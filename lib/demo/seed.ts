@@ -244,7 +244,7 @@ function sqlFor(p: Planned): string {
   const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T12:00:00Z');
   if (p.stage === 'verified' || p.stage === 'awaiting') {
     const start = new Date(Math.min(decided.getTime() + between(5, 20) * DAY, NOW.getTime() - 2 * DAY));
-    const done = new Date(start.getTime() + Math.max(1, Math.ceil(option.crewDays)) * DAY * 0.8);
+    const done = new Date(Math.min(start.getTime() + Math.max(1, Math.ceil(option.crewDays)) * DAY * 0.8, NOW.getTime() - 0.5 * DAY));
     out.push(
       `update jobs set crew_id = ${crew}, scheduled_start = ${s(start.toISOString().slice(0, 10))}, status = 'completed', started_at = ${ts(start)}, completed_at = ${ts(done)} where id = ${jobRef};`,
     );
