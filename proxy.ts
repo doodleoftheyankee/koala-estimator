@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Paths that work without a session: login, auth callbacks, the customer's quote/sign pages,
 // and PWA assets. Everything else requires a signed-in user.
 // /api/cron/* authenticates itself with CRON_SECRET (Vercel Cron sends no session cookie).
-const PUBLIC = [/^\/login/, /^\/auth\//, /^\/q\//, /^\/api\/public\//, /^\/api\/cron\//, /^\/sw\.js$/, /^\/manifest\.webmanifest$/, /^\/offline/];
+const PUBLIC = [/^\/login/, /^\/auth\//, /^\/q\//, /^\/api\/public\//, /^\/api\/cron\//, /^\/api\/demo\//, /^\/sw\.js$/, /^\/manifest\.webmanifest$/, /^\/offline/];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
