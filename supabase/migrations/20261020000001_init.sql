@@ -1,6 +1,6 @@
 -- =============================================================================
 -- Koala Insulation of Newark, DE — Estimator Platform
--- schema.sql  (Supabase / Postgres 15+)
+-- 20261020000001_init.sql  (Supabase / Postgres 15+)
 --
 -- Conventions
 --   * UUID PKs; estimate-side IDs are generated on the client (offline-first).
@@ -181,6 +181,7 @@ create table crews (
   name            text not null unique,
   size            int not null check (size between 1 and 10),
   blended_hourly_cost numeric(10,2) not null check (blended_hourly_cost >= 0), -- per person-hour
+  needs_owner_input boolean not null default false,
   home_lat        double precision,
   home_lng        double precision,
   active          boolean not null default true,
@@ -925,7 +926,7 @@ begin
 
   foreach t in array array['app_settings','products','materials','labor_roles','crews','job_types',
                            'access_levels','code_requirements','tier_templates','coefficient_sets',
-                           'rebate_programs','profiles','estimate_options','job_actuals']
+                           'rebate_programs','profiles','job_actuals']
   loop
     execute format('create trigger %I after insert or update or delete on %I for each row execute function tg_audit()',
                    t || '_audit', t);
@@ -1082,6 +1083,7 @@ end $$;
 create policy crew_avail_read on crew_availability for select using (has_role('estimator','crew'));
 create policy weekly_reports_owner on weekly_reports for select using (has_role('owner'));
 create policy sync_mutations_self on sync_mutations for select using (profile_id = auth.uid());
+create policy sync_mutations_insert on sync_mutations for insert with check (profile_id = auth.uid());
 
 -- =============================================================================
 -- SEED DATA (placeholders flagged; owner must confirm)
@@ -1102,7 +1104,7 @@ insert into products (code, label, unit, r_per_inch, is_r_bearing) values
   ('cellulose',        'Blown Cellulose',          'bag',      3.6, true),
   ('fiberglass_blown', 'Blown Fiberglass',         'bag',      2.5, true),
   ('batts',            'Fiberglass Batts',         'sqft',     3.2, true),
-  ('air_sealing',      'Air Sealing',              'hour',     null, false),
+  ('air_sealing',      'Air Sealing',              'sqft',     null, false),
   ('removal',          'Old Insulation Removal',   'sqft',     null, false);
 
 -- Default code minimums: 2021 IECC Table R402.1.3, Climate Zone 4A (except Marine).
@@ -1157,13 +1159,15 @@ from s, (values
   ('labor_hrs_per_unit','cellulose',null,null,        0.1500, 0.02,   1.00),
   ('labor_hrs_per_unit','fiberglass_blown',null,null, 0.1500, 0.02,   1.00),
   ('labor_hrs_per_unit','batts',null,null,            0.0150, 0.002,  0.10),
-  ('labor_hrs_per_unit','air_sealing',null,null,      1.0000, 1.00,   1.00),
+  ('labor_hrs_per_unit','air_sealing',null,null,      0.0060, 0.001,  0.05),
   -- setup / cleanup person-hours per product per job
   ('setup_hours','ocsf',null,null,             3.0, 0.5, 12),
   ('setup_hours','ccsf',null,null,             3.0, 0.5, 12),
   ('setup_hours','cellulose',null,null,        2.0, 0.5, 8),
   ('setup_hours','fiberglass_blown',null,null, 2.0, 0.5, 8),
   ('setup_hours','batts',null,null,            1.0, 0.25, 6),
+  ('setup_hours','air_sealing',null,null,      0.5, 0.1, 4),
+  ('setup_hours','removal',null,null,          1.0, 0.25, 6),
   -- access multipliers
   ('access_mult',null,null,'easy',      1.00, 0.80, 1.30),
   ('access_mult',null,null,'moderate',  1.15, 0.90, 1.60),
@@ -1172,6 +1176,7 @@ from s, (values
   -- removal person-hours per sqft
   ('removal_hrs_per_sqft',null,'attic',null,      0.020, 0.005, 0.10),
   ('removal_hrs_per_sqft',null,'crawlspace',null, 0.030, 0.005, 0.12),
+  ('removal_hrs_per_sqft',null,null,null,         0.025, 0.005, 0.12),
   -- drive time actual/estimated
   ('drive_time_factor',null,null,null, 1.10, 0.80, 1.80)
 ) as v(kind, product, job_type, access, val, lo, hi);
@@ -1183,8 +1188,7 @@ from products p join (values
   ('ccsf',             'Closed-cell set (per board ft)', 'board_ft', 1.00, 1.0),
   ('cellulose',        'Cellulose bag (25 lb)',          'bag',      14.00, 200.0),
   ('fiberglass_blown', 'Blown fiberglass bag (~28 lb)',  'bag',      38.00, 450.0),
-  ('batts',            'Batt (per sqft @ rated R)',      'sqft',     0.75, null)
+  ('batts',            'Batt (per sqft @ rated R)',      'sqft',     0.75, null),
+  ('air_sealing',      'Air sealing materials (per sqft)','sqft',    0.10, null)
 ) as m(code, name, unit, cost, cov) on p.code = m.code::product_code;
 
--- Storage buckets (private): quotes, signatures, photos.
--- insert into storage.buckets (id, name, public) values ('quotes','quotes',false), ('signatures','signatures',false), ('photos','photos',false);

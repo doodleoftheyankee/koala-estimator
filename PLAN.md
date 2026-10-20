@@ -31,11 +31,11 @@ next estimate more accurate.
 
 | Concern | Choice | Why |
 |---|---|---|
-| App | Next.js 15 (App Router) + TypeScript (strict) | SSR for the admin pages, client components for the field UI |
+| App | Next.js 16 (App Router) + TypeScript (strict) | SSR for the admin pages, client components for the field UI |
 | UI | Tailwind + shadcn/ui (Radix) | Accessible primitives and large tap targets for gloved hands |
 | DB / Auth / Files | Supabase (Postgres 15, Auth, Storage) | RLS enforces roles at the data layer |
 | Hosting | Vercel | Preview deployments per PR; Cron for nightly and weekly jobs |
-| Offline | Service worker (Serwist) + IndexedDB (Dexie) | Outbox-based sync, described in Section 7 |
+| Offline | Hand-written service worker (`public/sw.js`) + IndexedDB (Dexie) | Outbox-based sync, described in Section 7 |
 | Validation | Zod | One schema shared by the form, the API, and the sync payload |
 | PDF | `@react-pdf/renderer` on the server | Deterministic, branded output without a headless browser |
 | Email | Resend | Quote delivery, follow-ups, weekly report |
@@ -62,13 +62,13 @@ next estimate more accurate.
 | Enter job actuals | ✅ | ✅ | ❌ | assigned jobs only |
 | Weekly owner report | ✅ | ❌ | ❌ | ❌ |
 
-These rules are enforced in **Postgres RLS** (see `schema.sql`), not just in the UI. Crew
+These rules are enforced in **Postgres RLS** (see `supabase/migrations/`), not just in the UI. Crew
 users never receive price or margin columns: they read jobs through a restricted view
 (`crew_job_view`).
 
 ---
 
-## 4. Domain model (summary; full DDL in `schema.sql`)
+## 4. Domain model (summary; full DDL in `supabase/migrations/`)
 
 ```
 customers ─< properties ─< leads ─< estimates ─< estimate_areas
@@ -374,7 +374,7 @@ merge if coverage on `lib/learning` and `lib/pricing` falls below 95%.
 Each phase ships behind a preview deployment, with tests green and a short demo script.
 
 ### Phase 1: Estimator and quotes
-- Supabase project, migrations from `schema.sql`, seed data (job types, products, access
+- Supabase project, migrations in `supabase/migrations/` (the reviewed `schema.sql` became `20261020000001_init.sql`), seed data (job types, products, access
   levels, zone 4A code minimums, placeholder rates for the owner to fill in).
 - Auth (email magic link and passcode), roles, RLS, pgTAP tests per role.
 - Admin pricing tables UI (products, materials, crews, settings, tier templates) with
@@ -416,9 +416,7 @@ Each phase ships behind a preview deployment, with tests green and a short demo 
 
 ## 13. Open questions (need your input before or during Phase 1)
 
-1. **Repo location.** This repository is `automotive-deal-optimizer`. I've put the plan in
-   `koala-estimator/` on a branch so nothing collides. It should almost certainly be
-   its own repo (`koala-estimator`). Do you want me to create one?
+1. ~~**Repo location.**~~ Resolved: this is its own repo, `koala-estimator`.
 2. **Code minimums.** I seeded **2021 IECC zone 4A** values: ceiling R-60, wood-frame wall
    R-20 or 13+5ci, floor R-19, basement/crawlspace wall R-10ci or R-13. Delaware has run
    both the 2018 code (ceiling R-49) and the 2021 code; **please confirm which edition

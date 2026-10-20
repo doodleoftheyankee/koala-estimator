@@ -1,0 +1,40 @@
+@import 'tailwindcss';
+
+/* Brand tokens. Koala's real colors go here once the owner supplies them. */
+@theme {
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-brand-900: #134e4a;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f8fafc;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Large, glove-friendly inputs; no iOS zoom on focus (needs >= 16px). */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
