@@ -5,9 +5,10 @@ import { Alert, Badge, Card, Field, Select } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 import { ROLE_LABELS, ROLES } from '@/lib/admin/team';
+import { crewFieldName } from '@/lib/jobs/forms';
 import { ActionForm, ToggleInput } from '../pricing/ActionForm';
 import { TextField } from '../pricing/fields';
-import { inviteMember, updateMember } from './actions';
+import { inviteMember, updateCrewMembership, updateMember } from './actions';
 
 export const metadata: Metadata = { title: 'Team' };
 
@@ -20,6 +21,10 @@ const profileRows = z.array(
     active: z.boolean(),
   }),
 );
+
+const crewRows = z.array(z.object({ id: z.string(), name: z.string(), active: z.boolean() }));
+const membershipRows = z.array(z.object({ crew_id: z.string(), profile_id: z.string(), is_lead: z.boolean() }));
+type Crew = z.infer<typeof crewRows>[number];
 
 const ROLE_HELP: Record<(typeof ROLES)[number], string> = {
   owner: 'Everything, including pricing and the team',
@@ -43,9 +48,21 @@ function RoleSelect({ name, defaultValue }: { name: string; defaultValue: string
 export default async function TeamPage() {
   const profile = await requireRole('owner');
   const db = await createClient();
-  const res = await db.from('profiles').select('id, full_name, email, role, active').order('active', { ascending: false }).order('full_name');
+  const [res, crewsRes, membershipRes] = await Promise.all([
+    db.from('profiles').select('id, full_name, email, role, active').order('active', { ascending: false }).order('full_name'),
+    db.from('crews').select('id, name, active').order('name'),
+    db.from('crew_members').select('crew_id, profile_id, is_lead'),
+  ]);
   const parsed = res.error ? null : profileRows.safeParse(res.data);
   const members = parsed?.success ? parsed.data : null;
+  const crews = crewRows.safeParse(crewsRes.data ?? []).data ?? [];
+  // profile id -> crew id -> is lead
+  const memberships = new Map<string, Map<string, boolean>>();
+  for (const m of membershipRows.safeParse(membershipRes.data ?? []).data ?? []) {
+    const mine = memberships.get(m.profile_id) ?? new Map<string, boolean>();
+    mine.set(m.crew_id, m.is_lead);
+    memberships.set(m.profile_id, mine);
+  }
 
   return (
     <>
@@ -107,6 +124,7 @@ export default async function TeamPage() {
                           </div>
                         </ActionForm>
                       )}
+                      <CrewMembership memberId={m.id} name={m.full_name} isCrew={m.role === 'crew'} crews={crews} current={memberships.get(m.id) ?? new Map()} />
                     </Card>
                   </li>
                 );
@@ -116,5 +134,51 @@ export default async function TeamPage() {
         </section>
       </main>
     </>
+  );
+}
+
+/**
+ * Which crews this person is on (crew users see only their crews' jobs) and whether they lead
+ * it. Shown open for crew users; other roles can be added to a crew too (an owner who works jobs).
+ */
+function CrewMembership({ memberId, name, isCrew, crews, current }: { memberId: string; name: string; isCrew: boolean; crews: Crew[]; current: Map<string, boolean> }) {
+  const shown = crews.filter((c) => c.active || current.has(c.id));
+  const form =
+    shown.length === 0 ? (
+      <p className="text-sm text-slate-500">No crews yet. Add one on the Pricing page (Crews).</p>
+    ) : (
+      <ActionForm action={updateCrewMembership} readOnly={false} submitLabel="Save crews">
+        <input type="hidden" name="profile_id" value={memberId} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {shown.map((c) => (
+            <Field key={c.id} label={`${c.name}${c.active ? '' : ' (inactive)'} for ${name}`}>
+              <Select name={crewFieldName(c.id)} defaultValue={current.has(c.id) ? (current.get(c.id) ? 'lead' : 'member') : 'none'}>
+                <option value="none">Not in this crew</option>
+                <option value="member">Member</option>
+                <option value="lead">Crew lead</option>
+              </Select>
+            </Field>
+          ))}
+        </div>
+      </ActionForm>
+    );
+  if (isCrew) {
+    return (
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <h3 className="mb-2 text-sm font-semibold text-slate-800">Crews</h3>
+        {current.size === 0 && shown.length ? (
+          <div className="mb-3">
+            <Alert tone="amber">Not on any crew yet: {name} will not see any jobs.</Alert>
+          </div>
+        ) : null}
+        {form}
+      </div>
+    );
+  }
+  return (
+    <details className="mt-4 border-t border-slate-100 pt-3" open={current.size > 0}>
+      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">Crews{current.size ? ` (${current.size})` : ' (optional)'}</summary>
+      <div className="mt-2">{form}</div>
+    </details>
   );
 }

@@ -5,7 +5,9 @@ export function AppNav({ profile }: { profile: SessionProfile }) {
   const links = [
     { href: '/field', label: 'Field app', roles: ['owner', 'office', 'estimator'] },
     { href: '/estimates', label: 'Estimates', roles: ['owner', 'office', 'estimator'] },
+    { href: '/jobs', label: 'Jobs', roles: ['owner', 'office'] },
     { href: '/admin/pricing', label: 'Pricing', roles: ['owner', 'office'] },
+    { href: '/admin/learning', label: 'Learning', roles: ['owner', 'office'] },
     { href: '/admin/team', label: 'Team', roles: ['owner'] },
   ].filter((l) => l.roles.includes(profile.role));
   return (

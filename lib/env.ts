@@ -17,4 +17,8 @@ export const serverEnv = {
   quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>',
   officeNotifyEmail: () => process.env.OFFICE_NOTIFY_EMAIL || null,
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || null,
+  /** Shared secret Vercel Cron sends as `Authorization: Bearer <CRON_SECRET>`. Unset = cron endpoints refuse to run. */
+  cronSecret: () => process.env.CRON_SECRET || null,
+  /** Where the nightly job reports failures (and, in Phase 4, the weekly owner report). */
+  ownerReportEmail: () => process.env.OWNER_REPORT_EMAIL || null,
 };

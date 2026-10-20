@@ -1,9 +1,13 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { priceEstimate, type PricedEstimate } from '@/lib/pricing';
+import { computeDeviationFlags } from '@/lib/learning/deviation';
+import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
 import { resolveConflict, touch } from '@/lib/offline/syncCore';
 import { priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { withDraftDefaults } from '@/lib/field/draft';
+import { ackSummary } from '@/lib/field/flags';
 import { usd } from '@/lib/format';
 import { Alert, Badge, Button, cx } from '@/components/ui';
 import { useLive } from './hooks';
@@ -54,8 +58,9 @@ export function EstimateEditor({
     if (!record) return;
     if (savedMutation.current === null || (record.mutationId !== savedMutation.current && timer.current === null)) {
       savedMutation.current = record.mutationId;
-      latest.current = record.draft;
-      setDraft(record.draft);
+      const adopted = withDraftDefaults(record.draft);
+      latest.current = adopted;
+      setDraft(adopted);
     }
   }, [record]);
 
@@ -69,6 +74,18 @@ export function EstimateEditor({
       return { ok: null, error: (e as Error).message };
     }
   }, [draft, bundle]);
+
+  // Deviation flags (PLAN.md §6.5), computed on the phone so they work offline. The server
+  // recomputes them on sync and before sending; a failure here must never block editing.
+  const flags: DeviationFlag[] = useMemo(() => {
+    if (!bundle || !draft || !priced?.ok) return [];
+    try {
+      return computeDeviationFlags(priced.ok, { ...toEstimateInput(draft), areas: priceableAreas(draft) }, bundle);
+    } catch (e) {
+      console.error('[field] deviation flags failed', e);
+      return [];
+    }
+  }, [priced, draft, bundle]);
 
   const summaryPrice = useMemo(() => {
     const opts = priced?.ok?.options ?? [];
@@ -138,6 +155,7 @@ export function EstimateEditor({
   const locked = record.syncState === 'locked' || draft.status === 'signed';
   const name = `${draft.customer.firstName} ${draft.customer.lastName}`.trim() || 'New estimate';
   const stepIndex = STEPS.findIndex((s) => s.key === step);
+  const toExplain = ackSummary(flags, draft.deviationAcks).pending;
 
   async function resolve(choice: 'mine' | 'theirs') {
     await db().transaction('rw', db().estimates, async () => {
@@ -181,6 +199,14 @@ export function EstimateEditor({
               )}
             >
               {s.label}
+              {s.key === 'options' && toExplain > 0 ? (
+                <>
+                  <span aria-hidden className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-xs text-white">
+                    {toExplain}
+                  </span>
+                  <span className="sr-only"> ({toExplain} to explain)</span>
+                </>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -208,10 +234,26 @@ export function EstimateEditor({
         <fieldset disabled={locked} className="m-0 min-w-0 space-y-3 border-0 p-0">
           {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
           {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} /> : null}
-          {step === 'options' ? <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} profile={profile} online={online} /> : null}
+          {step === 'options' ? (
+            <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
+          ) : null}
         </fieldset>
         {step === 'send' ? (
-          <SendStep draft={draft} record={record} priced={priced} bundle={bundle} profile={profile} online={online} flush={flush} locked={locked} />
+          <SendStep
+            draft={draft}
+            record={record}
+            priced={priced}
+            flags={flags}
+            bundle={bundle}
+            profile={profile}
+            online={online}
+            flush={flush}
+            locked={locked}
+            onReviewOptions={() => {
+              setStep('options');
+              window.scrollTo(0, 0);
+            }}
+          />
         ) : null}
       </div>
 

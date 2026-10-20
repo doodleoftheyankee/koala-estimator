@@ -21,6 +21,9 @@ alter table deviation_flags add column tier tier_code;
 alter table estimates add column lost_reason text;
 alter table estimates add column decided_at timestamptz;
 
+-- The dashboard shows when the ±step limit held a coefficient back.
+alter table coefficients add column was_step_limited boolean not null default false;
+
 -- Learning settings used by the win model.
 update app_settings
    set value = value || '{"win_half_life_days": 365, "win_l2": 1.0, "price_recommendations": true}'::jsonb
@@ -91,15 +94,36 @@ end $$;
 revoke all on function crew_set_job_status(uuid, job_status) from public, anon;
 grant execute on function crew_set_job_status(uuid, job_status) to authenticated;
 
--- Crews may only touch their own, unverified actuals.
+-- Is this job assigned to one of the caller's crews? SECURITY DEFINER so crews never need
+-- to read the jobs table itself (it carries revenue = the signed price).
+create or replace function is_crew_job(p_job_id uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from jobs j join crew_members cm on cm.crew_id = j.crew_id
+                  where j.id = p_job_id and cm.profile_id = auth.uid())
+$$;
+revoke all on function is_crew_job(uuid) from public, anon;
+grant execute on function is_crew_job(uuid) to authenticated;
+
+-- Has the office verified any actuals for this job? (Crews cannot see verified rows.)
+create or replace function job_actuals_locked(p_job_id uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from job_actuals where job_id = p_job_id and verified_at is not null)
+$$;
+revoke all on function job_actuals_locked(uuid) from public, anon;
+grant execute on function job_actuals_locked(uuid) to authenticated;
+
+-- Crews read their jobs only through crew_job_view (no prices). The Phase 1 policy let a crew
+-- member select jobs.revenue directly.
+drop policy if exists jobs_crew_read on jobs;
+
+-- Crews may only change their own, unverified actuals, and may read all actuals of their jobs.
 drop policy if exists actuals_crew on job_actuals;
 create policy actuals_crew on job_actuals for all
-  using (has_role('crew') and verified_at is null
-         and exists (select 1 from jobs j join crew_members cm on cm.crew_id = j.crew_id
-                      where j.id = job_id and cm.profile_id = auth.uid()))
+  using (has_role('crew') and verified_at is null and is_crew_job(job_id))
   with check (has_role('crew') and entered_by = auth.uid() and verified_by is null and verified_at is null
-              and exists (select 1 from jobs j join crew_members cm on cm.crew_id = j.crew_id
-                           where j.id = job_id and cm.profile_id = auth.uid()));
+              and is_crew_job(job_id));
+create policy actuals_crew_read on job_actuals for select
+  using (has_role('crew') and is_crew_job(job_id));
 
 -- One actuals row per job x area x product (area/product null = job-level: drive, days, crew size).
 create unique index job_actuals_natural_uq on job_actuals (job_id, area_id, product) nulls not distinct;
@@ -138,10 +162,10 @@ begin
   if not has_role('owner', 'office', 'crew') then raise exception 'this role cannot enter actuals' using errcode = '42501'; end if;
   select result into v_prev from sync_mutations where mutation_id = p_mutation_id;
   if found then return v_prev; end if;
-  if not exists (select 1 from jobs where id = p_job_id) then
+  if not (has_role('owner', 'office') or is_crew_job(p_job_id)) then
     raise exception 'job not found' using errcode = '42501';
   end if;
-  if exists (select 1 from job_actuals where job_id = p_job_id and verified_at is not null) then
+  if job_actuals_locked(p_job_id) then
     return jsonb_build_object('status', 'locked');
   end if;
 
@@ -152,7 +176,7 @@ begin
          r.actual_crew_size, r.actual_drive_minutes, r.actual_days, r.actual_material_cost,
          r.actual_labor_cost, r.actual_other_cost, r.notes, auth.uid()
     from jsonb_populate_recordset(null::job_actuals, coalesce(p_rows, '[]')) r
-  on conflict (id) do update set
+  on conflict (job_id, area_id, product) do update set
     actual_material_qty  = excluded.actual_material_qty,
     actual_material_unit = excluded.actual_material_unit,
     actual_hours         = excluded.actual_hours,
@@ -208,10 +232,11 @@ begin
     returning id, estimate_id
   ), ev as (
     insert into quote_events (quote_id, event, meta) select id, 'expired', '{}'::jsonb from x
+  ), est as (
+    update estimates e set status = 'expired', decided_at = coalesce(e.decided_at, now())
+     where e.id in (select estimate_id from x) and e.status in ('sent', 'viewed')
   )
-  update estimates e set status = 'expired', decided_at = coalesce(e.decided_at, now())
-   where e.id in (select estimate_id from x) and e.status in ('sent', 'viewed');
-  get diagnostics v_n = row_count;
+  select count(*) into v_n from x;
   return v_n;
 end $$;
 revoke all on function expire_stale_quotes() from public, anon, authenticated;

@@ -50,6 +50,8 @@ describe('finance helpers', () => {
     expect(roundUpTo(5415.33, 5)).toBe(5420);
     expect(roundUpTo(5420.0000000001, 5)).toBe(5420);
     expect(roundUpTo(12.345, 0)).toBe(12.35);
+    expect(roundUpTo(12.341, 0)).toBe(12.35); // never rounds down, even without a $ step
+    expect(roundUpTo(12.34, 0)).toBe(12.34);
   });
 
   it('monthlyPayment matches the amortization formula', () => {

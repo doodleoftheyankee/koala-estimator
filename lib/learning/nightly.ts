@@ -1,7 +1,13 @@
-// SKELETON: replaced by the implementation. Signatures are the contract.
+// The nightly learning job (PLAN.md §6): run by app/api/cron/nightly (Vercel Cron) or manually by
+// the owner. The steps and their rules live in nightlyCore.ts (unit tested); this file wires them
+// to the database (io.ts) and to email.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { serverEnv } from '@/lib/env';
+import { sendEmail } from '@/lib/quotes/email';
 import type { AccuracyReport } from './accuracy';
+import * as io from './io';
+import { runNightlyWith } from './nightlyCore';
 import type { BacktestMetrics, GateResult, WinRateBucket } from './types';
 
 export interface NightlySummary {
@@ -44,8 +50,27 @@ export async function runNightly(
   now: Date,
   opts: { trigger: 'cron' | 'manual'; actorId?: string },
 ): Promise<NightlySummary> {
-  void admin;
-  void now;
-  void opts;
-  throw new Error('not implemented');
+  return runNightlyWith(
+    {
+      loadSettings: () => io.loadLearningSettings(admin),
+      expireStaleQuotes: () => io.expireStaleQuotes(admin),
+      startRun: (kind, summary) => io.startRun(admin, kind, summary),
+      finishRun: (runId, finish) => io.finishRun(admin, runId, finish),
+      loadActiveCoefficients: () => io.loadActiveCoefficients(admin),
+      loadActiveSetId: () => io.loadActiveSetId(admin),
+      loadJobsForLearning: () => io.loadJobsForLearning(admin),
+      insertCandidateSet: (args) => io.insertCandidateSet(admin, args),
+      rejectSet: (setId, reason) => io.rejectSet(admin, setId, reason),
+      promoteSet: (setId, reason) => io.promoteSet(admin, setId, reason),
+      loadDecidedQuotes: () => io.loadDecidedQuotes(admin),
+      insertWinModel: (runId, model) => io.insertWinModel(admin, runId, model),
+      updateDeviationOutcomes: () => io.updateDeviationOutcomes(admin),
+      ownerEmail: serverEnv.ownerReportEmail(),
+      sendEmail: (msg) => sendEmail(msg),
+      clock: () => new Date(),
+      log: (message) => console.error(message),
+    },
+    now,
+    opts,
+  );
 }
