@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import type { DeviationFlag } from '@/lib/learning/types';
 import { priceEstimate, type PricingBundle } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
-import { draftSchema, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput } from './draft';
+import { draftSchema, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput, type EstimateDraft } from './draft';
 import { buildSyncPayload } from './payload';
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
-const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients };
+const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function filledDraft() {
   const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
@@ -36,6 +37,21 @@ describe('draft', () => {
     const d = filledDraft();
     d.areas.push(newArea('walls', uuid)); // sqft 0, incomplete
     expect(priceableAreas(d)).toHaveLength(1);
+  });
+
+  it('keeps each deviation note with the deviation it explained; bare-string notes from earlier builds get an unknown one', () => {
+    const acks = { a: { note: ' Deep bays ', pctDiff: 0.31 }, b: 'Low clearance', c: { note: 'Old', pctDiff: null } };
+    const parsed = draftSchema.parse({ ...filledDraft(), deviationAcks: acks });
+    expect(parsed.deviationAcks).toEqual({
+      a: { note: 'Deep bays', pctDiff: 0.31 },
+      b: { note: 'Low clearance', pctDiff: null },
+      c: { note: 'Old', pctDiff: null },
+    });
+    // What the server stores as client_doc parses back unchanged on the phone.
+    expect(draftSchema.parse(JSON.parse(JSON.stringify(parsed))).deviationAcks).toEqual(parsed.deviationAcks);
+    expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: { note: 'x'.repeat(501), pctDiff: 0.2 } } }).success).toBe(false);
+    expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: { note: 'x', pctDiff: '0.2' } } }).success).toBe(false);
+    expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: 5 } }).success).toBe(false);
   });
 
   it('every job type gets a sensible default name', () => {
@@ -94,6 +110,39 @@ describe('buildSyncPayload', () => {
     const pl = buildSyncPayload(withDraftArea, priced, bundle, { pricedOffline: false, uuid });
     expect(pl.areas).toHaveLength(1);
     expect((pl.estimate.client_doc as { areas: unknown[] }).areas).toHaveLength(2);
+  });
+
+  it('sends each flag with its note string, only while the note explains that deviation', () => {
+    const f = (key: string, pctDiff: number): DeviationFlag => ({
+      key,
+      tier: 'better',
+      lineKey: null,
+      metric: 'total_price',
+      estimatorValue: 1,
+      modelValue: 1,
+      pctDiff,
+      reasons: [],
+      message: key,
+    });
+    const flags = [f('explained', 0.5), f('flipped', -0.5), f('earlier-build', 0.2), f('blank', 0.2), f('none', 0.2)];
+    const draft = {
+      ...d,
+      deviationAcks: {
+        explained: { note: ' Low clearance ', pctDiff: 0.5 },
+        flipped: { note: 'Low clearance', pctDiff: 0.5 },
+        'earlier-build': 'Deep bays',
+        blank: { note: '  ', pctDiff: 0.2 },
+      },
+    } as unknown as EstimateDraft;
+    const pl = buildSyncPayload(draft, priced, bundle, { pricedOffline: false, uuid, flags });
+    expect(pl.flags.map((x) => [x.flag_key, x.ack_note])).toEqual([
+      ['explained', 'Low clearance'],
+      ['flipped', null],
+      ['earlier-build', null],
+      ['blank', null],
+      ['none', null],
+    ]);
+    expect(pl.flags[0]).toMatchObject({ pct_diff: 0.5, tier: 'better', metric: 'total_price' });
   });
 
   it('handles an estimate with no priceable options', () => {

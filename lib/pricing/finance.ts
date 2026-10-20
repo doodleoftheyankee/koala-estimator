@@ -5,7 +5,7 @@ export function money(n: number): number {
 
 /** Round up to the nearest `step` dollars (step <= 0 means cents). Rounding up never erodes margin. */
 export function roundUpTo(n: number, step: number): number {
-  if (!(step > 0)) return money(n);
+  if (!(step > 0)) return Math.ceil(n * 100 - 1e-9) / 100; // whole cents, still rounding up
   // Subtract a hair so 1000.0000001 does not jump a whole step due to float noise.
   return Math.ceil(n / step - 1e-9) * step;
 }

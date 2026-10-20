@@ -8,6 +8,7 @@ import { getSessionProfile } from '@/lib/server/auth';
 import { serverEnv } from '@/lib/env';
 import { errorMessage, failure, formToObject, parseWith, success, type ActionResult } from '@/lib/admin/forms';
 import { inviteForm, isEmailTakenError, memberForm, ROLE_LABELS, selfEditError, type TeamRole } from '@/lib/admin/team';
+import { crewFieldName, membershipChanges, parseMembershipForm } from '@/lib/jobs/forms';
 
 const NOT_OWNER = 'Only the owner can manage the team.';
 const PATH = '/admin/team';
@@ -80,4 +81,47 @@ export async function updateMember(_prev: ActionResult | null, fd: FormData): Pr
 
   revalidatePath(PATH);
   return success();
+}
+
+/**
+ * Which crews a person belongs to, and whether they lead it. Crew membership decides which jobs
+ * a crew user sees and may enter actuals for (crew_job_view, RLS). Only crews present on the form
+ * change.
+ */
+export async function updateCrewMembership(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const profile = await getSessionProfile();
+  if (!profile || profile.role !== 'owner') return failure(NOT_OWNER);
+
+  const db = await createClient();
+  const crews = await db.from('crews').select('id');
+  if (crews.error) return failure(`Loading crews failed: ${crews.error.message}`);
+  const obj = formToObject(fd);
+  const crewIds = (crews.data ?? []).map((c) => String((c as { id: unknown }).id)).filter((id) => crewFieldName(id) in obj);
+  const parsed = parseMembershipForm(obj, crewIds);
+  if (!parsed.ok) return failure(parsed.error);
+
+  const person = await db.from('profiles').select('id').eq('id', parsed.profileId).maybeSingle();
+  if (person.error || !person.data) return failure('That team member was not found.');
+  const existing = await db.from('crew_members').select('crew_id, is_lead').eq('profile_id', parsed.profileId);
+  if (existing.error) return failure(`Loading crew membership failed: ${existing.error.message}`);
+  const { upserts, deletes } = membershipChanges(
+    (existing.data ?? []).map((m) => ({ crewId: String((m as { crew_id: unknown }).crew_id), isLead: Boolean((m as { is_lead: unknown }).is_lead) })),
+    parsed.memberships,
+    crewIds,
+  );
+  if (!upserts.length && !deletes.length) return success('No changes.');
+
+  if (deletes.length) {
+    const del = await db.from('crew_members').delete().eq('profile_id', parsed.profileId).in('crew_id', deletes);
+    if (del.error) return failure(`Saving failed: ${del.error.message}`);
+  }
+  if (upserts.length) {
+    const up = await db
+      .from('crew_members')
+      .upsert(upserts.map((u) => ({ crew_id: u.crewId, profile_id: parsed.profileId, is_lead: u.isLead })), { onConflict: 'crew_id,profile_id' });
+    if (up.error) return failure(`Saving failed: ${up.error.message}`);
+  }
+
+  revalidatePath(PATH);
+  return success('Crews saved.');
 }

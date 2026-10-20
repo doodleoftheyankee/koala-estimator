@@ -26,6 +26,30 @@ export const areaSchema = z.object({
 
 const overrideSchema = z.object({ price: positive.max(10_000_000), reason: trimmed(500) });
 
+/** Estimator's own qty (material) or hours (labor/removal) for a line; keyed by lineKey(). */
+export const lineOverrideSchema = z.object({
+  qty: z.number().finite().min(0).max(1_000_000).nullable().optional(),
+  hours: z.number().finite().min(0).max(10_000).nullable().optional(),
+  reason: trimmed(500).min(3, 'Give a reason for the change'),
+  /** The option the estimator changed; other options scale by the same proportion. */
+  tier: z.enum(TIERS).nullable().optional(),
+});
+
+/**
+ * The estimator's explanation of one deviation flag, stored with the deviation it explained
+ * (DeviationFlag.pctDiff when the note was written or last confirmed). The note only counts while
+ * the flag still has about that deviation (lib/field/flags.ts ackState). pctDiff is null when
+ * unknown: notes saved by app builds that stored a bare string, which must be confirmed again.
+ */
+export const deviationAckSchema = z.object({
+  note: trimmed(500),
+  pctDiff: z.number().finite().nullable(),
+});
+export type DeviationAck = z.infer<typeof deviationAckSchema>;
+
+/** The current object form, or the bare note string earlier builds stored (read as an unknown deviation). */
+const deviationAckValueSchema = z.union([deviationAckSchema, trimmed(500).transform((note): DeviationAck => ({ note, pctDiff: null }))]);
+
 export const draftSchema = z.object({
   id: z.uuid(),
   status: z.enum(ESTIMATE_STATUSES),
@@ -54,6 +78,10 @@ export const draftSchema = z.object({
   crewId: z.uuid().nullable(),
   driveMinutesOneWay: z.number().finite().min(0).max(600).nullable(),
   overrides: z.partialRecord(z.enum(TIERS), overrideSchema),
+  // Added in Phase 2; defaults keep older stored drafts valid.
+  lineOverrides: z.record(z.string(), lineOverrideSchema).default({}),
+  /** Estimator notes acknowledging deviation flags, keyed by DeviationFlag.key (see deviationAckSchema). */
+  deviationAcks: z.record(z.string(), deviationAckValueSchema).default({}),
   selectedTier: z.enum(TIERS).nullable(),
   notes: z.string().max(5000),
   rowVersion: z.number().int().positive().nullable(),
@@ -86,6 +114,8 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     crewId: null,
     driveMinutesOneWay: null,
     overrides: {},
+    lineOverrides: {},
+    deviationAcks: {},
     selectedTier: null,
     notes: '',
     rowVersion: null,
@@ -125,6 +155,7 @@ export function toEstimateInput(d: EstimateDraft): EstimateInput {
     crewId: d.crewId,
     driveMinutesOneWay: d.driveMinutesOneWay,
     overrides: d.overrides,
+    lineOverrides: d.lineOverrides,
   };
 }
 

@@ -510,8 +510,11 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
           Read-only. Waste factors, labor rates and multipliers the pricing engine uses.
         </SectionHeading>
         <Alert tone="blue">
-          Phase 2 adds nightly learning from job actuals, with owner approval of each new set and one-click rollback. Until then these are the seed
-          priors.
+          These values are learned nightly from verified job actuals. Review candidates, approve or reject them, and roll back on the{' '}
+          <a href="/admin/learning" className="font-semibold underline">
+            Learning dashboard
+          </a>
+          .
         </Alert>
         {config.activeSet ? (
           <Card className="p-0">

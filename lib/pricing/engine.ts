@@ -2,6 +2,7 @@ import { coeff, findCoefficient } from './coefficients';
 import { allocate, ceilHalf, money, monthlyPayment, roundUpTo } from './finance';
 import type {
   AreaInput,
+  LineOverride,
   CoefficientSet,
   CrewConfig,
   CustomerItem,
@@ -18,7 +19,7 @@ import type {
   Tier,
   TierTemplate,
 } from './types';
-import { PricingConfigError, TIERS } from './types';
+import { lineKey, PricingConfigError, TIERS } from './types';
 
 /**
  * Prices an estimate. Pure and deterministic: same input + snapshot + coefficients => same output.
@@ -38,9 +39,23 @@ export function priceEstimate(
   const crew = pickCrew(snapshot, input.crewId);
   const options: PricedOption[] = [];
 
+  const overrides = input.lineOverrides ?? {};
+  const hasLineOverrides = Object.keys(overrides).length > 0;
+  // Pure-model options: the price the learning loop and approval limits compare against, and the
+  // model values a line override is scaled from.
+  const pure = new Map<Tier, PricedOption>();
+  if (hasLineOverrides) {
+    for (const tier of TIERS) {
+      const p = priceTier(tier, input, snapshot, coeffs, crew, [], {});
+      if (p) pure.set(tier, p);
+    }
+  }
   for (const tier of TIERS) {
-    const option = priceTier(tier, input, snapshot, coeffs, crew, warnings);
-    if (option) options.push(option);
+    const ov = hasLineOverrides ? overridesForTier(overrides, tier, pure) : overrides;
+    const option = priceTier(tier, input, snapshot, coeffs, crew, warnings, ov);
+    if (!option) continue;
+    if (hasLineOverrides) option.modelPrice = pure.get(tier)?.adjustedPrice ?? option.adjustedPrice;
+    options.push(option);
   }
   // Good should cost less than better, better less than best. If the configured products and
   // costs say otherwise, the estimator needs to know before a customer sees it.
@@ -148,6 +163,7 @@ function priceTier(
   k: CoefficientSet,
   crew: CrewConfig,
   warnings: PricingWarning[],
+  ov: Record<string, LineOverride>,
 ): PricedOption | null {
   const templates: TierTemplate[] = [];
   for (const area of input.areas) {
@@ -178,7 +194,7 @@ function priceTier(
       const hours =
         (findCoefficient(k, 'setup_hours', { product: 'removal' })?.value ?? 0) +
         area.sqft * coeff(k, 'removal_hrs_per_sqft', { jobType: area.jobType }) * access;
-      const line = laborLine(area.id, 'removal', 'removal', `Remove existing insulation, ${fmtInt(area.sqft)} sq ft`, hours, crew);
+      const line = laborLine(area.id, 'removal', 'removal', `Remove existing insulation, ${fmtInt(area.sqft)} sq ft`, hours, crew, ov);
       lines.push(line);
       removalSqft += area.sqft;
       groups.push({
@@ -190,14 +206,14 @@ function priceTier(
       });
     }
 
-    const primary = priceProductScope(area, tpl, removal, s, k, access, crew, tier, warnings);
+    const primary = priceProductScope(area, tpl, removal, s, k, access, crew, tier, warnings, ov);
     if (primary) {
       lines.push(...primary.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'primary', description: primary.description, cost: primary.cost });
     }
 
     if (tpl.includeAirSealing && tpl.primaryProduct !== 'air_sealing') {
-      const air = priceAirSealing(area, s, k, access, crew);
+      const air = priceAirSealing(area, s, k, access, crew, ov);
       lines.push(...air.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'air_sealing', description: air.description, cost: air.cost });
     }
@@ -225,6 +241,7 @@ function priceTier(
   const drivePersonHours = (driveMinutes * 2 * trips * crew.size * driveFactor) / 60;
   const driveCost = money(drivePersonHours * crew.blendedHourlyCost + trips * st.vehicleCostPerTrip);
   lines.push({
+    key: null,
     areaId: null,
     kind: 'drive',
     product: null,
@@ -239,11 +256,14 @@ function priceTier(
     modelQty: trips,
     modelHours: round2(drivePersonHours),
     modelCost: driveCost,
+    isOverridden: false,
+    overrideReason: null,
   });
 
   const disposalCost = money(removalSqft * st.disposalCostPerSqft);
   if (removalSqft > 0) {
     lines.push({
+      key: null,
       areaId: null,
       kind: 'disposal',
       product: 'removal',
@@ -258,16 +278,18 @@ function priceTier(
       modelQty: removalSqft,
       modelHours: null,
       modelCost: disposalCost,
+      isOverridden: false,
+      overrideReason: null,
     });
   }
 
   const directCost = money(sum(lines.map((l) => l.cost)));
   const loadedCost = money(directCost * (1 + st.overheadPct));
-  const modelPrice = roundUpTo(Math.max(loadedCost / (1 - st.targetMarginPct), st.minimumJobPrice), st.priceRounding);
+  const adjustedPrice = roundUpTo(Math.max(loadedCost / (1 - st.targetMarginPct), st.minimumJobPrice), st.priceRounding);
 
   const override = input.overrides[tier];
   const isOverridden = !!override && Number.isFinite(override.price) && override.price > 0;
-  const price = isOverridden ? money(override!.price) : modelPrice;
+  const price = isOverridden ? money(override!.price) : adjustedPrice;
   const marginPct = price > 0 ? (price - loadedCost) / price : 0;
   const belowFloor = marginPct < st.floorMarginPct - 1e-9;
   if (isOverridden && belowFloor) {
@@ -312,9 +334,11 @@ function priceTier(
     disposalCost,
     directCost,
     loadedCost,
-    modelPrice,
+    modelPrice: adjustedPrice, // replaced by the pure-model price in priceEstimate when lines are overridden
+    adjustedPrice,
     price,
     isOverridden,
+    hasLineOverrides: lines.some((l) => l.isOverridden),
     overrideReason: isOverridden ? override!.reason : null,
     marginPct: round4(marginPct),
     belowFloor,
@@ -333,10 +357,11 @@ function priceProductScope(
   crew: CrewConfig,
   tier: Tier,
   warnings: PricingWarning[],
+  ov: Record<string, LineOverride>,
 ): { lines: PricedLine[]; description: string; cost: number } | null {
   const code = tpl.primaryProduct;
   const p = product(s, code);
-  if (code === 'air_sealing') return priceAirSealing(area, s, k, access, crew);
+  if (code === 'air_sealing') return priceAirSealing(area, s, k, access, crew, ov);
   if (code === 'removal') return null; // removal is handled as its own scope
   if (!p.isRBearing) throw new PricingConfigError(`${code} cannot be a primary insulation product`);
 
@@ -379,30 +404,15 @@ function priceProductScope(
 
   const waste = coeff(k, 'waste_factor', { product: code, jobType: area.jobType });
   const rawQty = designQty * waste;
-  const qty = mat.unit === 'bag' ? Math.ceil(rawQty - 1e-9) : round1(rawQty);
-  const matCost = money(qty * mat.costPerUnit);
+  const modelQty = mat.unit === 'bag' ? Math.ceil(rawQty - 1e-9) : round1(rawQty);
 
   const hours =
     (findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0) +
     designQty * coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
 
-  const matLine: PricedLine = {
-    areaId: area.id,
-    kind: 'material',
-    product: code,
-    materialId: mat.id,
-    description: `${mat.name}`,
-    qty,
-    unit: mat.unit,
-    hours: null,
-    unitCost: mat.costPerUnit,
-    cost: matCost,
-    designQty: round2(designQty),
-    modelQty: qty,
-    modelHours: null,
-    modelCost: matCost,
-  };
-  const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, hours, crew);
+  const matLine = materialLine(area.id, code, mat, `${mat.name}`, designQty, modelQty, ov);
+  const matCost = matLine.cost;
+  const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, hours, crew, ov);
 
   const rLabel = `R-${fmtNum(round1(achievedR))}`;
   const description =
@@ -419,42 +429,97 @@ function priceAirSealing(
   k: CoefficientSet,
   access: number,
   crew: CrewConfig,
+  ov: Record<string, LineOverride>,
 ): { lines: PricedLine[]; description: string; cost: number } {
   const code: ProductCode = 'air_sealing';
   const designQty = area.sqft;
   const mat = material(s, code);
   const waste = findCoefficient(k, 'waste_factor', { product: code, jobType: area.jobType })?.value ?? 1;
   const qty = round1(designQty * waste);
-  const matCost = mat ? money(qty * mat.costPerUnit) : 0;
   const hours =
     (findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0) +
     designQty * coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
 
   const lines: PricedLine[] = [];
+  let matCost = 0;
   if (mat) {
-    lines.push({
-      areaId: area.id,
-      kind: 'material',
-      product: code,
-      materialId: mat.id,
-      description: mat.name,
-      qty,
-      unit: mat.unit,
-      hours: null,
-      unitCost: mat.costPerUnit,
-      cost: matCost,
-      designQty: round2(designQty),
-      modelQty: qty,
-      modelHours: null,
-      modelCost: matCost,
-    });
+    const line = materialLine(area.id, code, mat, mat.name, designQty, qty, ov);
+    matCost = line.cost;
+    lines.push(line);
   }
-  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', hours, crew);
+  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', hours, crew, ov);
   lines.push(labor);
   return {
     lines,
     description: `Air sealing of top plates, penetrations and bypasses (${fmtInt(area.sqft)} sq ft)`,
     cost: matCost + labor.cost,
+  };
+}
+
+/**
+ * The overrides as they apply to `tier`. An override is the estimator's number for the tier they
+ * changed (override.tier); another tier with the same line gets its own model value scaled by the
+ * same proportion, so a change on Good never copies Good's quantity onto a deeper Best fill.
+ * Without a usable base (no tier, the source tier or line missing, a zero model value) the number
+ * is used as-is.
+ */
+function overridesForTier(
+  overrides: Record<string, LineOverride>,
+  tier: Tier,
+  pure: Map<Tier, PricedOption>,
+): Record<string, LineOverride> {
+  const out: Record<string, LineOverride> = {};
+  for (const [key, o] of Object.entries(overrides)) {
+    const from = o.tier && o.tier !== tier ? pure.get(o.tier)?.lines.find((l) => l.key === key) : undefined;
+    const to = from ? pure.get(tier)?.lines.find((l) => l.key === key) : undefined;
+    if (!from || !to) {
+      out[key] = o;
+      continue;
+    }
+    const scaled: LineOverride = { ...o };
+    if (isNum(o.qty) && isNum(from.modelQty) && from.modelQty > 0 && isNum(to.modelQty)) {
+      const q = to.modelQty * (o.qty / from.modelQty);
+      scaled.qty = to.unit === 'bag' ? Math.ceil(q - 1e-9) : round1(q);
+    }
+    if (isNum(o.hours) && isNum(from.modelHours) && from.modelHours > 0 && isNum(to.modelHours)) {
+      scaled.hours = round2(to.modelHours * (o.hours / from.modelHours));
+    }
+    out[key] = scaled;
+  }
+  return out;
+}
+
+function materialLine(
+  areaId: string,
+  productCode: ProductCode,
+  mat: MaterialConfig,
+  description: string,
+  designQty: number,
+  modelQty: number,
+  ov: Record<string, LineOverride>,
+): PricedLine {
+  const key = lineKey(areaId, productCode, 'material');
+  const o = ov[key];
+  const overrideQty = o && typeof o.qty === 'number' && Number.isFinite(o.qty) && o.qty >= 0 ? o.qty : null;
+  const qty = overrideQty ?? modelQty;
+  return {
+    key,
+    areaId,
+    kind: 'material',
+    product: productCode,
+    materialId: mat.id,
+    description,
+    qty,
+    unit: mat.unit,
+    hours: null,
+    unitCost: mat.costPerUnit,
+    cost: money(qty * mat.costPerUnit),
+    designQty: round2(designQty),
+    modelQty,
+    modelHours: null,
+    modelCost: money(modelQty * mat.costPerUnit),
+    isOverridden: overrideQty !== null,
+    overrideReason: overrideQty !== null ? o!.reason : null,
   };
 }
 
@@ -465,10 +530,15 @@ function laborLine(
   description: string,
   hours: number,
   crew: CrewConfig,
+  ov: Record<string, LineOverride>,
 ): PricedLine {
-  const h = round2(hours);
-  const cost = money(h * crew.blendedHourlyCost);
+  const key = lineKey(areaId, productCode, kind);
+  const o = ov[key];
+  const modelHours = round2(hours);
+  const overrideHours = o && typeof o.hours === 'number' && Number.isFinite(o.hours) && o.hours >= 0 ? round2(o.hours) : null;
+  const h = overrideHours ?? modelHours;
   return {
+    key,
     areaId,
     kind,
     product: productCode,
@@ -478,11 +548,13 @@ function laborLine(
     unit: 'hour',
     hours: h,
     unitCost: crew.blendedHourlyCost,
-    cost,
+    cost: money(h * crew.blendedHourlyCost),
     designQty: null,
     modelQty: null,
-    modelHours: h,
-    modelCost: cost,
+    modelHours,
+    modelCost: money(modelHours * crew.blendedHourlyCost),
+    isOverridden: overrideHours !== null,
+    overrideReason: overrideHours !== null ? o!.reason : null,
   };
 }
 
@@ -491,6 +563,7 @@ function laborLine(
 // ---------------------------------------------------------------------------
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const isNum = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;

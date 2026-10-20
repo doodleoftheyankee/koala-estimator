@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { canSendQuote, priceEstimate, type PricingBundle } from '@/lib/pricing';
+import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
 import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
 import { usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
 import type { PricingResult } from './EstimateEditor';
@@ -13,37 +15,52 @@ type SendResult =
   | { kind: 'idle' }
   | { kind: 'busy'; msg: string }
   | { kind: 'done'; url: string; emailed: boolean; version: number }
-  | { kind: 'error'; msg: string; reasons?: string[] };
+  | { kind: 'error'; msg: string; reasons?: string[] }
+  /** The server found changes from the model without a note (409 unacknowledged_flags). */
+  | { kind: 'flags'; msg: string; flags: Array<{ key: string; message: string }> };
 
 export function SendStep({
   draft,
   record,
   priced,
+  flags,
   bundle,
   profile,
   online,
   flush,
   locked,
+  onReviewOptions,
 }: {
   draft: EstimateDraft;
   record: LocalEstimate;
   priced: PricingResult;
+  /** Deviation flags for the draft as priced on this phone. */
+  flags: DeviationFlag[];
   bundle: PricingBundle | null;
   profile: CachedProfile;
   online: boolean;
   flush: () => Promise<void>;
   locked: boolean;
+  /** Takes the estimator to the Options tab, where flags are explained. */
+  onReviewOptions: () => void;
 }) {
   const [result, setResult] = useState<SendResult>({ kind: 'idle' });
   const options = priced?.ok?.options ?? [];
   const blocker = syncBlocker(draft);
   const policy = bundle && options.length ? canSendQuote(profile.role, options, bundle.snapshot.settings) : null;
+  const pendingFlags = unacknowledgedFlags(flags, draft.deviationAcks);
 
   const checks: Array<{ ok: boolean; label: string }> = [
     { ok: !blocker, label: blocker ?? 'Customer, address and areas complete' },
     { ok: !!draft.customer.email, label: draft.customer.email ? `Email: ${draft.customer.email}` : 'Customer email needed to send' },
     { ok: options.length > 0, label: options.length ? `${options.length} option(s) priced` : 'No priced options yet' },
     { ok: !!policy?.ok, label: policy?.ok ? 'Prices within your approval limits' : 'Price changes need approval (see below)' },
+    {
+      ok: pendingFlags.length === 0,
+      label: pendingFlags.length
+        ? `Every change from the model is explained (${pendingFlags.length} still ${pendingFlags.length === 1 ? 'needs' : 'need'} a note)`
+        : 'Every change from the model is explained',
+    },
     { ok: online, label: online ? 'Online' : 'Offline. Sending needs a connection; your work is saved.' },
   ];
   const canSend = !locked && checks.every((c) => c.ok) && record.syncState !== 'conflict';
@@ -77,6 +94,7 @@ export function SendStep({
         error?: string;
         message?: string;
         reasons?: string[];
+        flags?: unknown;
         url?: string;
         emailed?: boolean;
         version?: number;
@@ -84,7 +102,13 @@ export function SendStep({
         clientDoc?: unknown;
       };
       if (!res.ok) {
-        if (body.error === 'pricing_changed') {
+        if (body.error === 'unacknowledged_flags') {
+          setResult({
+            kind: 'flags',
+            msg: body.message ?? 'Explain each change from the model before sending.',
+            flags: parseFlagList(body.flags),
+          });
+        } else if (body.error === 'pricing_changed') {
           setResult({ kind: 'error', msg: 'Prices changed since this phone last downloaded pricing. Review the Options tab, then send again.' });
         } else if (body.error === 'policy') {
           setResult({ kind: 'error', msg: 'This quote needs approval before it can be sent.', reasons: body.reasons });
@@ -129,6 +153,24 @@ export function SendStep({
             </Alert>
           </div>
         ) : null}
+        {pendingFlags.length ? (
+          <div className="mt-3">
+            <Alert tone="amber">
+              <p className="font-semibold">These changes from the model need a short note:</p>
+              <ul className="mt-1 list-disc pl-4">
+                {pendingFlags.map((f) => (
+                  <li key={f.key}>
+                    {f.message}
+                    {ackState(f, draft.deviationAcks).status === 'stale' ? ' Check your earlier note, then confirm or edit it.' : ''}
+                  </li>
+                ))}
+              </ul>
+              <Button size="sm" variant="secondary" className="mt-2" onClick={onReviewOptions}>
+                Explain on the Options tab
+              </Button>
+            </Alert>
+          </div>
+        ) : null}
       </Card>
 
       {options.length ? (
@@ -159,6 +201,21 @@ export function SendStep({
               ))}
             </ul>
           ) : null}
+        </Alert>
+      ) : null}
+      {result.kind === 'flags' ? (
+        <Alert tone="amber">
+          <p className="font-semibold">Not sent. {result.msg}</p>
+          {result.flags.length ? (
+            <ul className="mt-1 list-disc pl-4">
+              {result.flags.map((f) => (
+                <li key={f.key}>{f.message}</li>
+              ))}
+            </ul>
+          ) : null}
+          <Button size="sm" variant="secondary" className="mt-2" onClick={onReviewOptions}>
+            Go to the Options tab
+          </Button>
         </Alert>
       ) : null}
       {result.kind === 'done' ? (

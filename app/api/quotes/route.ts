@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
 import { canSendQuote, priceEstimate, TIERS, type PricedOption, type Tier } from '@/lib/pricing';
+import { computeDeviationFlags } from '@/lib/learning/deviation';
+import { acknowledgedNote, unacknowledgedFlags } from '@/lib/field/flags';
 import { quoteEmail, sendEmail } from '@/lib/quotes/email';
 import { buildQuoteDocument } from '@/lib/quotes/model';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
@@ -96,6 +98,16 @@ export async function POST(request: Request) {
     if (options.length === 0) {
       return NextResponse.json({ error: 'Nothing to quote: add at least one complete area.' }, { status: 400 });
     }
+    // Every deviation from the model must carry the estimator's note before a customer sees it, and
+    // the note must have been written for this deviation (same rule as the phone: lib/field/flags.ts).
+    const flags = computeDeviationFlags(priced, { ...toEstimateInput(draft), areas: priceableAreas(draft) }, bundle);
+    const unacknowledged = unacknowledgedFlags(flags, draft.deviationAcks);
+    if (unacknowledged.length) {
+      return NextResponse.json(
+        { error: 'unacknowledged_flags', message: 'Explain each change from the model before sending.', flags: unacknowledged },
+        { status: 409 },
+      );
+    }
 
     const prices = pricesOf(options);
     if (!pricesMatch(expectedPrices, prices)) {
@@ -154,7 +166,18 @@ export async function POST(request: Request) {
         status: 'sent',
         pdf_path: pdfPath,
         pdf_sha256: sha256Hex(pdf),
-        snapshot: { document, options, bundleHash: bundle.hash, coefficientSetId: bundle.coefficientSet.id },
+        snapshot: {
+          document,
+          options,
+          bundleHash: bundle.hash,
+          coefficientSetId: bundle.coefficientSet.id,
+          // Frozen inputs and flags: the learning loop reads these, never the (editable) estimate.
+          input: {
+            areas: priceableAreas(draft).map((a) => ({ id: a.id, name: a.name, jobType: a.jobType, accessLevel: a.accessLevel, sqft: a.sqft })),
+            driveMinutesOneWay: draft.driveMinutesOneWay,
+          },
+          flags: flags.map((f) => ({ ...f, ackNote: acknowledgedNote(f, draft.deviationAcks) })),
+        },
         public_token_hash: hash,
         expires_at: expiresAt.toISOString(),
         sent_at: now.toISOString(),

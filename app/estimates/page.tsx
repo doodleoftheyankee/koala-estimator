@@ -2,9 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { z } from 'zod';
 import { AppNav } from '@/components/AppNav';
-import { Alert, Badge, Button, Card, Field, Select } from '@/components/ui';
+import { Alert, Badge, Button, Card, Field, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
+import { canMarkLost } from '@/lib/jobs/forms';
+import { ActionForm } from '../admin/pricing/ActionForm';
+import { markLost } from './actions';
 
 export const metadata: Metadata = { title: 'Estimates' };
 
@@ -40,6 +43,7 @@ const rowSchema = z.object({
   updated_at: z.string(),
   selected_tier: z.string().nullable(),
   model_total_price: money,
+  lost_reason: z.string().nullable().optional(),
   customer: one(z.object({ first_name: z.string(), last_name: z.string() })),
   property: one(z.object({ street: z.string(), city: z.string() })),
   estimator: one(z.object({ full_name: z.string() })),
@@ -90,7 +94,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   let query = db
     .from('estimates')
     .select(
-      `id, status, updated_at, selected_tier, model_total_price,
+      `id, status, updated_at, selected_tier, model_total_price, lost_reason,
        customer:customers(first_name, last_name),
        property:properties(street, city),
        estimator:profiles!estimates_estimator_id_fkey(full_name),
@@ -132,6 +136,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
       total: totalOf(r, quote),
       updated: when.format(new Date(r.updated_at)),
       quote,
+      lostReason: r.status === 'lost' ? (r.lost_reason ?? null) : null,
     };
   });
   const filtered = Boolean(status || estimatorId);
@@ -142,6 +147,11 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Estimates</h1>
+          {canFilterEstimator ? (
+            <Link href="/jobs" className="ml-auto inline-flex min-h-12 items-center rounded-xl px-3 font-semibold text-brand-800 hover:bg-brand-50">
+              Jobs
+            </Link>
+          ) : null}
           <Link
             href="/field?new=1"
             className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-700 px-5 text-base font-semibold text-white shadow-sm hover:bg-brand-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
@@ -211,9 +221,11 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                       </span>
                     </div>
                     {it.quote ? <QuoteLine quote={it.quote} /> : null}
+                    {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
                     <div className="mt-3 flex gap-2">
                       <RowActions id={it.id} quoteId={it.quote?.id ?? null} />
                     </div>
+                    {canMarkLost(it.status) ? <MarkLost id={it.id} /> : null}
                   </Card>
                 </li>
               ))}
@@ -244,6 +256,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                       <td className="px-4 py-3">
                         <StatusBadge status={it.status} />
                         {it.quote ? <QuoteLine quote={it.quote} compact /> : null}
+                        {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{it.total != null ? usd.format(it.total) : '—'}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{it.updated}</td>
@@ -251,6 +264,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                         <div className="flex justify-end gap-2">
                           <RowActions id={it.id} quoteId={it.quote?.id ?? null} />
                         </div>
+                        {canMarkLost(it.status) ? <MarkLost id={it.id} popover /> : null}
                       </td>
                     </tr>
                   ))}
@@ -304,5 +318,26 @@ function RowActions({ id, quoteId }: { id: string; quoteId: string | null }) {
         </a>
       ) : null}
     </>
+  );
+}
+
+function LostReason({ reason }: { reason: string }) {
+  return <p className="mt-1 max-w-xs text-xs text-red-700">Lost: {reason}</p>;
+}
+
+/** Record that the customer went elsewhere (or went quiet), with the reason. No JavaScript needed to open it. */
+function MarkLost({ id, popover = false }: { id: string; popover?: boolean }) {
+  return (
+    <details className={popover ? 'relative mt-1 text-right' : 'mt-2'}>
+      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-xl px-3 text-sm font-semibold text-red-700 hover:bg-red-50">Mark lost…</summary>
+      <div className={popover ? 'absolute right-0 top-full z-10 mt-1 w-80 rounded-2xl bg-white p-3 text-left shadow-lg ring-1 ring-slate-200' : 'mt-2'}>
+        <ActionForm action={markLost} readOnly={false} submitLabel="Mark lost">
+          <input type="hidden" name="id" value={id} />
+          <Field label="Why was it lost?" hint="Price, timing, went with a competitor, no response…">
+            <Textarea name="reason" rows={2} required maxLength={500} />
+          </Field>
+        </ActionForm>
+      </div>
+    </details>
   );
 }
