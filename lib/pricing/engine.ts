@@ -42,6 +42,20 @@ export function priceEstimate(
     const option = priceTier(tier, input, snapshot, coeffs, crew, warnings);
     if (option) options.push(option);
   }
+  // Good should cost less than better, better less than best. If the configured products and
+  // costs say otherwise, the estimator needs to know before a customer sees it.
+  for (let i = 1; i < options.length; i++) {
+    const lo = options[i - 1]!;
+    const hi = options[i]!;
+    if (lo.price > hi.price) {
+      warnings.push({
+        code: 'tier_price_order',
+        areaId: null,
+        tier: hi.tier,
+        message: `${capitalize(lo.tier)} (${usd(lo.price)}) costs more than ${hi.tier} (${usd(hi.price)}). Check material costs or the tier setup with the office.`,
+      });
+    }
+  }
   return { options, warnings, crewId: crew.id };
 }
 

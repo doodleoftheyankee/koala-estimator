@@ -222,7 +222,8 @@ export interface PricingWarning {
     | 'no_template'
     | 'tier_skipped'
     | 'override_below_floor'
-    | 'no_crew';
+    | 'no_crew'
+    | 'tier_price_order';
   areaId: string | null;
   tier: Tier | null;
   message: string;

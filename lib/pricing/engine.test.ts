@@ -213,6 +213,16 @@ describe('priceEstimate — scope rules', () => {
   });
 });
 
+describe('priceEstimate — tier order', () => {
+  it('warns when a lower tier costs more than a higher one', () => {
+    const pricey = { ...snapshot, materials: snapshot.materials.map((m) => (m.productCode === 'fiberglass_blown' ? { ...m, costPerUnit: 200 } : m)) };
+    const r = priceEstimate(estimate(), pricey, coefficients);
+    expect(r.warnings.some((w) => w.code === 'tier_price_order' && w.tier === 'better')).toBe(true);
+    const cheap = { ...snapshot, materials: snapshot.materials.map((m) => (m.productCode === 'fiberglass_blown' ? { ...m, costPerUnit: 5 } : m)) };
+    expect(priceEstimate(estimate(), cheap, coefficients).warnings.some((w) => w.code === 'tier_price_order')).toBe(false);
+  });
+});
+
 describe('priceEstimate — overrides', () => {
   it('applies a price override and recomputes margin', () => {
     const r = priceEstimate(estimate({ overrides: { good: { price: 5000, reason: 'match competitor' } } }), snapshot, coefficients);
