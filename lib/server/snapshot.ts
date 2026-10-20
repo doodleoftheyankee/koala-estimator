@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type {
   CoefficientSet,
   PricingBundle,
+  WinModel,
   PricingSettings,
   PricingSnapshot,
   ProductUnit,
@@ -88,7 +89,33 @@ export interface SnapshotRows {
     marketing_bullets: string[] | null;
   }>;
   coefficientSet: { id: string; version: number };
-  coefficients: Array<{ kind: string; product: string | null; job_type: string | null; access_level: string | null; value: number | string }>;
+  coefficients: Array<{
+    kind: string;
+    product: string | null;
+    job_type: string | null;
+    access_level: string | null;
+    value: number | string;
+    sample_size?: number | null;
+    n_eff?: number | string | null;
+    confidence?: number | string | null;
+  }>;
+  winModel?: { id: string; trained_at: string; n_quotes: number; params: unknown; metrics: unknown } | null;
+}
+
+const winParamsSchema = z.object({
+  weights: z.record(z.string(), z.number()),
+  jobTypes: z.array(z.string()),
+  sources: z.array(z.string()),
+});
+const winMetricsSchema = z.object({ logLoss: z.number(), auc: z.number().nullable(), baseRate: z.number() });
+
+/** Maps an active win_models row to the WinModel the phone uses; null if malformed. */
+export function parseWinModel(row: SnapshotRows['winModel']): WinModel | null {
+  if (!row) return null;
+  const params = winParamsSchema.safeParse(row.params);
+  const metrics = winMetricsSchema.safeParse(row.metrics);
+  if (!params.success || !metrics.success) return null;
+  return { id: row.id, trainedAt: row.trained_at, nQuotes: row.n_quotes, ...params.data, metrics: metrics.data };
 }
 
 const n = (v: number | string) => Number(v);
@@ -159,6 +186,9 @@ export function buildSnapshot(rows: SnapshotRows): { snapshot: PricingSnapshot; 
       jobType: c.job_type as CoefficientSet['coefficients'][number]['jobType'],
       accessLevel: c.access_level as CoefficientSet['coefficients'][number]['accessLevel'],
       value: n(c.value),
+      ...(c.sample_size != null ? { sampleSize: Number(c.sample_size) } : {}),
+      ...(c.n_eff != null ? { nEff: Number(c.n_eff) } : {}),
+      ...(c.confidence != null ? { confidence: Number(c.confidence) } : {}),
     })),
   };
   return { snapshot, coefficientSet };
@@ -174,8 +204,8 @@ export function stableStringify(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
-export function bundleHash(snapshot: PricingSnapshot, coefficientSet: CoefficientSet): string {
-  return createHash('sha256').update(stableStringify({ snapshot, coefficientSet })).digest('hex').slice(0, 16);
+export function bundleHash(snapshot: PricingSnapshot, coefficientSet: CoefficientSet, winModel: WinModel | null = null): string {
+  return createHash('sha256').update(stableStringify({ snapshot, coefficientSet, winModel })).digest('hex').slice(0, 16);
 }
 
 export function makeBundle(rows: SnapshotRows, now = new Date()): PricingBundle {
@@ -188,5 +218,6 @@ export function makeBundle(rows: SnapshotRows, now = new Date()): PricingBundle 
   coefficientSet.coefficients.sort((a, b) =>
     `${a.kind}/${a.product}/${a.jobType}/${a.accessLevel}`.localeCompare(`${b.kind}/${b.product}/${b.jobType}/${b.accessLevel}`),
   );
-  return { hash: bundleHash(snapshot, coefficientSet), builtAt: now.toISOString(), snapshot, coefficientSet };
+  const winModel = parseWinModel(rows.winModel ?? null);
+  return { hash: bundleHash(snapshot, coefficientSet, winModel), builtAt: now.toISOString(), snapshot, coefficientSet, winModel };
 }

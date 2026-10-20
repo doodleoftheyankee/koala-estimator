@@ -1,6 +1,7 @@
 // Converts an offline draft + its priced result into the snake_case payload consumed by
 // the sync_upsert_estimate() Postgres function. Pure, so it is unit tested.
 import type { PricedEstimate, PricingBundle } from '@/lib/pricing';
+import type { DeviationFlag } from '@/lib/learning/types';
 import { priceableAreas, type EstimateDraft } from './draft';
 
 export interface SyncPayload {
@@ -9,13 +10,14 @@ export interface SyncPayload {
   property: Record<string, unknown>;
   areas: Array<Record<string, unknown>>;
   options: Array<Record<string, unknown> & { lines: Array<Record<string, unknown>> }>;
+  flags: Array<Record<string, unknown>>;
 }
 
 export function buildSyncPayload(
   draft: EstimateDraft,
   priced: PricedEstimate,
   bundle: PricingBundle,
-  opts: { pricedOffline: boolean; uuid?: () => string },
+  opts: { pricedOffline: boolean; uuid?: () => string; flags?: DeviationFlag[] },
 ): SyncPayload {
   const uuid = opts.uuid ?? (() => crypto.randomUUID());
   const selected = priced.options.find((o) => o.tier === draft.selectedTier) ?? priced.options[0] ?? null;
@@ -105,10 +107,23 @@ export function buildSyncPayload(
           model_qty: l.modelQty,
           model_hours: l.modelHours,
           model_cost: l.modelCost,
-          is_overridden: false,
+          is_overridden: l.isOverridden,
+          override_reason: l.overrideReason,
+          line_key: l.key,
           sort_order: i,
         })),
       };
     }),
+    flags: (opts.flags ?? []).map((f) => ({
+      flag_key: f.key,
+      tier: f.tier,
+      line_key: f.lineKey,
+      metric: f.metric,
+      estimator_value: f.estimatorValue,
+      model_value: f.modelValue,
+      pct_diff: f.pctDiff,
+      reasons: f.reasons,
+      ack_note: draft.deviationAcks[f.key]?.trim() || null,
+    })),
   };
 }

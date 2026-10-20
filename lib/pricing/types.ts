@@ -107,6 +107,10 @@ export interface Coefficient {
   jobType: JobType | null;
   accessLevel: AccessLevel | null;
   value: number;
+  /** Evidence behind the value (from the learning loop). Absent for hand-set priors. */
+  sampleSize?: number;
+  nEff?: number;
+  confidence?: number; // 0..100
 }
 
 export interface CoefficientSet {
@@ -115,12 +119,29 @@ export interface CoefficientSet {
   coefficients: Coefficient[];
 }
 
-/** What the client caches for offline pricing. `hash` identifies snapshot + coefficient set. */
+/**
+ * Trained win-probability model (logistic regression), produced by lib/learning/winRate.
+ * Pure data so the phone can score prices offline.
+ */
+export interface WinModel {
+  id: string;
+  trainedAt: string;
+  nQuotes: number;
+  /** Feature name -> weight. Features: 'intercept', 'markup', 'log_sqft', 'job:<type>', 'source:<name>'. */
+  weights: Record<string, number>;
+  /** Categorical levels seen in training (others map to the reference level). */
+  jobTypes: string[];
+  sources: string[];
+  metrics: { logLoss: number; auc: number | null; baseRate: number };
+}
+
+/** What the client caches for offline pricing. `hash` identifies snapshot + coefficient set + win model. */
 export interface PricingBundle {
   hash: string;
   builtAt: string;
   snapshot: PricingSnapshot;
   coefficientSet: CoefficientSet;
+  winModel: WinModel | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,11 +169,27 @@ export interface PriceOverride {
   reason: string;
 }
 
+/**
+ * Estimator's own quantity (material lines) or hours (labor/removal lines) for one line,
+ * keyed by lineKey(areaId, product, kind). Applies to every tier that has that line.
+ */
+export interface LineOverride {
+  qty?: number | null;
+  hours?: number | null;
+  reason: string;
+}
+
 export interface EstimateInput {
   areas: AreaInput[];
   crewId: string | null;
   driveMinutesOneWay: number | null;
   overrides: Partial<Record<Tier, PriceOverride>>;
+  lineOverrides?: Record<string, LineOverride>;
+}
+
+/** Stable key for a line within an estimate: same area + product + kind across tiers. */
+export function lineKey(areaId: string, product: ProductCode, kind: LineKind): string {
+  return `${areaId}|${product}|${kind}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +197,8 @@ export interface EstimateInput {
 // ---------------------------------------------------------------------------
 
 export interface PricedLine {
+  /** lineKey() for area lines; null for job-level lines (drive, disposal). */
+  key: string | null;
   areaId: string | null;
   kind: LineKind;
   product: ProductCode | null;
@@ -175,6 +214,9 @@ export interface PricedLine {
   modelQty: number | null;
   modelHours: number | null;
   modelCost: number;
+  /** True when the estimator replaced the model's qty/hours (see LineOverride). */
+  isOverridden: boolean;
+  overrideReason: string | null;
 }
 
 /** What the customer sees: one row per area scope item, sell price allocated by cost share. */
@@ -205,9 +247,16 @@ export interface PricedOption {
   disposalCost: number;
   directCost: number;
   loadedCost: number;
+  /** Price from the model alone: no line overrides, no price override. */
   modelPrice: number;
+  /** Price after the estimator's line overrides, before any price override. */
+  adjustedPrice: number;
+  /** Customer price: the price override if set, else adjustedPrice. */
   price: number;
+  /** A customer-price override is set. */
   isOverridden: boolean;
+  /** At least one line uses estimator qty/hours instead of the model's. */
+  hasLineOverrides: boolean;
   overrideReason: string | null;
   marginPct: number;
   belowFloor: boolean;

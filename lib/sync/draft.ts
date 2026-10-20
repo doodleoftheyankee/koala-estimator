@@ -26,6 +26,13 @@ export const areaSchema = z.object({
 
 const overrideSchema = z.object({ price: positive.max(10_000_000), reason: trimmed(500) });
 
+/** Estimator's own qty (material) or hours (labor/removal) for a line; keyed by lineKey(). */
+export const lineOverrideSchema = z.object({
+  qty: z.number().finite().min(0).max(1_000_000).nullable().optional(),
+  hours: z.number().finite().min(0).max(10_000).nullable().optional(),
+  reason: trimmed(500).min(3, 'Give a reason for the change'),
+});
+
 export const draftSchema = z.object({
   id: z.uuid(),
   status: z.enum(ESTIMATE_STATUSES),
@@ -54,6 +61,10 @@ export const draftSchema = z.object({
   crewId: z.uuid().nullable(),
   driveMinutesOneWay: z.number().finite().min(0).max(600).nullable(),
   overrides: z.partialRecord(z.enum(TIERS), overrideSchema),
+  // Added in Phase 2; defaults keep older stored drafts valid.
+  lineOverrides: z.record(z.string(), lineOverrideSchema).default({}),
+  /** Estimator notes acknowledging deviation flags, keyed by DeviationFlag.key. */
+  deviationAcks: z.record(z.string(), z.string().trim().max(500)).default({}),
   selectedTier: z.enum(TIERS).nullable(),
   notes: z.string().max(5000),
   rowVersion: z.number().int().positive().nullable(),
@@ -86,6 +97,8 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     crewId: null,
     driveMinutesOneWay: null,
     overrides: {},
+    lineOverrides: {},
+    deviationAcks: {},
     selectedTier: null,
     notes: '',
     rowVersion: null,
@@ -125,6 +138,7 @@ export function toEstimateInput(d: EstimateDraft): EstimateInput {
     crewId: d.crewId,
     driveMinutesOneWay: d.driveMinutesOneWay,
     overrides: d.overrides,
+    lineOverrides: d.lineOverrides,
   };
 }
 

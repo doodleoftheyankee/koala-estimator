@@ -31,11 +31,12 @@ export async function loadPricingBundle(supabase: SupabaseClient): Promise<Prici
     if (r.error) throw new Error(`Loading pricing configuration failed: ${r.error.message}`);
   }
 
-  const coefficients = await supabase
-    .from('coefficients')
-    .select('kind, product, job_type, access_level, value')
-    .eq('set_id', set.data!.id);
+  const [coefficients, winModel] = await Promise.all([
+    supabase.from('coefficients').select('kind, product, job_type, access_level, value, sample_size, n_eff, confidence').eq('set_id', set.data!.id),
+    supabase.from('win_models').select('id, trained_at, n_quotes, params, metrics').eq('is_active', true).maybeSingle(),
+  ]);
   if (coefficients.error) throw new Error(`Loading coefficients failed: ${coefficients.error.message}`);
+  // The win model is optional (cold start, or a role that cannot read it); pricing never depends on it.
 
   const rows: SnapshotRows = {
     settings: settings.data!,
@@ -46,6 +47,7 @@ export async function loadPricingBundle(supabase: SupabaseClient): Promise<Prici
     tierTemplates: tiers.data!,
     coefficientSet: set.data!,
     coefficients: coefficients.data!,
+    winModel: winModel.error ? null : winModel.data,
   };
   const bundle = makeBundle(rows);
   validateSnapshot(bundle.snapshot);

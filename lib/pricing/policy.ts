@@ -23,7 +23,7 @@ export function canSendQuote(role: Role, options: PricedOption[], settings: Pric
         `${o.tier}: margin ${(o.marginPct * 100).toFixed(1)}% is below the ${(settings.floorMarginPct * 100).toFixed(0)}% floor. Owner approval required.`,
       );
     }
-    if (role === 'estimator' && o.isOverridden && o.modelPrice > 0) {
+    if (role === 'estimator' && (o.isOverridden || o.hasLineOverrides) && o.modelPrice > 0) {
       const delta = Math.abs(o.price - o.modelPrice) / o.modelPrice;
       if (delta > settings.estimatorOverrideLimitPct + 1e-9) {
         reasons.push(
@@ -33,6 +33,9 @@ export function canSendQuote(role: Role, options: PricedOption[], settings: Pric
     }
     if (o.isOverridden && !o.overrideReason?.trim()) {
       reasons.push(`${o.tier}: a price override needs a reason.`);
+    }
+    for (const l of o.lines) {
+      if (l.isOverridden && !l.overrideReason?.trim()) reasons.push(`${o.tier}: "${l.description}" was changed without a reason.`);
     }
   }
   return { ok: reasons.length === 0, reasons };

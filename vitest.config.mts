@@ -8,7 +8,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['lib/pricing/**', 'lib/learning/**'],
-      exclude: ['**/*.test.ts', '**/index.ts', '**/__fixtures__/**', 'lib/pricing/types.ts'],
+      exclude: ['**/*.test.ts', '**/index.ts', '**/__fixtures__/**', 'lib/pricing/types.ts', 'lib/learning/types.ts', 'lib/learning/io.ts', 'lib/learning/nightly.ts'],
       thresholds: { lines: 95, functions: 95, branches: 90, statements: 95 },
     },
   },

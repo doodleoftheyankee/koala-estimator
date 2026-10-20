@@ -6,7 +6,7 @@ import { buildSyncPayload } from './payload';
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
-const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients };
+const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function filledDraft() {
   const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
