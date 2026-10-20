@@ -54,9 +54,10 @@ export async function changeStatus(_prev: ActionResult | null, fd: FormData): Pr
 }
 
 /**
- * The office enters or corrects one actuals row. Costs can change at any time; quantities and
- * hours of a verified row only after the owner unverifies the job (verification is what feeds
- * learning, so verified numbers must not drift).
+ * The office enters or corrects one actuals row. Costs can change at any time; quantities, hours
+ * and notes of a verified row only after the owner unverifies the job (verification is what feeds
+ * learning, so verified numbers must not drift; the database enforces it too). A verified row's
+ * form only shows those values, so its save writes the costs alone.
  */
 export async function saveActual(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
@@ -76,8 +77,7 @@ export async function saveActual(_prev: ActionResult | null, fd: FormData): Prom
     if (cur.error) return failure(`Loading the row failed: ${cur.error.message}`);
     const row = cur.data as Record<string, unknown> | null;
     if (!row || row.job_id !== f.job_id) return failure('That actuals row was not found. Reload the page.');
-    const changed = valuesChanged(values, row);
-    if (changed && row.verified_at) return failure('This row is verified. The owner must unverify the job before quantities, hours or notes change.');
+    const changed = !row.verified_at && valuesChanged(values, row);
     const patch = changed ? { ...costs, ...values, entered_by: s.profile.userId, entered_at: new Date().toISOString() } : costs;
     const res = await s.db.from('job_actuals').update(patch).eq('id', f.id).select('id');
     if (res.error) return failure(`Saving failed: ${res.error.message}`);

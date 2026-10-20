@@ -8,6 +8,7 @@ import {
   ACCESS_LEVELS,
   COEFF_KINDS,
   JOB_TYPES,
+  lineKey,
   PRODUCTS,
   TIERS,
   type PricedOption,
@@ -122,18 +123,13 @@ export type OutcomeEstimateRow = z.infer<typeof outcomeEstimateRowSchema>;
 export const leadRowSchema = z.object({ id, source_id: z.string().nullable() });
 export const leadSourceRowSchema = z.object({ id, name: z.string() });
 
-export const flagRowSchema = z.object({
-  id,
-  estimate_id: id,
-  flag_key: z.string().nullable(),
-  metric: z.string(),
-  estimator_value: numeric,
-  model_value: numeric,
-});
+// No estimator_value/model_value: outcomes are scored from the signed quote (see lineFlagOutcomes).
+export const flagRowSchema = z.object({ id, estimate_id: id, flag_key: z.string().nullable(), metric: z.string() });
 export type FlagRow = z.infer<typeof flagRowSchema>;
 
-export const completedJobRowSchema = z.object({ id, estimate_id: id, completed_at: z.string().nullable() });
-export type CompletedJobRow = z.infer<typeof completedJobRowSchema>;
+/** A signed quote with only its frozen options (selected as `options:snapshot->options`). */
+export const flagQuoteRowSchema = z.object({ id, signed_tier: z.enum(TIERS).nullable(), options: z.unknown() });
+export type FlagQuoteRow = z.infer<typeof flagQuoteRowSchema>;
 
 export const idRowSchema = z.object({ id });
 
@@ -406,25 +402,35 @@ export function parseLineFlagKey(key: string | null): LineFlagKey | null {
   return { areaId, product: product as ProductCode, kind: kind as LineFlagKey['kind'], metric };
 }
 
+/** A line flag whose job is done, with the crew's actual it is judged against. */
+export interface ScorableLineFlag {
+  id: string;
+  /** The job's signed quote: its snapshot holds the numbers the customer agreed to. */
+  quoteId: string;
+  lineKey: string;
+  metric: 'qty' | 'hours';
+  actual: number;
+}
+
 /**
- * Outcome per unresolved line flag whose estimate has a completed job with fully verified
- * actuals (the most recently completed one if several): estimator vs model vs what the crew
- * reported for that area x product (material qty for 'qty', person-hours for 'hours').
- * Total-price flags, excluded actuals and missing or non-positive actuals get no outcome.
+ * Unresolved line flags whose estimate has a completed job with fully verified actuals (the most
+ * recently completed one if several) and a usable actual for the flag's area x product (material
+ * qty for 'qty', person-hours for 'hours'). Total-price flags, excluded actuals and missing or
+ * non-positive actuals are left out, so their quotes are never loaded.
  */
-export function lineFlagOutcomes(
+export function scorableLineFlags(
   flags: readonly FlagRow[],
-  jobs: readonly CompletedJobRow[],
+  jobs: readonly JobRow[],
   actuals: readonly ActualDbRow[],
-): Array<{ id: string; outcome: DeviationOutcome }> {
+): ScorableLineFlag[] {
   const verified = verifiedActualsByJob(actuals);
-  const jobByEstimate = new Map<string, CompletedJobRow>();
+  const jobByEstimate = new Map<string, JobRow>();
   const newestFirst = jobs
     .filter((j) => verified.has(j.id))
     .sort((a, b) => timeMs(b.completed_at) - timeMs(a.completed_at) || (a.id < b.id ? 1 : -1));
   for (const job of newestFirst) if (!jobByEstimate.has(job.estimate_id)) jobByEstimate.set(job.estimate_id, job);
 
-  const out: Array<{ id: string; outcome: DeviationOutcome }> = [];
+  const out: ScorableLineFlag[] = [];
   for (const flag of flags) {
     const key = parseLineFlagKey(flag.flag_key);
     if (!key || key.metric !== flag.metric) continue;
@@ -434,7 +440,50 @@ export function lineFlagOutcomes(
     if (!row || row.exclude_from_learning) continue;
     const actual = key.metric === 'qty' ? row.actual_material_qty : row.actual_hours;
     if (actual === null || !(actual > 0)) continue;
-    out.push({ id: flag.id, outcome: deviationOutcome(flag.estimator_value, flag.model_value, actual) });
+    out.push({ id: flag.id, quoteId: job.quote_id, lineKey: lineKey(key.areaId, key.product, key.kind), metric: key.metric, actual });
+  }
+  return out;
+}
+
+const signedLineSchema = z.looseObject({
+  key: z.string().nullish(),
+  isOverridden: z.boolean().nullish(),
+  qty: z.number().nullish(),
+  hours: z.number().nullish(),
+  modelQty: z.number().nullish(),
+  modelHours: z.number().nullish(),
+});
+type SignedLine = z.infer<typeof signedLineSchema>;
+const signedOptionsSchema = z.array(z.looseObject({ tier: z.enum(TIERS), lines: z.array(signedLineSchema) }));
+
+/** The lines of the option the customer signed, as frozen in the quote ([] when unreadable). */
+function signedLines(quote: FlagQuoteRow): SignedLine[] {
+  const options = signedOptionsSchema.safeParse(quote.options);
+  if (!options.success || !quote.signed_tier) return [];
+  return options.data.find((o) => o.tier === quote.signed_tier)?.lines ?? [];
+}
+
+/**
+ * Outcome per scorable flag, read from the signed option: the estimator's number is that line's
+ * own qty/hours, the model's its modelQty/modelHours. The flag row's values are not used: the row
+ * is rewritten on every sync (it can describe a revision made after the quote that was signed)
+ * and is stored once per line on one tier, while each tier has its own model value. A line that
+ * is missing from the signed option or not changed there was never installed as the estimator's
+ * deviation, so it gets no outcome (the column has no neutral value); see updateDeviationOutcomes.
+ */
+export function lineFlagOutcomes(
+  flags: readonly ScorableLineFlag[],
+  quotes: readonly FlagQuoteRow[],
+): Array<{ id: string; outcome: DeviationOutcome }> {
+  const lines = new Map(quotes.map((q) => [q.id, signedLines(q)]));
+  const out: Array<{ id: string; outcome: DeviationOutcome }> = [];
+  for (const flag of flags) {
+    const line = lines.get(flag.quoteId)?.find((l) => l.key === flag.lineKey);
+    if (!line?.isOverridden) continue;
+    const estimator = flag.metric === 'qty' ? line.qty : line.hours;
+    const model = flag.metric === 'qty' ? line.modelQty : line.modelHours;
+    if (estimator == null || model == null) continue;
+    out.push({ id: flag.id, outcome: deviationOutcome(estimator, model, flag.actual) });
   }
   return out;
 }

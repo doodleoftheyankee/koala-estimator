@@ -47,9 +47,12 @@ export const actualForm = z
     material_cost: optionalNumberField('Material cost', { min: 0, max: 10_000_000 }),
     labor_cost: optionalNumberField('Labor cost', { min: 0, max: 10_000_000 }),
     other_cost: optionalNumberField('Other cost', { min: 0, max: 10_000_000 }),
-    notes: optionalTextField('Notes', 2000),
+    // Multipart form posts turn line breaks into CRLF; store them as the crew app does (LF).
+    notes: optionalTextField('Notes', 2000).transform((s) => (s === null ? null : normalizeNewlines(s))),
   })
   .refine((f) => (f.area_id === null) === (f.product === null), { message: 'Area and product go together (or neither, for the whole-job row)' });
+
+export const normalizeNewlines = (s: string) => s.replace(/\r\n?/g, '\n');
 export type ActualFormData = z.infer<typeof actualForm>;
 
 /** The quantity/hours columns (crew-entered); changing them on a verified row needs an unverify first. */
@@ -76,7 +79,7 @@ export function valuesChanged(next: Record<string, string | number | null>, stor
   const norm = (x: unknown): unknown => {
     if (x === null || x === undefined) return null;
     if (typeof x !== 'string') return x;
-    const t = x.trim();
+    const t = normalizeNewlines(x).trim();
     if (t === '') return null;
     return Number.isFinite(Number(t)) ? Number(t) : t;
   };

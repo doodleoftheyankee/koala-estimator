@@ -1,6 +1,7 @@
 // Pure decisions for the crew app's offline actuals, separated from IndexedDB/fetch so they can
-// be unit tested: which rows a job needs, when they are complete, what to send, how to apply
-// the server's answer, and how to merge a fresh job list without losing unsynced work.
+// be unit tested: which rows a job needs, when they are complete, what to send (only rows the
+// crew changed, each with the server version it is based on), how to merge the server's newer
+// values field by field, and how to merge a fresh job list without losing unsynced work.
 import type { ProductCode, ProductUnit } from '@/lib/pricing';
 import {
   actualsBodySchema,
@@ -15,7 +16,7 @@ import {
   type ServerActual,
 } from '@/lib/jobs/crew';
 import type { JobStatus } from '@/lib/jobs/status';
-import type { DraftActualRow, LocalActuals, LocalJob } from './crewDb';
+import type { ActualValues, DraftActualRow, LocalActuals, LocalJob } from './crewDb';
 
 // ---------------------------------------------------------------------------
 // Expected rows and completeness
@@ -74,7 +75,7 @@ export function expectedRows(job: Pick<CrewJob, 'areas'>): ExpectedRow[] {
 }
 
 /** The value fields shared by draft rows and server rows. */
-export type RowValues = Pick<DraftActualRow, 'materialQty' | 'hours' | 'crewSize' | 'driveMinutes' | 'days' | 'notes'>;
+export type RowValues = ActualValues;
 type KeyedValues = RowValues & { areaId: string | null; product: ProductCode | null };
 
 /** What is still missing for one expected row (empty when complete). */
@@ -118,23 +119,37 @@ export function completionBlockers(job: Pick<CrewJob, 'areas'>, rows: readonly K
 const UNSYNCED = new Set(['pending', 'error', 'invalid']);
 export const isUnsynced = (d: Pick<LocalActuals, 'syncState'>) => UNSYNCED.has(d.syncState);
 
+const VALUE_KEYS = ['materialQty', 'hours', 'crewSize', 'driveMinutes', 'days', 'notes'] as const;
+type ValueKey = (typeof VALUE_KEYS)[number];
+const NO_VALUES: RowValues = { materialQty: null, hours: null, crewSize: null, driveMinutes: null, days: null, notes: null };
+
+/** Comparable form of one value: notes are compared trimmed, with blank = none. */
+const norm = (k: ValueKey, v: RowValues[ValueKey]) => (k === 'notes' ? (typeof v === 'string' && v.trim() ? v.trim() : null) : v);
+const pickValues = (r: RowValues): RowValues => ({
+  materialQty: r.materialQty,
+  hours: r.hours,
+  crewSize: r.crewSize,
+  driveMinutes: r.driveMinutes,
+  days: r.days,
+  notes: r.notes,
+});
+
 export function emptyRow(id: string, areaId: string | null, product: ProductCode | null, unit: ProductUnit | null): DraftActualRow {
-  return { id, areaId, product, materialQty: null, materialUnit: unit, hours: null, crewSize: null, driveMinutes: null, days: null, notes: null, onServer: false };
+  return { id, areaId, product, ...NO_VALUES, materialUnit: unit, onServer: false, base: null, baseVersion: null, changedElsewhere: null };
 }
 
 function fromServer(s: ServerActual, unit: ProductUnit | null): DraftActualRow {
+  const values = pickValues(s);
   return {
     id: s.id,
     areaId: s.areaId,
     product: s.product,
-    materialQty: s.materialQty,
+    ...values,
     materialUnit: unit,
-    hours: s.hours,
-    crewSize: s.crewSize,
-    driveMinutes: s.driveMinutes,
-    days: s.days,
-    notes: s.notes,
     onServer: true,
+    base: values,
+    baseVersion: s.rowVersion,
+    changedElsewhere: null,
   };
 }
 
@@ -142,13 +157,64 @@ export function rowHasValue(r: RowValues): boolean {
   return r.materialQty !== null || r.hours !== null || r.crewSize !== null || r.driveMinutes !== null || r.days !== null || !!r.notes?.trim();
 }
 
+/** Does the row hold something the server does not have yet (a value changed since `base`)? */
+export function isDirty(r: Pick<DraftActualRow, ValueKey | 'base'>): boolean {
+  if (!r.base) return rowHasValue(r);
+  return VALUE_KEYS.some((k) => norm(k, r[k]) !== norm(k, r.base![k]));
+}
+
+const FIELD_NAMES: Record<ValueKey, string> = {
+  materialQty: 'material used',
+  hours: 'person-hours',
+  crewSize: 'crew size',
+  driveMinutes: 'drive minutes',
+  days: 'days on site',
+  notes: 'notes',
+};
+const show = (v: RowValues[ValueKey]) => (v === null ? 'blank' : typeof v === 'string' ? `"${v}"` : String(v));
+
+/**
+ * Three-way merge of the phone's row with a newer server row, field by field against what the
+ * phone last saw (`base`): a field only the phone changed keeps the phone's value; a field only
+ * the server changed takes the server's; a field both changed takes the server's (it was saved
+ * first, e.g. the office correcting from an invoice) and the crew is told, with their value, so
+ * nothing is lost silently. The result is based on the server row; it is still dirty (and sent
+ * again) when it keeps any of the phone's values.
+ */
+export function mergeRow(mine: DraftActualRow, theirs: ServerActual, unit: ProductUnit | null): DraftActualRow {
+  const base = mine.base ?? NO_VALUES;
+  const server = pickValues(theirs);
+  const merged: RowValues = { ...server };
+  const overruled: string[] = [];
+  for (const k of VALUE_KEYS) {
+    const b = norm(k, base[k]);
+    const m = norm(k, mine[k]);
+    const t = norm(k, server[k]);
+    if (m === b || m === t) continue; // phone did not change it, or both agree: server value
+    if (t === b) (merged as Record<ValueKey, unknown>)[k] = mine[k];
+    else overruled.push(`${FIELD_NAMES[k]} is ${show(t)} (you had ${show(m)})`);
+  }
+  return {
+    ...mine,
+    ...merged,
+    id: theirs.id,
+    materialUnit: unit,
+    onServer: true,
+    base: server,
+    baseVersion: theirs.rowVersion,
+    changedElsewhere: overruled.length
+      ? `Saved by someone else while you were editing: ${joinList(overruled)}. Change it again if yours was right.`
+      : mine.changedElsewhere,
+  };
+}
+
 /**
  * Lines the local rows up with the job: one row per expected row (scope order), then rows the
- * server or the phone has beyond the scope. Server rows always lend their id (the database is
- * unique on job x area x product, so a second id for the same row would be refused); their
- * values replace the phone's only when `adoptServerValues` (nothing unsynced on the phone).
+ * server or the phone has beyond the scope. A row the crew has not changed takes the server's
+ * values; a changed row keeps the crew's changes, merged with anything the server changed since
+ * (mergeRow). `serverWins` (a verified job) discards the phone's changes.
  */
-export function reconcileRows(local: readonly DraftActualRow[], job: CrewJob, newId: () => string, adoptServerValues: boolean): DraftActualRow[] {
+export function reconcileRows(local: readonly DraftActualRow[], job: CrewJob, newId: () => string, serverWins: boolean): DraftActualRow[] {
   const expected = new Map(expectedRows(job).map((e) => [e.key, e]));
   const localByKey = new Map(local.map((r) => [naturalKey(r.areaId, r.product), r]));
   const serverByKey = new Map(job.actuals.map((a) => [naturalKey(a.areaId, a.product), a]));
@@ -163,10 +229,17 @@ export function reconcileRows(local: readonly DraftActualRow[], job: CrewJob, ne
     const mine = localByKey.get(key);
     const theirs = serverByKey.get(key);
     const unit = exp?.unit ?? mine?.materialUnit ?? theirs?.materialUnit ?? null;
-    if (theirs && (!mine || adoptServerValues)) out.push(fromServer(theirs, unit));
-    else if (theirs && mine) out.push({ ...mine, id: theirs.id, materialUnit: unit, onServer: true });
-    else if (mine) out.push({ ...mine, materialUnit: unit });
-    else if (exp) out.push(emptyRow(newId(), exp.areaId, exp.product, unit));
+    if (theirs) {
+      if (!mine || serverWins || !isDirty(mine)) out.push({ ...fromServer(theirs, unit), changedElsewhere: serverWins ? null : (mine?.changedElsewhere ?? null) });
+      else if (mine.baseVersion === theirs.rowVersion) out.push({ ...mine, id: theirs.id, materialUnit: unit, onServer: true });
+      else out.push(mergeRow(mine, theirs, unit));
+    } else if (mine && (mine.baseVersion === null || isDirty(mine))) {
+      // Only on the phone: keep it (it is sent as a new row).
+      out.push({ ...mine, materialUnit: unit, onServer: false, base: null, baseVersion: null });
+    } else if (exp) {
+      // Never entered, or removed on the server without changes here: start empty.
+      out.push(emptyRow(newId(), exp.areaId, exp.product, unit));
+    }
   }
   return out;
 }
@@ -184,18 +257,19 @@ export function initialActuals(job: CrewJob, ownerId: string, newId: () => strin
   };
 }
 
-const VALUE_FIELDS = ['id', 'areaId', 'product', 'materialQty', 'materialUnit', 'hours', 'crewSize', 'driveMinutes', 'days', 'notes', 'onServer'] as const;
+const sameValues = (a: RowValues | null, b: RowValues | null) =>
+  a === b || (a !== null && b !== null && VALUE_KEYS.every((k) => a[k] === b[k]));
+const ROW_FIELDS = ['id', 'areaId', 'product', ...VALUE_KEYS, 'materialUnit', 'onServer', 'baseVersion', 'changedElsewhere'] as const;
 
 export function sameRows(a: readonly DraftActualRow[], b: readonly DraftActualRow[]): boolean {
-  return a.length === b.length && a.every((r, i) => VALUE_FIELDS.every((f) => r[f] === b[i]![f]));
+  return a.length === b.length && a.every((r, i) => ROW_FIELDS.every((f) => r[f] === b[i]![f]) && sameValues(r.base, b[i]!.base));
 }
 
 /**
  * Merges one job from the server into the stored draft. Returns null when nothing changed.
- * Unsynced values on the phone win (they sync next); otherwise the server's values replace the
- * phone's (another phone or the office may have edited them). A verified job is locked and
- * shows the server's rows (rows the crew cannot see keep what was typed); an unverified one
- * unlocks again.
+ * Rows the crew changed keep their changes (merged with newer server values); everything else
+ * shows the server's values (another phone or the office may have edited them). A verified job
+ * is locked and shows the server's rows; an unverified one unlocks again.
  */
 export function mergeServerJob(
   local: LocalActuals | undefined,
@@ -206,14 +280,18 @@ export function mergeServerJob(
 ): LocalActuals | null {
   if (!local) return initialActuals(job, ownerId, newId, now);
   // Once verified, unsynced values can never sync: whatever the server shows wins.
-  const rows = reconcileRows(local.rows, job, newId, job.verified || !isUnsynced(local));
+  const rows = reconcileRows(local.rows, job, newId, job.verified);
   let syncState = local.syncState;
   let lastError = local.lastError;
   if (job.verified) {
     syncState = 'locked';
     lastError = LOCKED_MESSAGE;
-  } else if (local.syncState === 'locked') {
+  } else if (!rows.some(isDirty)) {
+    // Nothing left to send (the server already has it all).
     syncState = 'synced';
+    lastError = null;
+  } else if (local.syncState === 'locked' || local.syncState === 'synced') {
+    syncState = 'pending';
     lastError = null;
   }
   if (syncState === local.syncState && lastError === local.lastError && sameRows(rows, local.rows)) return null;
@@ -225,29 +303,22 @@ export function mergeServerJob(
 /** The form's values (by natural key) for every stored row. */
 export function valuesOf(draft: Pick<LocalActuals, 'rows'>): Record<string, RowValues> {
   const out: Record<string, RowValues> = {};
-  for (const r of draft.rows) {
-    out[naturalKey(r.areaId, r.product)] = {
-      materialQty: r.materialQty,
-      hours: r.hours,
-      crewSize: r.crewSize,
-      driveMinutes: r.driveMinutes,
-      days: r.days,
-      notes: r.notes,
-    };
-  }
+  for (const r of draft.rows) out[naturalKey(r.areaId, r.product)] = pickValues(r);
   return out;
 }
 
 /**
  * A local edit. Values are applied by natural key onto the stored rows, so ids the stored copy
- * adopted from the server meanwhile are kept. Every edit gets a fresh mutation id. Locked
- * (verified) drafts do not change.
+ * adopted from the server meanwhile are kept. Every edit gets a fresh mutation id; a row the crew
+ * changes again drops its "saved by someone else" notice. Locked (verified) drafts do not change.
  */
 export function applyEdits(current: LocalActuals, values: Record<string, RowValues>, newMutationId: string, now: string): LocalActuals {
   if (current.syncState === 'locked') return current;
   const rows = current.rows.map((r) => {
     const v = values[naturalKey(r.areaId, r.product)];
-    return v ? { ...r, ...v } : r;
+    if (!v) return r;
+    const edited = VALUE_KEYS.some((k) => norm(k, v[k]) !== norm(k, r[k]));
+    return { ...r, ...pickValues(v), changedElsewhere: edited ? null : r.changedElsewhere };
   });
   return { ...current, rows, mutationId: newMutationId, syncState: 'pending', lastError: null, updatedAt: now };
 }
@@ -256,25 +327,24 @@ export function applyEdits(current: LocalActuals, values: Record<string, RowValu
 // Push
 // ---------------------------------------------------------------------------
 
-/** Rows to send: anything holding a value, plus rows the server has (so clearing a value syncs). */
+/** Rows to send: only rows the crew changed since the server's version they are based on. */
 export function payloadRows(draft: Pick<LocalActuals, 'rows'>): ActualsRow[] {
-  return draft.rows
-    .filter((r) => r.onServer || rowHasValue(r))
-    .map((r) => {
-      const jobRow = r.areaId === null || r.product === null;
-      return {
-        id: r.id,
-        areaId: jobRow ? null : r.areaId,
-        product: jobRow ? null : r.product,
-        materialQty: jobRow ? null : r.materialQty,
-        materialUnit: jobRow ? null : r.materialUnit,
-        hours: jobRow ? null : r.hours,
-        crewSize: jobRow ? r.crewSize : null,
-        driveMinutes: jobRow ? r.driveMinutes : null,
-        days: jobRow ? r.days : null,
-        notes: r.notes?.trim() ? r.notes.trim() : null,
-      };
-    });
+  return draft.rows.filter(isDirty).map((r) => {
+    const jobRow = r.areaId === null || r.product === null;
+    return {
+      id: r.id,
+      areaId: jobRow ? null : r.areaId,
+      product: jobRow ? null : r.product,
+      materialQty: jobRow ? null : r.materialQty,
+      materialUnit: jobRow ? null : r.materialUnit,
+      hours: jobRow ? null : r.hours,
+      crewSize: jobRow ? r.crewSize : null,
+      driveMinutes: jobRow ? r.driveMinutes : null,
+      days: jobRow ? r.days : null,
+      notes: r.notes?.trim() ? r.notes.trim() : null,
+      baseVersion: r.baseVersion,
+    };
+  });
 }
 
 /** The request body, checked with the server's own schema so bad input fails on the phone with a clear message. */
@@ -297,24 +367,50 @@ const FIELD_LABELS: Record<string, string> = {
   notes: 'Notes',
 };
 
+/** What a sent row stored on the server, as row values (job rows carry no qty/hours, area rows no crew data). */
+const sentValues = (r: ActualsRow): RowValues => ({
+  materialQty: r.materialQty,
+  hours: r.hours,
+  crewSize: r.crewSize,
+  driveMinutes: r.driveMinutes,
+  days: r.days,
+  notes: r.notes,
+});
+
 /**
  * Applies the server's answer to the stored draft. `sent` is what went out: if the crew edited
- * while the request was in flight, the draft has a newer mutation id and stays pending.
+ * while the request was in flight, the draft has a newer mutation id and stays pending. Saved rows
+ * take the server's id and version with what was sent as their new base; conflicting rows are
+ * merged (mergeRow) and sent again under a new mutation id (the old one is spent on the server).
  */
 export function applyActualsResult(
   current: LocalActuals,
-  sent: { mutationId: string; rowIds: readonly string[] },
+  sent: { mutationId: string; rows: readonly ActualsRow[] },
   res: ActualsSyncResponse,
   now: string,
+  newId: () => string,
 ): LocalActuals {
   const editedSince = current.mutationId !== sent.mutationId;
   switch (res.status) {
     case 'applied': {
-      const ids = new Set(sent.rowIds);
+      const sentByKey = new Map(sent.rows.map((r) => [naturalKey(r.areaId, r.product), r]));
+      const saved = new Map(res.saved.map((r) => [naturalKey(r.areaId, r.product), r]));
+      const conflicts = new Map(res.conflicts.map((r) => [naturalKey(r.areaId, r.product), r]));
+      const rows = current.rows.map((r) => {
+        const key = naturalKey(r.areaId, r.product);
+        const s = saved.get(key);
+        const out = sentByKey.get(key);
+        if (s && out) return { ...r, id: s.id, onServer: true, base: sentValues(out), baseVersion: s.rowVersion };
+        const c = conflicts.get(key);
+        if (c) return mergeRow(r, c, r.materialUnit);
+        return r;
+      });
+      const more = rows.some(isDirty);
       return {
         ...current,
-        rows: current.rows.map((r) => (ids.has(r.id) && !r.onServer ? { ...r, onServer: true } : r)),
-        syncState: editedSince ? 'pending' : 'synced',
+        rows,
+        syncState: editedSince || more ? 'pending' : 'synced',
+        mutationId: editedSince || !more ? current.mutationId : newId(),
         lastError: null,
         syncedAt: now,
       };
@@ -323,6 +419,9 @@ export function applyActualsResult(
       return { ...current, syncState: 'locked', lastError: res.error };
     case 'invalid':
       return editedSince ? { ...current, syncState: 'pending', lastError: null } : { ...current, syncState: 'invalid', lastError: res.error };
+    case 'rejected':
+      // The id was spent by another user on this phone: the same change goes again under a new id.
+      return { ...current, syncState: 'error', lastError: res.error, mutationId: editedSince ? current.mutationId : newId() };
     case 'conflict':
     case 'error':
       return { ...current, syncState: 'error', lastError: res.error };

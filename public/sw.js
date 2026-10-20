@@ -9,9 +9,14 @@
  *    /field shell can show prices, which crews must not see.
  *  - /_next/static/* and /icons/* : cache-first (file names are content-hashed).
  *  - /api/* and everything else: network only. Offline data lives in IndexedDB, not here.
+ *  - The shells are per device, not per user. A shell the server refuses (redirect, 401, 403:
+ *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
+ *    and offline a /field launch opens the /crew shell when /crew was the last shell loaded, so
+ *    a crew member never gets someone else's priced /field shell.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
+const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
 const SHELLS = ['/field', '/crew'];
@@ -29,9 +34,10 @@ function assetsIn(html) {
 
 async function precacheShell(shellUrl) {
   const res = await fetch(shellUrl, { credentials: 'include', cache: 'no-store' });
-  // Signed out, wrong role (redirect) or error: skip; the next online visit caches it.
-  if (!res.ok || res.redirected) return;
   const cache = await caches.open(SHELL_CACHE);
+  // Signed out or wrong role: drop any copy cached for an earlier user. Other errors: keep it.
+  if (refused(res)) return cache.delete(shellUrl);
+  if (!res.ok) return;
   await cache.put(shellUrl, res.clone());
   const staticCache = await caches.open(STATIC_CACHE);
   await Promise.all(
@@ -39,6 +45,10 @@ async function precacheShell(shellUrl) {
       staticCache.add(url).catch(() => undefined),
     ),
   );
+}
+
+function refused(res) {
+  return res.redirected || res.type === 'opaqueredirect' || res.status === 401 || res.status === 403;
 }
 
 function precacheShells() {
@@ -61,6 +71,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'refresh-shell') event.waitUntil(precacheShells());
+  if (event.data === 'clear-user-data') {
+    // Sign-out: the shells embed the signed-in user's profile (and /field shows prices).
+    const done = caches.delete(SHELL_CACHE).then(() => event.ports[0]?.postMessage('cleared'));
+    event.waitUntil(done);
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -83,8 +98,11 @@ async function shellNavigation(req, shell) {
   const cache = await caches.open(SHELL_CACHE);
   try {
     const res = await fetch(req);
-    if (res.ok && !res.redirected) {
+    if (refused(res)) {
+      await cache.delete(shell);
+    } else if (res.ok) {
       cache.put(shell, res.clone());
+      cache.put(LAST_SHELL, new Response(shell));
       // Keep the shell's assets cached as deployments change them.
       res
         .clone()
@@ -97,7 +115,10 @@ async function shellNavigation(req, shell) {
     }
     return res;
   } catch {
-    const cached = (await cache.match(shell)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
+    const last = await cache.match(LAST_SHELL).then((r) => (r ? r.text() : null));
+    // A device last used for the crew app never opens a priced shell offline.
+    const preferred = last && FALLBACK[shell] === last ? last : shell;
+    const cached = (await cache.match(preferred)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
     if (cached) return cached;
     return new Response(
       '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title>' +

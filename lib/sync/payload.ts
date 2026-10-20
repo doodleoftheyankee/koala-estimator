@@ -2,6 +2,7 @@
 // the sync_upsert_estimate() Postgres function. Pure, so it is unit tested.
 import type { PricedEstimate, PricingBundle } from '@/lib/pricing';
 import type { DeviationFlag } from '@/lib/learning/types';
+import { acknowledgedNote } from '@/lib/field/flags';
 import { priceableAreas, type EstimateDraft } from './draft';
 
 export interface SyncPayload {
@@ -123,7 +124,8 @@ export function buildSyncPayload(
       model_value: f.modelValue,
       pct_diff: f.pctDiff,
       reasons: f.reasons,
-      ack_note: draft.deviationAcks[f.key]?.trim() || null,
+      // The note string, only while it explains this deviation (never a stale one).
+      ack_note: acknowledgedNote(f, draft.deviationAcks),
     })),
   };
 }

@@ -15,7 +15,6 @@ import {
   type CrewJobsResponse,
 } from '@/lib/jobs/crew';
 import { authorize } from '@/lib/server/auth';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -23,7 +22,7 @@ export const dynamic = 'force-dynamic';
 const RECENT_DAYS = 14;
 
 export async function GET() {
-  const { profile, error } = await authorize('crew', 'owner', 'office');
+  const { error } = await authorize('crew', 'owner', 'office');
   if (error) return error;
   const supabase = await createClient();
 
@@ -43,10 +42,10 @@ export async function GET() {
   const jobs = groupViewRows(rows.data);
   const ids = jobs.map((j) => j.jobId);
 
-  // RLS: crews read their own jobs' unverified rows; owner/office read everything.
+  // crew_actuals_view: the crew's own jobs' rows (verified ones too), never costs.
   let actuals: ActualDbRow[] = [];
   if (ids.length) {
-    const res = await supabase.from('job_actuals').select(CREW_ACTUAL_COLUMNS).in('job_id', ids).order('entered_at');
+    const res = await supabase.from('crew_actuals_view').select(CREW_ACTUAL_COLUMNS).in('job_id', ids).order('entered_at');
     if (res.error) return NextResponse.json({ error: `Could not load actuals: ${res.error.message}` }, { status: 500 });
     const parsed = z.array(actualDbRowSchema).safeParse(res.data);
     if (!parsed.success) return NextResponse.json({ error: 'Unexpected actuals data from the server.' }, { status: 500 });
@@ -54,7 +53,6 @@ export async function GET() {
   }
 
   const verified = new Set(actuals.filter((a) => a.verified_at !== null).map((a) => a.job_id));
-  if (profile.role === 'crew') for (const id of await verifiedForCrew(ids)) verified.add(id);
 
   const body: CrewJobsResponse = {
     jobs: jobs.map((j) => ({
@@ -65,20 +63,4 @@ export async function GET() {
     fetchedAt: new Date().toISOString(),
   };
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
-}
-
-/**
- * Crew RLS hides verified rows, so the crew's own client cannot tell "verified" from "nothing
- * entered". The ids come from the crew-scoped view above, so this only reveals a yes/no about
- * jobs the user may already see.
- */
-async function verifiedForCrew(ids: string[]): Promise<string[]> {
-  if (!ids.length) return [];
-  try {
-    const { data, error } = await createAdminClient().from('job_actuals').select('job_id').in('job_id', ids).not('verified_at', 'is', null);
-    if (error) return [];
-    return (data ?? []).map((r) => String((r as { job_id: unknown }).job_id));
-  } catch {
-    return []; // service role not configured: the crew learns about verification on its next sync
-  }
 }

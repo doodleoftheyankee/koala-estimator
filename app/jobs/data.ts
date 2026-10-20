@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { PRODUCTS } from '@/lib/pricing';
 import { PRODUCT_UNITS } from '@/lib/jobs/crew';
 import type { OfficeActual } from '@/lib/jobs/office';
+import { fetchRows, isHistoryGroup, officeListQueries, uniqueById, type HistoryGroup, type ListQuery } from '@/lib/jobs/officeList';
 import { JOB_STATUSES } from '@/lib/jobs/status';
 import type { createClient } from '@/lib/supabase/server';
 
@@ -57,39 +58,85 @@ export interface JobListItem {
   verifiedCount: number;
 }
 
-export async function loadJobList(db: Db): Promise<{ jobs: JobListItem[]; error: string | null }> {
-  const res = await db
-    .from('jobs')
-    .select(
-      `id, status, scheduled_start, scheduled_days, completed_at, revenue,
-       crew:crews(name),
-       quote:quotes(signed_tier, signed_price, doc_options:snapshot->document->options),
-       estimate:estimates(customer:customers(first_name, last_name), property:properties(street, city, zip)),
-       actuals:job_actuals(verified_at)`,
-    )
-    .order('scheduled_start', { ascending: true, nullsFirst: false })
-    .order('created_at', { ascending: false })
-    .limit(500);
-  if (res.error) return { jobs: [], error: res.error.message };
-  const parsed = z.array(listRow).safeParse(res.data);
-  if (!parsed.success) return { jobs: [], error: `Unexpected data from the server (${parsed.error.issues[0]?.message ?? 'parse error'}).` };
+/** The list's select; officeListQueries adds embeds to filter on. */
+const LIST_SELECT = `id, status, scheduled_start, scheduled_days, completed_at, revenue,
+   crew:crews(name),
+   quote:quotes(signed_tier, signed_price, doc_options:snapshot->document->options),
+   estimate:estimates(customer:customers(first_name, last_name), property:properties(street, city, zip)),
+   actuals:job_actuals(verified_at)`;
+
+export interface JobList {
+  jobs: JobListItem[];
+  /** History groups cut to their most recent jobs: how many are shown and how many exist. */
+  partial: Partial<Record<HistoryGroup, { shown: number; total: number }>>;
+  error: string | null;
+}
+
+/**
+ * Every open job and every completed job awaiting verification, and the latest verified and
+ * cancelled jobs (all of `showAll`). One query per group (lib/jobs/officeList.ts); a group that
+ * fails to load is reported in `error` and the others are still returned.
+ */
+export async function loadJobList(db: Db, showAll: HistoryGroup | null = null): Promise<JobList> {
+  const queries = officeListQueries(showAll);
+  const results = await Promise.all(queries.map((q) => loadListQuery(db, q)));
+  const errors = new Set<string>();
+  const lists: JobListItem[][] = [];
+  const partial: JobList['partial'] = {};
+  for (const [i, q] of queries.entries()) {
+    const r = results[i]!;
+    if ('error' in r) {
+      errors.add(r.error);
+      continue;
+    }
+    const parsed = z.array(listRow).safeParse(r.rows);
+    if (!parsed.success) {
+      errors.add(`Unexpected data from the server (${parsed.error.issues[0]?.message ?? 'parse error'}).`);
+      continue;
+    }
+    lists.push(parsed.data.map(toListItem));
+    if (q.limit !== null && isHistoryGroup(q.name) && r.total > parsed.data.length) partial[q.name] = { shown: parsed.data.length, total: r.total };
+  }
+  return { jobs: uniqueById(lists), partial, error: errors.size ? [...errors].join(' ') : null };
+}
+
+async function loadListQuery(db: Db, q: ListQuery): Promise<{ rows: unknown[]; total: number } | { error: string }> {
+  try {
+    return await fetchRows((from, to) => buildListQuery(db, q).range(from, to), q.limit);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** A list query as a PostgREST query on jobs (staff RLS through the user's client). */
+function buildListQuery(db: Db, q: ListQuery) {
+  let query = db.from('jobs').select([LIST_SELECT, ...q.embeds].join(', '), { count: 'exact' });
+  for (const f of q.filters) {
+    if (f.op === 'eq') query = query.eq(f.column, f.value);
+    else if (f.op === 'in') query = query.in(f.column, f.values);
+    else if (f.op === 'unverifiedRows') query = query.is('unverified.verified_at', null);
+    else if (f.op === 'isNull') query = query.is(f.embed, null);
+    else query = query.not(f.embed, 'is', null);
+  }
+  for (const o of q.order) query = query.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+  return query;
+}
+
+function toListItem(r: z.infer<typeof listRow>): JobListItem {
   return {
-    error: null,
-    jobs: parsed.data.map((r) => ({
-      id: r.id,
-      status: r.status,
-      customer: customerName(r.estimate?.customer),
-      address: addressOf(r.estimate?.property),
-      crew: r.crew?.name ?? null,
-      scheduledStart: r.scheduled_start,
-      scheduledDays: r.scheduled_days,
-      completedAt: r.completed_at,
-      signedTier: r.quote?.signed_tier ?? null,
-      signedPrice: r.quote?.signed_price ?? r.revenue,
-      docOptions: r.quote?.doc_options ?? null,
-      actualsCount: r.actuals?.length ?? 0,
-      verifiedCount: (r.actuals ?? []).filter((a) => a.verified_at !== null).length,
-    })),
+    id: r.id,
+    status: r.status,
+    customer: customerName(r.estimate?.customer),
+    address: addressOf(r.estimate?.property),
+    crew: r.crew?.name ?? null,
+    scheduledStart: r.scheduled_start,
+    scheduledDays: r.scheduled_days,
+    completedAt: r.completed_at,
+    signedTier: r.quote?.signed_tier ?? null,
+    signedPrice: r.quote?.signed_price ?? r.revenue,
+    docOptions: r.quote?.doc_options ?? null,
+    actualsCount: r.actuals?.length ?? 0,
+    verifiedCount: (r.actuals ?? []).filter((a) => a.verified_at !== null).length,
   };
 }
 

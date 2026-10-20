@@ -28,8 +28,27 @@ export interface DraftActualRow {
   driveMinutes: number | null; // job row: average one-way
   days: number | null; // job row: days on site
   notes: string | null;
-  /** The server has this row. Rows the server never saw are only sent once they hold a value. */
+  /** The server has this row (baseVersion is set). */
   onServer: boolean;
+  /**
+   * The server's values and row_version as this phone last saw them (null: no server row yet).
+   * A row is sent only when its values differ from `base`, with `baseVersion`; when the server
+   * row changed meanwhile, the two edits are merged field by field (see crewSyncCore).
+   */
+  base: ActualValues | null;
+  baseVersion: number | null;
+  /** Shown on the row after a merge kept someone else's value over the crew's. */
+  changedElsewhere: string | null;
+}
+
+/** The values the crew enters on one row. */
+export interface ActualValues {
+  materialQty: number | null;
+  hours: number | null;
+  crewSize: number | null;
+  driveMinutes: number | null;
+  days: number | null;
+  notes: string | null;
 }
 
 export interface LocalActuals {

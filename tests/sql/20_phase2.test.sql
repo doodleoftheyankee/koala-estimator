@@ -181,11 +181,35 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
 
+-- The snapshot is what the quote route freezes: every option with its lines, and the areas quoted.
 insert into quotes (id, estimate_id, version, status, pdf_path, pdf_sha256, snapshot, public_token_hash, expires_at, sent_by)
-values ('f2000000-0000-0000-0000-000000000001', 'e2000000-0000-0000-0000-000000000001', 1, 'sent',
-        'e2000000-0000-0000-0000-000000000001/v1.pdf', 'sha-p2-1', '{"options": []}', 'p2-token-1',
-        now() + interval '30 days', :'est');
+select 'f2000000-0000-0000-0000-000000000001', e.id, 1, 'sent', e.id || '/v1.pdf', 'sha-p2-1',
+       jsonb_build_object(
+         'options', (select jsonb_agg(jsonb_build_object(
+                       'tier', o.tier, 'crewDays', o.crew_days, 'price', o.price,
+                       'lines', (select coalesce(jsonb_agg(jsonb_build_object(
+                                   'key', l.line_key, 'areaId', l.area_id, 'kind', l.kind, 'product', l.product,
+                                   'description', l.description, 'qty', l.qty, 'unit', l.unit, 'hours', l.hours, 'cost', l.cost)
+                                   order by l.sort_order), '[]')
+                                   from estimate_lines l where l.option_id = o.id)) order by o.tier)
+                       from estimate_options o where o.estimate_id = e.id),
+         'input', jsonb_build_object('areas', (select jsonb_agg(jsonb_build_object(
+                       'id', a.id, 'name', a.name, 'jobType', a.job_type, 'accessLevel', a.access_level, 'sqft', a.sqft)
+                       order by a.sort_order) from estimate_areas a where a.estimate_id = e.id))),
+       'p2-token-1', now() + interval '30 days', :'est'
+  from estimates e where e.id = 'e2000000-0000-0000-0000-000000000001';
 update estimates set status = 'sent' where id = 'e2000000-0000-0000-0000-000000000001';
+
+
+-- The estimator then starts a revision that is never sent: more bags, more days, another area.
+-- The customer signs v1, so the job and the crew's scope must follow v1, not the revision.
+update estimate_options set crew_days = 3
+ where estimate_id = 'e2000000-0000-0000-0000-000000000001' and tier = 'better';
+update estimate_lines l set qty = 120 from estimate_options o
+ where l.option_id = o.id and o.estimate_id = 'e2000000-0000-0000-0000-000000000001' and o.tier = 'better'
+   and l.kind = 'material' and l.product = 'cellulose';
+insert into estimate_areas (id, estimate_id, name, job_type, sqft)
+values ('a2000000-0000-0000-0000-00000000000f', 'e2000000-0000-0000-0000-000000000001', 'Garage (revision only)', 'garage', 300);
 
 do $$
 declare j record;
@@ -200,7 +224,7 @@ begin
   assert j.estimate_id = 'e2000000-0000-0000-0000-000000000001', 'job belongs to the estimate';
   assert j.crew_id = 'c2000000-0000-0000-0000-000000000001', 'job goes to the estimate''s crew';
   assert j.status = 'scheduled' and j.revenue = 6400, 'job starts scheduled with the signed price as revenue';
-  assert j.scheduled_days = 1.5, 'scheduled days come from the signed option';
+  assert j.scheduled_days = 1.5, 'scheduled days come from the signed quote, not the later revision (3): ' || j.scheduled_days;
   assert (select decided_at from estimates where id = 'e2000000-0000-0000-0000-000000000001') is not null,
     'signing decides the estimate';
 end $$;
@@ -353,13 +377,14 @@ select set_config('request.jwt.claim.sub', :'crewa', false);
 do $$
 declare v record;
 begin
-  assert (select count(*) from crew_job_view where job_id = current_setting('p2.job1')::uuid) = 1, 'one row per job area';
+  assert (select count(*) from crew_job_view where job_id = current_setting('p2.job1')::uuid) = 1,
+    'one row per signed area (not the revision-only garage)';
   select * into v from crew_job_view where job_id = current_setting('p2.job1')::uuid;
   assert v.signed_tier = 'better' and v.status = 'completed' and v.completed_at is not null, 'status and signed tier visible';
   assert v.area_name = 'Main attic' and v.sqft = 1200 and v.access_level = 'difficult', 'area details visible';
   assert jsonb_array_length(v.scope) = 3, 'scope = the signed option''s material/labor lines for the area: ' || v.scope::text;
   assert v.scope->0->>'product' = 'cellulose' and v.scope->0->>'kind' = 'material' and (v.scope->0->>'qty')::numeric = 70
-         and v.scope->0->>'unit' = 'bag', 'material line with quantity';
+         and v.scope->0->>'unit' = 'bag', 'material line with the signed quantity (70, not the revision''s 120)';
   assert v.scope->1->>'kind' = 'labor' and (v.scope->1->>'hours')::numeric = 14, 'labor line with the hours the crew should plan';
   assert v.scope->2->>'product' = 'air_sealing', 'air sealing in scope';
   assert not exists (select 1 from jsonb_array_elements(v.scope) e
@@ -375,16 +400,19 @@ do $$ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- sync_job_actuals: crew entry, idempotency, office costs, verification lock
+-- sync_job_actuals: crew entry, idempotency, versions, office costs, verification lock
 -- ---------------------------------------------------------------------------
 reset role;
 create table p2_rows (rows jsonb);
 insert into p2_rows values (jsonb_build_array(
   jsonb_build_object('id', 'ac200000-0000-0000-0000-000000000001', 'area_id', 'a2000000-0000-0000-0000-000000000001',
     'product', 'cellulose', 'actual_material_qty', 75, 'actual_material_unit', 'bag', 'actual_hours', 15.5,
-    'notes', 'two extra bags', 'verified_by', '00000000-0000-0000-0000-0000000000b4', 'verified_at', now()),
+    'notes', 'two extra bags', 'base_row_version', null,
+    -- never taken from a phone:
+    'verified_by', '00000000-0000-0000-0000-0000000000b4', 'verified_at', now(),
+    'actual_material_cost', 99999, 'exclude_from_learning', true, 'exclude_reason', 'x'),
   jsonb_build_object('id', 'ac200000-0000-0000-0000-000000000002', 'area_id', null, 'product', null,
-    'actual_drive_minutes', 28, 'actual_days', 1, 'actual_crew_size', 2)));
+    'actual_drive_minutes', 28, 'actual_days', 1, 'actual_crew_size', 2, 'base_row_version', null)));
 grant select on p2_rows to authenticated;
 
 set role authenticated;
@@ -393,35 +421,65 @@ do $$
 declare r jsonb; r2 jsonb; a record; ok boolean := false;
 begin
   r := sync_job_actuals('d2000000-0000-0000-0000-000000000010', current_setting('p2.job1')::uuid, (select rows from p2_rows));
-  assert r->>'status' = 'applied' and (r->>'rows')::int = 2, 'crew actuals applied: ' || r::text;
+  assert r->>'status' = 'applied' and (r->>'rows')::int = 2 and jsonb_array_length(r->'conflicts') = 0,
+    'crew actuals applied: ' || r::text;
+  assert (r->'saved'->0->>'row_version')::int = 1 and r->'saved'->0->>'id' = 'ac200000-0000-0000-0000-000000000001',
+    'saved rows come back with their row_version: ' || r::text;
 
-  select * into a from job_actuals where id = 'ac200000-0000-0000-0000-000000000001';
+  select * into a from crew_actuals_view where id = 'ac200000-0000-0000-0000-000000000001';
   assert a.actual_material_qty = 75 and a.actual_hours = 15.5 and a.notes = 'two extra bags', 'actuals stored';
   assert a.entered_by = '00000000-0000-0000-0000-0000000000b4', 'entered by the crew member';
-  assert a.verified_by is null and a.verified_at is null, 'a crew sync can never verify its own rows';
+  assert a.verified_at is null, 'a crew sync can never verify its own rows';
 
   -- Replaying the mutation returns the first result and writes nothing.
   r2 := sync_job_actuals('d2000000-0000-0000-0000-000000000010', current_setting('p2.job1')::uuid,
           jsonb_set((select rows from p2_rows), '{0,actual_hours}', '99'));
   assert r2 = r, 'replay must be idempotent';
-  assert (select actual_hours from job_actuals where id = 'ac200000-0000-0000-0000-000000000001') = 15.5, 'replay writes nothing';
-  assert (select count(*) from job_actuals where job_id = current_setting('p2.job1')::uuid) = 2, 'replay adds no rows';
+  assert (select actual_hours from crew_actuals_view where id = 'ac200000-0000-0000-0000-000000000001') = 15.5, 'replay writes nothing';
+  assert (select count(*) from crew_actuals_view where job_id = current_setting('p2.job1')::uuid) = 2, 'replay adds no rows';
 
-  -- Direct writes cannot smuggle in a verification either.
+  -- Crews have no direct access to the table (it holds the office's costs).
+  assert (select count(*) from job_actuals) = 0, 'crew cannot read job_actuals directly';
   begin
-    insert into job_actuals (id, job_id, product, actual_hours, entered_by, verified_by, verified_at)
+    insert into job_actuals (id, job_id, product, actual_hours, entered_by)
     values ('ac200000-0000-0000-0000-000000000009', current_setting('p2.job1')::uuid, 'air_sealing', 5,
-            '00000000-0000-0000-0000-0000000000b4', '00000000-0000-0000-0000-0000000000b4', now());
+            '00000000-0000-0000-0000-0000000000b4');
   exception when insufficient_privilege then ok := true;
   end;
-  assert ok, 'crew cannot insert a verified row';
+  assert ok, 'crew cannot insert into job_actuals directly';
+
+  -- An area that is not part of the job is refused.
+  ok := false;
+  begin
+    perform sync_job_actuals('d2000000-0000-0000-0000-000000000017', current_setting('p2.job1')::uuid,
+      jsonb_build_array(jsonb_build_object('id', 'ac200000-0000-0000-0000-0000000000a1',
+        'area_id', 'a2000000-0000-0000-0000-000000000002', 'product', 'batts', 'actual_hours', 1)));
+  exception when invalid_parameter_value then ok := true;
+  end;
+  assert ok, 'an area of another job is refused';
+  ok := false;
+  begin
+    perform sync_job_actuals('d2000000-0000-0000-0000-000000000018', current_setting('p2.job1')::uuid,
+      jsonb_build_array(jsonb_build_object('id', 'ac200000-0000-0000-0000-0000000000a2',
+        'area_id', 'a2000000-0000-0000-0000-00000000000f', 'product', 'batts', 'actual_hours', 1)));
+  exception when invalid_parameter_value then ok := true;
+  end;
+  assert ok, 'an area added only in an unsigned revision is refused';
 end $$;
+
+reset role;
+do $$ declare a record; begin
+  select * into a from job_actuals where id = 'ac200000-0000-0000-0000-000000000001';
+  assert a.actual_material_cost is null and not a.exclude_from_learning and a.verified_by is null,
+    'costs, exclusions and verification are never taken from a phone';
+end $$;
+set role authenticated;
 
 select set_config('request.jwt.claim.sub', :'crewb', false);
 do $$
 declare ok boolean := false;
 begin
-  assert (select count(*) from job_actuals where job_id = current_setting('p2.job1')::uuid) = 0, 'another crew cannot read the actuals';
+  assert (select count(*) from crew_actuals_view where job_id = current_setting('p2.job1')::uuid) = 0, 'another crew cannot read the actuals';
   begin
     perform sync_job_actuals('d2000000-0000-0000-0000-000000000011', current_setting('p2.job1')::uuid, (select rows from p2_rows));
   exception when insufficient_privilege then ok := true;
@@ -440,45 +498,71 @@ begin
   assert ok, 'estimators cannot enter actuals';
 end $$;
 
--- The office adds invoice costs; a later crew re-sync must not wipe them.
+-- A mutation id is its author's: replaying another user's id returns 'rejected', not their result.
 select set_config('request.jwt.claim.sub', :'office', false);
+do $$ declare r jsonb; begin
+  r := sync_job_actuals('d2000000-0000-0000-0000-000000000010', current_setting('p2.job1')::uuid, (select rows from p2_rows));
+  assert r->>'status' = 'rejected', 'another user''s mutation id is rejected: ' || r::text;
+end $$;
+
+-- The office adds invoice costs. That bumps the row's version, so a crew edit made against the
+-- old version comes back as a conflict (with the server's values) instead of being written.
 update job_actuals set actual_material_cost = 812.50, actual_labor_cost = 640
  where id = 'ac200000-0000-0000-0000-000000000001';
 
 select set_config('request.jwt.claim.sub', :'crewa', false);
 do $$
-declare r jsonb; a record;
+declare r jsonb; a record; v int;
 begin
   r := sync_job_actuals('d2000000-0000-0000-0000-000000000013', current_setting('p2.job1')::uuid,
-         jsonb_set((select rows from p2_rows), '{0,actual_hours}', '16'));
-  assert r->>'status' = 'applied', 'crew correction applied: ' || r::text;
-  select * into a from job_actuals where id = 'ac200000-0000-0000-0000-000000000001';
-  assert a.actual_hours = 16, 'crew correction stored';
-  assert a.actual_material_cost = 812.50 and a.actual_labor_cost = 640, 'office-entered costs preserved on crew re-sync';
-end $$;
+         jsonb_build_array(jsonb_set(jsonb_set((select rows->0 from p2_rows), '{actual_hours}', '16'), '{base_row_version}', '1')));
+  assert r->>'status' = 'applied' and (r->>'rows')::int = 0 and jsonb_array_length(r->'conflicts') = 1,
+    'a stale base is a conflict: ' || r::text;
+  v := (r->'conflicts'->0->>'row_version')::int;
+  assert v = 2 and (r->'conflicts'->0->>'actual_hours')::numeric = 15.5, 'the conflict carries the server row';
+  assert not (r->'conflicts'->0 ?| array['actual_material_cost', 'actual_labor_cost', 'actual_other_cost']), 'and no costs';
+  assert (select actual_hours from crew_actuals_view where id = 'ac200000-0000-0000-0000-000000000001') = 15.5, 'nothing written';
 
--- A reinstalled phone re-sends the same area x product under a NEW client id: the natural key
--- (job, area, product) updates the existing row instead of failing forever.
-do $$
-declare r jsonb; n int;
-begin
+  -- The phone merges and re-sends against the version it now knows.
+  r := sync_job_actuals('d2000000-0000-0000-0000-000000000019', current_setting('p2.job1')::uuid,
+         jsonb_build_array(jsonb_set(jsonb_set((select rows->0 from p2_rows), '{actual_hours}', '16'), '{base_row_version}', to_jsonb(v))));
+  assert r->>'status' = 'applied' and (r->>'rows')::int = 1 and (r->'saved'->0->>'row_version')::int = 3, 'merged edit applied: ' || r::text;
+  assert (select actual_hours from crew_actuals_view where id = 'ac200000-0000-0000-0000-000000000001') = 16, 'crew correction stored';
+
+  -- A reinstalled phone re-sends the same area x product under a NEW client id without having seen
+  -- the row: a conflict naming the existing row, never a duplicate.
   r := sync_job_actuals('d2000000-0000-0000-0000-000000000015', current_setting('p2.job1')::uuid,
-         jsonb_set(jsonb_set((select rows from p2_rows), '{0,id}', '"ac2000ff-0000-0000-0000-0000000000ff"'),
-                   '{0,actual_hours}', '17'));
-  assert r->>'status' = 'applied', 're-send under a new id applies: ' || r::text;
-  select count(*) into n from job_actuals where job_id = current_setting('p2.job1')::uuid;
-  assert n = 2, 'no duplicate row for the same area x product: ' || n;
-  assert (select actual_hours from job_actuals where id = 'ac200000-0000-0000-0000-000000000001') = 17,
-    'the existing row (original id) was updated';
-  r := sync_job_actuals('d2000000-0000-0000-0000-000000000016', current_setting('p2.job1')::uuid,
-         jsonb_set((select rows from p2_rows), '{0,actual_hours}', '16'));
-  assert r->>'status' = 'applied', 'restore hours for later assertions';
+         jsonb_build_array(jsonb_set(jsonb_set((select rows->0 from p2_rows), '{id}', '"ac2000ff-0000-0000-0000-0000000000ff"'),
+                                     '{actual_hours}', '17')));
+  assert jsonb_array_length(r->'conflicts') = 1 and r->'conflicts'->0->>'id' = 'ac200000-0000-0000-0000-000000000001',
+    'a new id for an existing area x product is a conflict on the existing row: ' || r::text;
+  assert (select count(*) from crew_actuals_view where job_id = current_setting('p2.job1')::uuid) = 2, 'no duplicate row';
 end $$;
 
--- Crews never read prices: the jobs table (revenue = signed price) is invisible to them.
+reset role;
 do $$ begin
+  assert (select actual_material_cost from job_actuals where id = 'ac200000-0000-0000-0000-000000000001') = 812.50
+     and (select actual_labor_cost from job_actuals where id = 'ac200000-0000-0000-0000-000000000001') = 640,
+    'office-entered costs preserved on crew re-sync';
+end $$;
+set role authenticated;
+
+-- Crews never read money: not the jobs table (revenue), not costs, not crew labor rates.
+select set_config('request.jwt.claim.sub', :'crewa', false);
+do $$ declare n int; begin
   assert (select count(*) from jobs) = 0, 'crew cannot select from jobs (revenue)';
-  assert (select count(*) from job_actuals where job_id = current_setting('p2.job1')::uuid) = 2, 'crew still reads its actuals';
+  assert (select count(*) from crews) = 0, 'crew cannot read crews (blended labor cost)';
+  assert (select count(*) from crew_actuals_view where job_id = current_setting('p2.job1')::uuid) = 2, 'crew reads its actuals through the view';
+  assert (select count(*) from information_schema.columns
+           where table_schema = 'public' and table_name = 'crew_actuals_view'
+             and column_name ~ '(cost|price|revenue|exclude)') = 0, 'crew_actuals_view has no cost or exclusion columns';
+  update job_actuals set actual_labor_cost = 2, exclude_from_learning = true, exclude_reason = 'x'
+   where job_id = current_setting('p2.job1')::uuid;
+  get diagnostics n = row_count;
+  assert n = 0, 'crew cannot update costs or exclusions directly';
+  delete from job_actuals where job_id = current_setting('p2.job1')::uuid;
+  get diagnostics n = row_count;
+  assert n = 0, 'crew cannot delete actuals directly';
 end $$;
 
 -- The office verifies: the job's actuals are locked for the crew.
@@ -498,18 +582,65 @@ begin
   r := sync_job_actuals('d2000000-0000-0000-0000-000000000014', current_setting('p2.job1')::uuid,
          jsonb_set((select rows from p2_rows), '{0,actual_hours}', '40'));
   assert r->>'status' = 'locked', 'sync after verification is locked: ' || r::text;
-
-  update job_actuals set actual_hours = 99 where job_id = current_setting('p2.job1')::uuid;
-  get diagnostics n = row_count;
-  assert n = 0, 'crew cannot update verified actuals';
-  delete from job_actuals where job_id = current_setting('p2.job1')::uuid;
-  get diagnostics n = row_count;
-  assert n = 0, 'crew cannot delete verified actuals';
-  assert (select count(*) from job_actuals where job_id = current_setting('p2.job1')::uuid) = 2,
-    'crew can still see its verified actuals';
+  assert (select count(*) from crew_actuals_view where job_id = current_setting('p2.job1')::uuid and verified_at is not null) = 2,
+    'crew still sees its verified actuals (without costs)';
 end $$;
 
+-- Verified rows are frozen for everyone but the owner; the office may still add costs and exclude.
+select set_config('request.jwt.claim.sub', :'office', false);
+do $$
+declare ok boolean := false; n int;
+begin
+  begin
+    update job_actuals set actual_hours = 3 where id = 'ac200000-0000-0000-0000-000000000001';
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'office cannot change verified hours';
+  ok := false;
+  begin
+    update job_actuals set verified_at = null, verified_by = null where id = 'ac200000-0000-0000-0000-000000000001';
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'office cannot unverify';
+  ok := false;
+  begin
+    delete from job_actuals where id = 'ac200000-0000-0000-0000-000000000001';
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'office cannot delete verified actuals';
+  update job_actuals set actual_other_cost = 25, exclude_from_learning = true, exclude_reason = 'callback'
+   where id = 'ac200000-0000-0000-0000-000000000002';
+  get diagnostics n = row_count;
+  assert n = 1, 'office may add costs and exclude a verified row';
+  update job_actuals set exclude_from_learning = false, exclude_reason = null where id = 'ac200000-0000-0000-0000-000000000002';
+end $$;
+
+select set_config('request.jwt.claim.sub', :'owner', false);
+do $$ declare n int; begin
+  update job_actuals set verified_at = null, verified_by = null where job_id = current_setting('p2.job1')::uuid;
+  get diagnostics n = row_count;
+  assert n = 2, 'the owner can unverify';
+  update job_actuals set verified_by = auth.uid(), verified_at = now() where job_id = current_setting('p2.job1')::uuid;
+end $$;
+
+-- A deactivated crew member (or one moved to another role) keeps crew_members rows but loses access.
 reset role;
+update profiles set active = false where id = :'crewa';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'crewa', false);
+do $$ begin
+  assert (select count(*) from crew_job_view) = 0, 'a deactivated crew member sees no jobs (customer names, addresses)';
+  assert (select count(*) from crew_actuals_view) = 0, 'nor actuals';
+end $$;
+reset role;
+update profiles set active = true, role = 'estimator' where id = :'crewa';
+set role authenticated;
+do $$ begin
+  assert (select count(*) from crew_job_view) = 0, 'a crew member moved to estimator no longer sees the crew''s jobs';
+end $$;
+reset role;
+update profiles set role = 'crew' where id = :'crewa';
+
 do $$ begin
   assert (select actual_hours from job_actuals where id = 'ac200000-0000-0000-0000-000000000001') = 16, 'verified actuals unchanged';
   assert (select count(*) from job_actuals where job_id = current_setting('p2.job1')::uuid and verified_at is not null) = 2,
@@ -584,6 +715,69 @@ do $$ begin
   -- The nightly job runs without a user (service role) and may reject a failed candidate.
   perform reject_coefficient_set(current_setting('p2.cand2')::uuid, 'Failed gate(s): backtest');
   assert (select status from coefficient_sets where id = current_setting('p2.cand2')::uuid) = 'rejected', 'service role rejects';
+end $$;
+
+-- Promote and roll back: never anon (the public API key), never a signed-in non-owner; the
+-- nightly job's service role may promote.
+with s as (
+  insert into coefficient_sets (status, source, parent_id) select 'candidate', 'nightly', id from coefficient_sets where status = 'active'
+  returning id)
+select set_config('p2.cand3', (select id::text from s), false);
+insert into coefficients (set_id, kind, product, job_type, access_level, value, prior_value, lower_bound, upper_bound)
+select current_setting('p2.cand3')::uuid, kind, product, job_type, access_level, value, prior_value, lower_bound, upper_bound
+  from coefficients where set_id = current_setting('p2.active')::uuid;
+do $$ begin
+  assert not has_function_privilege('anon', 'promote_coefficient_set(uuid,text)', 'execute'), 'anon cannot execute promote';
+  assert not has_function_privilege('anon', 'rollback_coefficient_set(uuid,text)', 'execute'), 'anon cannot execute rollback';
+  assert not has_function_privilege('anon', 'reject_coefficient_set(uuid,text)', 'execute'), 'anon cannot execute reject';
+end $$;
+
+set role anon;
+select set_config('request.jwt.claim.sub', '', false);
+do $$ declare ok boolean := false; begin
+  begin
+    perform promote_coefficient_set(current_setting('p2.cand3')::uuid, 'anon promoted');
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'anon cannot promote a candidate';
+end $$;
+
+set role authenticated;
+do $$ declare ok boolean := false; begin
+  begin
+    perform promote_coefficient_set(current_setting('p2.cand3')::uuid, 'no user');
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'an authenticated call without a user cannot promote';
+end $$;
+select set_config('request.jwt.claim.sub', :'office', false);
+do $$ declare ok boolean := false; begin
+  begin
+    perform promote_coefficient_set(current_setting('p2.cand3')::uuid, 'office promoted');
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'office cannot promote';
+  ok := false;
+  begin
+    perform rollback_coefficient_set(current_setting('p2.active')::uuid, 'office rollback');
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'office cannot roll back';
+end $$;
+
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+do $$ begin
+  assert (select status from coefficient_sets where id = current_setting('p2.cand3')::uuid) = 'candidate', 'candidate untouched';
+end $$;
+set role service_role;
+do $$ begin
+  perform promote_coefficient_set(current_setting('p2.cand3')::uuid, 'Nightly: auto-promoted');
+end $$;
+reset role;
+do $$ begin
+  assert (select status from coefficient_sets where id = current_setting('p2.cand3')::uuid) = 'active', 'the service role promotes';
+  assert (select status from coefficient_sets where id = current_setting('p2.active')::uuid) = 'superseded', 'previous set superseded';
 end $$;
 
 -- ---------------------------------------------------------------------------

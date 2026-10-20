@@ -2,14 +2,17 @@
 import { useState } from 'react';
 import type { DeviationFlag } from '@/lib/learning/types';
 import type { LineOverride, PricedLine, Tier } from '@/lib/pricing';
-import { ackNote } from '@/lib/field/flags';
+import { ackState } from '@/lib/field/flags';
 import { buildLineOverride, formatAmount, formatPctDiff, lineView, relativeDiff, unitLabel, type LineView } from '@/lib/field/lineOverrides';
 import { TIER_LABELS, usd } from '@/lib/format';
+import type { EstimateDraft } from '@/lib/sync/draft';
 import { Button, Field, Input, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import { DeviationNote } from './DeviationNote';
 
 export type OnLineOverride = (key: string, override: LineOverride | null) => void;
+/** Saves the estimator's note for a flag, for the deviation the flag has now. */
+export type OnAck = (flag: DeviationFlag, note: string) => void;
 
 /**
  * The "Details" of one option: every line with the model's quantity or hours next to the
@@ -35,8 +38,8 @@ export function OptionLines({
   areaNames: Map<string, string>;
   tiersByKey: (key: string) => Tier[];
   flagsByLine: Map<string, DeviationFlag[]>;
-  acks: Record<string, string>;
-  onAck: (key: string, note: string) => void;
+  acks: EstimateDraft['deviationAcks'];
+  onAck: OnAck;
   onLineOverride: OnLineOverride;
   showCosts: boolean;
 }) {
@@ -97,8 +100,8 @@ function LineRow({
   tier: Tier;
   tiers: Tier[];
   flags: DeviationFlag[];
-  acks: Record<string, string>;
-  onAck: (key: string, note: string) => void;
+  acks: EstimateDraft['deviationAcks'];
+  onAck: OnAck;
   onLineOverride: OnLineOverride;
   showCosts: boolean;
 }) {
@@ -169,7 +172,7 @@ function LineRow({
 
       {flags.map((f) => (
         <div key={f.key} className="mt-2">
-          <DeviationNote flag={f} note={ackNote(acks, f.key)} onNote={(note) => onAck(f.key, note)} />
+          <DeviationNote flag={f} ack={ackState(f, acks)} onNote={(note) => onAck(f, note)} />
         </div>
       ))}
     </li>

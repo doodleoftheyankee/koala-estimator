@@ -2,7 +2,7 @@
 // Network side of the crew app: pulls assigned jobs, pushes actuals drafts through an outbox,
 // and changes job status (online only). Safe to call often; one full sync runs at a time.
 import { z } from 'zod';
-import { crewJobsResponseSchema, type ActualsSyncResponse } from '@/lib/jobs/crew';
+import { crewJobsResponseSchema, savedActualSchema, serverActualSchema, type ActualsSyncResponse } from '@/lib/jobs/crew';
 import type { JobStatus } from '@/lib/jobs/status';
 import { crewDb, type LocalActuals } from './crewDb';
 import { applyActualsResult, buildActualsBody, mergeServerJobs, withStatus } from './crewSyncCore';
@@ -22,8 +22,8 @@ export const isCrewSyncing = () => running !== null;
 export class CrewAuthRequiredError extends Error {}
 
 const responseSchema = z.union([
-  z.object({ status: z.literal('applied'), rows: z.number() }),
-  z.object({ status: z.enum(['locked', 'conflict', 'invalid', 'error']), error: z.string() }),
+  z.object({ status: z.literal('applied'), rows: z.number(), saved: z.array(savedActualSchema), conflicts: z.array(serverActualSchema) }),
+  z.object({ status: z.enum(['locked', 'conflict', 'invalid', 'error', 'rejected']), error: z.string() }),
 ]);
 
 const offlineMessage = () => (navigator.onLine ? 'Could not reach the server.' : 'Offline. Will sync when back online.');
@@ -40,11 +40,24 @@ async function postActuals(body: unknown): Promise<ActualsSyncResponse> {
   return parsed.success ? parsed.data : { status: 'error', error: `The server answered ${res.status}. Will retry.` };
 }
 
-/** Pushes one job's actuals if they have unsynced edits. Returns the stored draft and the server's answer. */
-export async function syncActuals(jobId: string): Promise<{ record: LocalActuals | undefined; status: ActualsSyncResponse['status'] | null }> {
+/**
+ * Pushes one job's actuals if they have unsynced edits made by `ownerId` (a draft parked by
+ * another user on this phone waits for them: it must never go out under someone else's session).
+ * Returns the stored draft and the server's answer.
+ */
+export async function syncActuals(
+  jobId: string,
+  ownerId: string,
+): Promise<{ record: LocalActuals | undefined; status: ActualsSyncResponse['status'] | null }> {
   const record = await crewDb().actuals.get(jobId);
-  if (!record || (record.syncState !== 'pending' && record.syncState !== 'error')) return { record, status: null };
+  if (!record || record.ownerId !== ownerId || (record.syncState !== 'pending' && record.syncState !== 'error')) return { record, status: null };
   const built = buildActualsBody(record);
+  if (built.ok && built.body.rows.length === 0) {
+    // Nothing differs from the server (e.g. a value typed and then put back).
+    const synced: LocalActuals = { ...record, syncState: 'synced', lastError: null };
+    await crewDb().actuals.put(synced);
+    return { record: synced, status: 'applied' };
+  }
   if (!built.ok) {
     const invalid: LocalActuals = { ...record, syncState: 'invalid', lastError: built.error };
     await crewDb().actuals.put(invalid);
@@ -55,22 +68,25 @@ export async function syncActuals(jobId: string): Promise<{ record: LocalActuals
   await crewDb().transaction('rw', crewDb().actuals, async () => {
     const current = await crewDb().actuals.get(jobId);
     if (!current) return;
-    result = applyActualsResult(current, { mutationId: record.mutationId, rowIds: built.body.rows.map((r) => r.id) }, res, new Date().toISOString());
+    result = applyActualsResult(current, { mutationId: record.mutationId, rows: built.body.rows }, res, new Date().toISOString(), uuid);
     await crewDb().actuals.put(result);
   });
   return { record: result, status: res.status };
 }
 
-/** Pushes every draft with unsynced edits. True when one hit a conflict (row ids to adopt from the server). */
-async function pushAll(): Promise<boolean> {
-  const pending = await crewDb().actuals.where('syncState').anyOf('pending', 'error').toArray();
-  let conflict = false;
+/**
+ * Pushes the signed-in user's drafts with unsynced edits. True when one needs another round:
+ * two phones created the same row at once (pull, then retry), or a merge left rows to re-send.
+ */
+async function pushAll(ownerId: string): Promise<boolean> {
+  const pending = (await crewDb().actuals.where('syncState').anyOf('pending', 'error').toArray()).filter((d) => d.ownerId === ownerId);
+  let again = false;
   for (const d of pending) {
     if (!navigator.onLine) break;
-    const { status } = await syncActuals(d.jobId);
-    if (status === 'conflict') conflict = true;
+    const { record, status } = await syncActuals(d.jobId, ownerId);
+    if (status === 'conflict' || (status === 'applied' && record?.syncState === 'pending')) again = true;
   }
-  return conflict;
+  return again;
 }
 
 /** Refreshes the cached jobs (and their server actuals) from the server. */
@@ -103,14 +119,14 @@ export async function pullJobs(ownerId: string): Promise<boolean> {
   return true;
 }
 
-/** Full cycle: push edits, pull jobs, and push again if a conflict needed the server's row ids. */
+/** Full cycle: push edits, pull jobs, and push again if a conflict or merge left rows to send. */
 export function crewSyncAll(ownerId: string): Promise<void> {
   if (running) return running;
   running = (async () => {
     if (!navigator.onLine) return;
-    const conflict = await pushAll();
+    const again = await pushAll(ownerId);
     await pullJobs(ownerId);
-    if (conflict) await pushAll();
+    if (again) await pushAll(ownerId);
   })().finally(() => {
     running = null;
     emit();

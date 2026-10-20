@@ -84,6 +84,8 @@ export const serverActualSchema = z.object({
   days: z.number().finite().nullable(),
   notes: z.string().nullable(),
   enteredAt: z.string().nullable(),
+  /** Bumped on every server-side change; the phone sends back the version its edit is based on. */
+  rowVersion: z.number().int(),
 });
 export type ServerActual = z.infer<typeof serverActualSchema>;
 
@@ -156,9 +158,9 @@ export const crewViewRowSchema = z.object({
 });
 export type CrewViewRow = z.infer<typeof crewViewRowSchema>;
 
-/** Columns of job_actuals the crew app reads. Deliberately no cost columns. */
+/** Columns of crew_actuals_view the crew app reads (the view has no cost columns at all). */
 export const CREW_ACTUAL_COLUMNS =
-  'id, job_id, area_id, product, actual_material_qty, actual_material_unit, actual_hours, actual_crew_size, actual_drive_minutes, actual_days, notes, entered_at, verified_at';
+  'id, job_id, area_id, product, actual_material_qty, actual_material_unit, actual_hours, actual_crew_size, actual_drive_minutes, actual_days, notes, entered_at, verified_at, row_version';
 
 export const actualDbRowSchema = z.object({
   id: z.guid(),
@@ -174,10 +176,11 @@ export const actualDbRowSchema = z.object({
   notes: textOrNull,
   entered_at: textOrNull,
   verified_at: textOrNull,
+  row_version: num.pipe(z.number().int()),
 });
 export type ActualDbRow = z.infer<typeof actualDbRowSchema>;
 
-export function toServerActual(r: ActualDbRow): ServerActual {
+export function toServerActual(r: Omit<ActualDbRow, 'job_id' | 'verified_at'>): ServerActual {
   return {
     id: r.id,
     areaId: r.area_id,
@@ -190,6 +193,7 @@ export function toServerActual(r: ActualDbRow): ServerActual {
     days: r.actual_days,
     notes: r.notes,
     enteredAt: r.entered_at,
+    rowVersion: r.row_version,
   };
 }
 
@@ -255,6 +259,8 @@ export const actualsRowSchema = z
     driveMinutes: z.number().finite().min(0).max(600).nullable(),
     days: z.number().finite().min(0).max(365).nullable(),
     notes: z.string().trim().max(2000).nullable(),
+    /** The server row_version this edit is based on; null when the phone has not seen the row. */
+    baseVersion: z.number().int().min(1).nullable(),
   })
   .refine((r) => (r.areaId === null) === (r.product === null), { message: 'Area and product go together (or neither, for the job row)' });
 export type ActualsRow = z.infer<typeof actualsRowSchema>;
@@ -271,9 +277,25 @@ export const actualsBodySchema = z
   .refine((b) => new Set(b.rows.map((r) => r.id)).size === b.rows.length, { message: 'Row ids must be unique' });
 export type ActualsBody = z.infer<typeof actualsBodySchema>;
 
+/** A row the server wrote, with its new version. */
+export const savedActualSchema = z.object({
+  id: z.guid(),
+  areaId: z.guid().nullable(),
+  product: z.enum(PRODUCTS).nullable(),
+  rowVersion: z.number().int(),
+});
+export type SavedActual = z.infer<typeof savedActualSchema>;
+
+/**
+ * 'applied': rows written (saved) and rows that changed on the server since the phone's base
+ * (conflicts, with the server's values: nothing was written for them; the phone merges and
+ * re-sends). 'conflict': two phones created the same row at the same moment; pull and retry.
+ * 'rejected': the mutation id was already used by another user on this phone; send again under
+ * a new id.
+ */
 export type ActualsSyncResponse =
-  | { status: 'applied'; rows: number }
-  | { status: 'locked' | 'conflict' | 'invalid' | 'error'; error: string };
+  | { status: 'applied'; rows: number; saved: SavedActual[]; conflicts: ServerActual[] }
+  | { status: 'locked' | 'conflict' | 'invalid' | 'error' | 'rejected'; error: string };
 
 export const LOCKED_MESSAGE = 'The office already verified this job. Actuals can no longer be changed from the crew app.';
 
@@ -295,7 +317,37 @@ export function toDbActualRow(r: ActualsRow): Record<string, string | number | n
     actual_drive_minutes: r.driveMinutes,
     actual_days: r.days,
     notes: r.notes === null || r.notes === '' ? null : r.notes,
+    base_row_version: r.baseVersion,
   };
+}
+
+/** sync_job_actuals' answer (snake_case jsonb) -> the wire response. */
+const dbSavedSchema = z.object({ id: z.guid(), area_id: z.guid().nullable(), product: z.enum(PRODUCTS).nullable(), row_version: z.number().int() });
+export const syncActualsResultSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('applied'),
+    rows: z.number(),
+    saved: z.array(dbSavedSchema),
+    conflicts: z.array(actualDbRowSchema.omit({ job_id: true, verified_at: true }).extend({ entered_at: textOrNull })),
+  }),
+  z.object({ status: z.literal('locked') }),
+  z.object({ status: z.literal('rejected'), error: z.string() }),
+]);
+
+export function fromSyncResult(r: z.infer<typeof syncActualsResultSchema>): ActualsSyncResponse {
+  switch (r.status) {
+    case 'applied':
+      return {
+        status: 'applied',
+        rows: r.rows,
+        saved: r.saved.map((x) => ({ id: x.id, areaId: x.area_id, product: x.product, rowVersion: x.row_version })),
+        conflicts: r.conflicts.map(toServerActual),
+      };
+    case 'locked':
+      return { status: 'locked', error: LOCKED_MESSAGE };
+    case 'rejected':
+      return { status: 'rejected', error: r.error };
+  }
 }
 
 // ---------------------------------------------------------------------------

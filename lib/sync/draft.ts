@@ -35,6 +35,21 @@ export const lineOverrideSchema = z.object({
   tier: z.enum(TIERS).nullable().optional(),
 });
 
+/**
+ * The estimator's explanation of one deviation flag, stored with the deviation it explained
+ * (DeviationFlag.pctDiff when the note was written or last confirmed). The note only counts while
+ * the flag still has about that deviation (lib/field/flags.ts ackState). pctDiff is null when
+ * unknown: notes saved by app builds that stored a bare string, which must be confirmed again.
+ */
+export const deviationAckSchema = z.object({
+  note: trimmed(500),
+  pctDiff: z.number().finite().nullable(),
+});
+export type DeviationAck = z.infer<typeof deviationAckSchema>;
+
+/** The current object form, or the bare note string earlier builds stored (read as an unknown deviation). */
+const deviationAckValueSchema = z.union([deviationAckSchema, trimmed(500).transform((note): DeviationAck => ({ note, pctDiff: null }))]);
+
 export const draftSchema = z.object({
   id: z.uuid(),
   status: z.enum(ESTIMATE_STATUSES),
@@ -65,8 +80,8 @@ export const draftSchema = z.object({
   overrides: z.partialRecord(z.enum(TIERS), overrideSchema),
   // Added in Phase 2; defaults keep older stored drafts valid.
   lineOverrides: z.record(z.string(), lineOverrideSchema).default({}),
-  /** Estimator notes acknowledging deviation flags, keyed by DeviationFlag.key. */
-  deviationAcks: z.record(z.string(), z.string().trim().max(500)).default({}),
+  /** Estimator notes acknowledging deviation flags, keyed by DeviationFlag.key (see deviationAckSchema). */
+  deviationAcks: z.record(z.string(), deviationAckValueSchema).default({}),
   selectedTier: z.enum(TIERS).nullable(),
   notes: z.string().max(5000),
   rowVersion: z.number().int().positive().nullable(),

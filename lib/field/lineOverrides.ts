@@ -1,10 +1,11 @@
 // Estimator line overrides (PLAN.md §6.5): the estimator's own quantity (material lines) or
 // person-hours (labor/removal lines) for one area line. Overrides are keyed by lineKey() and carry
 // the option they were made on; every other option with the same area + product + kind moves by
-// the same proportion (see LineOverride). Pure helpers behind the Options step; drafts are never
-// mutated.
+// the same proportion (see LineOverride). Also the whole-option price override. Pure helpers
+// behind the Options step; drafts are never mutated.
 import type { LineOverride, PricedLine, PricedOption, ProductUnit, Tier } from '@/lib/pricing';
 import { lineOverrideSchema, type EstimateDraft } from '@/lib/sync/draft';
+import { clearDeviationAcks, lineFlagKeys, totalFlagKey } from './flags';
 
 export type LineMetric = 'qty' | 'hours';
 
@@ -83,14 +84,31 @@ export function applyLineOverride(draft: EstimateDraft, key: string, override: L
   return { ...draft, lineOverrides: { ...draft.lineOverrides, [key]: override } };
 }
 
-/** Back to the model value for this line key. */
+/**
+ * Back to the model value for this line key. The notes on the line's deviation flags go too: they
+ * explained the change being taken back, not whatever the line is changed to next.
+ */
 export function removeLineOverride(draft: EstimateDraft, key: string): EstimateDraft {
   // Drafts saved on a phone before Phase 2 are not re-parsed and may have no lineOverrides at all.
   const current = draft.lineOverrides as EstimateDraft['lineOverrides'] | undefined;
-  if (!current || !Object.hasOwn(current, key)) return draft;
-  const lineOverrides = { ...current };
-  delete lineOverrides[key];
-  return { ...draft, lineOverrides };
+  let next = draft;
+  if (current && Object.hasOwn(current, key)) {
+    const lineOverrides = { ...current };
+    delete lineOverrides[key];
+    next = { ...draft, lineOverrides };
+  }
+  return clearDeviationAcks(next, lineFlagKeys(key));
+}
+
+/**
+ * Sets (or with null removes) the hand-set price of one option. Removing it also drops the note on
+ * that option's total-price flag, which explained the price being taken back.
+ */
+export function setPriceOverride(draft: EstimateDraft, tier: Tier, override: { price: number; reason: string } | null): EstimateDraft {
+  if (override) return { ...draft, overrides: { ...draft.overrides, [tier]: override } };
+  const overrides = { ...draft.overrides };
+  delete overrides[tier];
+  return clearDeviationAcks({ ...draft, overrides }, [totalFlagKey(tier)]);
 }
 
 /** Tiers whose option contains a line with this key, in option order. */

@@ -14,9 +14,9 @@ import {
   chunk,
   coefficientRow,
   coefficientRowSchema,
-  completedJobRowSchema,
   decideEstimates,
   estimateDriveRowSchema,
+  flagQuoteRowSchema,
   flagRowSchema,
   idRowSchema,
   jobRowSchema,
@@ -28,6 +28,7 @@ import {
   outcomeQuoteRowSchema,
   parseOutcomeSnapshot,
   parseRows,
+  scorableLineFlags,
   STALE_RUN_MS,
   toStoredCoefficient,
   verifiedActualsByJob,
@@ -353,8 +354,15 @@ export async function insertWinModel(admin: SupabaseClient, runId: string, model
 
 /**
  * Settles open line deviation flags (qty/hours) on estimates whose job is completed and fully
- * verified: who was closer to the crew's actual, the estimator or the model? Returns how many
- * flags got an outcome. Only rows still without an outcome are written, so reruns are no-ops.
+ * verified: who was closer to the crew's actual, the estimator or the model? Both numbers come
+ * from the option the customer signed (lineFlagOutcomes). Total-price flags are not scored: the
+ * crew reports quantities and hours, not a price. Returns how many flags got an outcome. Only
+ * rows still without an outcome are written, so reruns are no-ops.
+ *
+ * A flag whose line was not installed as changed (missing from the signed option, or not
+ * overridden there) has no outcome to record and stays open. It is never written, and it costs a
+ * re-read of its quote's options each night (the snapshot's document is not loaded); flags still
+ * waiting for actuals cost no quote read at all.
  */
 export async function updateDeviationOutcomes(admin: SupabaseClient): Promise<number> {
   const flags = parseRows(
@@ -362,7 +370,7 @@ export async function updateDeviationOutcomes(admin: SupabaseClient): Promise<nu
     await fetchAll('deviation flags', (from, to) =>
       admin
         .from('deviation_flags')
-        .select('id, estimate_id, flag_key, metric, estimator_value, model_value')
+        .select('id, estimate_id, flag_key, metric')
         .is('outcome', null)
         .in('metric', ['qty', 'hours'])
         .not('flag_key', 'is', null)
@@ -374,11 +382,11 @@ export async function updateDeviationOutcomes(admin: SupabaseClient): Promise<nu
   if (!flags.length) return 0;
 
   const jobs = parseRows(
-    completedJobRowSchema,
+    jobRowSchema,
     await fetchIn('completed jobs', flags.map((f) => f.estimate_id), (ids, from, to) =>
       admin
         .from('jobs')
-        .select('id, estimate_id, completed_at')
+        .select('id, quote_id, estimate_id, completed_at')
         .eq('status', 'completed')
         .in('estimate_id', ids)
         .order('id')
@@ -394,9 +402,18 @@ export async function updateDeviationOutcomes(admin: SupabaseClient): Promise<nu
     ),
     'job_actuals',
   );
+  const scorable = scorableLineFlags(flags, jobs, actuals);
+  if (!scorable.length) return 0;
+  const quotes = parseRows(
+    flagQuoteRowSchema,
+    await fetchIn('signed quotes', scorable.map((f) => f.quoteId), (ids, from, to) =>
+      admin.from('quotes').select('id, signed_tier, options:snapshot->options').in('id', ids).order('id').range(from, to),
+    ),
+    'quote',
+  );
 
   const byOutcome = new Map<DeviationOutcome, string[]>();
-  for (const { id, outcome } of lineFlagOutcomes(flags, jobs, actuals)) {
+  for (const { id, outcome } of lineFlagOutcomes(scorable, quotes)) {
     byOutcome.set(outcome, [...(byOutcome.get(outcome) ?? []), id]);
   }
   let updated = 0;

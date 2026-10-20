@@ -20,14 +20,20 @@ import type {
   StoredCoefficient,
 } from './types';
 import { ageDays, effectiveSampleSize, recencyWeight, weightedMean } from './weights';
-import { distinctCount, wlsLine } from './wls';
+import { distinctCount, wlsSolve } from './wls';
 
-/** Alternating passes for the hours model: (setup, rates) given access, then access given rates. */
+/** Alternating passes for the hours model: setup and rates given access, then access given rates. */
 // Alternating passes between (setup, rate) and access multipliers. 25 converges in a single run
 // on realistic data (3 left the rate/access split 4-7% off until several nights later).
 const ALS_ITERATIONS = 25;
-/** Smaller differences are float noise, not a change. */
-const CHANGE_EPS = 1e-9;
+/**
+ * Change detection. Values are stored to 6 decimals (numeric(14,6)), and a move smaller than
+ * CHANGE_REL of the active value is noise, not news: either way the active value is kept
+ * exactly, so a re-run on the same data changes nothing. The comparison is always with the
+ * stored active value, so a slow drift still moves once it adds up past the threshold.
+ */
+const STORAGE_DP = 6;
+const CHANGE_REL = 1e-3;
 
 const CALIBRATED: ReadonlySet<CoeffKind> = new Set<CoeffKind>([
   'waste_factor',
@@ -52,7 +58,12 @@ export function calibrate(input: CalibrationInput): CalibrationResult {
   const run = (obs: readonly Observation[], drv: readonly DriveObservation[]) => {
     const weigh = <T extends { completedAt: string }>(rows: readonly T[]): Weighted<T>[] =>
       rows.map((o) => ({ o, w: recencyWeight(ageDays(o.completedAt, input.now), s.halfLifeDays) }));
-    const fit = fitAll(weigh(obs), weigh(drv), input.active, s);
+    const weighted = weigh(obs);
+    const fit = fitAll(weighted, weigh(drv), input.active, s);
+    // Setup and access multipliers enter every rate. Guard them first, then fit the rates
+    // holding the guarded values fixed: a setup limited to one step must never be stored next
+    // to a rate that assumes the full move, or the pair predicts worse than the active set.
+    fitRates(fit, weighted, buildCandidate(input.active, fit.estimates, s).coefficients);
     return { built: buildCandidate(input.active, fit.estimates, s), used: fit.used.size };
   };
 
@@ -106,17 +117,28 @@ const cell = (
 const cellKey = (c: Cell) => `${c.kind}|${c.product ?? '*'}|${c.jobType ?? '*'}|${c.accessLevel ?? '*'}`;
 const label = (c: Cell) => `${c.kind}(${[c.product, c.jobType, c.accessLevel].map((x) => x ?? '*').join('/')})`;
 
+/** A multiplier the hours model can use: finite and positive. */
+const priced = (v: number) => Number.isFinite(v) && v > 0;
+
+/**
+ * What a top-level cell (no parent cell above it) shrinks toward: its prior, a fixed anchor.
+ * Shrinking toward the active value instead lets every promoted run move the anchor, so re-runs
+ * on the same data ratchet a thin cell all the way to its raw mean. The active value stands in
+ * for a prior that is not a usable coefficient.
+ */
+const anchor = (c: StoredCoefficient): number => (priced(c.priorValue) ? c.priorValue : c.value);
+
 /** What the data say about one coefficient, before guardrails. */
 interface Estimate {
   cell: Cell;
-  raw: number | null; // the data's own estimate: weighted mean or regression
-  value: number | null; // shrunk toward the parent (or the active value); null without data
+  raw: number | null; // the data's own estimate: weighted mean or regression intercept
+  value: number | null; // shrunk toward the parent's estimate (top-level cells: the prior); null without data
   n: number;
   nEff: number;
   stdError: number | null;
-  method: string | null; // hours model: 'regression' or 'mean'
+  method: string | null; // hours model: 'regression' or 'mean' for the setup, and the setup a rate is fitted at
   hold: string | null; // product setup only: why these data cannot separate it from the rate
-  parent: StoredCoefficient | null; // job-type cells: the active cell they are shrunk toward
+  parent: StoredCoefficient | null; // job-type cells: the active parent (bounds and prior of a new cell)
 }
 
 interface Weighted<T> {
@@ -131,11 +153,15 @@ interface Summary {
   se: number | null;
 }
 
+/** Weighted mean, n_eff and SE of one fitting group's per-observation values (already winsorized). */
+function stats(v: number[], weights: number[]): Summary {
+  const nEff = effectiveSampleSize(weights);
+  return { mean: weightedMean(v, weights), n: v.length, nEff, se: standardError(v, weights, nEff) };
+}
+
 /** Winsorized weighted mean, n_eff and SE of one fitting group's per-observation values. */
 function summarize(values: number[], weights: number[], winsorPct: number): Summary {
-  const v = winsorize(values, weights, winsorPct);
-  const nEff = effectiveSampleSize(weights);
-  return { mean: weightedMean(v, weights), n: values.length, nEff, se: standardError(v, weights, nEff) };
+  return stats(winsorize(values, weights, winsorPct), weights);
 }
 
 interface Fit {
@@ -166,6 +192,10 @@ function put(
   });
 }
 
+/**
+ * First pass: waste, drive, and the hours model's setup and access multipliers. The rates come
+ * second (fitRates), once the setup and multipliers they are priced with have been guarded.
+ */
 function fitAll(
   obs: Weighted<Observation>[],
   drive: Weighted<DriveObservation>[],
@@ -176,10 +206,25 @@ function fitAll(
   for (const c of active) if (!byKey.has(cellKey(c))) byKey.set(cellKey(c), c);
   const fit: Fit = { active, byKey, s, estimates: new Map(), used: new Set() };
   fitWaste(fit, obs);
-  const access = fitHours(fit, obs);
-  fitRemoval(fit, obs, access);
+  fitHours(fit, obs);
   fitDrive(fit, drive);
   return fit;
+}
+
+/**
+ * Second pass: labor and removal rates given the guarded setup and access multipliers of the
+ * candidate (`coupled`), the values pricing will use alongside them.
+ */
+function fitRates(fit: Fit, obs: Weighted<Observation>[], coupled: readonly StoredCoefficient[]): void {
+  const access = accessValues(coupled);
+  fitLaborRates(fit, obs, coupled, access);
+  fitRemoval(fit, obs, coupled, access);
+}
+
+/** The access multiplier the engine would use for each level (NaN where none is stored). */
+function accessValues(coeffs: readonly StoredCoefficient[]): Record<AccessLevel, number> {
+  const lookup = (accessLevel: AccessLevel) => findStored(coeffs, 'access_mult', { accessLevel })?.value ?? Number.NaN;
+  return { easy: lookup('easy'), moderate: lookup('moderate'), difficult: lookup('difficult'), extreme: lookup('extreme') };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,12 +241,15 @@ function pushRatio(rows: RatioRow[], o: Observation, w: number, r: number): void
   if (Number.isFinite(r)) rows.push({ o, w, r });
 }
 
-/** The parent cell over all rows plus one child per job type, each shrunk toward the level above. */
+/**
+ * The parent cell over all rows, shrunk toward its prior, plus one child per job type, each
+ * shrunk toward the parent's estimate.
+ */
 function fitTwoLevel(fit: Fit, parent: StoredCoefficient, rows: RatioRow[]): void {
   if (rows.length === 0) return;
   const k = fit.s.shrinkageK;
   const top = summarize(rows.map((r) => r.r), rows.map((r) => r.w), fit.s.winsorPct);
-  const topValue = shrink(top.mean, top.nEff, parent.value, k);
+  const topValue = shrink(top.mean, top.nEff, anchor(parent), k);
   put(fit, parent, top, topValue);
   for (const jobType of JOB_TYPES) {
     const sub = rows.filter((r) => r.o.jobType === jobType);
@@ -229,11 +277,19 @@ function fitWaste(fit: Fit, obs: Weighted<Observation>[]): void {
   }
 }
 
-/** removal_hrs_per_sqft per job type and overall: (hours − setup) / (sqft × access). */
-function fitRemoval(fit: Fit, obs: Weighted<Observation>[], access: Readonly<Record<AccessLevel, number>>): void {
+/**
+ * removal_hrs_per_sqft per job type and overall: (hours − setup) / (sqft × access), at the
+ * candidate's removal setup and access multipliers.
+ */
+function fitRemoval(
+  fit: Fit,
+  obs: Weighted<Observation>[],
+  coupled: readonly StoredCoefficient[],
+  access: Readonly<Record<AccessLevel, number>>,
+): void {
   const root = fit.byKey.get(cellKey(cell('removal_hrs_per_sqft')));
   if (!root) return;
-  const setup = findStored(fit.active, 'setup_hours', { product: 'removal' })?.value ?? 0;
+  const setup = findStored(coupled, 'setup_hours', { product: 'removal' })?.value ?? 0;
   const rows: RatioRow[] = [];
   for (const { o, w } of obs) {
     const hours = usable(o.actualHours);
@@ -256,51 +312,120 @@ function fitDrive(fit: Fit, drive: Weighted<DriveObservation>[]): void {
   }
   if (rows.length === 0) return;
   const sm = summarize(rows.map((r) => r.r), rows.map((r) => r.w), fit.s.winsorPct);
-  put(fit, own, sm, shrink(sm.mean, sm.nEff, own.value, fit.s.shrinkageK));
+  put(fit, own, sm, shrink(sm.mean, sm.nEff, anchor(own), fit.s.shrinkageK));
 }
 
 // ---------------------------------------------------------------------------
 // Hours model: hours = setup(product) + designQty × rate(product, job type) × access(level)
 // ---------------------------------------------------------------------------
 
-interface HoursRow {
+interface LaborRow {
   o: Observation;
   w: number;
   q: number; // design quantity
   h: number; // actual hours
+}
+
+interface HoursRow extends LaborRow {
   setup: number; // working setup of the row's product (NaN until fitted)
   rate: number; // working rate of the row's (product, job type) cell (NaN until fitted)
 }
 
+/** A row at its access-adjusted size x = designQty × access. */
+interface Sized<R extends LaborRow> {
+  r: R;
+  x: number;
+  w: number;
+}
+
+/** One product's rows with a usable design quantity and hours, at a level the engine can price. */
+function laborRows(obs: Weighted<Observation>[], product: ProductCode, access: Readonly<Record<AccessLevel, number>>): LaborRow[] {
+  const rows: LaborRow[] = [];
+  for (const { o, w } of obs) {
+    const q = usable(o.designQty);
+    const h = usable(o.actualHours);
+    if (o.product === product && q !== null && h !== null && priced(access[o.accessLevel])) rows.push({ o, w, q, h });
+  }
+  return rows;
+}
+
+const sized = <R extends LaborRow>(rows: readonly R[], access: Readonly<Record<AccessLevel, number>>): Sized<R>[] =>
+  rows.map((r) => ({ r, x: r.q * access[r.o.accessLevel], w: r.w })).filter((p) => priced(p.x));
+
+/**
+ * Rates given a setup: each job's (hours − setup) / x, winsorized within its job type (one clip
+ * over the pooled jobs would cut into the real gap between job types). One summary per job type
+ * present, and the product's pooled summary over the same clipped values.
+ */
+function rateSummaries<R extends LaborRow>(
+  pts: readonly Sized<R>[],
+  setup: number,
+  winsorPct: number,
+  refRate?: (r: R) => number,
+): { pooled: Summary; byJobType: Array<{ jobType: JobType; sub: Sized<R>[]; sm: Summary }> } {
+  const values: number[] = [];
+  const weights: number[] = [];
+  const byJobType: Array<{ jobType: JobType; sub: Sized<R>[]; sm: Summary }> = [];
+  for (const jobType of JOB_TYPES) {
+    const sub = pts.filter((p) => p.r.o.jobType === jobType);
+    if (sub.length === 0) continue;
+    const MODE = process.env.RW ?? 'A';
+    const ws = sub.map((p) => {
+      if (MODE === 'B') return p.w * p.x;
+      if (MODE === 'C') return p.w * (p.x / p.r.h) ** 2;
+      if (MODE === 'D') { const hh = setup + (refRate ? refRate(p.r) : (p.r.h - setup) / p.x) * p.x; return p.w * (p.x / hh) ** 2; }
+      return p.w;
+    });
+    const v = winsorize(sub.map((p) => (p.r.h - setup) / p.x), ws, winsorPct);
+    byJobType.push({ jobType, sub, sm: stats(v, ws) });
+    values.push(...v);
+    weights.push(...ws);
+  }
+  return { pooled: stats(values, weights), byJobType };
+}
+
+/**
+ * The setup regression: hours on [1, x · 1{job type = j} for each job type present], one shared
+ * intercept (the setup) and one slope per job type. A single pooled line would read the gap
+ * between job types that differ in rate and in size (big attics at a low rate, small wall
+ * cavities at a high one) as setup. Held without 3+ job sizes and n_eff ≥ 2 · min_n_eff, when
+ * no job type's sizes vary (singular), or when the intercept is negative.
+ */
+function fitSetup(
+  pts: ReadonlyArray<{ jobType: JobType; x: number; y: number; w: number }>,
+  nEff: number,
+  s: LearningSettings,
+): { raw: number | null; hold: string | null } {
+  if (distinctCount(pts.map((p) => p.x)) < 3 || nEff < 2 * s.minNEff)
+    return { raw: null, hold: `setup needs 3+ job sizes and n_eff ≥ ${fmt(2 * s.minNEff)} (have ${fmt(nEff)})` };
+  const present = JOB_TYPES.filter((jt) => pts.some((p) => p.jobType === jt && p.w > 0));
+  const beta = wlsSolve(pts.map((p) => ({ x: [1, ...present.map((jt) => (p.jobType === jt ? p.x : 0))], y: p.y, w: p.w })));
+  if (!beta) return { raw: null, hold: 'setup regression undefined' };
+  if (beta[0]! < 0) return { raw: null, hold: `setup regression gave ${fmt(beta[0]!)} < 0` };
+  return { raw: beta[0]!, hold: null };
+}
+
 interface ProductGroup {
-  product: ProductCode;
   rateCell: StoredCoefficient; // active product-level rate
   setupCell: StoredCoefficient | null; // null: setup is not stored per product, so it is not fitted
   setup0: number; // active setup (what pricing uses)
+  setupAnchor: number; // what a fitted setup is shrunk toward
   setup: number; // working values
   rate: number;
   rows: HoursRow[];
 }
 
-/** A multiplier the hours model can use: finite and positive. */
-const priced = (v: number) => Number.isFinite(v) && v > 0;
-
 /**
- * Alternating least squares with the 'easy' multiplier held at its active value (otherwise
- * rates and multipliers are only identified up to a common factor). Returns the working access
- * multipliers (NaN for a level the active set cannot price), which removal hours reuse.
+ * First pass of the hours model: alternating least squares for setup and the access
+ * multipliers, with the 'easy' multiplier held at its active value (otherwise rates and
+ * multipliers are only identified up to a common factor). Its working rates are not kept:
+ * fitLaborRates refits them at the guarded setup and multipliers.
  */
-function fitHours(fit: Fit, obs: Weighted<Observation>[]): Record<AccessLevel, number> {
+function fitHours(fit: Fit, obs: Weighted<Observation>[]): void {
   const { s } = fit;
   const k = s.shrinkageK;
 
-  const lookup = (accessLevel: AccessLevel) => findStored(fit.active, 'access_mult', { accessLevel })?.value ?? Number.NaN;
-  const access: Record<AccessLevel, number> = {
-    easy: lookup('easy'),
-    moderate: lookup('moderate'),
-    difficult: lookup('difficult'),
-    extreme: lookup('extreme'),
-  };
+  const access = accessValues(fit.active);
   const accessCells: Array<{ level: AccessLevel; own: StoredCoefficient }> = [];
   for (const level of ACCESS_LEVELS) {
     const own = fit.byKey.get(cellKey(cell('access_mult', null, null, level)));
@@ -313,74 +438,50 @@ function fitHours(fit: Fit, obs: Weighted<Observation>[]): Record<AccessLevel, n
     if (product === 'removal' || !rateCell) continue;
     const setupCell = fit.byKey.get(cellKey(cell('setup_hours', product))) ?? null;
     const setup0 = setupCell?.value ?? findStored(fit.active, 'setup_hours', { product })?.value ?? 0;
-    const rows: HoursRow[] = [];
-    for (const { o, w } of obs) {
-      const q = usable(o.designQty);
-      const h = usable(o.actualHours);
-      if (o.product === product && q !== null && h !== null && priced(access[o.accessLevel]))
-        rows.push({ o, w, q, h, setup: Number.NaN, rate: Number.NaN });
+    const rows = laborRows(obs, product, access).map((r) => ({ ...r, setup: Number.NaN, rate: Number.NaN }));
+    if (rows.length > 0) {
+      const setupAnchor = setupCell ? anchor(setupCell) : setup0;
+      groups.push({ rateCell, setupCell, setup0, setupAnchor, setup: setup0, rate: rateCell.value, rows });
     }
-    if (rows.length > 0) groups.push({ product, rateCell, setupCell, setup0, setup: setup0, rate: rateCell.value, rows });
   }
 
   for (let iter = 1; iter <= ALS_ITERATIONS; iter++) {
     const last = iter === ALS_ITERATIONS;
 
-    // (i) Given access: setup and rate per product, then a rate per (product, job type).
+    // (i) Given access: setup per product, then the rates per product and job type at that setup.
     for (const g of groups) {
-      const pts = g.rows.map((r) => ({ r, x: r.q * access[r.o.accessLevel], w: r.w })).filter((p) => priced(p.x));
+      const pts = sized(g.rows, access);
       const ws = pts.map((p) => p.w);
       const nEff = effectiveSampleSize(ws);
-      // Each job's ratio actual / predicted hours under the current fit, winsorized; the
-      // regression sees the winsorized hours, so one mis-keyed job cannot tilt the line. The
-      // ratio is centred at 1 for small and large jobs alike, so clipping does not bias setup.
-      const ref = pts.map((p) => g.setup + g.rate * p.x);
+      const rateOf = (r: HoursRow) => (Number.isFinite(r.rate) ? r.rate : g.rate);
+      // Each job's ratio actual / predicted hours under the current fit (at its job type's
+      // rate), winsorized; the regression sees the winsorized hours, so one mis-keyed job
+      // cannot tilt it. The ratio is centred at 1 for small and large jobs and for every job
+      // type alike, so clipping does not bias setup.
+      const ref = pts.map((p) => g.setup + rateOf(p.r) * p.x);
       const ratios = ref.every(priced) ? winsorize(pts.map((p, i) => p.r.h / ref[i]!), ws, s.winsorPct) : null;
-      const adjusted = pts.map((p, i) => ({ x: p.x, y: ratios ? ratios[i]! * ref[i]! : p.r.h, w: p.w }));
+      const adjusted = pts.map((p, i) => ({ jobType: p.r.o.jobType, x: p.x, y: ratios ? ratios[i]! * ref[i]! : p.r.h, w: p.w }));
 
-      let setupRaw = g.setup0;
-      let rateRaw: number | null = null;
-      let hold: string | null = null;
-      if (g.setupCell) {
-        if (distinctCount(pts.map((p) => p.x)) < 3 || nEff < 2 * s.minNEff) {
-          hold = `setup needs 3+ job sizes and n_eff ≥ ${fmt(2 * s.minNEff)} (have ${fmt(nEff)})`;
-        } else {
-          const line = wlsLine(adjusted);
-          if (!line) hold = 'setup regression undefined';
-          else if (line.intercept < 0) hold = `setup regression gave ${fmt(line.intercept)} < 0`;
-          else {
-            setupRaw = line.intercept;
-            rateRaw = line.slope;
-          }
-        }
-      }
-      // Without a regression the setup stays at its active value and the rate is the mean.
-      const method = rateRaw === null ? 'mean' : 'regression';
-      rateRaw ??= weightedMean(adjusted.map((p) => (p.y - g.setup0) / p.x), ws);
-      g.setup = shrink(setupRaw, nEff, g.setup0, k);
-      g.rate = shrink(rateRaw, nEff, g.rateCell.value, k);
+      // Without a regression the setup stays at its active value.
+      const setup = g.setupCell ? fitSetup(adjusted, nEff, s) : null;
+      const setupRaw = setup?.raw ?? null;
+      g.setup = setupRaw === null ? g.setup0 : shrink(setupRaw, nEff, g.setupAnchor, k);
 
-      if (last) {
-        const rates = adjusted.map((p) => (p.y - g.setup) / p.x);
-        put(fit, g.rateCell, { mean: rateRaw, n: pts.length, nEff, se: standardError(rates, ws, nEff) }, g.rate, { method });
-        if (g.setupCell) {
-          const setups = adjusted.map((p) => p.y - g.rate * p.x);
-          const sm = { mean: setupRaw, n: pts.length, nEff, se: standardError(setups, ws, nEff) };
-          put(fit, g.setupCell, sm, g.setup, { method, hold });
-        }
-        for (const p of pts) fit.used.add(p.r.o);
-      }
-
-      for (const jobType of JOB_TYPES) {
-        const sub = pts.filter((p) => p.r.o.jobType === jobType);
-        if (sub.length === 0) continue;
-        const sm = summarize(sub.map((p) => (p.r.h - g.setup) / p.x), sub.map((p) => p.w), s.winsorPct);
+      const { pooled, byJobType } = rateSummaries(pts, g.setup, s.winsorPct, rateOf);
+      g.rate = shrink(pooled.mean, nEff, anchor(g.rateCell), k);
+      for (const { sub, sm } of byJobType) {
         const v = shrink(sm.mean, sm.nEff, g.rate, k);
         for (const p of sub) {
           p.r.setup = g.setup;
           p.r.rate = v;
         }
-        if (last) put(fit, cell('labor_hrs_per_unit', g.product, jobType), sm, v, { parent: g.rateCell });
+      }
+
+      if (last && g.setupCell && setup) {
+        // Each job's implied setup at its job type's rate.
+        const setups = adjusted.map((p, i) => p.y - rateOf(pts[i]!.r) * p.x);
+        const sm = { mean: setupRaw ?? g.setup0, n: pts.length, nEff, se: standardError(setups, ws, nEff) };
+        put(fit, g.setupCell, sm, g.setup, { method: setupRaw === null ? 'mean' : 'regression', hold: setup.hold });
       }
     }
 
@@ -396,13 +497,44 @@ function fitHours(fit: Fit, obs: Weighted<Observation>[]): Record<AccessLevel, n
       }
       if (rows.length === 0) continue;
       const sm = summarize(rows.map((r) => r.r), rows.map((r) => r.w), s.winsorPct);
-      const v = shrink(sm.mean, sm.nEff, own.value, k);
+      const v = shrink(sm.mean, sm.nEff, anchor(own), k);
       // A non-positive working multiplier would poison the next pass; guardrails judge the final value.
       if (priced(v)) access[level] = v;
       if (last) put(fit, own, sm, v);
     }
   }
-  return access;
+}
+
+/**
+ * labor_hrs_per_unit at the candidate's setup and access multipliers: per product the pooled
+ * (hours − setup) / x over every job type, shrunk toward its prior; per (product, job type) its
+ * own, shrunk toward the product's estimate.
+ */
+function fitLaborRates(
+  fit: Fit,
+  obs: Weighted<Observation>[],
+  coupled: readonly StoredCoefficient[],
+  access: Readonly<Record<AccessLevel, number>>,
+): void {
+  const k = fit.s.shrinkageK;
+  for (const product of PRODUCTS) {
+    const rateCell = fit.byKey.get(cellKey(cell('labor_hrs_per_unit', product)));
+    if (product === 'removal' || !rateCell) continue;
+    const pts = sized(laborRows(obs, product, access), access);
+    if (pts.length === 0) continue;
+    const setup = findStored(coupled, 'setup_hours', { product })?.value ?? 0;
+    // 'regression' when that setup came out of this run's hours regression, 'mean' when it is held.
+    const regressed = fit.estimates.get(cellKey(cell('setup_hours', product)))?.hold === null;
+    const given = `given setup ${fmt(setup)}`;
+    const { pooled, byJobType } = rateSummaries(pts, setup, fit.s.winsorPct, (r) => findStored(fit.active, 'labor_hrs_per_unit', { product, jobType: r.o.jobType })!.value);
+    const value = shrink(pooled.mean, pooled.nEff, anchor(rateCell), k);
+    put(fit, rateCell, pooled, value, { method: `${regressed ? 'regression' : 'mean'}, ${given}` });
+    for (const { jobType, sm } of byJobType) {
+      const child = cell('labor_hrs_per_unit', product, jobType);
+      put(fit, child, sm, shrink(sm.mean, sm.nEff, value, k), { method: given, parent: rateCell });
+    }
+    for (const p of pts) fit.used.add(p.r.o);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -419,6 +551,9 @@ interface Built {
 }
 
 const fmt = (n: number | null): string => (n === null ? 'n/a' : String(Number(n.toPrecision(4))));
+
+/** A value as the coefficients table holds it (rounded like nightlyCore's coefficientRow). */
+const atStorage = (n: number): number => Math.round(n * 10 ** STORAGE_DP) / 10 ** STORAGE_DP;
 
 function copy(a: StoredCoefficient, note: string): CandidateCoefficient {
   return {
@@ -475,13 +610,26 @@ function guarded(
     b.insane.push(`${label(base)} estimate ${fmt(est.value)}`);
     return { c: copy(base, `kept active value: estimate ${fmt(est.value)} is not a valid coefficient`), keep: !isNew };
   }
-  if (g.wasStepLimited) b.limited.push(label(base));
-  if (g.wasClamped) b.clamped.push(label(base));
-  const tail = g.wasClamped
-    ? `${g.wasStepLimited ? 'step-limited, ' : ''}clamped to ${fmt(g.value)}`
-    : g.wasStepLimited
-      ? `step-limited to ${fmt(g.value)}`
-      : null;
+  // A move the table cannot store, or one smaller than CHANGE_REL of the active value, keeps
+  // the active value exactly. The band is never wider than half a step, so a tiny max_step_pct
+  // still lets values move.
+  const band = Math.min(CHANGE_REL, s.maxStepPct / 2);
+  const same =
+    !isNew &&
+    isSaneValue(v0, base.lowerBound, base.upperBound) &&
+    (atStorage(g.value) === atStorage(v0) || Math.abs(g.value - v0) < band * v0);
+  const value = same ? v0 : g.value;
+  const limited = !same && g.wasStepLimited;
+  const clamped = !same && g.wasClamped;
+  if (limited) b.limited.push(label(base));
+  if (clamped) b.clamped.push(label(base));
+  const tail = same
+    ? `within ${fmt(band * 100)}% of the active value`
+    : clamped
+      ? `${limited ? 'step-limited, ' : ''}clamped to ${fmt(value)}`
+      : limited
+        ? `step-limited to ${fmt(value)}`
+        : null;
   const note = [isNew ? `new cell (was ${fmt(v0)})` : null, evidence, `shrunk ${fmt(est.value)}`, tail]
     .filter((x): x is string => x !== null)
     .join(', ');
@@ -490,18 +638,18 @@ function guarded(
     product: base.product,
     jobType: base.jobType,
     accessLevel: base.accessLevel,
-    value: g.value,
+    value,
     priorValue: base.priorValue,
     lowerBound: base.lowerBound,
     upperBound: base.upperBound,
     sampleSize: est.n,
     nEff: est.nEff,
-    confidence: confidenceScore(est.nEff, g.value, est.stdError),
+    confidence: confidenceScore(est.nEff, value, est.stdError),
     stdError: est.stdError,
-    wasClamped: g.wasClamped,
-    wasStepLimited: g.wasStepLimited,
-    changed: isNew || Math.abs(g.value - base.value) > CHANGE_EPS,
-    note,
+    wasClamped: clamped,
+    wasStepLimited: limited,
+    changed: !same,
+    note: same ? `unchanged: ${note}` : note,
   };
   return { c, keep: true };
 }

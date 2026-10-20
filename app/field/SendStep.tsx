@@ -6,7 +6,7 @@ import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/l
 import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
-import { parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
+import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
 import { usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
 import type { PricingResult } from './EstimateEditor';
@@ -159,7 +159,10 @@ export function SendStep({
               <p className="font-semibold">These changes from the model need a short note:</p>
               <ul className="mt-1 list-disc pl-4">
                 {pendingFlags.map((f) => (
-                  <li key={f.key}>{f.message}</li>
+                  <li key={f.key}>
+                    {f.message}
+                    {ackState(f, draft.deviationAcks).status === 'stale' ? ' Check your earlier note, then confirm or edit it.' : ''}
+                  </li>
                 ))}
               </ul>
               <Button size="sm" variant="secondary" className="mt-2" onClick={onReviewOptions}>

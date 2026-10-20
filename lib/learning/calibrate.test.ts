@@ -195,7 +195,7 @@ describe('calibrate: recovery of known coefficients', () => {
       expect(c.stdError).toBeGreaterThan(0);
       expect(c.confidence).toBeGreaterThan(50);
       expect(c.confidence).toBeLessThanOrEqual(100);
-      expect(c.note).toMatch(/^(new cell \(was [\d.]+\), )?n_eff [\d.]+, (regression, |mean, )?raw [\d.e-]+, shrunk [\d.e-]+$/);
+      expect(c.note).toMatch(/^(new cell \(was [\d.]+\), )?n_eff [\d.]+, (regression, |mean, )?(given setup [\d.]+, )?raw [\d.e-]+, shrunk [\d.e-]+$/);
     }
     expect(r.metrics.nUsed).toBe(clean.observations.length);
     expect(r.metrics.holdout?.n).toBe(Math.ceil(0.2 * clean.observations.length));

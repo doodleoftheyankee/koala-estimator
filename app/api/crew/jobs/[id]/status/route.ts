@@ -74,7 +74,7 @@ async function completionCheck(supabase: Awaited<ReturnType<typeof createClient>
   if (view.error || !rows.success) throw new Error(view.error?.message ?? 'Unexpected job data');
   const job = groupViewRows(rows.data)[0];
   if (!job) return null;
-  const actuals = await supabase.from('job_actuals').select(CREW_ACTUAL_COLUMNS).eq('job_id', jobId);
+  const actuals = await supabase.from('crew_actuals_view').select(CREW_ACTUAL_COLUMNS).eq('job_id', jobId);
   const parsed = z.array(actualDbRowSchema).safeParse(actuals.data ?? []);
   if (actuals.error || !parsed.success) throw new Error(actuals.error?.message ?? 'Unexpected actuals data');
   return completionBlockers(job, parsed.data.map(toServerActual));

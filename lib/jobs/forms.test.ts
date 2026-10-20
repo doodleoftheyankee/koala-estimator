@@ -78,6 +78,18 @@ describe('actualForm', () => {
   });
 });
 
+describe('actualForm notes', () => {
+  it('stores line breaks as LF, as the crew app does', async () => {
+    // What a browser sends: multipart/form-data encodes every line break as CRLF.
+    const fd = new FormData();
+    fd.set('job_id', '11111111-1111-4111-8111-111111111111');
+    fd.set('notes', 'Knee walls were tight\nSkip the garage');
+    const sent = await new Response(fd).formData();
+    const parsed = actualForm.parse(Object.fromEntries(sent.entries()));
+    expect(parsed.notes).toBe('Knee walls were tight\nSkip the garage');
+  });
+});
+
 describe('valuesChanged', () => {
   it('compares numbers from Postgres strings and trims text', () => {
     const stored = { actual_hours: '15.500', actual_material_qty: '75.0000', notes: 'extra ', actual_days: null };
@@ -86,6 +98,8 @@ describe('valuesChanged', () => {
     expect(valuesChanged({ notes: null }, { notes: '' })).toBe(false);
     expect(valuesChanged({ actual_days: 1 }, stored)).toBe(true);
     expect(valuesChanged({ actual_material_unit: 'bag' }, { actual_material_unit: 'bag' })).toBe(false);
+    // A multipart form post turns the crew's LF line breaks into CRLF: not a change.
+    expect(valuesChanged({ notes: 'Knee walls were tight\r\nSkip the garage' }, { notes: 'Knee walls were tight\nSkip the garage' })).toBe(false);
   });
 });
 

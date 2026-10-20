@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
 import { AppNav } from '@/components/AppNav';
-import { Alert, Badge, Card, Field, Input, Select } from '@/components/ui';
+import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 import { num } from '@/lib/format';
@@ -343,14 +343,22 @@ function Entered({ actual }: { actual: OfficeActual | null }) {
   );
 }
 
-/** Hidden copies of the stored values: a verified row's numbers are shown, not edited. */
-function Locked({ name, value, label }: { name: string; value: string | number | null; label: string }) {
+/** A verified row's numbers are shown, not edited (and not sent: its save writes costs only). */
+function Locked({ value, label }: { value: string | number | null; label: string }) {
   return (
     <div>
-      <input type="hidden" name={name} value={value === null ? '' : String(value)} />
       <p className="text-sm text-slate-500">{label}</p>
-      <p className="min-h-12 py-3 font-medium text-slate-900">{value === null || value === '' ? '—' : value}</p>
+      <p className="min-h-12 whitespace-pre-line py-3 font-medium text-slate-900">{value === null || value === '' ? '—' : value}</p>
     </div>
+  );
+}
+
+/** Notes keep the crew's line breaks. */
+function NotesField({ defaultValue }: { defaultValue: string | null | undefined }) {
+  return (
+    <Field label="Notes" className="col-span-full">
+      <Textarea name="notes" rows={3} maxLength={2000} defaultValue={defaultValue ?? ''} />
+    </Field>
   );
 }
 
@@ -386,9 +394,9 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
             <Hidden jobId={jobId} id={a?.id ?? null} areaId={row.areaId} product={row.product} unit={row.unit} />
             {locked ? (
               <div className="grid gap-3 sm:grid-cols-3">
-                {row.hasMaterial ? <Locked name="material_qty" value={a?.materialQty ?? null} label={`${unit} used`} /> : null}
-                <Locked name="hours" value={a?.hours ?? null} label="Person-hours" />
-                <Locked name="notes" value={a?.notes ?? null} label="Notes" />
+                {row.hasMaterial ? <Locked value={a?.materialQty ?? null} label={`${unit} used`} /> : null}
+                <Locked value={a?.hours ?? null} label="Person-hours" />
+                <Locked value={a?.notes ?? null} label="Notes" />
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
@@ -402,7 +410,7 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
                   />
                 ) : null}
                 <NumberField label="Person-hours" name="hours" defaultValue={a?.hours} placeholder={row.estHours !== null ? String(row.estHours) : undefined} required={false} />
-                <TextField label="Notes" name="notes" defaultValue={a?.notes} />
+                <NotesField defaultValue={a?.notes} />
               </div>
             )}
             <CostFields actual={a} />
@@ -432,17 +440,17 @@ function JobRowEditor({ jobId, actual }: { jobId: string; actual: OfficeActual |
             <Hidden jobId={jobId} id={actual?.id ?? null} areaId={null} product={null} unit={null} />
             {locked ? (
               <div className="grid gap-3 sm:grid-cols-4">
-                <Locked name="drive_minutes" value={actual?.driveMinutes ?? null} label="Drive, one way (min)" />
-                <Locked name="days" value={actual?.days ?? null} label="Days on site" />
-                <Locked name="crew_size" value={actual?.crewSize ?? null} label="Crew size" />
-                <Locked name="notes" value={actual?.notes ?? null} label="Notes" />
+                <Locked value={actual?.driveMinutes ?? null} label="Drive, one way (min)" />
+                <Locked value={actual?.days ?? null} label="Days on site" />
+                <Locked value={actual?.crewSize ?? null} label="Crew size" />
+                <Locked value={actual?.notes ?? null} label="Notes" />
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-4">
                 <NumberField label="Drive, one way (min)" name="drive_minutes" defaultValue={actual?.driveMinutes} required={false} />
                 <NumberField label="Days on site" name="days" defaultValue={actual?.days} required={false} />
                 <NumberField label="Crew size" name="crew_size" integer defaultValue={actual?.crewSize} required={false} />
-                <TextField label="Notes" name="notes" defaultValue={actual?.notes} />
+                <NotesField defaultValue={actual?.notes} />
               </div>
             )}
             <CostFields actual={actual} />

@@ -5,6 +5,7 @@ import { computeDeviationFlags } from '@/lib/learning/deviation';
 import { authorize } from '@/lib/server/auth';
 import { loadPricingBundle } from '@/lib/server/bundle';
 import { createClient } from '@/lib/supabase/server';
+import { fieldsPushWouldErase, missingDraftFields, OUTDATED_APP_ERROR, type StoredEstimate } from '@/lib/sync/compat';
 import { priceableAreas, syncableDraftSchema, toEstimateInput } from '@/lib/sync/draft';
 import { buildSyncPayload } from '@/lib/sync/payload';
 import type { SyncResponse } from '@/lib/sync/protocol';
@@ -33,6 +34,24 @@ export async function POST(request: NextRequest) {
   const draft = parsed.data;
 
   const supabase = await createClient();
+
+  // A phone on an older build sends drafts without the fields it does not know; the schema above
+  // has defaulted them to {}. Never let that erase what a newer build saved (lib/sync/compat.ts).
+  // Only such drafts cost the extra read.
+  if (missingDraftFields(body.data.draft).length) {
+    const { data: stored, error: readError } = await supabase
+      .from('estimates')
+      .select('status, client_doc')
+      .eq('id', draft.id)
+      .maybeSingle();
+    if (readError) {
+      return NextResponse.json({ status: 'error', error: `Could not read the estimate: ${readError.message}` } satisfies SyncResponse, { status: 500 });
+    }
+    if (fieldsPushWouldErase(body.data.draft, stored as StoredEstimate | null).length) {
+      return NextResponse.json({ status: 'invalid', error: OUTDATED_APP_ERROR } satisfies SyncResponse, { status: 409 });
+    }
+  }
+
   let payload;
   let bundleHash: string;
   try {

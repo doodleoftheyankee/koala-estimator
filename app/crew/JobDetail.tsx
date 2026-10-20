@@ -5,7 +5,8 @@ import { setJobStatus, syncActuals } from '@/lib/offline/crewSync';
 import { completionBlockers } from '@/lib/offline/crewSyncCore';
 import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, formatNyDateTime, nyDate } from '@/lib/jobs/dates';
-import { mapsUrl, naturalKey, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
+import { mapsUrl, naturalKey, PRODUCT_LABELS, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
+import type { ProductCode } from '@/lib/pricing';
 import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
 import { ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
 import { Alert, Badge, Button, Card } from '@/components/ui';
@@ -83,8 +84,10 @@ export function JobDetail({
     }
     setBusy('complete');
     try {
-      // Complete only once the server has every number the crew typed.
-      const { record } = await syncActuals(id);
+      // Complete only once the server has every number the crew typed. A merge with someone
+      // else's newer values goes out in a second round.
+      let { record } = await syncActuals(id, profile.userId);
+      if (record?.syncState === 'pending') ({ record } = await syncActuals(id, profile.userId));
       if (!record || record.syncState !== 'synced') {
         setMessage({ tone: 'red', text: `The actuals did not sync, so the job was not completed. ${record?.lastError ?? ''}`.trim() });
         return;
@@ -173,6 +176,13 @@ export function JobDetail({
         </div>
         {draft?.syncState === 'locked' ? <Alert tone="blue">{draft.lastError ?? 'The office verified this job. Actuals are read-only.'}</Alert> : null}
         {draft?.syncState === 'invalid' && draft.lastError ? <Alert tone="red">Fix before it can sync: {draft.lastError}</Alert> : null}
+        {draft?.rows
+          .filter((r) => r.changedElsewhere)
+          .map((r) => (
+            <Alert key={r.id} tone="amber">
+              <span className="font-semibold">{rowTitle(job, r)}:</span> {r.changedElsewhere}
+            </Alert>
+          ))}
         {draft && values ? (
           <ActualsForm job={job} draft={draft} values={values} setRow={editor.setRow} />
         ) : (
@@ -182,6 +192,13 @@ export function JobDetail({
       </div>
     </div>
   );
+}
+
+/** "Attic · Cellulose" or "Whole job" for a stored actuals row. */
+function rowTitle(job: CrewJob, r: { areaId: string | null; product: ProductCode | null }): string {
+  if (r.areaId === null || r.product === null) return 'Whole job';
+  const area = job.areas.find((a) => a.areaId === r.areaId)?.name;
+  return `${area ? `${area} · ` : ''}${PRODUCT_LABELS[r.product]}`;
 }
 
 function scheduleLine(job: CrewJob, today: string): string {

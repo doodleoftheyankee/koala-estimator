@@ -10,7 +10,9 @@ import {
   emptyRow,
   expectedRows,
   initialActuals,
+  isDirty,
   isUnsynced,
+  mergeRow,
   mergeServerJob,
   mergeServerJobs,
   missingFor,
@@ -95,6 +97,7 @@ function server(over: Partial<ServerActual> & Pick<ServerActual, 'id'>): ServerA
     days: null,
     notes: null,
     enteredAt: NOW,
+    rowVersion: 1,
     ...over,
   };
 }
@@ -188,11 +191,20 @@ describe('reconcileRows', () => {
   const edited = applyEdits(local, filled(), 'm2', NOW);
   const s = server({ id: '44444444-4444-4444-8444-444444444441', materialQty: 60, hours: 10 });
 
-  it('lends the server id but keeps unsynced values', () => {
+  it('merges a newer server row field by field: the saved value wins a clash, and the crew is told', () => {
     const rows = reconcileRows(edited.rows, job({ actuals: [s] }), newId, false);
-    expect(rowOf({ rows }, KEY_CELL)).toMatchObject({ id: s.id, materialQty: 75, hours: 15.5, onServer: true });
+    const cell = rowOf({ rows }, KEY_CELL);
+    // Both sides set qty and hours: the server's (saved first) win; only the phone set the note: kept.
+    expect(cell).toMatchObject({ id: s.id, materialQty: 60, hours: 10, notes: 'two extra bags', onServer: true, baseVersion: 1 });
+    expect(cell.changedElsewhere).toMatch(/material used is 60 \(you had 75\) and person-hours is 10 \(you had 15\.5\)/);
+    expect(isDirty(cell)).toBe(true); // the note still goes to the server
   });
-  it('takes the server values when nothing is unsynced', () => {
+  it('keeps unsynced changes made against the current server version', () => {
+    const synced = reconcileRows([], job({ actuals: [s] }), newId, false);
+    const mine = synced.map((r) => (naturalKey(r.areaId, r.product) === KEY_CELL ? { ...r, hours: 12 } : r));
+    expect(rowOf({ rows: reconcileRows(mine, job({ actuals: [s] }), newId, false) }, KEY_CELL)).toMatchObject({ hours: 12, materialQty: 60 });
+  });
+  it('takes the server values for a verified job', () => {
     const rows = reconcileRows(edited.rows, job({ actuals: [s] }), newId, true);
     expect(rowOf({ rows }, KEY_CELL)).toMatchObject({ id: s.id, materialQty: 60, hours: 10 });
   });
@@ -212,13 +224,13 @@ describe('mergeServerJob', () => {
     const d = initialActuals(job(), 'u1', newId, NOW);
     expect(mergeServerJob(d, job(), 'u1', newId, NOW)).toBeNull();
   });
-  it('never clobbers unsynced edits, but adopts ids under a new mutation id', () => {
+  it('keeps unsynced edits the server does not clash with, under a new mutation id', () => {
     const d = applyEdits(initialActuals(job(), 'u1', newId, NOW), filled(), 'm2', NOW);
-    const s = server({ id: '44444444-4444-4444-8444-444444444441', materialQty: 1, hours: 1 });
+    const s = server({ id: '44444444-4444-4444-8444-444444444441', product: 'air_sealing', notes: 'office note' });
     const m = mergeServerJob(d, job({ actuals: [s] }), 'u1', newId, NOW)!;
     expect(m.syncState).toBe('pending');
-    expect(valuesOf(m)).toEqual(valuesOf(d));
-    expect(rowOf(m, KEY_CELL).id).toBe(s.id);
+    expect(valuesOf(m)).toEqual({ ...valuesOf(d), [KEY_AIR]: { ...valuesOf(d)[KEY_AIR]!, notes: 'office note' } });
+    expect(rowOf(m, KEY_AIR)).toMatchObject({ id: s.id, baseVersion: 1, changedElsewhere: null });
     expect(m.mutationId).not.toBe('m2');
   });
   it('replaces synced values with the server copy', () => {
@@ -231,12 +243,14 @@ describe('mergeServerJob', () => {
     const d = applyEdits(initialActuals(job(), 'u1', newId, NOW), filled(), 'm2', NOW);
     const locked = mergeServerJob(d, job({ verified: true }), 'u1', newId, NOW)!;
     expect(locked).toMatchObject({ syncState: 'locked', lastError: LOCKED_MESSAGE });
-    expect(valuesOf(locked)).toEqual(valuesOf(d)); // crews cannot see verified rows; keep what they typed
-    // Office and owner do see them: the verified values win over unsynced ones.
+    expect(valuesOf(locked)).toEqual(valuesOf(d)); // rows the server does not have keep what was typed
+    // Rows the server has: the verified values win over unsynced ones.
     const s = server({ id: '44444444-4444-4444-8444-444444444441', materialQty: 80, hours: 16 });
     expect(rowOf(mergeServerJob(d, job({ verified: true, actuals: [s] }), 'u1', newId, NOW)!, KEY_CELL)).toMatchObject({ materialQty: 80, hours: 16 });
+    // Unverified again: what was typed and never reached the server is sent.
     const unlocked = mergeServerJob(locked, job(), 'u1', newId, NOW)!;
-    expect(unlocked).toMatchObject({ syncState: 'synced', lastError: null });
+    expect(unlocked).toMatchObject({ syncState: 'pending', lastError: null });
+    expect(mergeServerJob(initialActuals(job({ verified: true }), 'u1', newId, NOW), job(), 'u1', newId, NOW)).toMatchObject({ syncState: 'synced' });
   });
 });
 
@@ -256,14 +270,17 @@ describe('applyEdits', () => {
 });
 
 describe('payload', () => {
-  it('sends rows with values and rows the server has, nothing else', () => {
+  it('sends only rows the crew changed, each with the server version it is based on', () => {
     const d = initialActuals(job(), 'u1', newId, NOW);
     expect(payloadRows(d)).toEqual([]);
     const e = applyEdits(d, { [KEY_CELL]: filled()[KEY_CELL]! }, 'm2', NOW);
-    expect(payloadRows(e).map((r) => r.product)).toEqual(['cellulose']);
-    // A cleared row the server has is sent so the clear syncs.
-    const cleared = { ...e, rows: e.rows.map((r) => (r.product === 'air_sealing' ? { ...r, onServer: true } : r)) };
-    expect(payloadRows(cleared).map((r) => r.product)).toEqual(['cellulose', 'air_sealing']);
+    expect(payloadRows(e).map((r) => [r.product, r.baseVersion])).toEqual([['cellulose', null]]);
+    // Rows the server has: sent only when changed (a cleared value too), with their version.
+    const air = server({ id: '44444444-4444-4444-8444-444444444443', product: 'air_sealing', hours: 6, rowVersion: 3 });
+    const pulled = mergeServerJob(e, job({ actuals: [air] }), 'u1', newId, NOW)!;
+    expect(payloadRows(pulled).map((r) => r.product)).toEqual(['cellulose']);
+    const cleared = applyEdits(pulled, { [KEY_AIR]: { ...valuesOf(pulled)[KEY_AIR]!, hours: null } }, 'm3', NOW);
+    expect(payloadRows(cleared).map((r) => [r.product, r.hours, r.baseVersion])).toEqual([['cellulose', 15.5, null], ['air_sealing', null, 3]]);
   });
   it('sends only the fields that belong to each kind of row, with trimmed notes', () => {
     const d = applyEdits(initialActuals(job(), 'u1', newId, NOW), filled(), 'm2', NOW);
@@ -289,28 +306,77 @@ describe('payload', () => {
 
 describe('applyActualsResult', () => {
   const base = applyEdits(initialActuals(job(), 'u1', newId, NOW), filled(), 'm1', NOW);
-  const sent = { mutationId: 'm1', rowIds: payloadRows(base).map((r) => r.id) };
+  const sent = { mutationId: 'm1', rows: payloadRows(base) };
+  const savedAll = sent.rows.map((r) => ({ id: r.id, areaId: r.areaId, product: r.product, rowVersion: 1 }));
+  const applied = { status: 'applied' as const, rows: 5, saved: savedAll, conflicts: [] };
 
-  it('marks synced and remembers the server has the rows', () => {
-    const r = applyActualsResult(base, sent, { status: 'applied', rows: 5 }, NOW);
-    expect(r).toMatchObject({ syncState: 'synced', lastError: null, syncedAt: NOW });
-    expect(r.rows.every((x) => x.onServer)).toBe(true);
+  it('marks synced and remembers what the server now has, and its version', () => {
+    const r = applyActualsResult(base, sent, applied, NOW, newId);
+    expect(r).toMatchObject({ syncState: 'synced', lastError: null, syncedAt: NOW, mutationId: 'm1' });
+    expect(r.rows.every((x) => x.onServer && x.baseVersion === 1 && !isDirty(x))).toBe(true);
+    expect(rowOf(r, KEY_CELL).base).toMatchObject({ materialQty: 75, hours: 15.5, notes: 'two extra bags' });
+    expect(payloadRows(r)).toEqual([]);
+  });
+  it('takes the id the server kept for a row', () => {
+    const saved = savedAll.map((x) => (x.product === 'cellulose' ? { ...x, id: '44444444-4444-4444-8444-444444444449' } : x));
+    expect(rowOf(applyActualsResult(base, sent, { ...applied, saved }, NOW, newId), KEY_CELL).id).toBe('44444444-4444-4444-8444-444444444449');
   });
   it('stays pending if edited while in flight', () => {
-    expect(applyActualsResult({ ...base, mutationId: 'm2' }, sent, { status: 'applied', rows: 5 }, NOW).syncState).toBe('pending');
+    const r = applyActualsResult({ ...base, mutationId: 'm2' }, sent, applied, NOW, newId);
+    expect(r).toMatchObject({ syncState: 'pending', mutationId: 'm2' });
+  });
+  it('merges conflicting rows and sends them again under a new mutation id', () => {
+    const theirs = server({ id: '44444444-4444-4444-8444-444444444441', materialQty: 80, hours: 15.5, rowVersion: 4 });
+    const saved = savedAll.filter((x) => x.product !== 'cellulose');
+    const r = applyActualsResult(base, sent, { ...applied, saved, conflicts: [theirs] }, NOW, newId);
+    expect(r.syncState).toBe('pending');
+    expect(r.mutationId).not.toBe('m1'); // m1 is spent on the server (its answer was this conflict)
+    // qty: both set it differently -> the server's 80, with a notice; note: only the phone -> kept.
+    expect(rowOf(r, KEY_CELL)).toMatchObject({ id: theirs.id, materialQty: 80, hours: 15.5, notes: 'two extra bags', baseVersion: 4 });
+    expect(rowOf(r, KEY_CELL).changedElsewhere).toMatch(/material used is 80 \(you had 75\)/);
+    expect(payloadRows(r).map((x) => [x.product, x.baseVersion])).toEqual([['cellulose', 4]]);
   });
   it('locks when the office verified the job', () => {
-    expect(applyActualsResult(base, sent, { status: 'locked', error: LOCKED_MESSAGE }, NOW)).toMatchObject({ syncState: 'locked', lastError: LOCKED_MESSAGE });
+    expect(applyActualsResult(base, sent, { status: 'locked', error: LOCKED_MESSAGE }, NOW, newId)).toMatchObject({ syncState: 'locked', lastError: LOCKED_MESSAGE });
   });
   it('needs a fix for invalid data unless it was already edited', () => {
-    expect(applyActualsResult(base, sent, { status: 'invalid', error: 'bad' }, NOW)).toMatchObject({ syncState: 'invalid', lastError: 'bad' });
-    expect(applyActualsResult({ ...base, mutationId: 'm2' }, sent, { status: 'invalid', error: 'bad' }, NOW)).toMatchObject({ syncState: 'pending', lastError: null });
+    expect(applyActualsResult(base, sent, { status: 'invalid', error: 'bad' }, NOW, newId)).toMatchObject({ syncState: 'invalid', lastError: 'bad' });
+    expect(applyActualsResult({ ...base, mutationId: 'm2' }, sent, { status: 'invalid', error: 'bad' }, NOW, newId)).toMatchObject({ syncState: 'pending', lastError: null });
   });
-  it('retries conflicts and transient errors', () => {
-    expect(applyActualsResult(base, sent, { status: 'conflict', error: 'elsewhere' }, NOW)).toMatchObject({ syncState: 'error', lastError: 'elsewhere' });
-    expect(applyActualsResult(base, sent, { status: 'error', error: 'offline' }, NOW)).toMatchObject({ syncState: 'error' });
+  it('retries conflicts and transient errors under the same id, and a rejected id under a new one', () => {
+    expect(applyActualsResult(base, sent, { status: 'conflict', error: 'elsewhere' }, NOW, newId)).toMatchObject({ syncState: 'error', lastError: 'elsewhere', mutationId: 'm1' });
+    expect(applyActualsResult(base, sent, { status: 'error', error: 'offline' }, NOW, newId)).toMatchObject({ syncState: 'error', mutationId: 'm1' });
+    const rejected = applyActualsResult(base, sent, { status: 'rejected', error: 'someone else' }, NOW, newId);
+    expect(rejected.syncState).toBe('error');
+    expect(rejected.mutationId).not.toBe('m1');
     expect(isUnsynced({ syncState: 'error' })).toBe(true);
     expect(isUnsynced({ syncState: 'locked' })).toBe(false);
+  });
+});
+
+describe('two phones and the office (review regressions)', () => {
+  const CELL_ID = '44444444-4444-4444-8444-444444444441';
+  it('a row this phone never touched takes the other phone\'s values and is never sent blank', () => {
+    // Phone B loaded the job before anything was entered, then edits only the whole-job row.
+    const b = applyEdits(initialActuals(job(), 'u2', newId, NOW), { job: filled().job! }, 'mb', NOW);
+    // Phone A synced the cellulose row meanwhile; B pulls while its own edit is still unsynced.
+    const a = server({ id: CELL_ID, materialQty: 75, hours: 15.5, notes: 'two extra bags' });
+    const merged = mergeServerJob(b, job({ actuals: [a] }), 'u2', newId, NOW)!;
+    expect(rowOf(merged, KEY_CELL)).toMatchObject({ materialQty: 75, hours: 15.5, notes: 'two extra bags', changedElsewhere: null });
+    expect(payloadRows(merged).map((r) => r.areaId)).toEqual([null]); // only the job row goes out
+  });
+  it('an office correction is not overwritten by a later crew edit of another row', () => {
+    const synced = mergeServerJob(undefined, job({ actuals: [server({ id: CELL_ID, materialQty: 70, hours: 15 })] }), 'u1', newId, NOW)!;
+    // Offline, the crew lead adds a note on the whole-job row; the office meanwhile set 82 bags.
+    const edited = applyEdits(synced, { job: { ...filled().job!, notes: 'gate code 1234' } }, 'm2', NOW);
+    expect(payloadRows(edited).map((r) => r.areaId)).toEqual([null]);
+    // And had the crew changed the hours too, the stale base makes the server answer with a
+    // conflict; the merge keeps the office's 82 and the crew's hours.
+    const both = applyEdits(edited, { [KEY_CELL]: { ...valuesOf(edited)[KEY_CELL]!, hours: 16 } }, 'm3', NOW);
+    expect(payloadRows(both).find((r) => r.product === 'cellulose')?.baseVersion).toBe(1);
+    const office = server({ id: CELL_ID, materialQty: 82, hours: 15, rowVersion: 2 });
+    const m = mergeRow(rowOf(both, KEY_CELL), office, 'bag');
+    expect(m).toMatchObject({ materialQty: 82, hours: 16, baseVersion: 2, changedElsewhere: null });
   });
 });
 
@@ -377,16 +443,21 @@ const serverArb = fc.uniqueArray(
 );
 
 describe('merge properties', () => {
-  it('never loses unsynced values and keeps one row per key', () => {
+  it('never silently loses a value the crew typed, and keeps one row per key', () => {
     fc.assert(
       fc.property(editsArb, serverArb, fc.boolean(), (edits, actuals, verified) => {
         const d = applyEdits(initialActuals(job(), 'u1', newId, NOW), edits, 'm2', NOW);
         const m = mergeServerJob(d, job({ actuals, verified }), 'u1', newId, NOW) ?? d;
-        const server = new Set(actuals.map((s) => naturalKey(s.areaId, s.product)));
         for (const [key, v] of Object.entries(valuesOf(d))) {
-          // Verified jobs show the server's rows; everything else keeps what the crew typed.
-          if (verified && server.has(key)) expect(valuesOf(m)[key]!.hours).toBe(actuals.find((s) => naturalKey(s.areaId, s.product) === key)!.hours);
-          else expect(valuesOf(m)[key]).toEqual(v);
+          const s = actuals.find((x) => naturalKey(x.areaId, x.product) === key);
+          const got = valuesOf(m)[key]!;
+          if (!s) expect(got).toEqual(v); // only on the phone: kept as typed
+          else if (verified) expect(got.hours).toBe(s.hours); // verified: the server's rows
+          else if (v.hours !== null && s.hours !== null && v.hours !== s.hours) {
+            // Both entered hours: the saved value wins and the crew is told what they had.
+            expect(got.hours).toBe(s.hours);
+            expect(rowOf(m, key).changedElsewhere).toContain(`you had ${v.hours}`);
+          } else expect(got.hours).toBe(v.hours ?? s.hours);
         }
         const keys = m.rows.map((r) => naturalKey(r.areaId, r.product));
         expect(new Set(keys).size).toBe(keys.length);

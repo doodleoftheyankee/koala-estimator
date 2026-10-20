@@ -4,6 +4,8 @@
 -- Source: owner-supplied research, Oct 2026 — Koala Insulation FDD Item 19
 -- benchmarks (job supplies ~28.5% and installer wages ~20.6% of revenue, gross
 -- margin ~48-49%, average job ~$3.3-3.5k) and Delaware/Mid-Atlantic wage data.
+-- Every statement only replaces a value that is still the Phase 1 placeholder, so a database
+-- where the owner already saved real numbers keeps them.
 -- These are ESTIMATES TO CONFIRM; the pricing page keeps flagging them until the
 -- owner saves real numbers. The learning loop then corrects labor and waste from
 -- actual jobs.
@@ -17,26 +19,26 @@
 
 update app_settings set value = '0.63',
   description = 'All non-job costs (overhead staff, rent, insurance, vehicles, royalty, brand fund, marketing) as % of direct job cost. 0.63 ≈ 33% of revenue — ESTIMATE, confirm'
- where key = 'overhead_pct';
+ where key = 'overhead_pct' and value = '0.18'::jsonb;
 update app_settings set value = '0.15',
   description = 'Target net margin on price after all overhead (≈48% gross margin with overhead 0.63) — ESTIMATE, confirm'
- where key = 'target_margin_pct';
+ where key = 'target_margin_pct' and value = '0.40'::jsonb;
 update app_settings set value = '0.05',
   description = 'Lowest net margin allowed without owner approval (≈44% gross margin)'
- where key = 'floor_margin_pct';
+ where key = 'floor_margin_pct' and value = '0.25'::jsonb;
 update app_settings set value = '0.30',
   description = 'Highest net margin the price optimizer will consider'
- where key = 'ceiling_margin_pct';
+ where key = 'ceiling_margin_pct' and value = '0.60'::jsonb;
 update app_settings set value = '1500',
   description = 'Minimum job price ($): setup, travel and cleanup are mostly fixed — ESTIMATE, confirm'
- where key = 'minimum_job_price';
+ where key = 'minimum_job_price' and value = '995'::jsonb;
 
 -- No customer-financing partner is contracted yet; never print terms that do not exist.
 -- Koala locations commonly use Wisetack, EnerBank USA (Regions), Finance of America or Hearth.
 update app_settings
    set value = '{"provider": null, "apr": 0.0899, "term_months": 120, "show": false}',
        description = 'Customer financing shown on quotes. Off until a lender (e.g. Wisetack, EnerBank/Regions, Finance of America, Hearth) gives you program terms — then set provider, APR and term and turn it on. PLACEHOLDER'
- where key = 'financing';
+ where key = 'financing' and value->>'provider' is null;
 
 -- Materials: realistic cost per unit before waste; yield loss is the waste factor below.
 update materials m set cost_per_unit = v.cost, name = v.name
@@ -44,7 +46,7 @@ update materials m set cost_per_unit = v.cost, name = v.name
     ('ccsf', 0.47, 'Closed-cell set (~$2,350/set at full yield, per board ft)'),
     ('ocsf', 0.12, 'Open-cell set (~$1,800/set at full yield, per board ft)')
   ) as v(code, cost, name)
- where m.product_id = p.id and p.code = v.code::product_code and m.is_default;
+ where m.product_id = p.id and p.code = v.code::product_code and m.is_default and m.needs_owner_input;
 
 -- Crew: ~$24.50/h average base (helper $16–25, lead $20–32) + ~40% burden ≈ $35 per person-hour.
 update crews set blended_hourly_cost = 35.00 where name = 'Crew A' and needs_owner_input;

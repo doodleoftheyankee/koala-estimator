@@ -1,8 +1,9 @@
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
-import { priceEstimate, type PricedOption, type WinModel } from '@/lib/pricing';
+import { priceEstimate, type EstimateInput, type PricedOption, type Tier, type WinModel } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { seedActive } from './__fixtures__/synthetic';
+import { computeDeviationFlags, deviationOutcome } from './deviation';
 import type { NightlySummary } from './nightly';
 import {
   assembleJobsForLearning,
@@ -20,14 +21,16 @@ import {
   parseOutcomeSnapshot,
   parseRows,
   runNightlyWith,
+  scorableLineFlags,
   summaryHasFailures,
   toStoredCoefficient,
   verifiedActualsByJob,
   winModelRow,
   type ActualDbRow,
-  type CompletedJobRow,
   type EmailOut,
+  type FlagQuoteRow,
   type FlagRow,
+  type JobRow,
   type LearningRows,
   type NightlyDeps,
   type OutcomeEstimateRow,
@@ -542,34 +545,59 @@ describe('parseLineFlagKey', () => {
 });
 
 describe('lineFlagOutcomes', () => {
-  const flag = (patch: Partial<FlagRow>): FlagRow => ({
+  const flag = (patch: Partial<FlagRow> = {}): FlagRow => ({
     id: 'f1',
     estimate_id: 'e1',
     flag_key: 'a1|cellulose|labor|hours',
     metric: 'hours',
-    estimator_value: 14,
-    model_value: 10,
     ...patch,
   });
-  const job = (patch: Partial<CompletedJobRow> = {}): CompletedJobRow => ({
+  const job = (patch: Partial<JobRow> = {}): JobRow => ({
     id: 'job-1',
+    quote_id: 'q1',
     estimate_id: 'e1',
     completed_at: '2026-10-01T16:00:00Z',
     ...patch,
   });
+  /** A line the estimator changed, as the signed snapshot stores it (the fields scoring reads). */
+  const changed = (key: string, values: { qty?: number; hours?: number; modelQty?: number; modelHours?: number }) => ({
+    key,
+    kind: key.split('|')[2],
+    isOverridden: true,
+    qty: 0,
+    hours: null,
+    modelQty: null,
+    modelHours: null,
+    ...values,
+  });
+  const quote = (lines: object[], patch: Partial<FlagQuoteRow> = {}): FlagQuoteRow => ({
+    id: 'q1',
+    signed_tier: 'better',
+    options: [{ tier: 'better', lines }],
+    ...patch,
+  });
+  /** Both steps, as updateDeviationOutcomes runs them. */
+  const outcomes = (flags: readonly FlagRow[], jobs: JobRow[], actuals: ActualDbRow[], quotes: FlagQuoteRow[]) =>
+    lineFlagOutcomes(scorableLineFlags(flags, jobs, actuals), quotes);
 
-  it('scores hours and quantity flags against the crew actuals', () => {
-    const out = lineFlagOutcomes(
+  it("scores hours and quantity flags with the signed option's numbers against the crew actuals", () => {
+    const signed = quote([
+      changed('a1|cellulose|labor', { hours: 14, modelHours: 10 }), // actual 13.5: estimator closer
+      changed('a1|cellulose|material', { qty: 120, modelQty: 90 }), // actual 92: model closer
+      changed('a1|air_sealing|labor', { hours: 8.1, modelHours: 7.9 }), // actual 8: tie
+    ]);
+    const out = outcomes(
       [
-        flag({ id: 'hours-est' }), // actual 13.5: estimator (14) closer than model (10)
-        flag({ id: 'qty-model', flag_key: 'a1|cellulose|material|qty', metric: 'qty', estimator_value: 120, model_value: 90 }), // actual 92
-        flag({ id: 'tie', flag_key: 'a1|air_sealing|labor|hours', estimator_value: 8.1, model_value: 7.9 }), // actual 8
+        flag({ id: 'hours-est' }),
+        flag({ id: 'qty-model', flag_key: 'a1|cellulose|material|qty', metric: 'qty' }),
+        flag({ id: 'tie', flag_key: 'a1|air_sealing|labor|hours' }),
       ],
       [job()],
       [
         actual({ actual_hours: 13.5, actual_material_qty: 92 }),
         actual({ product: 'air_sealing', actual_hours: 8, actual_material_qty: 900 }),
       ],
+      [signed],
     );
     expect(out).toEqual([
       { id: 'hours-est', outcome: 'estimator_closer' },
@@ -578,7 +606,7 @@ describe('lineFlagOutcomes', () => {
     ]);
   });
 
-  it('gives no outcome without a usable, verified, included actual', () => {
+  it('needs no quote for flags without a usable, verified, included actual', () => {
     const flags = [
       flag({ id: 'total', flag_key: 'better|total_price', metric: 'total_price' }),
       flag({ id: 'metric-mismatch', metric: 'qty' }),
@@ -589,9 +617,9 @@ describe('lineFlagOutcomes', () => {
       flag({ id: 'no-job', estimate_id: 'e9' }),
       flag({ id: 'unverified', estimate_id: 'e2' }),
     ];
-    const out = lineFlagOutcomes(
+    const scorable = scorableLineFlags(
       flags,
-      [job(), job({ id: 'job-2', estimate_id: 'e2' })],
+      [job(), job({ id: 'job-2', quote_id: 'q2', estimate_id: 'e2' })],
       [
         actual({ actual_hours: 13.5 }),
         actual({ product: 'removal', actual_hours: 30, exclude_from_learning: true }),
@@ -599,32 +627,145 @@ describe('lineFlagOutcomes', () => {
         actual({ job_id: 'job-2', verified_at: null }),
       ],
     );
-    expect(out).toEqual([]);
+    expect(scorable).toEqual([]);
   });
 
-  it('uses the most recently completed verified job of the estimate', () => {
-    const out = lineFlagOutcomes(
-      [flag({})],
-      [
-        job({ id: 'job-old', completed_at: '2026-09-01T16:00:00Z' }),
-        job({ id: 'job-new', completed_at: '2026-10-05T16:00:00Z' }),
-        job({ id: 'job-undated', completed_at: null }),
-      ],
-      [
-        actual({ job_id: 'job-old', actual_hours: 10 }), // would favor the model
-        actual({ job_id: 'job-new', actual_hours: 14 }), // favors the estimator
-        actual({ job_id: 'job-undated', actual_hours: 10 }),
-      ],
-    );
-    expect(out).toEqual([{ id: 'f1', outcome: 'estimator_closer' }]);
+  it("uses the most recently completed verified job of the estimate, and that job's quote", () => {
+    const jobs = [
+      job({ id: 'job-old', quote_id: 'q-old', completed_at: '2026-09-01T16:00:00Z' }),
+      job({ id: 'job-new', quote_id: 'q-new', completed_at: '2026-10-05T16:00:00Z' }),
+      job({ id: 'job-undated', quote_id: 'q-undated', completed_at: null }),
+    ];
+    const actuals = [
+      actual({ job_id: 'job-old', actual_hours: 10 }), // would favor the model
+      actual({ job_id: 'job-new', actual_hours: 14 }), // favors the estimator
+      actual({ job_id: 'job-undated', actual_hours: 10 }),
+    ];
+    expect(scorableLineFlags([flag()], jobs, actuals)).toEqual([
+      { id: 'f1', quoteId: 'q-new', lineKey: 'a1|cellulose|labor', metric: 'hours', actual: 14 },
+    ]);
+    const lines = [changed('a1|cellulose|labor', { hours: 14, modelHours: 10 })];
+    const quotes = ['q-old', 'q-new', 'q-undated'].map((id) => quote(lines, { id }));
+    expect(outcomes([flag()], jobs, actuals, quotes)).toEqual([{ id: 'f1', outcome: 'estimator_closer' }]);
 
     // Same completion time: the larger id wins, deterministically.
-    const tie = lineFlagOutcomes(
-      [flag({})],
-      [job({ id: 'job-a' }), job({ id: 'job-b' })],
+    const tie = scorableLineFlags(
+      [flag()],
+      [job({ id: 'job-a', quote_id: 'q-a' }), job({ id: 'job-b', quote_id: 'q-b' })],
       [actual({ job_id: 'job-a', actual_hours: 10 }), actual({ job_id: 'job-b', actual_hours: 14 })],
     );
-    expect(tie).toEqual([{ id: 'f1', outcome: 'estimator_closer' }]);
+    expect(tie).toMatchObject([{ quoteId: 'q-b', actual: 14 }]);
+  });
+
+  it('gives no outcome when the signed option does not carry the change', () => {
+    const scorable = scorableLineFlags([flag()], [job()], [actual({ actual_hours: 13.5 })]);
+    const line = changed('a1|cellulose|labor', { hours: 14, modelHours: 10 });
+    expect(lineFlagOutcomes(scorable, [quote([line])])).toEqual([{ id: 'f1', outcome: 'estimator_closer' }]);
+    for (const q of [
+      quote([line], { id: 'q-other' }), // the job's quote was not loaded
+      quote([line], { signed_tier: null }),
+      quote([line], { signed_tier: 'best' }), // no Best option in this snapshot
+      quote([changed('a1|cellulose|material', { qty: 90, modelQty: 62 })]), // the line is not in the signed option
+      quote([{ ...line, isOverridden: false }]), // there, the estimator kept the model's hours
+      quote([{ key: 'a1|cellulose|labor', kind: 'labor', hours: 14, modelHours: 10 }]), // Phase 1 line: no override flag
+      quote([changed('a1|cellulose|labor', { modelHours: 10 })]), // no estimator hours
+      quote([changed('a1|cellulose|labor', { hours: 14 })]), // no model hours
+      quote([{ ...line, hours: '14' }]), // malformed snapshot
+      { id: 'q1', signed_tier: 'better', options: null },
+      { id: 'q1', signed_tier: 'better', options: [{ tier: 'platinum', lines: [line] }] },
+    ] satisfies FlagQuoteRow[]) {
+      expect(lineFlagOutcomes(scorable, [q])).toEqual([]);
+    }
+  });
+
+  describe('scored from the signed quote, never from the flag row', () => {
+    const bundle = { snapshot, coefficientSet: coefficients };
+    // 1000 sq ft attic at R-19: Better tops it up with 62 bags of cellulose, Best removes it and blows 90.
+    const attic = estimate({ areas: [area({ currentR: 19 })] });
+    /** The quote the customer signed: the engine's options after a jsonb round trip. */
+    const signedQuote = (input: EstimateInput, tier: Tier): FlagQuoteRow => ({
+      id: 'q1',
+      signed_tier: tier,
+      options: JSON.parse(JSON.stringify(priceEstimate(input, snapshot, coefficients).options)),
+    });
+    /** The deviation_flags rows sync_upsert_estimate stores for this version of the estimate. */
+    const flagRows = (input: EstimateInput) =>
+      computeDeviationFlags(priceEstimate(input, snapshot, coefficients), input, bundle).map((f, i) => ({
+        id: `f${i + 1}`,
+        estimate_id: 'e1',
+        flag_key: f.key,
+        metric: f.metric,
+        tier: f.tier,
+        estimator_value: f.estimatorValue,
+        model_value: f.modelValue,
+      }));
+    const lineOf = (q: FlagQuoteRow, key: string) =>
+      (q.options as PricedOption[]).find((o) => o.tier === q.signed_tier)!.lines.find((l) => l.key === key);
+
+    it('judges the tier that was installed: a change made on Better, Best signed', () => {
+      const input = { ...attic, lineOverrides: { 'a1|cellulose|material': { qty: 90, reason: 'Deep joist bays', tier: 'better' as const } } };
+      const rows = flagRows(input);
+      const bags = rows.find((r) => r.flag_key === 'a1|cellulose|material|qty')!;
+      // One row for the line, on Better: 90 bags against Better's model of 62.
+      expect(bags).toMatchObject({ tier: 'better', estimator_value: 90, model_value: 62 });
+      const best = signedQuote(input, 'best');
+      // On Best the same change is 131 bags against Best's model of 90.
+      expect(lineOf(best, 'a1|cellulose|material')).toMatchObject({ qty: 131, modelQty: 90, isOverridden: true });
+
+      const crew = [actual({ actual_material_qty: 90 })];
+      // The flag row's numbers would credit the estimator (the bug)...
+      expect(deviationOutcome(bags.estimator_value, bags.model_value, 90)).toBe('estimator_closer');
+      // ...but on the option installed, the model called the 90 bags. Total-price rows are never scored.
+      expect(rows.map((r) => r.flag_key)).toEqual(['a1|cellulose|material|qty', 'better|total_price', 'best|total_price']);
+      expect(outcomes(rows, [job()], crew, [best])).toEqual([{ id: bags.id, outcome: 'model_closer' }]);
+      // Had Better been signed, the same 90 bags would prove the estimator right.
+      expect(outcomes(rows, [job()], crew, [signedQuote(input, 'better')])).toEqual([{ id: bags.id, outcome: 'estimator_closer' }]);
+    });
+
+    it('ignores a revision synced after the quote that was signed', () => {
+      const v1 = { ...attic, lineOverrides: { 'a1|cellulose|labor': { hours: 13, reason: 'Low clearance', tier: 'better' as const } } };
+      // Revised after v1 was sent but never re-sent: more hours, and air sealing changed too.
+      const revision = {
+        ...attic,
+        lineOverrides: {
+          'a1|cellulose|labor': { hours: 18, reason: 'Low clearance', tier: 'better' as const },
+          'a1|air_sealing|labor': { hours: 9, reason: 'Many penetrations', tier: 'better' as const },
+        },
+      };
+      const rows = flagRows(revision); // deviation_flags now describes the revision
+      const labor = rows.find((r) => r.flag_key === 'a1|cellulose|labor|hours')!;
+      const sealing = rows.find((r) => r.flag_key === 'a1|air_sealing|labor|hours')!;
+      expect(labor).toMatchObject({ estimator_value: 18, model_value: 10.54 });
+      expect(sealing).toMatchObject({ estimator_value: 9, model_value: 6.5 });
+
+      const signed = signedQuote(v1, 'better');
+      expect(lineOf(signed, 'a1|cellulose|labor')).toMatchObject({ hours: 13, modelHours: 10.54, isOverridden: true });
+      expect(lineOf(signed, 'a1|air_sealing|labor')).toMatchObject({ isOverridden: false });
+
+      const crew = [actual({ actual_hours: 12.8 }), actual({ product: 'air_sealing', actual_hours: 9, actual_material_qty: 1000 })];
+      // From the row's 18 h the model would look closer; the customer signed 13 h, and the crew took 12.8.
+      expect(deviationOutcome(labor.estimator_value, labor.model_value, 12.8)).toBe('model_closer');
+      // The air sealing change was never quoted, so it is not judged.
+      expect(outcomes(rows, [job()], crew, [signed])).toEqual([{ id: labor.id, outcome: 'estimator_closer' }]);
+    });
+
+    it('never scores a line against a tier the customer did not sign', () => {
+      // Removal is only part of Best. The estimator raised its hours there; the customer signed Better.
+      const input = { ...attic, lineOverrides: { 'a1|removal|removal': { hours: 28, reason: 'Wet insulation', tier: 'best' as const } } };
+      const rows = flagRows(input);
+      const removal = rows.find((r) => r.flag_key === 'a1|removal|removal|hours')!;
+      expect(removal).toMatchObject({ tier: 'best', estimator_value: 28, model_value: 21 });
+      const better = signedQuote(input, 'better');
+      expect(lineOf(better, 'a1|removal|removal')).toBeUndefined();
+
+      // The crew still logged some removal (a wet patch), so there is an actual to compare with.
+      const crew = [actual({ product: 'removal', actual_hours: 27, actual_material_qty: null })];
+      expect(scorableLineFlags(rows, [job()], crew)).toHaveLength(1);
+      expect(deviationOutcome(removal.estimator_value, removal.model_value, 27)).toBe('estimator_closer');
+      expect(outcomes(rows, [job()], crew, [better])).toEqual([]);
+      // Best signed: judged on Best's own numbers.
+      expect(outcomes(rows, [job()], crew, [signedQuote(input, 'best')])).toEqual([{ id: removal.id, outcome: 'estimator_closer' }]);
+    });
   });
 });
 

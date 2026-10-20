@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
 import { signedOption } from '@/lib/jobs/office';
 import { groupForOffice, OFFICE_GROUP_LABELS, OFFICE_GROUPS, type OfficeGroup } from '@/lib/jobs/status';
+import { isHistoryGroup } from '@/lib/jobs/officeList';
 import { loadJobList, type JobListItem } from './data';
 
 export const metadata: Metadata = { title: 'Jobs' };
@@ -21,10 +22,11 @@ const GROUP_TONE: Record<OfficeGroup, 'slate' | 'green' | 'amber' | 'red' | 'blu
   cancelled: 'slate',
 };
 
-export default async function JobsPage() {
+export default async function JobsPage({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
   const profile = await requireRole('owner', 'office');
   const db = await createClient();
-  const { jobs, error } = await loadJobList(db);
+  const { all } = await searchParams;
+  const { jobs, partial, error } = await loadJobList(db, all && isHistoryGroup(all) ? all : null);
   const groups = groupForOffice(jobs);
   const today = nyDate(new Date());
 
@@ -56,6 +58,14 @@ export default async function JobsPage() {
               <h2 id={`grp-${g}`} className="flex items-center gap-2 text-lg font-semibold text-slate-900">
                 {OFFICE_GROUP_LABELS[g]} <Badge tone={GROUP_TONE[g]}>{groups[g].length}</Badge>
               </h2>
+              {isHistoryGroup(g) && partial[g] ? (
+                <p className="text-sm text-slate-600">
+                  Showing the latest {partial[g].shown} of {partial[g].total}.{' '}
+                  <Link href={`/jobs?all=${g}`} className="font-semibold text-brand-800 underline">
+                    Show all
+                  </Link>
+                </p>
+              ) : null}
               <ul className="grid gap-3 md:grid-cols-2">
                 {(g === 'verified' || g === 'awaiting_verification' ? sortByCompletion(groups[g]) : groups[g]).map((j) => (
                   <li key={j.id}>

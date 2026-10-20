@@ -4,14 +4,14 @@ import type { DeviationFlag, WinFeatures } from '@/lib/learning/types';
 import type { PricedOption, PricingBundle, Tier, WinModel } from '@/lib/pricing';
 import type { CachedProfile } from '@/lib/offline/db';
 import { priceableAreas, type EstimateDraft } from '@/lib/sync/draft';
-import { ackNote, ackSummary, flagsForOption, setDeviationAck } from '@/lib/field/flags';
-import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, tiersWithLine } from '@/lib/field/lineOverrides';
+import { ackState, ackSummary, flagsForOption, isAcknowledged, setDeviationAck } from '@/lib/field/flags';
+import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, setPriceOverride, tiersWithLine } from '@/lib/field/lineOverrides';
 import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor, type PriceAdvice } from '@/lib/field/priceAdvice';
 import { num, pct, TIER_LABELS, usd } from '@/lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import { DeviationNote } from './DeviationNote';
-import { OptionLines, type OnLineOverride } from './OptionLines';
+import { OptionLines, type OnAck, type OnLineOverride } from './OptionLines';
 import { PriceAdvicePanel } from './PriceAdvicePanel';
 import type { PricingResult, Update } from './EstimateEditor';
 
@@ -47,7 +47,7 @@ export function OptionsStep({
   const areaNames = new Map(draft.areas.map((a) => [a.id, a.name]));
   const toExplain = ackSummary(flags, draft.deviationAcks).pending;
 
-  const onAck = (key: string, note: string) => update((d) => setDeviationAck(d, key, note));
+  const onAck: OnAck = (flag, note) => update((d) => setDeviationAck(d, flag, note));
   const onLineOverride: OnLineOverride = (key, ov) => update((d) => (ov ? applyLineOverride(d, key, ov) : removeLineOverride(d, key)));
   const tiersByKey = (key: string) => tiersWithLine(options, key);
 
@@ -117,14 +117,7 @@ export function OptionsStep({
             selected={draft.selectedTier === o.tier}
             onSelect={() => update((d) => ({ ...d, selectedTier: o.tier }))}
             override={draft.overrides[o.tier] ?? null}
-            onOverride={(ov) =>
-              update((d) => {
-                const overrides = { ...d.overrides };
-                if (ov) overrides[o.tier] = ov;
-                else delete overrides[o.tier];
-                return { ...d, overrides };
-              })
-            }
+            onOverride={(ov) => update((d) => setPriceOverride(d, o.tier, ov))}
             showCosts={showCosts}
             overrideLimit={overrideLimit}
             flags={flags}
@@ -184,15 +177,15 @@ function OptionCard({
   showCosts: boolean;
   overrideLimit: number | null;
   flags: DeviationFlag[];
-  acks: Record<string, string>;
-  onAck: (key: string, note: string) => void;
+  acks: EstimateDraft['deviationAcks'];
+  onAck: OnAck;
   onLineOverride: OnLineOverride;
   areaNames: Map<string, string>;
   tiersByKey: (key: string) => Tier[];
   advice: { advice: PriceAdvice; model: WinModel } | null;
 }) {
   const mine = flagsForOption(flags, o);
-  const linesToExplain = [...mine.byLine.values()].flat().filter((f) => !ackNote(acks, f.key).trim()).length;
+  const linesToExplain = [...mine.byLine.values()].flat().filter((f) => !isAcknowledged(f, acks)).length;
   const [editing, setEditing] = useState(false);
   // Open the line details when a change on one of them still needs explaining.
   const [details, setDetails] = useState(linesToExplain > 0);
@@ -242,7 +235,7 @@ function OptionCard({
 
       {mine.total.map((f) => (
         <div key={f.key} className="mt-2">
-          <DeviationNote flag={f} note={ackNote(acks, f.key)} onNote={(note) => onAck(f.key, note)} />
+          <DeviationNote flag={f} ack={ackState(f, acks)} onNote={(note) => onAck(f, note)} />
         </div>
       ))}
 

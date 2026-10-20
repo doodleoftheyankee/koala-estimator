@@ -4,9 +4,12 @@ import {
   actualsBodySchema,
   crewJobsResponseSchema,
   crewViewRowSchema,
+  fromSyncResult,
   groupViewRows,
+  LOCKED_MESSAGE,
   mapsUrl,
   naturalKey,
+  syncActualsResultSchema,
   telUrl,
   toDbActualRow,
   toServerActual,
@@ -104,6 +107,7 @@ describe('actuals rows', () => {
     driveMinutes: null,
     days: null,
     notes: ' two extra bags ',
+    baseVersion: null,
     ...over,
   });
   const jobRow = row({ id: '44444444-4444-4444-8444-444444444442', areaId: null, product: null, materialQty: null, materialUnit: null, hours: null, crewSize: 2, driveMinutes: 28, days: 1, notes: '' });
@@ -133,8 +137,10 @@ describe('actuals rows', () => {
       actual_drive_minutes: null,
       actual_days: null,
       notes: null,
+      base_row_version: null,
     });
     expect(Object.keys(db).some((k) => /cost|verified|exclude/.test(k))).toBe(false);
+    expect(toDbActualRow(row({ baseVersion: 3 })).base_row_version).toBe(3);
     expect(toDbActualRow(row({ materialQty: null })).actual_material_unit).toBeNull();
   });
   it('reads server rows (numeric strings included)', () => {
@@ -152,8 +158,33 @@ describe('actuals rows', () => {
       notes: null,
       entered_at: '2026-10-20T20:00:00Z',
       verified_at: null,
+      row_version: '2',
     });
-    expect(toServerActual(r)).toMatchObject({ materialQty: 75, hours: 15.5, areaId: A1, enteredAt: '2026-10-20T20:00:00Z' });
+    expect(toServerActual(r)).toMatchObject({ materialQty: 75, hours: 15.5, areaId: A1, enteredAt: '2026-10-20T20:00:00Z', rowVersion: 2 });
+  });
+  it('reads sync_job_actuals answers: saved versions and conflicts without costs', () => {
+    const res = fromSyncResult(
+      syncActualsResultSchema.parse({
+        status: 'applied',
+        rows: 1,
+        saved: [{ id: '44444444-4444-4444-8444-444444444442', area_id: null, product: null, row_version: 1 }],
+        conflicts: [
+          {
+            id: '44444444-4444-4444-8444-444444444441', area_id: A1, product: 'cellulose', row_version: 4,
+            actual_material_qty: 82, actual_material_unit: 'bag', actual_hours: 15, actual_crew_size: null,
+            actual_drive_minutes: null, actual_days: null, notes: null, entered_by: JOB, entered_at: '2026-10-20T20:00:00Z',
+          },
+        ],
+      }),
+    );
+    expect(res).toEqual({
+      status: 'applied',
+      rows: 1,
+      saved: [{ id: '44444444-4444-4444-8444-444444444442', areaId: null, product: null, rowVersion: 1 }],
+      conflicts: [expect.objectContaining({ id: '44444444-4444-4444-8444-444444444441', materialQty: 82, rowVersion: 4 })],
+    });
+    expect(fromSyncResult(syncActualsResultSchema.parse({ status: 'locked' }))).toEqual({ status: 'locked', error: LOCKED_MESSAGE });
+    expect(fromSyncResult(syncActualsResultSchema.parse({ status: 'rejected', error: 'x' }))).toEqual({ status: 'rejected', error: 'x' });
   });
   it('keys rows like the database unique index', () => {
     expect(naturalKey(A1, 'cellulose')).toBe(`${A1}|cellulose`);
