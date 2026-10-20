@@ -61,3 +61,30 @@ update tier_templates
    set primary_product = 'cellulose', label = 'Blown Cellulose to Code',
        marketing_bullets = array['Brings your attic to current code R-value', 'Dense cellulose fills gaps and blocks air movement']
  where job_type = 'attic' and tier = 'good' and primary_product = 'fiberglass_blown';
+
+-- -----------------------------------------------------------------------------
+-- Code minimums correction (research, Oct 2026): Delaware never adopted the 2021 IECC.
+-- City of Newark and unincorporated New Castle County enforce the 2018 IECC; the state
+-- adopted the 2024 IECC effective 2026-04-11 and localities must follow within ~12 months.
+-- Climate zone 4A attic minimum is R-49 under BOTH 2018 and 2024. Walls stay R-20 / 13+5ci
+-- under 2018 (2024 raises them; revisit when Newark/NCC switch, expected by ~April 2027).
+-- -----------------------------------------------------------------------------
+update code_requirements set min_r = 49, code_edition = '2018 IECC (local)',
+       source_note = 'CZ4A ceiling R-49 under 2018 and 2024 IECC. Newark/NCC enforce 2018 until they adopt 2024 (~Apr 2027). Confirm with NCC Land Use 302-395-5400 / Newark Code Enforcement.'
+ where job_type = 'attic' and assembly = 'ceiling' and code_edition = '2021 IECC';
+update code_requirements set code_edition = '2018 IECC (local)',
+       source_note = 'CZ4A 2018 IECC Table R402.1.2: R-20 or R-13+5ci. 2024 IECC raises walls (R-30 / 20+5ci / 13+10ci) once adopted locally.'
+ where job_type = 'walls' and assembly = 'wood_frame_wall' and code_edition = '2021 IECC';
+update code_requirements set code_edition = '2018 IECC (local)',
+       source_note = 'CZ4A floor R-19 (same in 2018 and 2024 IECC).'
+ where job_type = 'crawlspace' and assembly = 'floor' and code_edition = '2021 IECC';
+update code_requirements set code_edition = '2018 IECC (local)',
+       source_note = 'CZ4A crawlspace wall R-10ci or R-13 (same in 2018 and 2024 IECC).'
+ where job_type = 'crawlspace' and assembly = 'crawl_wall' and code_edition = '2021 IECC';
+update code_requirements set code_edition = '2018 IECC (local)',
+       source_note = 'CZ4A basement wall R-10ci or R-13 (same in 2018 and 2024 IECC).'
+ where job_type = 'rim_joist' and assembly = 'basement_wall' and code_edition = '2021 IECC';
+
+-- Attic upsell: Good meets code (R-49); Better and Best go to R-60 for comfort and savings.
+update tier_templates set target_r = 60
+ where job_type = 'attic' and tier in ('better', 'best') and target_r is null;

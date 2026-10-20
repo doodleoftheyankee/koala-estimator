@@ -220,3 +220,48 @@ describe('canSendQuote with line overrides', () => {
     expect(r.reasons).toEqual(['good: "Blown fiberglass bag" was changed without a reason.']);
   });
 });
+
+describe('a line override made on one option scales the others', () => {
+  // Existing R-30: better tops it up (8.25 h); best removes it and installs R-60 (14.5 h).
+  const base = { areas: [area({ currentR: 30, existingMaterial: 'fiberglass' })] };
+  const before = price(estimate(base));
+  const CEL_MAT = lineKey('a1', 'cellulose', 'material');
+  const line = (r: PricedEstimate, t: Tier, key: string) => tier(r, t).lines.find((l) => l.key === key)!;
+
+  it('moves every option by the same proportion from its own model value', () => {
+    expect(line(before, 'better', CEL_LABOR).modelHours).toBe(8.25);
+    expect(line(before, 'best', CEL_LABOR).modelHours).toBe(14.5);
+    const r = price(withLines({ [CEL_LABOR]: { hours: 11.55, reason: 'Low clearance', tier: 'better' } }, base));
+    expect(line(r, 'better', CEL_LABOR)).toMatchObject({ hours: 11.55, modelHours: 8.25, isOverridden: true, overrideReason: 'Low clearance' });
+    expect(line(r, 'best', CEL_LABOR)).toMatchObject({ hours: 20.3, modelHours: 14.5, isOverridden: true }); // +40% too
+    // More hours on Better never makes Best cheaper.
+    expect(tier(r, 'best').price).toBeGreaterThan(tier(before, 'best').price);
+    expect(tier(r, 'best').modelPrice).toBe(tier(before, 'best').price);
+  });
+
+  it('scales a quantity and rounds bags up to whole bags', () => {
+    const betterBags = line(before, 'better', CEL_MAT).modelQty!;
+    const bestBags = line(before, 'best', CEL_MAT).modelQty!;
+    const r = price(withLines({ [CEL_MAT]: { qty: betterBags + 1, reason: 'Knee walls', tier: 'better' } }, base));
+    expect(line(r, 'better', CEL_MAT).qty).toBe(betterBags + 1);
+    expect(line(r, 'best', CEL_MAT).qty).toBe(Math.ceil(bestBags * ((betterBags + 1) / betterBags) - 1e-9));
+    expect(Number.isInteger(line(r, 'best', CEL_MAT).qty)).toBe(true);
+  });
+
+  it('uses the number as-is without a tier, or when the option it was made on is not offered', () => {
+    const noTier = price(withLines({ [CEL_LABOR]: { hours: 11, reason: 'r' } }, base));
+    expect(line(noTier, 'better', CEL_LABOR).hours).toBe(11);
+    expect(line(noTier, 'best', CEL_LABOR).hours).toBe(11);
+    // Good has no cellulose line, so there is no base to scale from.
+    const fromGood = price(withLines({ [CEL_LABOR]: { hours: 11, reason: 'r', tier: 'good' } }, base));
+    expect(line(fromGood, 'better', CEL_LABOR).hours).toBe(11);
+    expect(line(fromGood, 'best', CEL_LABOR).hours).toBe(11);
+  });
+
+  it('uses the number as-is when the option it was made on no longer has the line', () => {
+    // Existing R-60: better needs nothing more, so only best (remove and refill) has cellulose.
+    const r = price(withLines({ [CEL_LABOR]: { hours: 5, reason: 'r', tier: 'better' } }, { areas: [area({ currentR: 60, existingMaterial: 'fiberglass' })] }));
+    expect(tier(r, 'better').lines.some((l) => l.key === CEL_LABOR)).toBe(false);
+    expect(line(r, 'best', CEL_LABOR)).toMatchObject({ hours: 5, modelHours: 14.5, isOverridden: true });
+  });
+});

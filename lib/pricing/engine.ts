@@ -41,14 +41,20 @@ export function priceEstimate(
 
   const overrides = input.lineOverrides ?? {};
   const hasLineOverrides = Object.keys(overrides).length > 0;
-  for (const tier of TIERS) {
-    const option = priceTier(tier, input, snapshot, coeffs, crew, warnings, overrides);
-    if (!option) continue;
-    if (hasLineOverrides) {
-      // The pure-model price is what the learning loop and approval limits compare against.
-      const pure = priceTier(tier, input, snapshot, coeffs, crew, [], {});
-      option.modelPrice = pure?.adjustedPrice ?? option.adjustedPrice;
+  // Pure-model options: the price the learning loop and approval limits compare against, and the
+  // model values a line override is scaled from.
+  const pure = new Map<Tier, PricedOption>();
+  if (hasLineOverrides) {
+    for (const tier of TIERS) {
+      const p = priceTier(tier, input, snapshot, coeffs, crew, [], {});
+      if (p) pure.set(tier, p);
     }
+  }
+  for (const tier of TIERS) {
+    const ov = hasLineOverrides ? overridesForTier(overrides, tier, pure) : overrides;
+    const option = priceTier(tier, input, snapshot, coeffs, crew, warnings, ov);
+    if (!option) continue;
+    if (hasLineOverrides) option.modelPrice = pure.get(tier)?.adjustedPrice ?? option.adjustedPrice;
     options.push(option);
   }
   // Good should cost less than better, better less than best. If the configured products and
@@ -450,6 +456,39 @@ function priceAirSealing(
   };
 }
 
+/**
+ * The overrides as they apply to `tier`. An override is the estimator's number for the tier they
+ * changed (override.tier); another tier with the same line gets its own model value scaled by the
+ * same proportion, so a change on Good never copies Good's quantity onto a deeper Best fill.
+ * Without a usable base (no tier, the source tier or line missing, a zero model value) the number
+ * is used as-is.
+ */
+function overridesForTier(
+  overrides: Record<string, LineOverride>,
+  tier: Tier,
+  pure: Map<Tier, PricedOption>,
+): Record<string, LineOverride> {
+  const out: Record<string, LineOverride> = {};
+  for (const [key, o] of Object.entries(overrides)) {
+    const from = o.tier && o.tier !== tier ? pure.get(o.tier)?.lines.find((l) => l.key === key) : undefined;
+    const to = from ? pure.get(tier)?.lines.find((l) => l.key === key) : undefined;
+    if (!from || !to) {
+      out[key] = o;
+      continue;
+    }
+    const scaled: LineOverride = { ...o };
+    if (isNum(o.qty) && isNum(from.modelQty) && from.modelQty > 0 && isNum(to.modelQty)) {
+      const q = to.modelQty * (o.qty / from.modelQty);
+      scaled.qty = to.unit === 'bag' ? Math.ceil(q - 1e-9) : round1(q);
+    }
+    if (isNum(o.hours) && isNum(from.modelHours) && from.modelHours > 0 && isNum(to.modelHours)) {
+      scaled.hours = round2(to.modelHours * (o.hours / from.modelHours));
+    }
+    out[key] = scaled;
+  }
+  return out;
+}
+
 function materialLine(
   areaId: string,
   productCode: ProductCode,
@@ -524,6 +563,7 @@ function laborLine(
 // ---------------------------------------------------------------------------
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const isNum = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;

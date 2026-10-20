@@ -130,6 +130,7 @@ describe('buildLineOverride', () => {
     expect(buildLineOverride('qty', 70, '  Deep joist bays ')).toEqual({ ok: true, override: { qty: 70, reason: 'Deep joist bays' } });
     expect(buildLineOverride('hours', 15.5, 'Low clearance')).toEqual({ ok: true, override: { hours: 15.5, reason: 'Low clearance' } });
     expect(buildLineOverride('hours', 0, 'Customer does it')).toEqual({ ok: true, override: { hours: 0, reason: 'Customer does it' } });
+    expect(buildLineOverride('hours', 12, 'Low clearance', 'better')).toEqual({ ok: true, override: { hours: 12, reason: 'Low clearance', tier: 'better' } });
   });
 
   it('needs a number', () => {

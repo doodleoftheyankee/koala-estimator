@@ -31,6 +31,8 @@ export const lineOverrideSchema = z.object({
   qty: z.number().finite().min(0).max(1_000_000).nullable().optional(),
   hours: z.number().finite().min(0).max(10_000).nullable().optional(),
   reason: trimmed(500).min(3, 'Give a reason for the change'),
+  /** The option the estimator changed; other options scale by the same proportion. */
+  tier: z.enum(TIERS).nullable().optional(),
 });
 
 export const draftSchema = z.object({

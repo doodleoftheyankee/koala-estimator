@@ -171,12 +171,16 @@ export interface PriceOverride {
 
 /**
  * Estimator's own quantity (material lines) or hours (labor/removal lines) for one line,
- * keyed by lineKey(areaId, product, kind). Applies to every tier that has that line.
+ * keyed by lineKey(areaId, product, kind). The number is for `tier`, the option the estimator
+ * changed; every other tier with that line moves by the same proportion from its own model value
+ * (Good's install hours +40% => Better's and Best's +40%). Without a tier the number is used
+ * as-is in every tier.
  */
 export interface LineOverride {
   qty?: number | null;
   hours?: number | null;
   reason: string;
+  tier?: Tier | null;
 }
 
 export interface EstimateInput {

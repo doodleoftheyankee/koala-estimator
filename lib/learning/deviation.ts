@@ -48,7 +48,8 @@ const UNITS: Record<ProductUnit, [one: string, many: string]> = {
  * Compares what the estimator will quote against what the active model predicts for the
  * same inputs (PLAN.md §6.5). A flag is raised when |pctDiff| > settings.deviationThreshold:
  *  - per overridden line (metric 'qty' for material lines, 'hours' for labor/removal lines),
- *    deduplicated across tiers by key `${lineKey}|${metric}` (tier = first tier containing it);
+ *    deduplicated across tiers by key `${lineKey}|${metric}` (tier = the tier the override was
+ *    made on, else the first tier containing it);
  *  - per option whose final price differs from modelPrice (key `${tier}|total_price`).
  * Reasons name the coefficients behind the model value (value, scope, sample size, confidence).
  */
@@ -64,8 +65,13 @@ export function computeDeviationFlags(
 
   const flags: DeviationFlag[] = [];
   const seen = new Set<string>();
+  const overrides = input.lineOverrides ?? {};
+  const pricedTiers = new Set(priced.options.map((o) => o.tier));
   for (const option of priced.options) {
     for (const line of option.lines) {
+      // Explain a change on the option it was made on ("you entered" is what was typed there).
+      const madeOn = line.key ? overrides[line.key]?.tier : null;
+      if (madeOn && madeOn !== option.tier && pricedTiers.has(madeOn)) continue;
       const flag = lineFlag(option, line, areas, threshold, bundle);
       // The same line appears in several tiers; the estimator explains it once.
       if (flag && !seen.has(flag.key)) {

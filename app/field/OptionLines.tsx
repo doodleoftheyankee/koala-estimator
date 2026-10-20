@@ -14,10 +14,12 @@ export type OnLineOverride = (key: string, override: LineOverride | null) => voi
 /**
  * The "Details" of one option: every line with the model's quantity or hours next to the
  * estimator's. Area lines can be changed (with a reason); the change is stored once per line key
- * and so applies to every option with that line. Job-level lines (travel, disposal) follow
+ * with this option's tier, and every other option with that line moves by the same proportion.
+ * Job-level lines (travel, disposal) follow
  * from the drive time and areas and are not editable here.
  */
 export function OptionLines({
+  tier,
   lines,
   areaNames,
   tiersByKey,
@@ -27,6 +29,8 @@ export function OptionLines({
   onLineOverride,
   showCosts,
 }: {
+  /** The option these lines belong to; a change made here is this tier's number. */
+  tier: Tier;
   lines: PricedLine[];
   areaNames: Map<string, string>;
   tiersByKey: (key: string) => Tier[];
@@ -46,6 +50,7 @@ export function OptionLines({
               <LineRow
                 key={line.key ?? `${line.kind}-${i}`}
                 line={line}
+                tier={tier}
                 tiers={line.key ? tiersByKey(line.key) : []}
                 flags={(line.key && flagsByLine.get(line.key)) || []}
                 acks={acks}
@@ -80,6 +85,7 @@ function groupLines(lines: PricedLine[], areaNames: Map<string, string>): Array<
 
 function LineRow({
   line,
+  tier,
   tiers,
   flags,
   acks,
@@ -88,6 +94,7 @@ function LineRow({
   showCosts,
 }: {
   line: PricedLine;
+  tier: Tier;
   tiers: Tier[];
   flags: DeviationFlag[];
   acks: Record<string, string>;
@@ -146,6 +153,7 @@ function LineRow({
       {editing ? (
         <LineEditor
           view={view}
+          tier={tier}
           tiers={tiers}
           onApply={(ov) => {
             onLineOverride(view.key, ov);
@@ -170,12 +178,14 @@ function LineRow({
 
 function LineEditor({
   view,
+  tier,
   tiers,
   onApply,
   onReset,
   onCancel,
 }: {
   view: LineView;
+  tier: Tier;
   tiers: Tier[];
   onApply: (o: LineOverride) => void;
   onReset: () => void;
@@ -183,9 +193,9 @@ function LineEditor({
 }) {
   const [value, setValue] = useState<number | null>(view.value);
   const [reason, setReason] = useState(view.reason ?? '');
-  const built = buildLineOverride(view.metric, value, reason);
+  const built = buildLineOverride(view.metric, value, reason, tier);
   const diff = value === null ? null : relativeDiff(value, view.modelValue);
-  const where = tiers.length > 1 ? ` (${tiers.map((t) => TIER_LABELS[t]).join(', ')})` : '';
+  const others = tiers.filter((t) => t !== tier).map((t) => TIER_LABELS[t]);
 
   return (
     <div className="mt-2 space-y-3 rounded-xl bg-white p-3 ring-1 ring-slate-200">
@@ -209,7 +219,11 @@ function LineEditor({
           placeholder={view.metric === 'qty' ? 'e.g. deep joist bays need more' : 'e.g. low clearance, long hose run'}
         />
       </Field>
-      <p className="text-xs text-slate-600">Applies to every option with this line{where}.</p>
+      {others.length ? (
+        <p className="text-xs text-slate-600">
+          {others.join(' and ')} change{others.length === 1 ? 's' : ''} by the same percentage from {others.length === 1 ? 'its' : 'their'} own model value.
+        </p>
+      ) : null}
       {!built.ok ? <p className="text-xs text-amber-800">{built.error}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={!built.ok} onClick={() => built.ok && onApply(built.override)}>

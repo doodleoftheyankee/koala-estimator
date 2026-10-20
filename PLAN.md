@@ -417,16 +417,16 @@ Each phase ships behind a preview deployment, with tests green and a short demo 
 ## 13. Open questions (need your input before or during Phase 1)
 
 1. ~~**Repo location.**~~ Resolved: this is its own repo, `koala-estimator`.
-2. **Code minimums.** I seeded **2021 IECC zone 4A** values: ceiling R-60, wood-frame wall
-   R-20 or 13+5ci, floor R-19, basement/crawlspace wall R-10ci or R-13. Delaware has run
-   both the 2018 code (ceiling R-49) and the 2021 code; **please confirm which edition
-   Newark and New Castle County enforce for your permits.** These values live in
-   `code_requirements` and are editable either way.
+2. ~~**Code minimums.**~~ Resolved (Oct 2026): Delaware never adopted the 2021 IECC. Newark
+   and New Castle County enforce the **2018 IECC**, zone 4A: ceiling R-49, wood-frame wall
+   R-20 or 13+5ci, floor R-19, basement/crawlspace wall R-10ci or R-13. The state adopted the
+   2024 IECC on 2026-04-11 and localities follow within about a year; attics stay R-49 but
+   walls rise. Better/Best attic options target R-60. Values live in `code_requirements`.
 3. **Real numbers.** Material costs per set or bag, crew rates, overhead %, target margin,
    minimum job price. I'll seed obvious placeholders flagged "needs owner input". I need
    your actual sheet to make v1 pricing match how you quote today.
-4. **Financing partner.** Who is it (for example GreenSky, Service Finance, or Synchrony)?
-   What APR and term should the "as low as" line use?
+4. **Financing partner.** Not contracted yet (candidates: Wisetack, EnerBank USA/Regions,
+   Finance of America, Hearth). The quote line stays off until a lender's terms are entered.
 5. **E-sign.** Is the built-in signing page OK for v1, or do you require DocuSign or
    Dropbox Sign?
 6. **Rebates.** Do you have the current Energize Delaware and Delmarva Power program

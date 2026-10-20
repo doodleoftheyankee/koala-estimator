@@ -342,6 +342,7 @@ function OptionCard({
 
       {details ? (
         <OptionLines
+          tier={o.tier}
           lines={o.lines}
           areaNames={areaNames}
           tiersByKey={tiersByKey}

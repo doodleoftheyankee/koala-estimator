@@ -1,7 +1,8 @@
 // Estimator line overrides (PLAN.md §6.5): the estimator's own quantity (material lines) or
-// person-hours (labor/removal lines) for one area line. Overrides are keyed by lineKey(), so one
-// override applies to every option that has the same area + product + kind. Pure helpers behind
-// the Options step; drafts are never mutated.
+// person-hours (labor/removal lines) for one area line. Overrides are keyed by lineKey() and carry
+// the option they were made on; every other option with the same area + product + kind moves by
+// the same proportion (see LineOverride). Pure helpers behind the Options step; drafts are never
+// mutated.
 import type { LineOverride, PricedLine, PricedOption, ProductUnit, Tier } from '@/lib/pricing';
 import { lineOverrideSchema, type EstimateDraft } from '@/lib/sync/draft';
 
@@ -61,12 +62,13 @@ export type BuiltOverride = { ok: true; override: LineOverride } | { ok: false; 
  * Validates what the estimator typed with the same schema the sync uses, so an override that
  * passes here can never make the draft unsyncable.
  */
-export function buildLineOverride(metric: LineMetric, value: number | null, reason: string): BuiltOverride {
+export function buildLineOverride(metric: LineMetric, value: number | null, reason: string, tier?: Tier): BuiltOverride {
   if (value === null || !Number.isFinite(value)) {
     return { ok: false, error: metric === 'qty' ? 'Enter a quantity.' : 'Enter the person-hours.' };
   }
   if (value < 0) return { ok: false, error: 'The number cannot be negative.' };
   const candidate: LineOverride = metric === 'qty' ? { qty: value, reason: reason.trim() } : { hours: value, reason: reason.trim() };
+  if (tier) candidate.tier = tier;
   const parsed = lineOverrideSchema.safeParse(candidate);
   if (parsed.success) return { ok: true, override: candidate };
   const issue = parsed.error.issues[0];
@@ -76,7 +78,7 @@ export function buildLineOverride(metric: LineMetric, value: number | null, reas
   return { ok: false, error: 'That number is too large.' };
 }
 
-/** Sets the override for one line key (every option with that line picks it up). */
+/** Sets the override for one line key (every option with that line picks it up, scaled). */
 export function applyLineOverride(draft: EstimateDraft, key: string, override: LineOverride): EstimateDraft {
   return { ...draft, lineOverrides: { ...draft.lineOverrides, [key]: override } };
 }

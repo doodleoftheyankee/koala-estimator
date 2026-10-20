@@ -190,6 +190,14 @@ describe('computeDeviationFlags — line flags', () => {
     expect(new Set(flags.map((f) => f.key)).size).toBe(flags.length);
   });
 
+  it('explains a change on the option it was made on', () => {
+    // Existing R-30: better 8.25 h, best 14.5 h. Changed on best, scaled onto better.
+    const input = withLines({ [CEL_LABOR]: { hours: 20.3, reason: 'r', tier: 'best' } }, { areas: [area({ currentR: 30, existingMaterial: 'fiberglass' })] });
+    const line = run(input).filter((f) => f.lineKey === CEL_LABOR);
+    expect(line).toHaveLength(1);
+    expect(line[0]).toMatchObject({ tier: 'best', modelValue: 14.5, estimatorValue: 20.3, pctDiff: 0.4 });
+  });
+
   it('flags a line in the first tier where it actually deviates', () => {
     // Existing R-30: better tops it up (8.25 h); best removes it and installs R-60 (14.5 h).
     const input = withLines({ [CEL_LABOR]: { hours: 9, reason: 'r' } }, { areas: [area({ currentR: 30, existingMaterial: 'fiberglass' })] });
