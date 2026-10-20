@@ -45,6 +45,7 @@ function refreshAll() {
   writeEstimates_(data.estimates);
   writeJobs_(data.jobs);
   writeDashboard_(data);
+  arrangeTabs_();
   SpreadsheetApp.getActive().toast('Updated ' + data.estimates.length + ' estimates and ' + data.jobs.length + ' jobs.', '🐨 Koala', 5);
 }
 
@@ -65,131 +66,359 @@ function hourlyRefresh_() {
 // Tabs
 // -------------------------------------------------------------------------------------------
 
+const THEME = {
+  brand: '#0f766e', brandDark: '#134e4a',
+  page: '#f1f5f9', card: '#ffffff', stripe: '#f8fafc', line: '#e2e8f0',
+  ink: '#0f172a', muted: '#64748b', font: 'Roboto',
+};
+// Background and text colour for status "chips".
+const CHIPS = {
+  Won: ['#dcfce7', '#166534'], Lost: ['#fee2e2', '#991b1b'], Open: ['#fef3c7', '#92400e'], Draft: ['#e2e8f0', '#475569'],
+  Scheduled: ['#dbeafe', '#1e40af'], 'In progress': ['#ffedd5', '#9a3412'], Completed: ['#dcfce7', '#166534'], Cancelled: ['#e2e8f0', '#475569'],
+};
+const DATE_FMT = 'mmm d, yyyy';
+const MONEY_FMT = '$#,##0';
+
 function sheet_(name) {
   const ss = SpreadsheetApp.getActive();
   return ss.getSheetByName(name) || ss.insertSheet(name);
 }
 
-function writeTable_(name, headers, rows, formats) {
-  const sh = sheet_(name);
-  sh.clear();
-  sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#0f766e').setFontColor('#ffffff');
-  if (rows.length) sh.getRange(2, 1, rows.length, headers.length).setValues(rows);
-  sh.setFrozenRows(1);
-  Object.keys(formats || {}).forEach(function (col) {
-    if (rows.length) sh.getRange(2, Number(col), rows.length, 1).setNumberFormat(formats[col]);
-  });
+/** Wipes a tab completely (charts, banding, filter, merges, values, formats) so a refresh redraws it cleanly. */
+function resetSheet_(sh) {
+  sh.getCharts().forEach(function (c) { sh.removeChart(c); });
+  sh.getBandings().forEach(function (b) { b.remove(); });
   if (sh.getFilter()) sh.getFilter().remove();
-  sh.getRange(1, 1, Math.max(rows.length, 1) + 1, headers.length).createFilter();
-  sh.autoResizeColumns(1, headers.length);
+  sh.setFrozenRows(0);
+  sh.setFrozenColumns(0);
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart();
+  sh.clear();
+  sh.clearConditionalFormatRules();
+}
+
+/** Makes the tab exactly `cols` columns wide and `rows` rows tall, so nothing trails off to the right or bottom. */
+function fitSize_(sh, rows, cols) {
+  const c = sh.getMaxColumns(), r = sh.getMaxRows();
+  if (c > cols) sh.deleteColumns(cols + 1, c - cols);
+  if (c < cols) sh.insertColumnsAfter(c, cols - c);
+  if (r > rows) sh.deleteRows(rows + 1, r - rows);
+  if (r < rows) sh.insertRowsAfter(r, rows - r);
+}
+
+function day_(s) { return s ? new Date(String(s).slice(0, 10) + 'T12:00:00') : ''; }
+function label_(s) { s = String(s || '').replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function chipRules_(range, values) {
+  return values.map(function (v) {
+    return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(v)
+      .setBackground(CHIPS[v][0]).setFontColor(CHIPS[v][1]).setBold(true).setRanges([range]).build();
+  });
+}
+
+/**
+ * A data tab: teal header, fixed column widths, striped rows on a light grid, a filter, and the
+ * header row and first column frozen. columns: [{h: header, w: width px, fmt?: number format, align?}]
+ */
+function writeTable_(name, tabColor, columns, rows) {
+  const sh = sheet_(name);
+  resetSheet_(sh);
+  const n = Math.max(rows.length, 1);
+  fitSize_(sh, n + 1, columns.length);
+  sh.setTabColor(tabColor).setHiddenGridlines(true);
+
+  const all = sh.getRange(1, 1, n + 1, columns.length);
+  const header = sh.getRange(1, 1, 1, columns.length);
+  header.setValues([columns.map(function (c) { return c.h; })]);
+  if (rows.length) sh.getRange(2, 1, rows.length, columns.length).setValues(rows);
+
+  all.setFontFamily(THEME.font).setFontSize(10).setFontColor(THEME.ink).setVerticalAlignment('middle')
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  all.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false)
+    .setHeaderRowColor(THEME.brand).setFirstRowColor(THEME.card).setSecondRowColor(THEME.stripe);
+  all.setBorder(true, true, true, true, true, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+  header.setFontWeight('bold').setFontColor('#ffffff').setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
+
+  columns.forEach(function (c, i) {
+    sh.setColumnWidth(i + 1, c.w);
+    sh.getRange(1, i + 1, n + 1, 1).setHorizontalAlignment(c.align || (c.fmt ? 'right' : 'left'));
+    if (c.fmt) sh.getRange(2, i + 1, n, 1).setNumberFormat(c.fmt);
+  });
+  sh.setRowHeight(1, 36);
+  sh.setRowHeightsForced(2, n, 26);
+  sh.setFrozenRows(1);
+  sh.setFrozenColumns(1);
+  all.createFilter();
   return sh;
 }
 
 function writeEstimates_(estimates) {
-  const headers = ['Customer', 'Address', 'Phone', 'Lead source', 'Estimator', 'Job types', 'Sq ft', 'Created', 'Outcome', 'Decided',
-                   'Good', 'Better', 'Best', 'Signed option', 'Signed price', 'Lost reason'];
-  const rows = estimates.map(function (e) {
-    return [e.customer, e.address, e.phone, e.source, e.estimator, e.jobTypes, e.sqft, e.created, e.outcome, e.decided,
-            e.good, e.better, e.best, e.signedTier, e.signedPrice, e.lostReason];
+  const columns = [
+    { h: 'Customer', w: 170 }, { h: 'Address', w: 250 }, { h: 'Phone', w: 120, align: 'center' },
+    { h: 'Lead source', w: 120 }, { h: 'Estimator', w: 110 }, { h: 'Job types', w: 160 },
+    { h: 'Sq ft', w: 80, fmt: '#,##0' }, { h: 'Created', w: 105, fmt: DATE_FMT, align: 'center' },
+    { h: 'Outcome', w: 95, align: 'center' }, { h: 'Decided', w: 105, fmt: DATE_FMT, align: 'center' },
+    { h: 'Good', w: 95, fmt: MONEY_FMT }, { h: 'Better', w: 95, fmt: MONEY_FMT }, { h: 'Best', w: 95, fmt: MONEY_FMT },
+    { h: 'Signed option', w: 110, align: 'center' }, { h: 'Signed price', w: 110, fmt: MONEY_FMT }, { h: 'Lost reason', w: 220 },
+  ];
+  const rows = estimates.slice().sort(function (a, b) { return a.created < b.created ? 1 : -1; }).map(function (e) {
+    return [e.customer, e.address, e.phone, e.source, e.estimator, e.jobTypes, e.sqft, day_(e.created), e.outcome, day_(e.decided),
+            e.good, e.better, e.best, e.signedTier, e.signedPrice, label_(e.lostReason)];
   });
-  const sh = writeTable_('Estimates', headers, rows, { 11: '$#,##0', 12: '$#,##0', 13: '$#,##0', 15: '$#,##0' });
-  const outcome = sh.getRange(2, 9, Math.max(rows.length, 1), 1);
-  sh.setConditionalFormatRules([
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Won').setBackground('#d1fae5').setRanges([outcome]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Lost').setBackground('#fee2e2').setRanges([outcome]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo('Open').setBackground('#fef3c7').setRanges([outcome]).build(),
-  ]);
+  const sh = writeTable_('Estimates', '#14b8a6', columns, rows);
+  sh.setConditionalFormatRules(chipRules_(sh.getRange(2, 9, Math.max(rows.length, 1), 1), ['Won', 'Lost', 'Open', 'Draft']));
 }
 
 function writeJobs_(jobs) {
-  const headers = ['Customer', 'Address', 'Phone', 'Crew', 'Status', 'Start', 'Days', 'Option', 'Revenue', 'What gets installed',
-                   'Planned hours', 'Actual hours', 'Hours vs plan', 'Verified', 'Completed'];
-  const rows = jobs.map(function (j) {
-    return [j.customer, j.address, j.phone, j.crew, j.status.replace('_', ' '), j.start, j.days, j.signedTier, j.revenue, j.scope,
+  const columns = [
+    { h: 'Customer', w: 170 }, { h: 'Address', w: 250 }, { h: 'Phone', w: 120, align: 'center' },
+    { h: 'Crew', w: 100, align: 'center' }, { h: 'Status', w: 110, align: 'center' },
+    { h: 'Start', w: 105, fmt: DATE_FMT, align: 'center' }, { h: 'Days', w: 60, fmt: '0.#', align: 'center' },
+    { h: 'Option', w: 90, align: 'center' }, { h: 'Revenue', w: 100, fmt: MONEY_FMT }, { h: 'What gets installed', w: 280 },
+    { h: 'Planned hours', w: 100, fmt: '0.0' }, { h: 'Actual hours', w: 100, fmt: '0.0' },
+    { h: 'Hours vs plan', w: 105, fmt: '+0%;-0%;0%', align: 'center' }, { h: 'Verified', w: 80, align: 'center' },
+    { h: 'Completed', w: 105, fmt: DATE_FMT, align: 'center' },
+  ];
+  const rows = jobs.slice().sort(function (a, b) { return (a.start || '') < (b.start || '') ? 1 : -1; }).map(function (j) {
+    return [j.customer, j.address, j.phone, j.crew, label_(j.status), day_(j.start), j.days, j.signedTier, j.revenue, j.scope,
             j.estHours, j.actualHours === null ? '' : j.actualHours, j.hoursVariance === null ? '' : j.hoursVariance,
-            j.verified ? 'Yes' : '', j.completed];
+            j.verified ? '✓' : '', day_(j.completed)];
   });
-  const sh = writeTable_('Jobs', headers, rows, { 9: '$#,##0', 13: '+0%;-0%;0%' });
-  const variance = sh.getRange(2, 13, Math.max(rows.length, 1), 1);
-  sh.setConditionalFormatRules([
-    SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0.1).setFontColor('#b91c1c').setRanges([variance]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(-0.1).setFontColor('#047857').setRanges([variance]).build(),
-  ]);
+  const sh = writeTable_('Jobs', '#5eead4', columns, rows);
+  const n = Math.max(rows.length, 1);
+  const variance = sh.getRange(2, 13, n, 1);
+  sh.setConditionalFormatRules(chipRules_(sh.getRange(2, 5, n, 1), ['Scheduled', 'In progress', 'Completed', 'Cancelled']).concat([
+    SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThan(0.1).setBackground('#fee2e2').setFontColor('#991b1b').setBold(true).setRanges([variance]).build(),
+    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(-0.1).setBackground('#dcfce7').setFontColor('#166534').setBold(true).setRanges([variance]).build(),
+  ]));
+  sh.getRange(2, 14, n, 1).setFontColor('#166534').setFontWeight('bold');
 }
 
-/** KPI tiles and charts, computed here so the tab needs no formulas. */
-function writeDashboard_(data) {
-  const sh = sheet_('Dashboard');
-  sh.clear();
-  sh.getCharts().forEach(function (c) { sh.removeChart(c); });
-  SpreadsheetApp.getActive().setActiveSheet(sh);
-  SpreadsheetApp.getActive().moveActiveSheet(1);
+// Dashboard grid: six "blocks", each two 100px columns, with 16px gutters between blocks and a
+// 24px margin either side. KPI cards take one block, charts three, so everything lines up.
+const GRID = { blocks: 6, colW: 100, gutter: 16, margin: 24, cols: 19 };
+function blockCol_(i) { return 2 + i * 3; }
+function spanCols_(count) { return count * 3 - 1; }
+function spanPx_(count) { return count * 2 * GRID.colW + (count - 1) * GRID.gutter; }
 
+const DASH_ROWS = {
+  title: 2, subtitle: 3, kpi: 5,
+  sales: 9, salesCharts: 11, crew: 27, crewCharts: 29, details: 45, tables: 47, last: 60,
+};
+const CHART_H = 300; // 15 rows of 21px = 315px reserved per chart row
+
+function writeDashboard_(data) {
+  const ss = SpreadsheetApp.getActive();
+  const sh = sheet_('Dashboard');
+  resetSheet_(sh);
+  fitSize_(sh, DASH_ROWS.last, GRID.cols);
+  sh.setTabColor(THEME.brand).setHiddenGridlines(true);
+
+  // Grid and page.
+  sh.setColumnWidth(1, GRID.margin);
+  sh.setColumnWidth(GRID.cols, GRID.margin);
+  for (let i = 0; i < GRID.blocks; i++) {
+    sh.setColumnWidths(blockCol_(i), 2, GRID.colW);
+    if (i < GRID.blocks - 1) sh.setColumnWidth(blockCol_(i) + 2, GRID.gutter);
+  }
+  sh.setRowHeightsForced(1, DASH_ROWS.last, 21);
+  sh.getRange(1, 1, DASH_ROWS.last, GRID.cols).setBackground(THEME.page).setFontFamily(THEME.font)
+    .setFontColor(THEME.ink).setFontSize(10).setVerticalAlignment('middle');
+
+  // Numbers.
   const decided = data.estimates.filter(function (e) { return e.outcome === 'Won' || e.outcome === 'Lost'; });
   const won = decided.filter(function (e) { return e.outcome === 'Won'; });
-  const revenue = won.reduce(function (s, e) { return s + (e.signedPrice || 0); }, 0);
   const open = data.estimates.filter(function (e) { return e.outcome === 'Open'; });
+  const revenue = won.reduce(function (s, e) { return s + (e.signedPrice || 0); }, 0);
   const pipeline = open.reduce(function (s, e) { return s + (e.better || e.good || 0); }, 0);
   const done = data.jobs.filter(function (j) { return j.actualHours !== null && j.estHours > 0; });
   const hoursOff = done.length ? done.reduce(function (s, j) { return s + Math.abs(j.hoursVariance); }, 0) / done.length : null;
+  const upcoming = data.jobs.filter(function (j) { return j.start && (j.status === 'scheduled' || j.status === 'in_progress'); });
 
-  sh.getRange('A1').setValue('Koala Insulation of Newark: dashboard').setFontSize(18).setFontWeight('bold');
-  sh.getRange('A2').setValue('Updated ' + new Date(data.generatedAt).toLocaleString()).setFontColor('#64748b');
+  // Title.
+  const stamp = Utilities.formatDate(new Date(data.generatedAt), ss.getSpreadsheetTimeZone(), 'MMM d, yyyy h:mm a');
+  sh.setRowHeight(1, 16);
+  sh.setRowHeight(DASH_ROWS.title, 40);
+  sh.getRange(DASH_ROWS.title, 2, 1, spanCols_(6)).merge().setValue('Koala Insulation of Newark').setFontSize(20).setFontWeight('bold');
+  sh.getRange(DASH_ROWS.subtitle, 2, 1, spanCols_(6)).merge()
+    .setValue('Sales and crew dashboard  ·  ' + data.estimates.length + ' estimates  ·  ' + data.jobs.length + ' jobs  ·  updated ' + stamp)
+    .setFontColor(THEME.muted);
+  sh.setRowHeight(DASH_ROWS.subtitle + 1, 12);
+
+  // KPI cards.
   const tiles = [
-    ['Win rate', decided.length ? won.length / decided.length : 0, '0%'],
-    ['Jobs won', won.length, '0'],
-    ['Revenue won', revenue, '$#,##0'],
-    ['Average job', won.length ? revenue / won.length : 0, '$#,##0'],
-    ['Open quotes', pipeline, '$#,##0'],
-    ['Crew hours vs plan', hoursOff === null ? '' : hoursOff, '±0%'],
+    { label: 'Win rate', value: decided.length ? won.length / decided.length : 0, fmt: '0%', note: won.length + ' won · ' + (decided.length - won.length) + ' lost' },
+    { label: 'Jobs won', value: won.length, fmt: '0', note: 'signed quotes' },
+    { label: 'Revenue won', value: revenue, fmt: MONEY_FMT, note: 'total of signed prices' },
+    { label: 'Average job', value: won.length ? revenue / won.length : 0, fmt: MONEY_FMT, note: 'per signed quote' },
+    { label: 'Open quotes', value: pipeline, fmt: MONEY_FMT, note: open.length + ' waiting on an answer' },
+    { label: 'Crew hours vs plan', value: hoursOff === null ? '—' : hoursOff, fmt: '"±"0%', note: 'average miss, ' + done.length + ' jobs' },
   ];
+  const k = DASH_ROWS.kpi;
+  sh.setRowHeight(k, 28);
+  sh.setRowHeight(k + 1, 44);
+  sh.setRowHeight(k + 2, 26);
+  sh.setRowHeight(k + 3, 20);
   tiles.forEach(function (t, i) {
-    const col = 1 + i * 2;
-    sh.getRange(4, col).setValue(t[0]).setFontColor('#64748b');
-    sh.getRange(5, col).setValue(t[1]).setNumberFormat(t[2]).setFontSize(20).setFontWeight('bold').setFontColor('#0f766e');
+    const c = blockCol_(i);
+    sh.getRange(k, c, 3, 2).mergeAcross().setBackground(THEME.card).setHorizontalAlignment('center')
+      .setBorder(true, true, true, true, null, null, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+    sh.getRange(k, c, 1, 2).setBorder(true, null, null, null, null, null, THEME.brand, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    sh.getRange(k, c).setValue(t.label.toUpperCase()).setFontSize(9).setFontWeight('bold').setFontColor(THEME.muted);
+    sh.getRange(k + 1, c).setValue(t.value).setNumberFormat(t.fmt).setFontSize(22).setFontWeight('bold').setFontColor(THEME.brand);
+    sh.getRange(k + 2, c).setValue(t.note).setFontSize(9).setFontColor(THEME.muted);
   });
 
-  // Tables behind the charts.
+  // Data behind the charts lives on its own tab.
   const bySource = group_(decided, function (e) { return e.source || 'Unknown'; });
-  const srcRows = Object.keys(bySource).sort().map(function (k) {
-    const g = bySource[k];
-    const w = g.filter(function (e) { return e.outcome === 'Won'; }).length;
-    return [k, g.length, w, w / g.length];
-  });
-  sh.getRange(8, 1, 1, 4).setValues([['Lead source', 'Quotes', 'Won', 'Win rate']]).setFontWeight('bold');
-  if (srcRows.length) sh.getRange(9, 1, srcRows.length, 4).setValues(srcRows);
-  sh.getRange(9, 4, Math.max(srcRows.length, 1), 1).setNumberFormat('0%');
-
+  const sources = Object.keys(bySource).map(function (s) {
+    const g = bySource[s], w = g.filter(function (e) { return e.outcome === 'Won'; }).length;
+    return [s, g.length, w, w / g.length];
+  }).sort(function (a, b) { return b[1] - a[1]; });
   const byMonth = group_(won, function (e) { return (e.decided || e.created).slice(0, 7); });
-  const monthRows = Object.keys(byMonth).sort().map(function (m) {
-    return [m, byMonth[m].reduce(function (s, e) { return s + (e.signedPrice || 0); }, 0)];
+  const months = Object.keys(byMonth).sort().map(function (m) {
+    return [monthLabel_(m), byMonth[m].reduce(function (s, e) { return s + (e.signedPrice || 0); }, 0)];
   });
-  sh.getRange(8, 7, 1, 2).setValues([['Month', 'Revenue won']]).setFontWeight('bold');
-  if (monthRows.length) sh.getRange(9, 7, monthRows.length, 2).setValues(monthRows);
-  sh.getRange(9, 8, Math.max(monthRows.length, 1), 1).setNumberFormat('$#,##0');
+  const recent = done.slice().sort(function (a, b) { return a.completed < b.completed ? 1 : -1; }).slice(0, 12)
+    .map(function (j) { return [j.customer, j.estHours, j.actualHours]; });
+  const outcomes = ['Won', 'Lost', 'Open'].map(function (o) {
+    return [o, data.estimates.filter(function (e) { return e.outcome === o; }).length];
+  });
+  const cd = writeChartData_([
+    { key: 'sources', headers: ['Lead source', 'Quotes', 'Won', 'Win rate'], rows: sources, fmts: [null, '0', '0', '0%'] },
+    { key: 'months', headers: ['Month', 'Revenue won'], rows: months, fmts: [null, MONEY_FMT] },
+    { key: 'hours', headers: ['Job', 'Planned hours', 'Actual hours'], rows: recent, fmts: [null, '0.0', '0.0'] },
+    { key: 'outcomes', headers: ['Outcome', 'Estimates'], rows: outcomes, fmts: [null, '0'] },
+  ]);
+  const axis = { gridlines: { color: THEME.line }, textStyle: { color: THEME.muted } };
 
-  const jobRows = done.slice(0, 15).map(function (j) { return [j.customer, j.estHours, j.actualHours]; });
-  sh.getRange(8, 10, 1, 3).setValues([['Job', 'Planned hours', 'Actual hours']]).setFontWeight('bold');
-  if (jobRows.length) sh.getRange(9, 10, jobRows.length, 3).setValues(jobRows);
+  // Sales charts.
+  section_(sh, DASH_ROWS.sales, 'Sales');
+  if (sources.length) {
+    chart_(sh, Charts.ChartType.COLUMN, [cd.col('sources', 0), cd.col('sources', 3)], DASH_ROWS.salesCharts, 0, {
+      title: 'Win rate by lead source', colors: [THEME.brand],
+      vAxis: Object.assign({ format: 'percent', viewWindow: { min: 0, max: 1 } }, axis), hAxis: { textStyle: { color: THEME.muted } },
+    });
+  }
+  if (months.length) {
+    chart_(sh, Charts.ChartType.COLUMN, [cd.col('months', 0), cd.col('months', 1)], DASH_ROWS.salesCharts, 3, {
+      title: 'Revenue won by month', colors: ['#14b8a6'],
+      vAxis: Object.assign({ format: '$#,##0' }, axis), hAxis: { textStyle: { color: THEME.muted } },
+    });
+  }
 
-  if (srcRows.length) {
-    sh.insertChart(sh.newChart().setChartType(Charts.ChartType.COLUMN)
-      .addRange(sh.getRange(8, 1, srcRows.length + 1, 1)).addRange(sh.getRange(8, 4, srcRows.length + 1, 1))
-      .setPosition(26, 1, 0, 0).setOption('title', 'Win rate by lead source').setOption('legend', { position: 'none' })
-      .setOption('vAxis', { format: 'percent' }).setOption('colors', ['#0f766e']).build());
+  // Crew and outcome charts.
+  section_(sh, DASH_ROWS.crew, 'Crew and outcomes');
+  if (recent.length) {
+    chart_(sh, Charts.ChartType.BAR, [cd.col('hours', 0), cd.col('hours', 1), cd.col('hours', 2)], DASH_ROWS.crewCharts, 0, {
+      title: 'Crew hours: planned vs actual (latest jobs)', colors: ['#cbd5e1', THEME.brand],
+      legend: { position: 'top', textStyle: { color: THEME.muted } }, hAxis: axis, vAxis: { textStyle: { color: THEME.muted } },
+    });
   }
-  if (monthRows.length) {
-    sh.insertChart(sh.newChart().setChartType(Charts.ChartType.COLUMN)
-      .addRange(sh.getRange(8, 7, monthRows.length + 1, 2))
-      .setPosition(26, 6, 0, 0).setOption('title', 'Revenue won by month').setOption('legend', { position: 'none' })
-      .setOption('colors', ['#14b8a6']).build());
-  }
-  if (jobRows.length) {
-    sh.insertChart(sh.newChart().setChartType(Charts.ChartType.BAR)
-      .addRange(sh.getRange(8, 10, jobRows.length + 1, 3))
-      .setPosition(46, 1, 0, 0).setOption('title', 'Crew hours: planned vs actual (latest jobs)')
-      .setOption('colors', ['#94a3b8', '#0f766e']).setOption('height', 420).build());
-  }
+  chart_(sh, Charts.ChartType.PIE, [cd.col('outcomes', 0), cd.col('outcomes', 1)], DASH_ROWS.crewCharts, 3, {
+    title: 'Estimate outcomes', pieHole: 0.55, colors: ['#16a34a', '#dc2626', '#f59e0b'],
+    legend: { position: 'right', textStyle: { color: THEME.ink } }, pieSliceText: 'percentage',
+  });
+
+  // Detail tables.
+  section_(sh, DASH_ROWS.details, 'Details');
+  blockTable_(sh, DASH_ROWS.tables, 0, 'Lead sources',
+    ['Lead source', 'Won / quotes', 'Win rate'],
+    sources.slice(0, 10).map(function (s) { return [s[0], s[2] + ' / ' + s[1], s[3]]; }), [null, null, '0%']);
+  blockTable_(sh, DASH_ROWS.tables, 3, 'Coming up',
+    ['Start', 'Customer', 'Crew'],
+    upcoming.sort(function (a, b) { return a.start < b.start ? -1 : 1; }).slice(0, 10)
+      .map(function (j) { return [day_(j.start), j.customer, j.crew || 'Not assigned']; }), [DATE_FMT, null, null]);
+}
+
+function monthLabel_(ym) {
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return names[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4);
+}
+
+/** A section heading across the full dashboard width, underlined in the brand colour. */
+function section_(sh, row, text) {
+  sh.setRowHeight(row, 30);
+  sh.setRowHeight(row + 1, 8);
+  sh.getRange(row, 2, 1, spanCols_(GRID.blocks)).merge().setValue(text).setFontSize(12).setFontWeight('bold')
+    .setFontColor(THEME.brandDark).setBorder(null, null, true, null, null, null, THEME.brand, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+}
+
+/** A white chart card three blocks wide, anchored to the grid. */
+function chart_(sh, type, ranges, row, firstBlock, opts) {
+  let b = sh.newChart().setChartType(type).setNumHeaders(1);
+  ranges.forEach(function (r) { b = b.addRange(r); });
+  b = b.setPosition(row, blockCol_(firstBlock), 0, 0)
+    .setOption('width', spanPx_(3)).setOption('height', CHART_H)
+    .setOption('backgroundColor', THEME.card).setOption('fontName', THEME.font)
+    .setOption('titleTextStyle', { color: THEME.ink, fontSize: 13, bold: true })
+    .setOption('legend', { position: 'none' });
+  Object.keys(opts).forEach(function (key) { b = b.setOption(key, opts[key]); });
+  sh.insertChart(b.build());
+}
+
+/**
+ * A table on the dashboard grid. Each table column spans one block (its two columns plus the
+ * gutter after it), so tables line up with the cards and charts above.
+ */
+function blockTable_(sh, row, firstBlock, title, headers, rows, fmts) {
+  const c0 = blockCol_(firstBlock), width = spanCols_(headers.length);
+  const body = Math.max(rows.length, 1);
+  sh.setRowHeight(row, 30);
+  sh.setRowHeights(row + 1, body + 1, 26);
+  sh.getRange(row, c0, 1, width).merge().setValue(title).setFontSize(11).setFontWeight('bold').setBackground(THEME.card)
+    .setBorder(true, true, null, true, null, null, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+  for (let r = 0; r < body; r++) sh.getRange(row + 2 + r, c0, 1, width).setBackground(r % 2 ? THEME.stripe : THEME.card);
+  sh.getRange(row + 1, c0, 1, width).setBackground(THEME.brand).setFontColor('#ffffff').setFontWeight('bold');
+  headers.forEach(function (h, i) {
+    const c = blockCol_(firstBlock + i);
+    const span = i < headers.length - 1 ? 3 : 2;
+    sh.getRange(row + 1, c, body + 1, span).mergeAcross().setHorizontalAlignment(i === 0 ? 'left' : 'center');
+    sh.getRange(row + 1, c).setValue(h);
+    if (rows.length) sh.getRange(row + 2, c, rows.length, 1).setValues(rows.map(function (r) { return [r[i]]; }));
+    if (fmts[i]) sh.getRange(row + 2, c, body, 1).setNumberFormat(fmts[i]);
+  });
+  if (!rows.length) sh.getRange(row + 2, c0).setValue('Nothing yet').setFontColor(THEME.muted);
+  sh.getRange(row + 1, c0, body + 1, width).setBorder(true, true, true, true, null, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+}
+
+/** Writes the chart tables side by side on the "Chart data" tab; col(key, i) is a column of one table. */
+function writeChartData_(tables) {
+  const sh = sheet_('Chart data');
+  resetSheet_(sh);
+  const width = tables.reduce(function (s, t) { return s + t.headers.length + 1; }, 0);
+  const height = tables.reduce(function (m, t) { return Math.max(m, t.rows.length + 1); }, 2);
+  fitSize_(sh, height, width);
+  sh.setTabColor('#94a3b8').setHiddenGridlines(true);
+  sh.getRange(1, 1, height, width).setFontFamily(THEME.font).setFontSize(10).setVerticalAlignment('middle');
+  const at = {};
+  let col = 1;
+  tables.forEach(function (t) {
+    const n = t.rows.length;
+    sh.getRange(1, col, 1, t.headers.length).setValues([t.headers]).setFontWeight('bold').setBackground(THEME.brand).setFontColor('#ffffff');
+    if (n) sh.getRange(2, col, n, t.headers.length).setValues(t.rows);
+    t.fmts.forEach(function (f, i) { if (f && n) sh.getRange(2, col + i, n, 1).setNumberFormat(f); });
+    sh.getRange(1, col, n + 1, t.headers.length).setBorder(true, true, true, true, true, true, THEME.line, SpreadsheetApp.BorderStyle.SOLID);
+    sh.setColumnWidths(col, t.headers.length, 120);
+    sh.setColumnWidth(col + t.headers.length, 24);
+    at[t.key] = { col: col, rows: n };
+    col += t.headers.length + 1;
+  });
+  sh.setRowHeightsForced(1, height, 24);
+  return {
+    col: function (key, i) { return sh.getRange(1, at[key].col + i, at[key].rows + 1, 1); },
+  };
+}
+
+/** Dashboard first, then the data tabs; drops the empty "Sheet1" a new spreadsheet starts with. */
+function arrangeTabs_() {
+  const ss = SpreadsheetApp.getActive();
+  ['Dashboard', 'Estimates', 'Jobs', 'Chart data'].forEach(function (name, i) {
+    const sh = ss.getSheetByName(name);
+    if (sh) { ss.setActiveSheet(sh); ss.moveActiveSheet(i + 1); }
+  });
+  const blank = ss.getSheetByName('Sheet1');
+  if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
+  ss.setActiveSheet(ss.getSheetByName('Dashboard'));
 }
 
 function group_(rows, keyOf) {
