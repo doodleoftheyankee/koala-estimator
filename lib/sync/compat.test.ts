@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fieldsPushWouldErase, LATER_DRAFT_FIELDS, missingDraftFields, OUTDATED_APP_ERROR, type StoredEstimate } from './compat';
 import { newArea, newDraft, syncableDraftSchema, type EstimateDraft } from './draft';
+import { newMeasurement } from '@/lib/measure/measure';
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
@@ -23,14 +24,14 @@ function wire(d: EstimateDraft, without: ReadonlyArray<keyof EstimateDraft> = []
 }
 
 /** A Phase 1 build strips the keys it does not know, then pushes after fixing a typo. */
-const phase1Push = (d: EstimateDraft) => wire({ ...d, notes: 'Fixed typo' }, ['lineOverrides', 'deviationAcks']);
+const phase1Push = (d: EstimateDraft) => wire({ ...d, notes: 'Fixed typo' }, ['lineOverrides', 'deviationAcks', 'measurements']);
 
 const stored = (doc: unknown, status = 'draft'): StoredEstimate => ({ status, client_doc: doc });
 
 describe('missingDraftFields', () => {
   it('reads the JSON as received, not the parsed draft (the schema fills in {})', () => {
     const raw = phase1Push(phase2Draft());
-    expect(missingDraftFields(raw)).toEqual(['lineOverrides', 'deviationAcks']);
+    expect(missingDraftFields(raw)).toEqual(['lineOverrides', 'deviationAcks', 'measurements']);
     const parsed = syncableDraftSchema.parse(raw);
     expect(parsed.lineOverrides).toEqual({});
     expect(missingDraftFields(parsed)).toEqual([]);
@@ -41,7 +42,7 @@ describe('missingDraftFields', () => {
     expect(missingDraftFields(wire(phase2Draft(), ['deviationAcks']))).toEqual(['deviationAcks']);
     expect(missingDraftFields(null)).toEqual([]);
     expect(missingDraftFields([])).toEqual([]);
-    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks']);
+    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks', 'measurements']);
   });
 });
 
@@ -49,6 +50,12 @@ describe('fieldsPushWouldErase', () => {
   it('refuses a push from an older build over an estimate that has line changes and notes', () => {
     const server = phase2Draft();
     expect(fieldsPushWouldErase(phase1Push(server), stored(server))).toEqual(['lineOverrides', 'deviationAcks']);
+  });
+
+  it('refuses a push from a build without the Measure tool over measured areas', () => {
+    const server = { ...phase2Draft(), measurements: { a: newMeasurement('attic') } };
+    expect(fieldsPushWouldErase(wire(server, ['measurements']), stored(server))).toEqual(['measurements']);
+    expect(fieldsPushWouldErase(wire(server, ['measurements']), stored({ ...server, measurements: {} }))).toEqual([]);
   });
 
   it('reports only the fields that would be lost', () => {

@@ -6,6 +6,10 @@ import { ACCESS_HINTS, ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format'
 import { Alert, Badge, Button, Card, Chips, Field, Input, Select, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import type { Update } from './EstimateEditor';
+import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
+import { MeasureSheet } from './measure/MeasureSheet';
+import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
+import { removeAreaPhotos } from '@/lib/offline/photos';
 
 const EXISTING = ['None', 'Fiberglass batts', 'Blown fiberglass', 'Cellulose', 'Rock wool', 'Vermiculite', 'Spray foam', 'Other'];
 const CAVITY_DEPTHS = [
@@ -16,8 +20,10 @@ const CAVITY_DEPTHS = [
 ] as const;
 const CAVITY_JOBS = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
 
-export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; update: Update; bundle: PricingBundle | null }) {
+export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateDraft; update: Update; bundle: PricingBundle | null; ownerId: string }) {
+  const remotePhotos = useRemotePhotos(draft.id);
   const [open, setOpen] = useState<string | null>(draft.areas.at(-1)?.id ?? null);
+  const [measuring, setMeasuring] = useState<string | null>(null);
 
   const add = (jobType: AreaDraft['jobType']) => {
     const a = newArea(jobType);
@@ -26,7 +32,28 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
   };
   const set = (id: string, patch: Partial<AreaDraft>) =>
     update((d) => ({ ...d, areas: d.areas.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
-  const remove = (id: string) => update((d) => ({ ...d, areas: d.areas.filter((a) => a.id !== id) }));
+  const remove = (id: string) => {
+    void removeAreaPhotos(id);
+    update((d) => {
+      return { ...d, areas: d.areas.filter((a) => a.id !== id), measurements: without(d.measurements, id) };
+    });
+  };
+
+  /** Saves the measurement; once it's complete, its net becomes the area's square feet. */
+  const setMeasurement = (id: string, m: Measurement) =>
+    update((d) => {
+      const sqft = measuredSqft(m);
+      return {
+        ...d,
+        measurements: { ...d.measurements, [id]: m },
+        areas: sqft === null ? d.areas : d.areas.map((a) => (a.id === id ? { ...a, sqft } : a)),
+      };
+    });
+  const removeMeasurement = (id: string) =>
+    update((d) => {
+      return { ...d, measurements: without(d.measurements, id) };
+    });
+  const measuringArea = measuring ? draft.areas.find((a) => a.id === measuring) : undefined;
 
   return (
     <>
@@ -40,7 +67,7 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
                 <span className="block text-sm text-slate-600">
-                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
+                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ' 📐' : ''}` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
                 </span>
               </span>
               {valid ? <Badge tone="green">Ready</Badge> : <Badge tone="amber">Incomplete</Badge>}
@@ -54,6 +81,15 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
                 <Field label="Job type" group>
                   <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, { jobType: v })} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
                 </Field>
+                <MeasureButton
+                  measurement={draft.measurements[a.id]}
+                  sqft={a.sqft}
+                  onOpen={() => {
+                    if (!draft.measurements[a.id]) setMeasurement(a.id, newMeasurement(a.jobType));
+                    setMeasuring(a.id);
+                  }}
+                  onUseMeasured={(sqft) => set(a.id, { sqft })}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Square feet">
                     <NumberInput value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
@@ -115,6 +151,8 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
                   hint="Required removal on every option (damaged, wet, rodent, or customer request)."
                 />
 
+                <AreaPhotos estimateId={draft.id} areaId={a.id} ownerId={ownerId} remote={remotePhotos.photos} onRemoteDeleted={remotePhotos.reload} />
+
                 <Field label="Prep notes / obstructions">
                   <Textarea rows={2} value={a.prepNotes ?? ''} onChange={(e) => set(a.id, { prepNotes: e.target.value || null })} />
                 </Field>
@@ -133,6 +171,19 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
         );
       })}
 
+      {measuringArea && draft.measurements[measuringArea.id] ? (
+        <MeasureSheet
+          area={measuringArea}
+          measurement={draft.measurements[measuringArea.id]!}
+          onChange={(m) => setMeasurement(measuringArea.id, m)}
+          onRemove={() => {
+            removeMeasurement(measuringArea.id);
+            setMeasuring(null);
+          }}
+          onClose={() => setMeasuring(null)}
+        />
+      ) : null}
+
       <Card>
         <h2 className="mb-2 font-semibold">Add an area</h2>
         <div className="grid grid-cols-2 gap-2">
@@ -144,5 +195,47 @@ export function AreasStep({ draft, update, bundle }: { draft: EstimateDraft; upd
         </div>
       </Card>
     </>
+  );
+}
+
+function without<T>(record: Record<string, T>, key: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+}
+
+/** Opens the measuring tools; shows what was measured and whether the square feet still match. */
+function MeasureButton({
+  measurement,
+  sqft,
+  onOpen,
+  onUseMeasured,
+}: {
+  measurement: Measurement | undefined;
+  sqft: number;
+  onOpen: () => void;
+  onUseMeasured: (sqft: number) => void;
+}) {
+  const measured = measurement ? measuredSqft(measurement) : null;
+  const differs = measured !== null && Math.round(sqft) !== measured;
+  return (
+    <div className="space-y-2">
+      <Button variant="secondary" size="lg" className="w-full" onClick={onOpen}>
+        📐 {measurement ? 'Edit measurement' : 'Measure this area'}
+      </Button>
+      {measurement ? (
+        <p className="text-sm text-slate-600">
+          {measurementSummary(measurement)} · {measured === null ? 'not finished' : `${num(measured)} sq ft net`}
+        </p>
+      ) : (
+        <p className="text-xs text-slate-500">Shapes, cutouts, roof pitch and wall heights. Or type the square feet below.</p>
+      )}
+      {differs ? (
+        <Alert tone="amber">
+          Square feet ({num(sqft)}) don&apos;t match the measurement ({num(measured)}).{' '}
+          <button type="button" className="font-semibold underline" onClick={() => onUseMeasured(measured)}>
+            Use {num(measured)}
+          </button>
+        </Alert>
+      ) : null}
+    </div>
   );
 }

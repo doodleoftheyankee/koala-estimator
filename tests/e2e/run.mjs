@@ -63,9 +63,24 @@ await page.getByLabel('ZIP').fill('19711');
 await page.screenshot({ path: SHOTS + '02-customer.png' });
 await page.getByRole('button', { name: 'Next' }).click();
 
-step('add attic area');
+step('add attic area, measured with the Measure tool, with a photo');
 await page.getByRole('button', { name: '+ Attic' }).click();
-await page.getByLabel('Square feet').fill('1200');
+await page.getByRole('button', { name: /Measure this area/ }).click();
+const sheet = page.getByRole('dialog', { name: /Measure/ });
+await sheet.getByLabel('A · Width').fill('42');
+await sheet.getByLabel('B · Depth').fill(`30'`);
+await sheet.getByRole('button', { name: '+ Add cutout' }).click();
+await sheet.getByRole('button', { name: 'Chimney', exact: true }).click();
+await sheet.getByLabel('A · Width').nth(1).fill('6');
+await sheet.getByLabel('B · Depth').nth(1).fill('10');
+check((await sheet.getByText('1,200', { exact: true }).count()) > 0, 'measure sheet: 42 × 30 minus a 6 × 10 chimney → 1,200 net');
+await page.screenshot({ path: SHOTS + '03a-measure.png' });
+await sheet.getByRole('button', { name: 'Use 1,200 sq ft' }).click();
+check((await page.getByLabel('Square feet').inputValue()) === '1200', 'measured net fills the area square feet');
+check((await page.getByText(/Floor: rectangle, 1 cutout · 1,200 sq ft net/).count()) === 1, 'area card shows what was measured');
+await page.locator('input[type=file][multiple]').first().setInputFiles(new URL('../../public/icons/icon-512.png', import.meta.url).pathname);
+await page.getByText('On phone').first().waitFor();
+check(true, 'photo saved on the phone, waiting to upload');
 await page.getByRole('radio', { name: 'R-11' }).click();
 await page.getByRole('radio', { name: 'Difficult' }).click();
 await page.screenshot({ path: SHOTS + '03-area.png', fullPage: true });
@@ -106,6 +121,11 @@ console.log('  send checklist:', (await page.locator('body').innerText()).split(
 await page.getByRole('button', { name: /Send quote to customer/ }).click();
 await page.getByText(/Quote v1 sent/).waitFor({ timeout: 30000 });
 const link = await page.locator('a[href*="/q/"]').first().getAttribute('href');
+const estId = psql("select id from estimates order by created_at desc limit 1");
+await waitForDb(`select count(*) from photos where estimate_id = '${estId}' and uploaded_at is not null and area_id is not null`, '1', 'area photo uploaded after the estimate synced, linked to its area');
+check(psql(`select client_doc->'measurements' ? (select id::text from estimate_areas where estimate_id = '${estId}' limit 1) from estimates where id = '${estId}'`) === 't', 'measurement saved with the estimate on the server');
+const photoList = await page.evaluate((id) => fetch('/api/photos?estimateId=' + id).then((r) => r.json()), estId);
+check(photoList.photos?.length === 1 && photoList.photos[0].url.includes('/object/sign/photos/'), 'photo list returns a signed link');
 await page.screenshot({ path: SHOTS + '05-sent.png', fullPage: true });
 console.log('  link', link);
 

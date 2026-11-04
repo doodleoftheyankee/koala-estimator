@@ -38,10 +38,15 @@ http.createServer(async (req, res) => {
 
     if (url.pathname.startsWith('/storage/v1/object/sign/')) {
       const key = decodeURIComponent(url.pathname.replace('/storage/v1/object/sign/', ''));
-      if (req.method === 'POST') { await readBody(req); return send(res, 200, { signedURL: `/object/sign/${key}?token=t` }); }
+      if (req.method === 'POST') {
+        const body = JSON.parse((await readBody(req)).toString() || '{}');
+        // createSignedUrls (bulk): POST /object/sign/<bucket> {paths}
+        if (Array.isArray(body.paths)) return send(res, 200, body.paths.map((p) => ({ path: p, signedURL: `/object/sign/${key}/${p}?token=t`, error: null })));
+        return send(res, 200, { signedURL: `/object/sign/${key}?token=t` });
+      }
       const f = path.join(STORE, key);
       if (!fs.existsSync(f)) return send(res, 404, { error: 'not found' });
-      res.writeHead(200, { 'content-type': key.endsWith('.pdf') ? 'application/pdf' : 'image/png' });
+      res.writeHead(200, { 'content-type': key.endsWith('.pdf') ? 'application/pdf' : key.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
       return res.end(fs.readFileSync(f));
     }
     if (url.pathname.startsWith('/storage/v1/object/') && req.method === 'POST') {
@@ -60,6 +65,13 @@ http.createServer(async (req, res) => {
       }
       fs.writeFileSync(f, buf);
       return send(res, 200, { Key: key, Id: key });
+    }
+    // remove: DELETE /object/<bucket> {prefixes}
+    if (url.pathname.startsWith('/storage/v1/object/') && req.method === 'DELETE') {
+      const bucket = decodeURIComponent(url.pathname.replace('/storage/v1/object/', ''));
+      const { prefixes = [] } = JSON.parse((await readBody(req)).toString() || '{}');
+      for (const p of prefixes) fs.rmSync(path.join(STORE, bucket, p), { force: true });
+      return send(res, 200, prefixes.map((p) => ({ name: p })));
     }
     send(res, 404, { error: 'not mocked: ' + req.method + ' ' + url.pathname });
   } catch (e) {

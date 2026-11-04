@@ -30,6 +30,23 @@ export interface LocalEstimate {
   summaryPrice?: number | null;
 }
 
+/** A photo of an estimate area, kept on the phone until it's uploaded (lib/offline/photos.ts). */
+export interface LocalPhoto {
+  id: string;
+  estimateId: string;
+  areaId: string;
+  ownerId: string;
+  takenAt: string;
+  /** Downscaled photo (≤2000px JPEG) and a small preview. */
+  blob: Blob;
+  thumb: Blob;
+  width: number;
+  height: number;
+  /** pending → uploaded; 'deleting' waits for the server delete before the row goes. */
+  state: 'pending' | 'uploaded' | 'deleting';
+  lastError: string | null;
+}
+
 export interface CachedProfile {
   userId: string;
   fullName: string;
@@ -44,12 +61,16 @@ interface MetaRow {
 class KoalaDB extends Dexie {
   estimates!: Table<LocalEstimate, string>;
   meta!: Table<MetaRow, string>;
+  photos!: Table<LocalPhoto, string>;
 
   constructor() {
     super('koala-estimator');
     this.version(1).stores({
       estimates: 'id, ownerId, syncState, updatedAt',
       meta: 'key',
+    });
+    this.version(2).stores({
+      photos: 'id, estimateId, areaId, ownerId, state',
     });
   }
 }
@@ -86,6 +107,8 @@ export async function switchUser(profile: CachedProfile): Promise<void> {
   const prev = await getMeta<CachedProfile>(META.profile);
   if (prev && prev.userId !== profile.userId) {
     await db().estimates.where('ownerId').equals(prev.userId).and((e) => e.syncState === 'synced' || e.syncState === 'locked').delete();
+    // Uploaded photos are safe on the server; ones still waiting to upload stay, like unsynced estimates.
+    await db().photos.where('ownerId').equals(prev.userId).and((p) => p.state === 'uploaded').delete();
     await db().meta.delete(META.bundle);
   }
   await setMeta(META.profile, profile);

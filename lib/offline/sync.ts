@@ -5,6 +5,7 @@ import type { PricingBundle } from '@/lib/pricing';
 import type { RemoteEstimate, SyncResponse } from '@/lib/sync/protocol';
 import { db, getCachedBundle, META, setMeta, type LocalEstimate } from './db';
 import { applySyncResult, mergeRemote } from './syncCore';
+import { syncPhotos } from './photos';
 
 const uuid = () => crypto.randomUUID();
 type Listener = () => void;
@@ -121,6 +122,7 @@ export function syncAll(ownerId: string): Promise<void> {
     if (!navigator.onLine) return;
     await refreshBundle();
     await pushAll();
+    await syncPhotos();
     await pullEstimates(ownerId);
   })().finally(() => {
     running = null;

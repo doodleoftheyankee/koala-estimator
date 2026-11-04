@@ -2,6 +2,7 @@
 // estimates.client_doc and also normalizes it into relational tables for reporting/learning.
 import { z } from 'zod';
 import { ACCESS_LEVELS, JOB_TYPES, TIERS, type EstimateInput } from '@/lib/pricing';
+import { measurementSchema } from '@/lib/measure/measure';
 
 export const ESTIMATE_STATUSES = ['draft', 'ready', 'sent', 'viewed', 'signed', 'lost', 'expired', 'void'] as const;
 
@@ -82,6 +83,8 @@ export const draftSchema = z.object({
   lineOverrides: z.record(z.string(), lineOverrideSchema).default({}),
   /** Estimator notes acknowledging deviation flags, keyed by DeviationFlag.key (see deviationAckSchema). */
   deviationAcks: z.record(z.string(), deviationAckValueSchema).default({}),
+  /** Tape measurements behind each area's square feet (lib/measure), keyed by area id. */
+  measurements: z.record(z.string(), measurementSchema).default({}),
   selectedTier: z.enum(TIERS).nullable(),
   notes: z.string().max(5000),
   rowVersion: z.number().int().positive().nullable(),
@@ -116,6 +119,7 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     overrides: {},
     lineOverrides: {},
     deviationAcks: {},
+    measurements: {},
     selectedTier: null,
     notes: '',
     rowVersion: null,
