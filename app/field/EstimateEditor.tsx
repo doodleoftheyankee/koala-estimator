@@ -233,7 +233,7 @@ export function EstimateEditor({
 
         <fieldset disabled={locked} className="m-0 min-w-0 space-y-3 border-0 p-0">
           {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
-          {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} /> : null}
+          {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} /> : null}
           {step === 'options' ? (
             <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
           ) : null}
