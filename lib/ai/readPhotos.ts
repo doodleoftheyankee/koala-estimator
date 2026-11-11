@@ -126,6 +126,7 @@ export async function readPhotos(images: ReadImage[], ctx: ReadContext, signal?:
       if (deadline.aborted) throw new PhotoReadError('The AI took too long. Try again with fewer photos.', 504, 'incomplete');
       throw new PhotoReadError('Stopped.', 499, 'aborted');
     }
+    if (e instanceof Anthropic.APIError) console.error('[photo-read] API error', backend.kind, e.status, e.message);
     const outOfCredit = e instanceof Anthropic.APIError && (e.status === 402 || /credit|insufficient|balance|quota/i.test(e.message));
     if (backend.kind === 'gateway' && outOfCredit) {
       throw new PhotoReadError('The Vercel AI Gateway is out of credit. The owner adds credit in Vercel (AI Gateway → Credits).', 503, 'no_credit');
@@ -142,7 +143,6 @@ export async function readPhotos(images: ReadImage[], ctx: ReadContext, signal?:
     if (e instanceof Anthropic.RateLimitError) throw new PhotoReadError('The AI is busy right now. Try again in a minute.', 429, 'busy');
     if (e instanceof Anthropic.APIConnectionError) throw new PhotoReadError("Couldn't reach the AI. Check the signal and try again.", 504, 'unreachable');
     if (e instanceof Anthropic.APIError) {
-      console.error('[photo-read] API error', backend.kind, e.status, e.message);
       if ((e.status ?? 500) >= 500) throw new PhotoReadError('The AI had a problem. Try again in a minute.', 502, 'busy');
       throw new PhotoReadError("The AI couldn't read these photos. Try again with fewer or smaller photos.", 502, 'failed');
     }
