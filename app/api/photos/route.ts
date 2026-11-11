@@ -6,7 +6,8 @@ import { isUuid, MAX_PHOTO_BYTES, photoPath, type RemotePhoto } from '@/lib/phot
 
 // Area photos. The photos table's RLS (can_edit_estimate) decides who may see or change them;
 // the private storage bucket has no policies, so files move through the service-role client
-// only after the user's own client has passed that check.
+// only after the user's own client has passed that check. File paths are always rebuilt from
+// the estimate and photo ids (photoPath), never read from photos.storage_path.
 
 const ROLES = ['owner', 'office', 'estimator'] as const;
 const SIGNED_URL_SECONDS = 60 * 60;
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: rows, error: dbError } = await supabase
     .from('photos')
-    .select('id, area_id, storage_path, taken_at')
+    .select('id, area_id, taken_at')
     .eq('estimate_id', estimateId)
     .not('uploaded_at', 'is', null)
     .order('taken_at', { ascending: true });
@@ -30,11 +31,11 @@ export async function GET(request: NextRequest) {
 
   const { data: signed, error: signError } = await createAdminClient()
     .storage.from('photos')
-    .createSignedUrls(rows.map((r) => r.storage_path as string), SIGNED_URL_SECONDS);
+    .createSignedUrls(rows.map((r) => photoPath(estimateId, r.id as string)), SIGNED_URL_SECONDS);
   if (signError) return NextResponse.json({ error: signError.message }, { status: 500 });
   const urlFor = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
   const photos: RemotePhoto[] = rows.flatMap((r) => {
-    const url = urlFor.get(r.storage_path as string);
+    const url = urlFor.get(photoPath(estimateId, r.id as string));
     return url ? [{ id: r.id as string, areaId: (r.area_id as string | null) ?? null, takenAt: (r.taken_at as string | null) ?? null, url }] : [];
   });
   return NextResponse.json({ photos });
@@ -99,12 +100,13 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get('id');
   if (!isUuid(id)) return NextResponse.json({ error: 'id is required' }, { status: 400 });
   const supabase = await createClient();
-  const { data: row, error: readError } = await supabase.from('photos').select('storage_path').eq('id', id).maybeSingle();
+  const { data: row, error: readError } = await supabase.from('photos').select('estimate_id').eq('id', id).maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!row) return NextResponse.json({ ok: true });
   const { data: deleted, error: delError } = await supabase.from('photos').delete().eq('id', id).select('id');
   if (delError) return NextResponse.json({ error: delError.message }, { status: 500 });
   if (!deleted?.length) return NextResponse.json({ error: 'Not allowed' }, { status: 403 });
-  await createAdminClient().storage.from('photos').remove([row.storage_path as string]);
+  // The file path is rebuilt from ids, never taken from the row (which a user could edit).
+  await createAdminClient().storage.from('photos').remove([photoPath(row.estimate_id as string, id)]);
   return NextResponse.json({ ok: true });
 }

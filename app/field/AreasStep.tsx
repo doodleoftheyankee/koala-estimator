@@ -10,8 +10,10 @@ import { measuredSqft, measurementSummary, newMeasurement, type Measurement } fr
 import { MeasureSheet } from './measure/MeasureSheet';
 import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
 import { removeAreaPhotos } from '@/lib/offline/photos';
+import { PhotoRead } from './measure/PhotoRead';
+import { EXISTING_MATERIALS, type StoredPhotoRead, type Suggestion } from '@/lib/ai/photoRead';
 
-const EXISTING = ['None', 'Fiberglass batts', 'Blown fiberglass', 'Cellulose', 'Rock wool', 'Vermiculite', 'Spray foam', 'Other'];
+const EXISTING = EXISTING_MATERIALS;
 const CAVITY_DEPTHS = [
   { value: '3.5', label: '2×4 (3.5")' },
   { value: '5.5', label: '2×6 (5.5")' },
@@ -35,7 +37,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
   const remove = (id: string) => {
     void removeAreaPhotos(id);
     update((d) => {
-      return { ...d, areas: d.areas.filter((a) => a.id !== id), measurements: without(d.measurements, id) };
+      return { ...d, areas: d.areas.filter((a) => a.id !== id), measurements: without(d.measurements, id), photoReads: without(d.photoReads, id) };
     });
   };
 
@@ -54,6 +56,19 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
       return { ...d, measurements: without(d.measurements, id) };
     });
   const measuringArea = measuring ? draft.areas.find((a) => a.id === measuring) : undefined;
+
+  const setPhotoRead = (id: string, r: StoredPhotoRead) => update((d) => ({ ...d, photoReads: { ...d.photoReads, [id]: r } }));
+  const decide = (id: string, key: string, decision: 'applied' | 'dismissed') =>
+    update((d) => {
+      const r = d.photoReads[id];
+      return r ? { ...d, photoReads: { ...d.photoReads, [id]: { ...r, decisions: { ...r.decisions, [key]: decision } } } } : d;
+    });
+  /** Applies one suggestion from a photo read: area fields, or the measurement (cutouts). */
+  const applySuggestion = (id: string, s: Suggestion) => {
+    if (s.patch) set(id, s.patch);
+    if (s.measurement) setMeasurement(id, s.measurement);
+  };
+  const codeFor = (jobType: AreaDraft['jobType']) => (bundle ? codeMinimumR(bundle.snapshot, jobType) : null);
 
   return (
     <>
@@ -152,6 +167,16 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 />
 
                 <AreaPhotos estimateId={draft.id} areaId={a.id} ownerId={ownerId} remote={remotePhotos.photos} onRemoteDeleted={remotePhotos.reload} />
+                <PhotoRead
+                  context={{ estimateId: draft.id, yearBuilt: draft.property.yearBuilt, codeR: codeFor(a.jobType) }}
+                  area={a}
+                  measurement={draft.measurements[a.id]}
+                  stored={draft.photoReads[a.id]}
+                  remote={remotePhotos.photos}
+                  onRead={(r) => setPhotoRead(a.id, r)}
+                  onApply={(s) => applySuggestion(a.id, s)}
+                  onDecide={(key, decision) => decide(a.id, key, decision)}
+                />
 
                 <Field label="Prep notes / obstructions">
                   <Textarea rows={2} value={a.prepNotes ?? ''} onChange={(e) => set(a.id, { prepNotes: e.target.value || null })} />

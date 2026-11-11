@@ -1,3 +1,5 @@
+import { OUTDATED_APP_ERROR } from '@/lib/sync/compat';
+import { newMeasurement } from '@/lib/measure/measure';
 import { describe, expect, it } from 'vitest';
 import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import type { LocalEstimate } from './db';
@@ -116,6 +118,24 @@ describe('mergeRemote', () => {
     expect(r).toMatchObject({ syncState: 'locked' });
     expect(r!.draft.status).toBe('signed');
   });
+  it('fills fields an older build left out, so the next edit cannot erase them on the server', () => {
+    const server: EstimateDraft = { ...complete(), measurements: { a: newMeasurement('attic') } };
+    const oldCopy = JSON.parse(JSON.stringify(complete())) as Record<string, unknown>;
+    delete oldCopy.measurements;
+    delete oldCopy.photoReads;
+    const outdated = record({ syncState: 'invalid', lastError: OUTDATED_APP_ERROR, draft: { ...(oldCopy as unknown as EstimateDraft), rowVersion: 2 } });
+    const r = mergeRemote(outdated, remote({ doc: server }), 'u1', 'm2')!;
+    expect(r.draft.measurements).toEqual(server.measurements);
+    expect(r.draft.photoReads).toEqual({});
+    expect(r).toMatchObject({ syncState: 'pending', lastError: null, mutationId: 'm2' });
+    // Local edits stay; only the missing fields come from the server.
+    const editing = record({ syncState: 'pending', draft: { ...(oldCopy as unknown as EstimateDraft), notes: 'mine', rowVersion: 1 } });
+    const e = mergeRemote(editing, remote({ doc: server }), 'u1', 'm3')!;
+    expect(e).toMatchObject({ syncState: 'pending' });
+    expect(e.draft.notes).toBe('mine');
+    expect(e.draft.measurements).toEqual(server.measurements);
+  });
+
   it('ignores malformed remote docs and unknown statuses', () => {
     expect(mergeRemote(undefined, remote({ doc: { nope: true } }), 'u1', 'm')).toBeNull();
     expect(mergeRemote(undefined, remote({ status: 'weird' }), 'u1', 'm')!.draft.status).toBe('draft');

@@ -31,6 +31,9 @@ export const CUTOUT_NAMES: Record<MeasureMode, string[]> = {
   walls: ['Window', 'Door', 'Vent', 'Garage door'],
 };
 
+/** Cutouts per measurement (the stored schema's limit). */
+export const MAX_CUTOUTS = 30;
+
 // Everything is kept as typed text (24'6", 6/12…) so the inputs show back exactly what was entered.
 const len = z.string().max(40);
 const shapeSchema = z.object({
@@ -50,7 +53,7 @@ export const measurementSchema = z.object({
   shape: shapeSchema,
   cutouts: z
     .array(z.object({ id: z.string().max(64), label: z.string().max(60), shape: shapeSchema, qty: z.string().max(6) }))
-    .max(30),
+    .max(MAX_CUTOUTS),
   pitch: z.string().max(12),
   twoSlope: z.boolean(),
   pitch2: z.string().max(12),

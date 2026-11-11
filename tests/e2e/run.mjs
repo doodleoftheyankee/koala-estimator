@@ -81,6 +81,26 @@ check((await page.getByText(/Floor: rectangle, 1 cutout · 1,200 sq ft net/).cou
 await page.locator('input[type=file][multiple]').first().setInputFiles(new URL('../../public/icons/icon-512.png', import.meta.url).pathname);
 await page.getByText('On phone').first().waitFor();
 check(true, 'photo saved on the phone, waiting to upload');
+
+step('AI photo read');
+await page.getByRole('button', { name: /Read this photo/ }).click();
+await page.getByText('✨ Photo read').waitFor({ timeout: 60000 });
+check((await page.getByText(/Recessed lights that may not be IC-rated/).count()) > 0, 'photo read flags the recessed lights as a hazard');
+check((await page.getByText('Suggested changes').count()) === 1, 'photo read suggests changes to the area');
+await page.screenshot({ path: SHOTS + '03b-photo-read.png', fullPage: true });
+await page.getByRole('button', { name: /Apply all/ }).click();
+check((await page.getByLabel('Existing insulation').inputValue()) === 'Blown fiberglass', 'applying sets the existing insulation');
+check((await page.getByLabel('Existing depth (in)').inputValue()) === '3', 'applying sets the existing depth');
+check((await page.getByRole('textbox', { name: 'Current R-value' }).inputValue()) === '8', 'applying sets current R from depth (3" × 2.5)');
+check((await page.getByText('Suggested changes').count()) === 0, 'applied suggestions are cleared');
+check((await page.getByLabel('Prep notes / obstructions').inputValue()).startsWith('From photo read:'), 'hazards and notes go into the prep notes');
+const aiReq = JSON.parse(execSync(`cat ${process.env.E2E_STORAGE}/anthropic-last.json`).toString());
+const imgs = aiReq.body.messages[0].content.filter((c) => c.type === 'image');
+check(aiReq.body.model === 'claude-opus-5-5' && imgs.length === 1 && imgs[0].source.media_type === 'image/jpeg', 'the AI request carries the photo as a JPEG to claude-opus-5-5');
+check(aiReq.body.stream === true && aiReq.body.fallbacks === 'default' && aiReq.body.output_config.effort === 'high' && aiReq.body.output_config.format?.type === 'json_schema', 'streamed, structured output, high effort, server-side fallback');
+check(String(aiReq.headers.beta).includes('server-side-fallback-2026-07-01') && aiReq.headers.key, 'fallback beta header and API key sent');
+await waitForDb(`select count(*) from photo_analyses where created_by = '${EST.id}' and cost_usd > 0`, '1', 'the read is logged with its cost');
+await waitForDb(`select count(*) > 0 from photo_corrections where corrected_by = '${EST.id}' and accepted`, 't', 'applied suggestions are recorded for calibration');
 await page.getByRole('radio', { name: 'R-11' }).click();
 await page.getByRole('radio', { name: 'Difficult' }).click();
 await page.screenshot({ path: SHOTS + '03-area.png', fullPage: true });

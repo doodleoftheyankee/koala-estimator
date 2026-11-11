@@ -32,6 +32,11 @@ function resize(img: HTMLImageElement, maxSide: number, quality: number): Promis
   );
 }
 
+/** A smaller JPEG copy of a stored photo, e.g. for AI reading (which works at ~1568px). */
+export async function shrinkPhoto(blob: Blob, maxSide: number, quality = 0.8): Promise<Blob> {
+  return (await resize(await loadImage(blob), maxSide, quality)).blob;
+}
+
 /** Saves a photo for an area on this phone (a 2000px copy + a 320px thumbnail). Upload happens on sync. */
 export async function addAreaPhoto(file: File, estimateId: string, areaId: string, ownerId: string): Promise<void> {
   const img = await loadImage(file);
@@ -53,8 +58,13 @@ export async function addAreaPhoto(file: File, estimateId: string, areaId: strin
   });
 }
 
+/** Photos deleted on this phone in this session; the server's (cached) list may still show them. */
+const deletedHere = new Set<string>();
+export const deletedOnThisPhone = (id: string) => deletedHere.has(id);
+
 /** Deletes a photo: right away if it never left the phone, otherwise after the server deletes it. */
 export async function removeAreaPhoto(id: string): Promise<void> {
+  deletedHere.add(id);
   const photo = await db().photos.get(id);
   if (!photo) return;
   if (photo.state === 'pending') await db().photos.delete(id);
