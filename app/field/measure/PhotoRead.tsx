@@ -57,13 +57,16 @@ export function PhotoRead({
     onReadRef.current = onRead;
   }, [onRead]);
 
+  // Ask the server whether AI reading is on only when it could be used (signal and photos).
+  const hasPhotos = local.some((p) => p.state !== 'deleting') || remote.some((r) => r.areaId === area.id);
   useEffect(() => {
+    if (!online || !hasPhotos) return;
     let live = true;
     void photoReadAvailable().then((ok) => live && setAvailable(ok));
     return () => {
       live = false;
     };
-  }, []);
+  }, [online, hasPhotos]);
 
   /** A finished read (this visit or while the card was closed): store it, or show why it failed. */
   const settle = useCallback((outcome: ReadOutcome | undefined) => {
