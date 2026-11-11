@@ -23,6 +23,7 @@
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/oidc": "^4.0.8",
     "dexie": "^4.4.6",
     "next": "^16.4.2",
     "react": "^19.3.1",

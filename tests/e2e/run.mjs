@@ -101,6 +101,10 @@ check(aiReq.body.stream === true && aiReq.body.fallbacks === 'default' && aiReq.
 check(String(aiReq.headers.beta).includes('server-side-fallback-2026-07-01') && aiReq.headers.key, 'fallback beta header and API key sent');
 await waitForDb(`select count(*) from photo_analyses where created_by = '${EST.id}' and cost_usd > 0`, '1', 'the read is logged with its cost');
 await waitForDb(`select count(*) > 0 from photo_corrections where corrected_by = '${EST.id}' and accepted`, 't', 'applied suggestions are recorded for calibration');
+const checkNoKey = await fetch(BASE + '/api/photos/read/check?key=wrong');
+check(checkNoKey.status === 401, 'AI self-check refuses without the cron secret');
+const selfCheck = await (await fetch(BASE + '/api/photos/read/check?key=e2e-cron-secret')).json();
+check(selfCheck.ok === true && selfCheck.backend === 'anthropic' && selfCheck.model === 'claude-opus-5-5' && selfCheck.costUsd > 0, 'AI self-check runs a real read: ' + JSON.stringify({ ok: selfCheck.ok, backend: selfCheck.backend, model: selfCheck.model }));
 await page.getByRole('radio', { name: 'R-11' }).click();
 await page.getByRole('radio', { name: 'Difficult' }).click();
 await page.screenshot({ path: SHOTS + '03-area.png', fullPage: true });

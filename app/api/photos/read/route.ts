@@ -15,7 +15,7 @@ import {
   readContextSchema,
   READS_PER_HOUR,
 } from '@/lib/ai/photoRead';
-import { PhotoReadError, readPhotos, type ReadImage } from '@/lib/ai/readPhotos';
+import { PhotoReadError, photoReadConfigured, readPhotos, type ReadImage } from '@/lib/ai/readPhotos';
 
 // AI photo reading. POST: read an area's photos (sent from the phone, or already on the server)
 // and return findings; every read is logged to photo_analyses with its cost. PATCH: record what
@@ -211,5 +211,5 @@ export async function PATCH(request: NextRequest) {
 export async function GET() {
   const { error } = await authorize(...ROLES);
   if (error) return error;
-  return NextResponse.json({ configured: Boolean(process.env.ANTHROPIC_API_KEY), maxPhotos: MAX_READ_PHOTOS });
+  return NextResponse.json({ configured: photoReadConfigured(), maxPhotos: MAX_READ_PHOTOS });
 }
