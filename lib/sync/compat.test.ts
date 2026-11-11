@@ -24,14 +24,14 @@ function wire(d: EstimateDraft, without: ReadonlyArray<keyof EstimateDraft> = []
 }
 
 /** A Phase 1 build strips the keys it does not know, then pushes after fixing a typo. */
-const phase1Push = (d: EstimateDraft) => wire({ ...d, notes: 'Fixed typo' }, ['lineOverrides', 'deviationAcks', 'measurements']);
+const phase1Push = (d: EstimateDraft) => wire({ ...d, notes: 'Fixed typo' }, ['lineOverrides', 'deviationAcks', 'measurements', 'photoReads']);
 
 const stored = (doc: unknown, status = 'draft'): StoredEstimate => ({ status, client_doc: doc });
 
 describe('missingDraftFields', () => {
   it('reads the JSON as received, not the parsed draft (the schema fills in {})', () => {
     const raw = phase1Push(phase2Draft());
-    expect(missingDraftFields(raw)).toEqual(['lineOverrides', 'deviationAcks', 'measurements']);
+    expect(missingDraftFields(raw)).toEqual(['lineOverrides', 'deviationAcks', 'measurements', 'photoReads']);
     const parsed = syncableDraftSchema.parse(raw);
     expect(parsed.lineOverrides).toEqual({});
     expect(missingDraftFields(parsed)).toEqual([]);
@@ -42,7 +42,7 @@ describe('missingDraftFields', () => {
     expect(missingDraftFields(wire(phase2Draft(), ['deviationAcks']))).toEqual(['deviationAcks']);
     expect(missingDraftFields(null)).toEqual([]);
     expect(missingDraftFields([])).toEqual([]);
-    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks', 'measurements']);
+    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks', 'measurements', 'photoReads']);
   });
 });
 
@@ -56,6 +56,12 @@ describe('fieldsPushWouldErase', () => {
     const server = { ...phase2Draft(), measurements: { a: newMeasurement('attic') } };
     expect(fieldsPushWouldErase(wire(server, ['measurements']), stored(server))).toEqual(['measurements']);
     expect(fieldsPushWouldErase(wire(server, ['measurements']), stored({ ...server, measurements: {} }))).toEqual([]);
+  });
+
+  it('refuses a push from a build without photo reading over areas that were read', () => {
+    const read = { read: {} as never, analysisId: null, model: 'claude-opus-5-5', createdAt: '2026-11-11T12:00:00.000Z', photoIds: [], decisions: {} };
+    const server = { ...phase2Draft(), photoReads: { a: read } };
+    expect(fieldsPushWouldErase(wire(server, ['photoReads']), stored(server))).toEqual(['photoReads']);
   });
 
   it('reports only the fields that would be lost', () => {

@@ -1,17 +1,18 @@
 // Protects estimates from phones running an older build of the app. The phone parses drafts with
 // its own draftSchema, and z.object strips keys it does not know: a Phase 1 build has no
-// lineOverrides or deviationAcks, and builds before the Measure tool have no measurements. If such a phone pulls an estimate that has them, fixes a typo and
+// lineOverrides or deviationAcks, builds before the Measure tool have no measurements, and builds
+// before AI photo reading have no photoReads. If such a phone pulls an estimate that has them, fixes a typo and
 // pushes, the server's schema would default both to {} and the sync would store client_doc
 // without them, re-price the lines at model values and delete the acknowledged deviation flags.
 // /api/sync refuses that push instead (status 'invalid', which every build shows). Pure.
 
 /** Draft fields added after Phase 1, which an older build drops without knowing they exist. */
-export const LATER_DRAFT_FIELDS = ['lineOverrides', 'deviationAcks', 'measurements'] as const;
+export const LATER_DRAFT_FIELDS = ['lineOverrides', 'deviationAcks', 'measurements', 'photoReads'] as const;
 export type LaterDraftField = (typeof LATER_DRAFT_FIELDS)[number];
 
 /** Shown on the phone ("Server rejected this estimate: …"). Nothing was saved on the server. */
 export const OUTDATED_APP_ERROR =
-  'This estimate has line changes, notes or measurements made in a newer version of the app, and this version would erase them, so nothing was saved. Reload the app to update it.';
+  'This estimate has line changes, notes, measurements or photo reads made in a newer version of the app, and this version would erase them, so nothing was saved. Reload the app to update it.';
 
 /** The stored estimates row the check reads, or null when there is none (a new estimate). */
 export interface StoredEstimate {

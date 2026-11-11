@@ -37,6 +37,8 @@ CONF
 node tests/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 & pids+=($!)
 
 export NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321 APP_URL=http://localhost:3000 NEXT_TELEMETRY_DISABLED=1 CRON_SECRET=e2e-cron-secret
+# AI photo reading talks to the stand-in in mock-supabase.mjs instead of Anthropic.
+export ANTHROPIC_API_KEY=e2e-test-key ANTHROPIC_BASE_URL=http://localhost:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.ANON))")"
 SUPABASE_SERVICE_ROLE_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.SERVICE))")"
 export NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY

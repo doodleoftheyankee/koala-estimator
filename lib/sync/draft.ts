@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { ACCESS_LEVELS, JOB_TYPES, TIERS, type EstimateInput } from '@/lib/pricing';
 import { measurementSchema } from '@/lib/measure/measure';
+import { storedPhotoReadSchema } from '@/lib/ai/photoRead';
 
 export const ESTIMATE_STATUSES = ['draft', 'ready', 'sent', 'viewed', 'signed', 'lost', 'expired', 'void'] as const;
 
@@ -85,6 +86,8 @@ export const draftSchema = z.object({
   deviationAcks: z.record(z.string(), deviationAckValueSchema).default({}),
   /** Tape measurements behind each area's square feet (lib/measure), keyed by area id. */
   measurements: z.record(z.string(), measurementSchema).default({}),
+  /** AI photo reads of each area (lib/ai/photoRead), keyed by area id. */
+  photoReads: z.record(z.string(), storedPhotoReadSchema).default({}),
   selectedTier: z.enum(TIERS).nullable(),
   notes: z.string().max(5000),
   rowVersion: z.number().int().positive().nullable(),
@@ -120,6 +123,7 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     lineOverrides: {},
     deviationAcks: {},
     measurements: {},
+    photoReads: {},
     selectedTier: null,
     notes: '',
     rowVersion: null,

@@ -6,6 +6,23 @@ import path from 'node:path';
 import { verify } from './jwt.mjs';
 const PGRST = process.env.POSTGREST_URL ?? 'http://127.0.0.1:3001';
 const STORE = process.env.E2E_STORAGE ?? new URL('./storage/', import.meta.url).pathname;
+
+// What the stand-in AI "sees" in the estimator's attic photo.
+const CANNED_READ = {
+  summary: 'Attic floor with about 3 inches of settled blown fiberglass between 2x6 joists. Two recessed lights near the hatch may not be IC-rated.',
+  spaceSeen: 'attic_floor',
+  matchesArea: true,
+  existingInsulation: { material: 'Blown fiberglass', depthInches: 3, estimatedRValue: null, condition: 'settled_or_compressed', confidence: 'high', evidence: 'Joist tops show 2 to 3 inches above the fill.' },
+  framing: { memberDepthInches: 5.5, spacingInches: 16, confidence: 'medium', evidence: '2x6 ceiling joists at 16 inches on center.' },
+  size: { lengthFt: null, widthFt: null, sqftLow: null, sqftHigh: null, confidence: 'low', method: 'No scale reference in the photo.' },
+  access: { level: 'difficult', reason: 'Low pitch, about 3 ft at the peak.', confidence: 'medium' },
+  removal: { recommended: false, reason: 'Dry and clean; top it up.' },
+  hazards: [{ type: 'non_ic_recessed_lights', severity: 'caution', detail: 'Two can lights near the hatch.', photoNumbers: [1] }],
+  obstructions: [{ name: 'Bath fan duct', lengthFt: null, widthFt: null, count: 1, subtractFromArea: false, detail: 'Flexible duct across the bays.' }],
+  airSealing: ['Top plates along the eaves', 'Plumbing stack'],
+  estimatorNotes: ['Needs baffles at every eave bay.'],
+  photoTips: ['Stand a tape measure in the insulation.'],
+};
 const users = JSON.parse(fs.readFileSync(new URL('./users.json', import.meta.url)));
 
 const send = (res, code, body, headers = {}) => {
@@ -65,6 +82,24 @@ http.createServer(async (req, res) => {
       }
       fs.writeFileSync(f, buf);
       return send(res, 200, { Key: key, Id: key });
+    }
+    // Anthropic Messages API stand-in for AI photo reading (ANTHROPIC_BASE_URL points here). Streams
+    // a canned read and keeps the last request so the test can check what was sent.
+    if (url.pathname === '/v1/messages' && req.method === 'POST') {
+      const body = JSON.parse((await readBody(req)).toString());
+      fs.mkdirSync(STORE, { recursive: true });
+      fs.writeFileSync(path.join(STORE, 'anthropic-last.json'), JSON.stringify({ headers: { beta: req.headers['anthropic-beta'] ?? null, key: Boolean(req.headers['x-api-key']) }, body }));
+      const text = JSON.stringify(CANNED_READ);
+      const ev = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      res.write(ev('message_start', { message: { id: 'msg_e2e', type: 'message', role: 'assistant', model: body.model, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 4200, output_tokens: 1 } } }));
+      res.write(ev('content_block_start', { index: 0, content_block: { type: 'text', text: '' } }));
+      res.write(ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text: text.slice(0, 200) } }));
+      res.write(ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text: text.slice(200) } }));
+      res.write(ev('content_block_stop', { index: 0 }));
+      res.write(ev('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1300 } }));
+      res.write(ev('message_stop', {}));
+      return res.end();
     }
     // remove: DELETE /object/<bucket> {prefixes}
     if (url.pathname.startsWith('/storage/v1/object/') && req.method === 'DELETE') {
