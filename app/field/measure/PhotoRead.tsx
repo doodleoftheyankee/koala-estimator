@@ -2,10 +2,11 @@
 // "Read these photos": AI looks at the area's photos and suggests what to fill in (existing
 // insulation, depth, R-value, access, removal, size, cutouts) and flags hazards. Nothing changes
 // until the estimator taps Apply; every suggestion shows what it's based on and how sure it is.
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/offline/db';
-import type { LocalPhoto } from '@/lib/offline/photos';
-import { photoReadAvailable, ReadFailed, requestPhotoRead, sendReadFeedback } from '@/lib/offline/photoRead';
+import { deletedOnThisPhone, type LocalPhoto } from '@/lib/offline/photos';
+import { onReadFinished, photoReadAvailable, runningRead, sendReadFeedback, startPhotoRead, takeFinishedRead, type ReadOutcome } from '@/lib/offline/photoRead';
+import { measuredSqft } from '@/lib/measure/measure';
 import { HAZARD_LABELS, suggestionsFor, type Confidence, type ReadContext, type StoredPhotoRead, type Suggestion } from '@/lib/ai/photoRead';
 import type { RemotePhoto } from '@/lib/photos/rules';
 import type { AreaDraft } from '@/lib/sync/draft';
@@ -48,66 +49,86 @@ export function PhotoRead({
   const online = useOnline();
   const local = useLive(() => db().photos.where('areaId').equals(area.id).toArray(), [area.id], [] as LocalPhoto[]);
   const [available, setAvailable] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(() => Boolean(runningRead(area.id)));
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const abort = useRef<AbortController | null>(null);
+  const onReadRef = useRef(onRead);
+  useEffect(() => {
+    onReadRef.current = onRead;
+  }, [onRead]);
 
   useEffect(() => {
     let live = true;
     void photoReadAvailable().then((ok) => live && setAvailable(ok));
     return () => {
       live = false;
-      abort.current?.abort();
     };
   }, []);
+
+  /** A finished read (this visit or while the card was closed): store it, or show why it failed. */
+  const settle = useCallback((outcome: ReadOutcome | undefined) => {
+    if (!outcome) return;
+    setBusy(false);
+    if (outcome.ok) {
+      const r = outcome.response;
+      onReadRef.current({ read: r.read, analysisId: r.analysisId, model: r.model, createdAt: r.createdAt, photoIds: r.photoIds, decisions: {} });
+      setError(null);
+      return;
+    }
+    const e = outcome.error;
+    if (e.code === 'aborted') return;
+    if (e.code === 'not_configured') setAvailable(false);
+    setError(e.message);
+  }, []);
+
+  // Reads keep running when the card closes; pick up one that finished meanwhile, and listen
+  // for the one running now. Leaving the card never cancels a read (only Stop does).
+  useEffect(() => {
+    const waiting = takeFinishedRead(area.id);
+    if (waiting) queueMicrotask(() => settle(waiting));
+    return onReadFinished((id) => id === area.id && settle(takeFinishedRead(area.id)));
+  }, [area.id, settle]);
+
   useEffect(() => {
     if (!busy) return;
-    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    const tick = () => setElapsed(Math.round((Date.now() - (runningRead(area.id)?.startedAt ?? Date.now())) / 1000));
+    tick();
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [busy]);
+  }, [busy, area.id]);
 
   const phonePhotos = local.filter((p) => p.state !== 'deleting').sort((a, b) => a.takenAt.localeCompare(b.takenAt));
   const known = new Set(local.map((p) => p.id));
-  const serverPhotos = remote.filter((r) => r.areaId === area.id && !known.has(r.id));
+  const serverPhotos = remote.filter((r) => r.areaId === area.id && !known.has(r.id) && !deletedOnThisPhone(r.id));
   const photoCount = phonePhotos.length + serverPhotos.length;
   const currentIds = [...phonePhotos.map((p) => p.id), ...serverPhotos.map((r) => r.id)];
   const newSinceRead = stored ? currentIds.some((id) => !stored.photoIds.includes(id)) : false;
 
-  const read = async () => {
+  const read = () => {
     setError(null);
     setBusy(true);
     setElapsed(0);
-    abort.current = new AbortController();
-    try {
-      const res = await requestPhotoRead(
-        {
-          ...context,
-          areaId: area.id,
-          areaName: area.name,
-          jobType: area.jobType,
-          sqft: area.sqft || null,
-          measured: Boolean(measurement),
-          currentR: area.currentR || null,
-          existingMaterial: area.existingMaterial,
-        },
-        phonePhotos,
-        serverPhotos,
-        abort.current.signal,
-      );
-      onRead({ read: res.read, analysisId: res.analysisId, model: res.model, createdAt: res.createdAt, photoIds: res.photoIds, decisions: {} });
-    } catch (e) {
-      if (e instanceof ReadFailed) {
-        if (e.code === 'aborted') return;
-        if (e.code === 'not_configured') setAvailable(false);
-        setError(e.message);
-      } else setError('The photo read failed. Try again.');
-    } finally {
-      setBusy(false);
-    }
+    const m = measurement ? measuredSqft(measurement) : null;
+    startPhotoRead(
+      {
+        ...context,
+        areaId: area.id,
+        areaName: area.name,
+        jobType: area.jobType,
+        sqft: area.sqft || null,
+        measured: m !== null && m === Math.round(area.sqft),
+        currentR: area.currentR || null,
+        existingMaterial: area.existingMaterial,
+      },
+      phonePhotos,
+      serverPhotos,
+    );
   };
 
-  const suggestions = stored ? suggestionsFor(stored.read, area, measurement).filter((s) => !stored.decisions[s.key]) : [];
+  const all = stored ? suggestionsFor(stored.read, area, measurement) : [];
+  const suggestions = all.filter((s) => !stored?.decisions[s.key]);
+  const inBatch = suggestions.filter((s) => !s.onlyOnItsOwn);
+  const decided = stored ? Object.values(stored.decisions) : [];
   const apply = (list: Suggestion[]) => {
     for (const s of list) {
       onApply(s);
@@ -123,7 +144,7 @@ export function PhotoRead({
   if (!photoCount && !stored) return null;
 
   const button = (
-    <Button variant={stored ? 'secondary' : 'primary'} size={stored ? 'md' : 'lg'} className="w-full" disabled={busy || !online || !photoCount || !available} onClick={() => void read()}>
+    <Button variant={stored ? 'secondary' : 'primary'} size={stored ? 'md' : 'lg'} className="w-full" disabled={busy || !online || !photoCount} onClick={read}>
       {busy ? `Reading ${photoCount} photo${photoCount === 1 ? '' : 's'}… ${elapsed}s` : stored ? (newSinceRead ? '✨ Read again with the new photos' : '✨ Read again') : `✨ Read ${photoCount === 1 ? 'this photo' : `these ${photoCount} photos`}`}
     </Button>
   );
@@ -138,17 +159,19 @@ export function PhotoRead({
           </p>
         </>
       ) : null}
+      <div role="status" aria-live="polite" className="contents">
       {busy ? (
         <div className="flex items-center justify-between gap-2 text-sm text-violet-900">
           <span>Looking at insulation, framing, access and hazards. Usually 20–60 seconds.</span>
-          <Button size="sm" variant="ghost" onClick={() => abort.current?.abort()}>
+          <Button size="sm" variant="ghost" onClick={() => runningRead(area.id)?.controller.abort()}>
             Stop
           </Button>
         </div>
       ) : null}
       {!online && photoCount ? <p className="text-sm text-slate-600">No signal. Photo reading needs a connection; the photos are saved and you can read them later.</p> : null}
-      {!available ? <Alert tone="blue">AI photo reading isn&apos;t switched on yet. The owner adds an Anthropic API key in Vercel (ANTHROPIC_API_KEY).</Alert> : null}
-      {error && available ? <Alert>{error}</Alert> : null}
+      {!available && !error ? <Alert tone="blue">AI photo reading isn&apos;t switched on yet. The owner adds an Anthropic API key in Vercel (ANTHROPIC_API_KEY).</Alert> : null}
+      {error ? <Alert>{error}</Alert> : null}
+      </div>
 
       {stored ? (
         <div className="space-y-3">
@@ -163,7 +186,7 @@ export function PhotoRead({
 
           {stored.read.hazards.map((h, i) => (
             <Alert key={i} tone={h.severity === 'stop_work' ? 'red' : h.severity === 'caution' ? 'amber' : 'blue'}>
-              <strong>{h.severity === 'stop_work' ? 'Stop: ' : ''}{HAZARD_LABELS[h.type]}</strong>
+              <strong role={h.severity === 'stop_work' ? 'alert' : undefined}>{h.severity === 'stop_work' ? 'Stop: ' : ''}{HAZARD_LABELS[h.type]}</strong>
               {h.detail ? ` — ${h.detail}` : ''}
               {h.photoNumbers.length ? <span className="text-xs"> (photo {h.photoNumbers.join(', ')})</span> : null}
             </Alert>
@@ -173,9 +196,9 @@ export function PhotoRead({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-700">Suggested changes</span>
-                {suggestions.length > 1 ? (
-                  <Button size="sm" onClick={() => apply(suggestions)}>
-                    Apply all {suggestions.length}
+                {inBatch.length > 1 ? (
+                  <Button size="sm" onClick={() => apply(inBatch)}>
+                    Apply all {inBatch.length}
                   </Button>
                 ) : null}
               </div>
@@ -192,10 +215,10 @@ export function PhotoRead({
                       {s.why ? <p className="mt-1 whitespace-pre-line text-xs text-slate-600">{s.why}</p> : null}
                     </div>
                     <div className="flex shrink-0 flex-col gap-1">
-                      <Button size="sm" onClick={() => apply([s])}>
+                      <Button size="sm" onClick={() => apply([s])} aria-label={`Apply ${s.label}`}>
                         Apply
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => dismiss(s)} aria-label={`Dismiss ${s.label}`}>
+                      <Button size="sm" variant="ghost" onClick={() => dismiss(s)} aria-label={`Skip ${s.label}`}>
                         Skip
                       </Button>
                     </div>
@@ -204,7 +227,11 @@ export function PhotoRead({
               ))}
             </div>
           ) : stored.read.matchesArea ? (
-            <p className="text-sm text-emerald-800">✓ The area matches what the photos show.</p>
+            <p className="text-sm text-emerald-800">
+              {all.length && decided.length
+                ? `✓ All suggestions handled (${decided.filter((d) => d === 'applied').length} applied, ${decided.filter((d) => d === 'dismissed').length} skipped).`
+                : '✓ The area matches what the photos show.'}
+            </p>
           ) : null}
 
           <details className="rounded-xl bg-white p-3 text-sm ring-1 ring-slate-200">

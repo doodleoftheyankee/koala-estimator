@@ -88,7 +88,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/v1/messages' && req.method === 'POST') {
       const body = JSON.parse((await readBody(req)).toString());
       fs.mkdirSync(STORE, { recursive: true });
-      fs.writeFileSync(path.join(STORE, 'anthropic-last.json'), JSON.stringify({ headers: { beta: req.headers['anthropic-beta'] ?? null, key: Boolean(req.headers['x-api-key']) }, body }));
+      fs.writeFileSync(path.join(STORE, 'anthropic-last.json'), JSON.stringify({ headers: { beta: req.headers['anthropic-beta'] ?? null, key: Boolean(req.headers['x-api-key'] || req.headers.authorization) }, body }));
       const text = JSON.stringify(CANNED_READ);
       const ev = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });

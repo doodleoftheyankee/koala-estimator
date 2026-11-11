@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { authorize } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isUuid } from '@/lib/photos/rules';
+import { isUuid, photoPath } from '@/lib/photos/rules';
 import {
   CONFIDENCE_SCORE,
   impliedSqft,
   MAX_READ_PHOTO_BYTES,
   MAX_READ_PHOTOS,
   MAX_READ_TOTAL_BYTES,
+  PHOTO_READ_MODEL,
   PHOTO_READ_PROMPT_VERSION,
   readContextSchema,
   READS_PER_HOUR,
@@ -65,61 +66,91 @@ export async function POST(request: NextRequest) {
   if (total > MAX_READ_TOTAL_BYTES) return fail('The photos are too large together', 413);
 
   const admin = createAdminClient();
+  const images: ReadImage[] = [];
+  const sentIds: string[] = [];
+  for (const [i, f] of files.entries()) {
+    images.push({ mediaType: f.type as ReadImage['mediaType'], base64: Buffer.from(await f.arrayBuffer()).toString('base64') });
+    if (isUuid(localIds[i])) sentIds.push(localIds[i]);
+  }
 
-  // Cap reads per person per hour so a stuck button can't run up the bill.
+  // Photos already on the server (taken on another phone): the user's own client checks they can
+  // see them (RLS on photos). The file path is rebuilt from the ids, never taken from the row.
+  // A photo deleted since the phone listed it is skipped. Order follows the phone's list, so
+  // "photo 3" in the answer is the third thumbnail.
+  if (remoteIds.length) {
+    const supabase = await createClient();
+    const { data: rows, error: rowsError } = await supabase.from('photos').select('id').in('id', remoteIds).eq('estimate_id', ctx.data.estimateId);
+    if (rowsError) return fail(rowsError.message, 500, 'failed');
+    const found = new Set((rows ?? []).map((r) => r.id as string));
+    for (const id of remoteIds.filter((x) => found.has(x))) {
+      const { data: blob, error: dlError } = await admin.storage.from('photos').download(photoPath(ctx.data.estimateId, id));
+      if (dlError || !blob) continue;
+      if (blob.size > MAX_READ_PHOTO_BYTES * 2) return fail('A saved photo is too large to read', 413);
+      images.push({ mediaType: 'image/jpeg', base64: Buffer.from(await blob.arrayBuffer()).toString('base64') });
+      sentIds.push(id);
+    }
+  }
+  if (!images.length) return fail('Those photos are no longer available. Refresh and try again.', 404);
+
+  // Reserve the read before calling the model, then check the hourly cap including it: reads in
+  // flight and billed failures count, and parallel taps can't slip past the cap together.
+  const { data: areaRow } = await admin.from('estimate_areas').select('id').eq('id', ctx.data.areaId).eq('estimate_id', ctx.data.estimateId).maybeSingle();
+  const { data: reserved, error: reserveError } = await admin
+    .from('photo_analyses')
+    .insert({
+      status: 'pending',
+      area_id: (areaRow?.id as string | undefined) ?? null,
+      estimate_id: ctx.data.estimateId,
+      created_by: profile.userId,
+      photo_ids: sentIds,
+      photo_count: images.length,
+      model: PHOTO_READ_MODEL,
+      prompt_version: PHOTO_READ_PROMPT_VERSION,
+      raw_response: {},
+    })
+    .select('id')
+    .single();
+  if (reserveError || !reserved) return fail(`Could not start the read: ${reserveError?.message ?? 'no row'}`, 500, 'failed');
+  const analysisId = reserved.id as string;
+  const release = () => admin.from('photo_analyses').delete().eq('id', analysisId);
+
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { count: recent, error: countError } = await admin
     .from('photo_analyses')
     .select('id', { count: 'exact', head: true })
     .eq('created_by', profile.userId)
     .gte('created_at', since);
-  if (countError) return fail(`Could not check usage: ${countError.message}`, 500, 'failed');
-  if ((recent ?? 0) >= READS_PER_HOUR) return fail(`That's ${READS_PER_HOUR} photo reads in the last hour. Try again later.`, 429, 'busy');
-
-  const images: ReadImage[] = [];
-  for (const f of files) images.push({ mediaType: f.type as ReadImage['mediaType'], base64: Buffer.from(await f.arrayBuffer()).toString('base64') });
-
-  // Photos already on the server (taken on another phone): the user's own client checks they can
-  // see them (RLS on photos), then the service role reads the files from the private bucket.
-  if (remoteIds.length) {
-    const supabase = await createClient();
-    const { data: rows, error: rowsError } = await supabase
-      .from('photos')
-      .select('id, storage_path')
-      .in('id', remoteIds)
-      .eq('estimate_id', ctx.data.estimateId);
-    if (rowsError) return fail(rowsError.message, 500, 'failed');
-    if ((rows ?? []).length !== remoteIds.length) return fail('Some photos are no longer available. Refresh and try again.', 404);
-    for (const r of rows ?? []) {
-      const { data: blob, error: dlError } = await admin.storage.from('photos').download(r.storage_path as string);
-      if (dlError || !blob) return fail('Could not load a saved photo. Try again.', 502, 'failed');
-      if (blob.size > MAX_READ_PHOTO_BYTES * 2) return fail('A saved photo is too large to read', 413);
-      images.push({ mediaType: 'image/jpeg', base64: Buffer.from(await blob.arrayBuffer()).toString('base64') });
-    }
+  if (countError || (recent ?? 0) > READS_PER_HOUR) {
+    await release();
+    return countError ? fail(`Could not check usage: ${countError.message}`, 500, 'failed') : fail(`That's ${READS_PER_HOUR} photo reads in the last hour. Try again later.`, 429, 'busy');
   }
 
   let result;
   try {
-    result = await readPhotos(images, ctx.data);
+    // request.signal: when the phone stops waiting (Stop, or it left), stop paying for the read.
+    result = await readPhotos(images, ctx.data, request.signal);
   } catch (e) {
-    if (e instanceof PhotoReadError) return fail(e.message, e.status, e.code);
+    const err = e instanceof PhotoReadError ? e : null;
+    if (err?.usage) {
+      // The model ran and was billed: keep the row (counts toward the cap and the cost record).
+      await admin
+        .from('photo_analyses')
+        .update({ status: 'failed', error: err.code, model: err.usage.model, request_tokens: err.usage.inputTokens, response_tokens: err.usage.outputTokens, cost_usd: err.usage.costUsd })
+        .eq('id', analysisId);
+    } else {
+      await release();
+    }
+    if (err) return fail(err.message, err.status, err.code);
     console.error('[photo-read] failed', e);
     return fail('The photo read failed. Try again.', 500, 'failed');
   }
 
-  // Log the read. The area link only when the area is already on the server.
-  const { data: areaRow } = await admin.from('estimate_areas').select('id').eq('id', ctx.data.areaId).eq('estimate_id', ctx.data.estimateId).maybeSingle();
   const { read } = result;
-  const { data: logged, error: logError } = await admin
+  const { error: logError } = await admin
     .from('photo_analyses')
-    .insert({
-      area_id: (areaRow?.id as string | undefined) ?? null,
-      estimate_id: ctx.data.estimateId,
-      created_by: profile.userId,
-      photo_ids: [...localIds.filter(isUuid), ...remoteIds],
-      photo_count: images.length,
+    .update({
+      status: 'done',
       model: result.model,
-      prompt_version: PHOTO_READ_PROMPT_VERSION,
       request_tokens: result.inputTokens,
       response_tokens: result.outputTokens,
       cost_usd: result.costUsd,
@@ -131,11 +162,10 @@ export async function POST(request: NextRequest) {
       hazards: read.hazards,
       confidence: CONFIDENCE_SCORE[read.existingInsulation.confidence],
     })
-    .select('id')
-    .single();
+    .eq('id', analysisId);
   if (logError) console.error('[photo-read] could not log the read', logError.message);
 
-  return NextResponse.json({ read, analysisId: (logged?.id as string | undefined) ?? null, model: result.model, createdAt: new Date().toISOString() });
+  return NextResponse.json({ read, analysisId, model: result.model, createdAt: new Date().toISOString(), photoIds: sentIds });
 }
 
 const feedbackSchema = z.object({
@@ -144,8 +174,8 @@ const feedbackSchema = z.object({
     .array(
       z.object({
         field: z.string().trim().min(1).max(60),
-        aiValue: z.string().max(300).nullable(),
-        confirmedValue: z.string().max(300).nullable(),
+        aiValue: z.string().max(2000).nullable(),
+        confirmedValue: z.string().max(2000).nullable(),
         accepted: z.boolean(),
       }),
     )
@@ -160,7 +190,7 @@ export async function PATCH(request: NextRequest) {
   const body = feedbackSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return fail('Invalid feedback', 400);
   const admin = createAdminClient();
-  const { data: analysis } = await admin.from('photo_analyses').select('id, created_by').eq('id', body.data.analysisId).maybeSingle();
+  const { data: analysis } = await admin.from('photo_analyses').select('id, created_by').eq('id', body.data.analysisId).eq('status', 'done').maybeSingle();
   if (!analysis) return fail('Unknown photo read', 404);
   if (analysis.created_by !== profile.userId && profile.role !== 'owner') return fail('Not your photo read', 403);
   const { error: insertError } = await admin.from('photo_corrections').insert(

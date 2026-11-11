@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { newArea } from '@/lib/sync/draft';
-import { newMeasurement } from '@/lib/measure/measure';
+import { MAX_CUTOUTS, newCutout, newMeasurement, type Measurement } from '@/lib/measure/measure';
 import {
   impliedR,
   impliedSqft,
   modelReadSchema,
   notesFor,
+  PHOTO_READ_SYSTEM,
   photoReadSchema,
   readCostUsd,
   readRequestText,
@@ -75,26 +76,45 @@ describe('implied values', () => {
 
 describe('suggestionsFor', () => {
   const read: PhotoRead = sanitizeRead(raw());
+  const measured = (): Measurement => ({ ...newMeasurement('attic'), shape: { kind: 'rect', dims: { A: '40', B: '30' } } });
 
   it('suggests each change that differs from the area', () => {
     const area = { ...newArea('attic', uuid) };
     const keys = suggestionsFor(read, area, undefined).map((s) => s.key);
-    expect(keys).toEqual(['existingMaterial', 'existingDepthIn', 'currentR', 'accessLevel', 'sqft', 'cutouts', 'prepNotes']);
+    // No size (low confidence) and no cutouts (nothing measured yet).
+    expect(keys).toEqual(['existingMaterial', 'existingDepthIn', 'currentR', 'accessLevel', 'prepNotes']);
   });
 
-  it('skips what already matches and never offers a size over a measured one', () => {
+  it('skips what already matches', () => {
     const area = { ...newArea('attic', uuid), existingMaterial: 'Blown fiberglass', existingDepthIn: 3, currentR: 8, accessLevel: 'difficult' as const, sqft: 1180 };
-    const s = suggestionsFor(read, area, newMeasurement('attic'));
-    expect(s.map((x) => x.key)).toEqual(['cutouts', 'prepNotes']);
+    expect(suggestionsFor(read, area, measured()).map((x) => x.key)).toEqual(['cutouts', 'prepNotes']);
   });
 
-  it('turns sized obstructions into cutouts once', () => {
+  it('offers a rough size only with a real basis, only when there is none, and never in Apply all', () => {
+    const sure = sanitizeRead(raw({ size: { ...raw().size, confidence: 'medium' } }));
+    const s = suggestionsFor(sure, newArea('attic', uuid), undefined).find((x) => x.key === 'sqft')!;
+    expect(s.patch).toEqual({ sqft: 1100 });
+    expect(s.onlyOnItsOwn).toBe(true);
+    expect(suggestionsFor(sure, { ...newArea('attic', uuid), sqft: 900 }, undefined).find((x) => x.key === 'sqft')).toBeUndefined();
+    expect(suggestionsFor(read, newArea('attic', uuid), undefined).find((x) => x.key === 'sqft')).toBeUndefined(); // low confidence
+  });
+
+  it('turns sized obstructions into cutouts on a finished measurement, once', () => {
     const area = newArea('attic', uuid);
-    const cut = suggestionsFor(read, area, undefined).find((s) => s.key === 'cutouts')!;
+    expect(suggestionsFor(read, area, undefined).find((s) => s.key === 'cutouts')).toBeUndefined();
+    expect(suggestionsFor(read, area, newMeasurement('attic')).find((s) => s.key === 'cutouts')).toBeUndefined(); // no footprint yet
+    const cut = suggestionsFor(read, area, measured()).find((s) => s.key === 'cutouts')!;
     expect(cut.measurement!.cutouts).toHaveLength(1);
     expect(cut.measurement!.cutouts[0]).toMatchObject({ label: 'HVAC platform', qty: '1', shape: { kind: 'rect', dims: { A: '6', B: '4' } } });
-    const again = suggestionsFor(read, area, cut.measurement);
-    expect(again.find((s) => s.key === 'cutouts')).toBeUndefined();
+    expect(cut.measurement!.cutouts[0]!.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(suggestionsFor(read, area, cut.measurement).find((s) => s.key === 'cutouts')).toBeUndefined();
+  });
+
+  it('never fills a measurement past its cutout limit, and drops duplicate names', () => {
+    const full: Measurement = { ...measured(), cutouts: Array.from({ length: MAX_CUTOUTS }, (_, i) => ({ ...newCutout('floor', `c${i}`), label: `Vent ${i}` })) };
+    expect(suggestionsFor(read, newArea('attic', uuid), full).find((s) => s.key === 'cutouts')).toBeUndefined();
+    const twice = sanitizeRead(raw({ obstructions: [raw().obstructions[0]!, { ...raw().obstructions[0]!, name: ' hvac platform ' }] }));
+    expect(suggestionsFor(twice, newArea('attic', uuid), measured()).find((s) => s.key === 'cutouts')!.measurement!.cutouts).toHaveLength(1);
   });
 
   it('offers the cavity depth only for cavity jobs, snapped to lumber sizes', () => {
@@ -107,12 +127,40 @@ describe('suggestionsFor', () => {
     expect(suggestionsFor(sanitizeRead(raw({ matchesArea: false })), newArea('attic', uuid), undefined)).toEqual([]);
   });
 
-  it('appends notes once', () => {
+  it('adds only new note lines, so a second read adds what it found new', () => {
     const area = newArea('attic', uuid);
-    const notes = suggestionsFor(read, area, undefined).find((s) => s.key === 'prepNotes')!;
-    expect(notes.patch!.prepNotes).toContain('Caution: Recessed lights that may not be IC-rated');
-    const after = { ...area, prepNotes: notes.patch!.prepNotes! };
+    const first = suggestionsFor(read, area, undefined).find((s) => s.key === 'prepNotes')!;
+    expect(first.patch!.prepNotes).toContain('Caution: Recessed lights that may not be IC-rated');
+    const after = { ...area, prepNotes: first.patch!.prepNotes! };
     expect(suggestionsFor(read, after, undefined).find((s) => s.key === 'prepNotes')).toBeUndefined();
+    const second = sanitizeRead(raw({ hazards: [...raw().hazards, { type: 'mold_or_mildew', severity: 'caution', detail: 'North eave sheathing.', photoNumbers: [3] }] }));
+    const more = suggestionsFor(second, after, undefined).find((s) => s.key === 'prepNotes')!;
+    expect(more.why).toBe('• Caution: Mold or mildew — North eave sheathing.');
+    expect(more.patch!.prepNotes!.match(/From photo read:/g)).toHaveLength(1);
+  });
+
+  it('never suggests ordinary removal for suspected vermiculite or asbestos', () => {
+    const verm = sanitizeRead(
+      raw({
+        existingInsulation: { ...raw().existingInsulation, material: 'Vermiculite' },
+        removal: { recommended: true, reason: 'Vermiculite' },
+        hazards: [{ type: 'vermiculite_suspected', severity: 'caution', detail: '', photoNumbers: [1] }],
+      }),
+    );
+    expect(verm.hazards[0]!.severity).toBe('stop_work'); // floor applied
+    expect(suggestionsFor(verm, newArea('attic', uuid), undefined).find((s) => s.key === 'removalNeeded')).toBeUndefined();
+    const wet = sanitizeRead(raw({ removal: { recommended: true, reason: 'Soaked by a roof leak.' } }));
+    expect(suggestionsFor(wet, newArea('attic', uuid), undefined).find((s) => s.key === 'removalNeeded')?.patch).toEqual({ removalNeeded: true });
+  });
+
+  it('treats any knob-and-tube as stop-work', () => {
+    const kt = sanitizeRead(raw({ hazards: [{ type: 'knob_and_tube_wiring', severity: 'note', detail: 'Porcelain knobs on joists.', photoNumbers: [1] }] }));
+    expect(kt.hazards[0]!.severity).toBe('stop_work');
+  });
+
+  it('skips values the area form would reject', () => {
+    const over = sanitizeRead(raw({ existingInsulation: { ...raw().existingInsulation, estimatedRValue: null, depthInches: 45, material: 'Cellulose' } }));
+    expect(impliedR(over)).toBeNull(); // 45" × 3.5 = 158
   });
 });
 
@@ -129,12 +177,26 @@ describe('prompt text and cost', () => {
     expect(text).toContain('Cellulose at about R-11');
   });
 
-  it('prices tokens at Opus 5.5 rates', () => {
+  it('prices tokens at Opus 5.5 rates, and each fallback attempt at its own model', () => {
     expect(readCostUsd({ input_tokens: 10_000, output_tokens: 3_000 })).toBe(0.1);
+    const usage = {
+      input_tokens: 10_000,
+      output_tokens: 2_000,
+      iterations: [
+        { model: 'claude-opus-5-5', input_tokens: 10_000, output_tokens: 500 },
+        { model: 'claude-opus-4-8', input_tokens: 10_000, output_tokens: 2_000 },
+      ],
+    };
+    expect(readCostUsd(usage)).toBeCloseTo(0.15, 6); // 10k×$4 + 500×$20, then 10k×$5 + 2k×$25
   });
 
   it('notes start with a marker line', () => {
     expect(notesFor(sanitizeRead(raw()))!.split('\n')[0]).toBe('From photo read:');
+  });
+
+  it('tells the model the estimator\'s access scale', () => {
+    expect(PHOTO_READ_SYSTEM).toContain('scuttle hatch, 3–4 ft clearance');
+    expect(PHOTO_READ_SYSTEM).toContain('Never recommend removal when vermiculite or asbestos is suspected');
   });
 
   it('stores a read with its decisions', () => {

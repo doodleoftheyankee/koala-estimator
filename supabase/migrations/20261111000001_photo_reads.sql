@@ -9,6 +9,11 @@ alter table photo_analyses alter column area_id drop not null;
 alter table photo_analyses add column if not exists estimate_id uuid;
 alter table photo_analyses add column if not exists created_by uuid references profiles(id) on delete set null;
 alter table photo_analyses add column if not exists photo_count int;
+-- A read is reserved ('pending') before the model is called, so reads in flight and failed reads
+-- that were billed count toward the per-person hourly cap and the cost record.
+alter table photo_analyses add column if not exists status text not null default 'done'
+  check (status in ('pending', 'done', 'failed'));
+alter table photo_analyses add column if not exists error text;
 
 create index if not exists photo_analyses_created_by_idx on photo_analyses (created_by, created_at desc);
 create index if not exists photo_analyses_estimate_idx on photo_analyses (estimate_id);

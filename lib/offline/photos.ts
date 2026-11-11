@@ -58,8 +58,13 @@ export async function addAreaPhoto(file: File, estimateId: string, areaId: strin
   });
 }
 
+/** Photos deleted on this phone in this session; the server's (cached) list may still show them. */
+const deletedHere = new Set<string>();
+export const deletedOnThisPhone = (id: string) => deletedHere.has(id);
+
 /** Deletes a photo: right away if it never left the phone, otherwise after the server deletes it. */
 export async function removeAreaPhoto(id: string): Promise<void> {
+  deletedHere.add(id);
   const photo = await db().photos.get(id);
   if (!photo) return;
   if (photo.state === 'pending') await db().photos.delete(id);

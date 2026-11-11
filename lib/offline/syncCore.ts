@@ -1,6 +1,7 @@
 // Pure sync decisions, separated from IndexedDB/fetch so they can be unit tested.
 import { draftSchema, syncableDraftSchema, type EstimateDraft } from '@/lib/sync/draft';
 import type { RemoteEstimate, SyncResponse } from '@/lib/sync/protocol';
+import { missingDraftFields, OUTDATED_APP_ERROR } from '@/lib/sync/compat';
 import type { LocalEstimate } from './db';
 
 /** Is this draft complete enough to send? Returns the first problem, or null. */
@@ -97,6 +98,22 @@ export function mergeRemote(
   const doc = parseDoc(remote.doc);
   if (!doc) return null;
   const draft: EstimateDraft = { ...doc, status: asStatus(remote.status, doc.status), rowVersion: remote.rowVersion };
+  // A copy saved by an older build lacks fields added since (photo reads, measurements…). Fill
+  // them from the server before anything else, or the next edit would send empty ones and erase
+  // the server's. A push refused for exactly that reason can then go through.
+  const missing = local ? missingDraftFields(local.draft) : [];
+  if (local && missing.length) {
+    const filled = { ...local.draft, ...Object.fromEntries(missing.map((f) => [f, draft[f]])) } as EstimateDraft;
+    const unblocked = local.syncState === 'invalid' && local.lastError === OUTDATED_APP_ERROR;
+    if (local.syncState !== 'synced' || local.draft.rowVersion === null || local.draft.rowVersion >= remote.rowVersion) {
+      return {
+        ...local,
+        draft: filled,
+        mutationId: newMutationId,
+        ...(unblocked ? { syncState: 'pending' as const, lastError: null } : {}),
+      };
+    }
+  }
   if (local && ['pending', 'conflict', 'invalid', 'error', 'local'].includes(local.syncState)) return null;
   if (local && local.draft.rowVersion !== null && local.draft.rowVersion >= remote.rowVersion && local.draft.status === draft.status) {
     return null; // already up to date
