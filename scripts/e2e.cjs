@@ -86,8 +86,9 @@ function expect(cond, msg) { if (!cond) throw new Error('FAILED: ' + msg); log(m
   await page.locator('#photo-input').setInputFiles([ICON, ICON]);
   await page.locator('.thumb').nth(1).waitFor();
   expect((await page.locator('.thumb').count()) === 2, '2 photos stored and shown as thumbnails');
-  await page.getByRole('button', { name: /Analyze photos/ }).click();
-  expect(await page.locator('#toast').textContent().then((t) => t.includes('coming soon')), 'analyzePhotos stub reports not available');
+  const koala = await page.getByRole('link', { name: /Open the Koala app/ }).getAttribute('href');
+  expect(koala === 'https://koala-estimator-indol.vercel.app/field', 'photos screen points to AI photo reading in the Koala app');
+  expect((await page.getByText(/coming soon/i).count()) === 0, 'no "coming soon" placeholder');
   await page.screenshot({ path: OUT + '/3-photos.png', fullPage: true });
   await back();
   await back();

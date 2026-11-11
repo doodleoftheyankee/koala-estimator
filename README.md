@@ -28,8 +28,11 @@ Built with Vite and plain TypeScript (no framework). About 13 KB gzipped.
    `https://koala-foam-desk.vercel.app?sqft={total}&type={type}`.
    `type` is one of `attic_floor`, `roofline`, `crawl_floor`, `crawl_walls`.
 4. **Photos**: up to 6 per space, from the camera or the library. They're shrunk to 2000px
-   JPEG on the phone and stored in IndexedDB with thumbnails. `analyzePhotos()` in
-   `src/photos.ts` is a stub for future AI analysis.
+   JPEG on the phone and stored in IndexedDB with thumbnails. AI photo reading is in the
+   Koala app (koala-estimator): the photos screen links there.
+
+> AtticScan's measuring tools are built into the Koala estimator's field app, together with AI
+> photo reading and quotes. This standalone app keeps working for jobs already saved on a phone.
 
 ### Typing lengths
 
@@ -114,7 +117,7 @@ src/geometry.ts          preset shapes, custom-polygon solver, shoelace area
 src/model.ts             job/space data model and gross/cutouts/net per space type
 src/summary.ts           summary text, JSON export, Foam Desk link
 src/db.ts                IndexedDB (jobs + photos)
-src/photos.ts            photo downscaling, thumbnails, analyzePhotos() stub
+src/photos.ts            photo downscaling, thumbnails, link to the Koala app
 src/shapeView.ts         shape picker, labelled preview drawing, tap-to-draw grid
 src/screens/*.ts         Home, Job, Space editor, Photos, Summary screens
 src/main.ts              hash router, service-worker registration, update banner

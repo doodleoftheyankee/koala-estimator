@@ -366,3 +366,8 @@ dialog.viewer img { width: 100%; max-height: 70vh; object-fit: contain; display:
   .shape-picker { grid-template-columns: repeat(3, 1fr); }
   .dims { grid-template-columns: 1fr; }
 }
+
+/* Pointers to the Koala app (AI photo reading lives there). */
+.moved { display: flex; flex-direction: column; gap: 4px; text-decoration: none; color: inherit; border: 2px solid var(--t-roofline); }
+.ai-card { border: 2px solid var(--t-roofline); }
+.ai-card .btn.block { margin-bottom: 0; }

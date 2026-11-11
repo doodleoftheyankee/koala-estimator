@@ -1,10 +1,13 @@
 // Photo capture helpers: downscale on the phone before storing (a 12 MP photo is ~4 MB; 2000px
-// JPEG is ~400 KB), make a thumbnail, and the placeholder for future photo analysis.
+// JPEG is ~400 KB) and make a thumbnail. AI photo reading lives in the Koala app (KOALA_FIELD_URL).
 
 import { addPhoto, type PhotoRecord } from './db';
 import { uid } from './model';
 
 export const MAX_PHOTOS_PER_SPACE = 6;
+
+/** The Koala estimator's field app: measuring, AI photo reading and quotes in one place. */
+export const KOALA_FIELD_URL = 'https://koala-estimator-indol.vercel.app/field';
 
 /** Decodes an image file. Browsers apply the photo's EXIF rotation when drawing an <img>. */
 function loadImage(file: Blob): Promise<HTMLImageElement> {
@@ -41,20 +44,4 @@ export async function savePhoto(file: File, jobId: string, spaceId: string): Pro
   const record: PhotoRecord = { id: uid(), jobId, spaceId, createdAt: Date.now(), blob, thumb, name: file.name };
   await addPhoto(record);
   return record;
-}
-
-export interface PhotoAnalysis {
-  /** Suggested dimensions or square footage, per photo. */
-  suggestions: Array<{ photoId: string; note: string }>;
-}
-
-/**
- * Placeholder for automatic photo analysis (e.g. estimating joist spacing, existing insulation
- * depth, or room dimensions from a reference object). Not implemented yet: it always resolves
- * to null, and the UI says so. Wire a vision model in here later; the photos are already
- * stored per space with their IDs.
- */
-export async function analyzePhotos(photos: PhotoRecord[]): Promise<PhotoAnalysis | null> {
-  void photos;
-  return null;
 }

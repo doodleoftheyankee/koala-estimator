@@ -6,6 +6,7 @@ import { newJob, totalsByType } from '../model';
 import { setCurrent, flush } from '../store';
 import { formatSqft } from '../units';
 import { go, topBar } from './layout';
+import { KOALA_FIELD_URL } from '../photos';
 
 export async function renderHome(root: HTMLElement): Promise<void> {
   const jobs = await listJobs();
@@ -23,6 +24,12 @@ export async function renderHome(root: HTMLElement): Promise<void> {
     h(
       'main',
       { class: 'screen' },
+      h(
+        'a',
+        { class: 'card moved', href: KOALA_FIELD_URL, target: '_blank', rel: 'noopener' },
+        h('strong', {}, 'AtticScan is now part of the Koala app ↗'),
+        h('span', { class: 'muted small' }, 'Measuring, AI photo reading and Good/Better/Best quotes in one place. Jobs saved here stay on this phone.'),
+      ),
       h('button', { type: 'button', class: 'btn primary block xl', onclick: start }, '+ New job'),
       jobs.length
         ? h(

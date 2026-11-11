@@ -3,7 +3,7 @@
 import { deletePhoto, listPhotos, type PhotoRecord } from '../db';
 import { h, mount, toast } from '../dom';
 import type { Job, Space } from '../model';
-import { analyzePhotos, MAX_PHOTOS_PER_SPACE, savePhoto } from '../photos';
+import { KOALA_FIELD_URL, MAX_PHOTOS_PER_SPACE, savePhoto } from '../photos';
 import { topBar } from './layout';
 
 export async function renderPhotos(root: HTMLElement, job: Job, space: Space): Promise<void> {
@@ -92,13 +92,17 @@ export async function renderPhotos(root: HTMLElement, job: Job, space: Space): P
           )
         : h('p', { class: 'hint' }, 'This space has the maximum 6 photos. Delete one to add another.'),
       status,
-      h('button', {
-        type: 'button', class: 'btn block', disabled: photos.length === 0,
-        onclick: async () => {
-          const result = await analyzePhotos(photos);
-          toast(result ? 'Analysis done.' : 'Photo analysis is coming soon. Measurements are manual for now.');
-        },
-      }, '✨ Analyze photos (coming soon)'),
+      h(
+        'section',
+        { class: 'card ai-card' },
+        h('strong', {}, '✨ AI photo reading'),
+        h(
+          'p',
+          { class: 'hint' },
+          'In the Koala app, AI reads your photos and fills in existing insulation and depth, R-value, framing, access and obstacles, and flags hazards like vermiculite or knob-and-tube. Add the area there to use it.',
+        ),
+        h('a', { class: 'btn primary block', href: KOALA_FIELD_URL, target: '_blank', rel: 'noopener' }, 'Open the Koala app ↗'),
+      ),
     ),
   );
 }
