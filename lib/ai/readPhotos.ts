@@ -129,7 +129,15 @@ export async function readPhotos(images: ReadImage[], ctx: ReadContext, signal?:
     if (e instanceof Anthropic.APIError) console.error('[photo-read] API error', backend.kind, e.status, e.message);
     const outOfCredit = e instanceof Anthropic.APIError && (e.status === 402 || /credit|insufficient|balance|quota/i.test(e.message));
     if (backend.kind === 'gateway' && outOfCredit) {
-      throw new PhotoReadError('The Vercel AI Gateway is out of credit. The owner adds credit in Vercel (AI Gateway → Credits).', 503, 'no_credit');
+      // The gateway won't serve a team with no card on file, even from its free credit.
+      const needsCard = e instanceof Anthropic.APIError && /credit card|customer_verification/i.test(e.message);
+      throw new PhotoReadError(
+        needsCard
+          ? 'AI photo reading is ready but waiting on Vercel: the owner adds a card in Vercel → AI Gateway, which unlocks its free credit.'
+          : 'The Vercel AI Gateway is out of credit. The owner adds credit in Vercel → AI Gateway.',
+        503,
+        'no_credit',
+      );
     }
     if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
       throw new PhotoReadError(
