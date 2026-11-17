@@ -10,7 +10,9 @@ Every `/api/*` handler calls `requireAccess(req)`:
 - If `PARTNER_KEY` is set and the `x-partner-key` header equals it (constant-time compare), the call is allowed.
   The Koala server sends this header.
 - Else if `ACCESS_CODE` is set, the `x-access-code` header must equal it (constant-time compare), or 401.
-- Else (neither set) the call is allowed, as today.
+- Else (no `ACCESS_CODE` set) the call is allowed, as today. `PARTNER_KEY` on its own does not lock the tool;
+  it only lets the Koala server past an `ACCESS_CODE`.
+- A header of a different length is a mismatch.
 
 ## GET /api/takeoff
 
