@@ -252,14 +252,15 @@ export function isRoofResult(v: unknown): v is RoofResult {
 /**
  * The contract's attic floor in m²: footprint A less the overhang d all the way round except along
  * a neighbour's roof (S), exact for any right-angled outline, then less the share of the footprint
- * over the parts left out. With no perimeter (no outline and no box) the overhang can't be taken
- * off, so the footprint is used.
+ * over the parts left out. With no perimeter (no outline and no box) no overhang is taken off; the
+ * formula is still used as written, as Roof Takeoff does, so both give the same number.
  */
 export function atticFloorM2(footprintM2: number, perimeterM: number, overhangM: number, excludedM2: number, sharedWallM = 0): number {
   const A = footprintM2;
   if (!(A > 0)) return 0;
   const d = Math.max(0, overhangM);
-  const floorAll = perimeterM > 0 ? Math.max(0, A - (perimeterM - Math.max(0, sharedWallM)) * d + 4 * d * d) : A;
+  const P = Math.max(0, perimeterM);
+  const floorAll = Math.max(0, A - (P - Math.min(P, Math.max(0, sharedWallM))) * d + 4 * d * d);
   return floorAll * Math.max(0, 1 - excludedM2 / A);
 }
 

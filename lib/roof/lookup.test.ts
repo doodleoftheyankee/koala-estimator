@@ -135,10 +135,13 @@ describe('the contract attic floor', () => {
     expect(deckM2(100, [{ areaM2: 0, groundM2: 0 }])).toBeNull();
   });
 
-  it('never goes below zero, and uses the footprint when there is no perimeter', () => {
+  it('never goes below zero, and takes no overhang off when there is no perimeter (the contract formula, as Roof Takeoff does)', () => {
     expect(atticFloorM2(10, 100, 1, 0)).toBe(0);
     expect(atticFloorM2(0, 10, 0.3, 0)).toBe(0);
-    expect(atticFloorM2(200, 0, 0.3048, 50)).toBeCloseTo(150, 9);
+    // A − (P − S)·d + 4·d² with P = 0: Roof Takeoff's attic.floorM2 is this too.
+    expect(atticFloorM2(200, 0, 0.3048, 50)).toBeCloseTo((200 + 4 * 0.3048 ** 2) * 0.75, 9);
+    // A shared wall longer than the perimeter (a broken answer) counts as the whole perimeter, as on the server.
+    expect(atticFloorM2(100, 40, 0.3, 0, 60)).toBeCloseTo(100 + 4 * 0.09, 9);
     expect(wallRunM(0, 0.3048)).toBeNull();
     expect(wallRunM(2, 1)).toBe(0);
   });
