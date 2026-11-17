@@ -151,6 +151,25 @@ test('takeoff by map pin: cross gable with a 6 in overhang; clients can redo the
   assert.ok(j.edges.some(e => e.type === 'headwall' && e.faces.includes(porch.n)));
 });
 
+test('an address that is only "lat,lng" (an old pin link forwarded by the notice) is looked up as a map pin', async () => {
+  const pin = CROSS.frame.toLatLng(3, -1), lat = pin.lat.toFixed(6), lng = pin.lng.toFixed(6);
+  const asPin = (await get(q({ lat, lng }))).json();
+  for (const text of [`${lat},${lng}`, ` ${lat} , ${lng} `]) {
+    const before = mock.calls.length;
+    const j = (await get(q({ address: text }))).json();
+    assert.deepEqual(j.place, { address: null, lat: Number(lat), lng: Number(lng), precision: 'PIN' }, text);
+    assert.ok(!mock.calls.slice(before).some(c => c.route === 'geocode'), 'no geocode for a pin');
+    assert.equal(j.attic.floorM2, asPin.attic.floorM2);
+  }
+  // Out of range, whole numbers or anything else stays an address.
+  for (const text of ['91.5,-75.75', '39,-75', '39.68, -75.75 Newark', '12.5 Main St, Newark']) {
+    const before = mock.calls.length;
+    const j = (await get(q({ address: text }))).json();
+    assert.notEqual(j.place.precision, 'PIN', text);
+    assert.ok(mock.calls.slice(before).some(c => c.route === 'geocode'), `geocoded: ${text}`);
+  }
+});
+
 test('every mock house: v1.1 fields, the CONTRACT formulas, and accuracy against the drawings', async () => {
   for (const h of HOUSES) {
     const j = (await get(q({ address: h.address.split(',')[0] }))).json();

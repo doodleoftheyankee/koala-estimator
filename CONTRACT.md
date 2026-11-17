@@ -21,6 +21,9 @@ Every `/api/*` handler calls `requireAccess(req)`:
 ## GET /api/takeoff
 
 Query: `address` (trimmed, at most 200 characters) **or** `lat` + `lng`. Optional `overhangIn` (number, 0 to 36, default 12).
+An `address` that is only decimal degrees, `lat,lng` (for example `39.683470,-75.750390`, spaces allowed around the
+comma), is a map pin: no geocode, `place.address` null, `precision` "PIN". Old Roof Takeoff pin links reach Koala's
+address box this way.
 
 One call does the whole job: geocode (address only) → Solar `buildingInsights:findClosest` →
 Solar `dataLayers:get` (view `IMAGERY_LAYERS`) → downloads the mask and DSM GeoTIFFs on the server →

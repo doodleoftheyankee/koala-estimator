@@ -16,12 +16,19 @@ const ll = p => (p ? { lat: r7(p.lat), lng: r7(p.lng) } : null);
 const box = b => (b ? { sw: ll(b.sw), ne: ll(b.ne) } : null);
 const stats = s => (s ? { areaM2: r2(s.areaM2), groundM2: r2(s.groundM2) } : null);
 
+// An "address" that is only decimal degrees, "39.68347,-75.75039": a map pin. Old Roof Takeoff pin links reach
+// Koala's address box this way. Geocoding it as text would measure whatever house Google puts nearest.
+const PIN_TEXT = /^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/;
+
 function readInput(q) {
   let address = null, pin = null;
   const raw = q.get('address');
   if (raw != null && raw.trim()) {
     address = raw.trim();
     if (address.length > 200) throw new HttpError(400, 'That address is too long. Use 200 characters or fewer.');
+    const m = address.match(PIN_TEXT);
+    pin = m && readLatLng(new URLSearchParams({ lat: m[1], lng: m[2] }));
+    if (pin) address = null;
   } else if (q.has('lat') || q.has('lng')) {
     pin = readLatLng(q);
     if (!pin) throw new HttpError(400, "That map pin isn't a real spot. Send lat and lng in degrees.");

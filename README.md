@@ -12,9 +12,10 @@ that Koala's server calls, at https://roof-takeoff-ten.vercel.app.
 - **`GET /api/satellite`:** the regular satellite picture of a spot, for showing which building was found.
 - **The home page** (`index.html`) is now a short notice with a button to Koala's Roof lookup. Old links
   (`?address=...`, or `?lat=..&lng=..` for a map pin) open Koala's Roof lookup for the same address after one
-  second (a pin goes over as `lat,lng`), with the button as a fallback. The notice calls no `/api` endpoint, so it
-  never runs a paid lookup, and it loads no scripts from elsewhere. It also clears what the old page kept in the
-  browser (its access code, recent addresses and last result).
+  second (a pin goes over as `lat,lng`, which `/api/takeoff` measures as a map pin, not a typed address), with the
+  button as a fallback. The notice calls no `/api` endpoint, so it never runs a paid lookup, and it loads no scripts
+  from elsewhere. It also clears what the old page kept in the browser (its access code, recent addresses and last
+  result).
 
 Plain Node (ES modules), no framework, no build step. `api/*.js` are Vercel serverless functions. `lib/google.js`
 makes every call to Google on the server, so the API key never leaves it.
@@ -62,12 +63,12 @@ when the contract changes.
 
 `npm run e2e` starts its own mock dev server on a free port and stands in for the Koala site (nothing reaches the
 real Koala, Google or Google Fonts). It checks the notice: the title, the line, the button to Koala's Roof lookup,
-that old `?address=` and `?lat=&lng=` links forward with the address encoded and only after one second, that blank
-or broken links just show the button, that Back doesn't bounce to Koala again, that the page makes no `/api` call and
-loads no script, that the old page's saved data is cleared, and the layout at 320, 375 and 1280 px in light and
-dark (no sideways scroll, a 56 px button). It also checks that the same dev server still answers `/api/takeoff` and
-`/api/satellite`. Screenshots go to a temp folder; `SHOTS=dir` keeps them elsewhere, and `CHROMIUM=/path/to/chrome`
-picks the browser.
+that old `?address=` and `?lat=&lng=` links forward with the address encoded and only after one second (and that a
+forwarded pin is measured as a pin), that blank or broken links just show the button, that Back doesn't bounce to
+Koala again, that the page makes no `/api` call and loads no script, that the old page's saved data is cleared, and
+the layout at 320, 375 and 1280 px in light and dark (no sideways scroll, a 56 px button). It also checks that the
+same dev server still answers `/api/takeoff` and `/api/satellite`. Screenshots go to a temp folder; `SHOTS=dir` keeps
+them elsewhere, and `CHROMIUM=/path/to/chrome` picks the browser.
 
 `PORT=3000 npm run mock` picks another port. Try the API by hand:
 `curl 'http://localhost:8787/api/takeoff?address=7%20Cape%20Dormer%20Way'` (add `-H 'x-partner-key: ...'` when

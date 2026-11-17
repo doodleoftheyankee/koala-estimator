@@ -313,6 +313,23 @@ async function main() {
     assert.match(s.headers.get('content-type'), /^image\//);
   });
 
+  await test('a forwarded pin ("lat,lng" as the address) is measured at the pin, as a pin, when Koala looks it up', async () => {
+    const gable = await (await fetch(`${server.url}/api/takeoff?${new URLSearchParams({ address: '1 Gable Ln' })}`)).json();
+    const lat = gable.building.center.lat.toFixed(6), lng = gable.building.center.lng.toFixed(6);
+    const ctx = await newContext();
+    await ctx.clock.install();
+    const p = await open(ctx, q({ lat, lng }));
+    // Koala puts ?address= in its box as is and sends it to /api/takeoff.
+    const sent = new URL(await href(p)).searchParams.get('address');
+    assert.equal(sent, `${lat},${lng}`);
+    await ctx.close();
+    const r = await fetch(`${server.url}/api/takeoff?${new URLSearchParams({ address: sent })}`);
+    assert.equal(r.status, 200);
+    const j = await r.json();
+    assert.deepEqual(j.place, { address: null, lat: Number(lat), lng: Number(lng), precision: 'PIN' });
+    assert.equal(j.attic.floorM2, gable.attic.floorM2, 'the same building');
+  });
+
   await browser.close();
   server.stop();
   const failed = results.filter(r => !r.ok);
