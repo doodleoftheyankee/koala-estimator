@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Roof pitch and sloped area from photos, or by address with Google's Solar API.",
+  "description": "Roof takeoff API (Google Solar) behind the Koala app's Roof lookup. The old page is retired.",
   "scripts": {
     "dev": "node dev-server.js",
     "mock": "node -e \"process.env.MOCK='1'; import('./dev-server.js')\"",

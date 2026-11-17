@@ -1,44 +1,47 @@
 # Roof Takeoff
 
-A one-page tool for roof and attic takeoffs. Live at https://roof-takeoff-ten.vercel.app.
+The roof takeoff engine behind the **Koala field app's Roof lookup**. The Roof Takeoff page is retired: roof
+lookups, the attic floor, roof edges, materials and the printable report now live in Koala
+(https://koala-estimator-indol.vercel.app/field/roof, sign-in required). This repo keeps the `/api/*` endpoints
+that Koala's server calls, at https://roof-takeoff-ten.vercel.app.
 
-- **From photos:** measure pitch from a gable photo and trace roof sections on an overhead photo.
-- **By address:** one call to `/api/takeoff` gives the two numbers a takeoff needs: the **attic floor** (for
-  blown-in insulation) and the **sloped roof area** (for roofing), plus the **roof deck over the attic floor**
-  (for spray foam under the deck), every roof face and the roof edges (ridge, hip, valley, eave, rake, step,
-  headwall, break) drawn on Google's aerial photo.
-- **`GET /api/takeoff`:** one call that returns the roof outline, each face's plan shape, the roof edges and
-  the attic floor (the building's footprint minus the overhang, without porch and flat-addition roofs, with the wall run
-  and the roof deck). The Koala field app calls it server to server.
+- **`GET /api/takeoff`:** one call that returns the roof outline, each face's plan shape, the roof edges (ridge, hip,
+  valley, eave, rake, step, headwall, break) and the attic floor (the building's footprint minus the overhang,
+  without porch and flat-addition roofs, with the wall run and the roof deck over the attic floor).
   **[CONTRACT.md](CONTRACT.md) (v1.2) is the agreed API contract.** Read it before changing anything it describes.
+- **`GET /api/satellite`:** the regular satellite picture of a spot, for showing which building was found.
+- **The home page** (`index.html`) is now a short notice with a button to Koala's Roof lookup. Old links
+  (`?address=...`, or `?lat=..&lng=..` for a map pin) open Koala's Roof lookup for the same address after one
+  second (a pin goes over as `lat,lng`), with the button as a fallback. The notice calls no `/api` endpoint, so it
+  never runs a paid lookup, and it loads no scripts from elsewhere. It also clears what the old page kept in the
+  browser (its access code, recent addresses and last result).
 
-Plain Node (ES modules), no framework, no build step. `index.html` is the whole page. `api/*.js` are Vercel
-serverless functions. `lib/google.js` makes every call to Google on the server, so the API key never
-reaches the browser.
+Plain Node (ES modules), no framework, no build step. `api/*.js` are Vercel serverless functions. `lib/google.js`
+makes every call to Google on the server, so the API key never leaves it.
 
 ## Files
 
 | Path | What it is |
 |---|---|
-| `index.html` | The page (one inline script; reads the aerial photo with geotiff@2.1.3 from a CDN) |
-| `api/lookup.js` | Address or map pin → building and roof faces (the page no longer calls it) |
-| `api/layers.js` | Asks Google for the aerial photo and rooftop mask; returns file ids (the page no longer calls it) |
-| `api/geotiff.js` | Downloads one of those files by id (adds the key on the server) |
-| `api/satellite.js` | Regular satellite picture, the fallback when there is no aerial photo |
-| `api/takeoff.js` | The full takeoff (see CONTRACT.md) |
+| `index.html` | The retired page: a notice that sends people and old links to Koala (one small inline script, no `/api` calls) |
+| `api/takeoff.js` | The full takeoff (see CONTRACT.md). Koala calls it. |
+| `api/satellite.js` | Regular satellite picture of a spot. Koala calls it. |
+| `api/geotiff.js` | Downloads one of Google's aerial-data files by id (adds the key on the server) |
+| `api/lookup.js` | Address or map pin → building and roof faces (older; kept working) |
+| `api/layers.js` | Asks Google for the aerial photo and rooftop mask; returns file ids (older; kept working) |
 | `lib/google.js` | Google calls, access check, error messages |
 | `lib/takeoff.js` | Roof geometry: pure functions, no I/O |
 | `lib/raster.js` | Reads Google's GeoTIFF files for `lib/takeoff.js` |
 | `dev-server.js`, `dev/` | Local dev server and the mock Google (never deployed) |
-| `test/` | `node --test` tests (never deployed) |
+| `test/` | `node --test` tests of the API and geometry, and the e2e of the notice page (never deployed) |
 
 ## Settings (environment variables)
 
 | Name | Needed | What it does |
 |---|---|---|
 | `GOOGLE_MAPS_API_KEY` | yes | Server-side Google key. Turn on **Geocoding API**, **Solar API** and **Maps Static API** for it. |
-| `ACCESS_CODE` | no | When set, every `/api/*` call needs the `x-access-code` header (the page asks for the code once per device). Each lookup costs money, so set this for a crew-only tool. |
-| `PARTNER_KEY` | no | Lets the Koala server through with the `x-partner-key` header when `ACCESS_CODE` is set. On its own it locks nothing, but a call that sends a partner key that doesn't match is refused (401 "The partner key doesn't match."), so a wrong Koala key shows up at once. |
+| `PARTNER_KEY` | yes, for Koala | The shared key Koala's server sends in the `x-partner-key` header (Koala's `ROOF_TAKEOFF_KEY`). On its own it locks nothing, but a call that sends a partner key that doesn't match is refused (401 "The partner key doesn't match."), so a wrong Koala key shows up at once. |
+| `ACCESS_CODE` | recommended | When set, every `/api/*` call needs the `x-access-code` header, except Koala's (a matching partner key gets through). Each lookup costs money and Koala is now the only client, so set this to a long random value nobody needs to type: it shuts out everyone else. |
 
 Values are trimmed, so a key saved with a trailing newline still works. Set them in the Vercel project settings, then redeploy. For local work put them in a `.env` file
 (`KEY=value` lines; it is git-ignored and never deployed).
@@ -49,17 +52,27 @@ Needs Node 20 or later.
 
 ```sh
 npm install
-npm run mock    # synthetic houses, no key, no network: http://localhost:8787
+npm run mock    # synthetic houses, no key, no network: http://localhost:8787 (the API; / is the notice)
 npm run dev     # real Google, with the key from .env: http://localhost:8787
-npm test        # geometry and endpoint tests against the mock
-npm run e2e     # the page in Chromium against the mock (needs Playwright installed)
+npm test        # geometry and endpoint tests against the mock (node --test)
+npm run e2e     # the notice page in Chromium (needs Playwright installed)
 ```
 
-`npm run e2e` starts its own mock servers on free ports, checks every feature of the page (including that no
-link, reload or photo tap calls `/api/takeoff` on its own) and saves screenshots of `7 Cape Dormer Way` (375 and
-1280 px, light and dark, print) to a temp folder; `SHOTS=dir` keeps them elsewhere.
+`npm test` checks `lib/takeoff.js` against the mock houses' known answers and calls every endpoint through the
+mock, including the auth rules. Koala's own tests use exact `/api/takeoff` answers from this mock, so run both
+when the contract changes.
 
-`PORT=3000 npm run mock` picks another port.
+`npm run e2e` starts its own mock dev server on a free port and stands in for the Koala site (nothing reaches the
+real Koala, Google or Google Fonts). It checks the notice: the title, the line, the button to Koala's Roof lookup,
+that old `?address=` and `?lat=&lng=` links forward with the address encoded and only after one second, that blank
+or broken links just show the button, that Back doesn't bounce to Koala again, that the page makes no `/api` call and
+loads no script, that the old page's saved data is cleared, and the layout at 320, 375 and 1280 px in light and
+dark (no sideways scroll, a 56 px button). It also checks that the same dev server still answers `/api/takeoff` and
+`/api/satellite`. Screenshots go to a temp folder; `SHOTS=dir` keeps them elsewhere, and `CHROMIUM=/path/to/chrome`
+picks the browser.
+
+`PORT=3000 npm run mock` picks another port. Try the API by hand:
+`curl 'http://localhost:8787/api/takeoff?address=7%20Cape%20Dormer%20Way'`.
 
 ### Mock addresses (`npm run mock`)
 
@@ -68,7 +81,7 @@ link, reload or photo tap calls `/api/takeoff` on its own) and saves screenshots
 | `1 Gable Ln` | Gable, 40 × 30 ft at 6/12, 1 ft overhang. A shed and a tree next door are ignored. |
 | `2 Hip Rd` | Hip roof, 50 × 30 ft at 6/12, turned 25°. |
 | `3 Cross Gable Ct` | L-shaped cross gable with two valleys, a low-slope (1/12) front porch against the house wall (headwall), and a chimney. |
-| `4 Low Detail Dr` | Lower-detail imagery whose surface heights fail to load, plus a flat carport with no pitch data: the degraded path and the "Parts with no roof data" row. |
+| `4 Low Detail Dr` | Lower-detail imagery whose surface heights fail to load, plus a flat carport with no pitch data: the degraded path and `attic.unmatchedM2` ("Parts with no roof data"). |
 | `5 Twin Ave` | One half of a twin. The other half's roof touches it in Google's mask but isn't Google's building: the outline is cut at the party wall (`sharedWallM`), with a warning. |
 | `6 Flat Roof Plaza` | Commercial building, every face at 1/4 in per ft, with a lower loading bay: nothing is left out of the attic by default, with a "mostly flat" warning. |
 | `7 Cape Dormer Way` | 12/12 Cape with a 1.5/12 shed dormer (stays in the attic), an attached 3/12 garage (marked lower, stays in) and a 1/12 porch (left out). Steps at the dormer cheeks and the garage, headwalls under the dormer front and the porch. |
@@ -79,7 +92,7 @@ link, reload or photo tap calls `/api/takeoff` on its own) and saves screenshots
 
 The analytic truth for each mock house (areas, edge lengths, attic floor) is in comments at the top of
 `dev/houses.js`. The mock serves real GeoTIFFs (color photo, rooftop mask, surface heights, UTM zone 18N)
-and a generated satellite picture, so the page and `/api/takeoff` run the same code as with Google. Its surface
+and a generated satellite picture, so `/api/takeoff` and `/api/satellite` run the same code as with Google. Its surface
 heights round off ridges, hips and valleys the way Google's do on real roofs (a band along each steep ridge fits
 neither face; eaves and walls stay sharp); `renderLayers({ smooth: false })` gives ideal planes for tests.
 
@@ -104,29 +117,12 @@ neither face; eaves and walls stay sharp); `renderLayers({ smooth: false })` giv
   additions); a low-slope dormer up on the roof stays in; faces more than 1.5 m under it are marked `lower`
   (garage, porch or addition) but stay in; a mostly flat building leaves nothing out and gets a warning.
 
-## The page
+## The old page
 
-- **Address lookup:** one call to `/api/takeoff`, then the color photo through `/api/geotiff` (the plain
-  satellite picture from `/api/satellite` if that fails).
-- **Paid lookups only on purpose:** each lookup costs money, so only Look up, a recent lookup, or "Look up the
-  roof here (paid)" runs one. Tapping the photo marks a spot and asks first; the result is labelled "Near
-  <the old address>". Links (`?address=...` or `?lat=..&lng=..`) fill in the address or mark the pin and wait
-  for a tap. The address bar follows each lookup, and a reload or restored tab shows that tab's last result
-  again from `sessionStorage` (photo and choices included) without calling the server.
-- **Two numbers:** sloped roof area and attic floor, in the lookup panel and in the Roof total card, plus the
-  roof deck over the attic floor. The overhang chips (none to 24 in, one setting for the page) and the "Over
-  the attic" checkboxes recompute them with the CONTRACT.md formulas. The starting choices are the server's
-  (`attic.excluded`). "Parts with no roof data" gets its own row when it is over 5% of the footprint.
-- **Warnings:** an amber "Check on site" line under the lookup numbers and in the Roof total; the status turns
-  amber. A failed lookup takes the previous house off the screen so its numbers can't be mistaken for the new one.
-- **Roof edges:** colored on the photo, totals per type and a materials helper (drip edge, starter strip,
-  ridge cap, valley, step flashing, headwall (apron) flashing, rounded up to the next foot).
-- **Report:** Print or save PDF (one letter page), Copy summary (plain text), Copy link.
-- **Recent lookups:** the last 12, kept in this browser only (`localStorage`). Tapping one runs it again (paid).
-- **Phones:** controls are at least 44 px; the faces table keeps both sq ft columns on screen at 375 px.
-- **From photos (steps 1 to 3):** plus an "Over the attic" checkbox per section; traced sections over the attic
-  keep the overhang along a side they share. The Roof total follows whichever method was used last; the
-  "Totals from" switch changes it.
+Until November 2026 `index.html` was the whole Roof Takeoff tool (address lookup with the attic floor and roof
+edges on the aerial photo, measuring from photos, materials, recent lookups, a printable report). All of it moved
+into Koala's Roof lookup, so Koala is the one app the crew uses and the only client of this API. The old page is in
+the git history (the commit before "Retire the Roof Takeoff page") if anything needs checking against it.
 
 ## Deploying
 

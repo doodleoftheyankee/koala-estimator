@@ -1,6 +1,8 @@
 # Roof Takeoff API contract (v1)
 
 Shared by the Roof Takeoff site (this repo) and the Koala field app, which calls it server-to-server.
+**The Roof Takeoff page is retired (November 2026): its home page is only a notice that links to Koala and calls no
+endpoint. The Koala field app is the only client of this API.**
 All lengths are meters and all areas square meters on the wire. Clients convert to feet.
 
 ## Auth
