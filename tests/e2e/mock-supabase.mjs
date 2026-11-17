@@ -27,9 +27,12 @@ const CANNED_READ = {
 };
 const users = JSON.parse(fs.readFileSync(new URL('./users.json', import.meta.url)));
 
-// Roof Takeoff stand-in: the same made-up house the unit tests use (lib/roof/__fixtures__).
+// Roof Takeoff stand-in: the same made-up house the unit tests use (lib/roof/__fixtures__), and Roof
+// Takeoff's own answer for its cross-gable mock house, with every kind of roof edge it measures
+// (GET /api/takeoff?address=3 Cross Gable Ct on its mock server, kept in __fixtures__/roof-takeoff).
 const ROOF_KEY = process.env.ROOF_TAKEOFF_KEY ?? 'e2e-roof-key';
 const TAKEOFF = JSON.parse(fs.readFileSync(new URL('../../lib/roof/__fixtures__/takeoff.json', import.meta.url)));
+const CROSS_GABLE = JSON.parse(fs.readFileSync(new URL('../../lib/roof/__fixtures__/roof-takeoff/3-cross-gable.json', import.meta.url)));
 
 // A fake aerial photo of that house (1280 x 1280, as Google's 640 x 640 at scale 2): grass, a
 // street, and each roof face shaded by the way it faces, placed with the same Web Mercator math.
@@ -57,8 +60,9 @@ function aerialPhoto(lat, lng, zoom) {
   const sin = Math.sin((lat * Math.PI) / 180);
   const cx = ((lng + 180) / 360) * size, cy = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * size;
   const shade = { 1: [168, 160, 156], 2: [112, 108, 110], 3: [150, 142, 136], 4: [126, 120, 118], 5: [176, 170, 160] };
-  const faces = TAKEOFF.faces.map((f) => ({ poly: f.poly, rgb: shade[f.n] ?? [140, 140, 140] }));
-  const roadLat = TAKEOFF.place.lat - 0.00004;
+  const houses = [TAKEOFF, CROSS_GABLE].filter((h) => Math.abs(h.building.center.lat - lat) < 0.001 && Math.abs(h.building.center.lng - lng) < 0.001);
+  const faces = houses.flatMap((h) => h.faces.map((f) => ({ poly: f.poly, rgb: shade[f.n] ?? [140, 140, 140] })));
+  const roads = houses.map((h) => h.place.lat - 0.00004);
   const raw = Buffer.alloc((W * 3 + 1) * W);
   for (let y = 0; y < W; y++) {
     raw[y * (W * 3 + 1)] = 0;
@@ -68,7 +72,7 @@ function aerialPhoto(lat, lng, zoom) {
       const p = { lat: plat, lng: ((cx + x / 2 - 320) / size) * 360 - 180 };
       const noise = ((x * 7919 + y * 104729) ^ (x * y)) % 23;
       let rgb = [70 + noise, 104 + noise, 58 + (noise >> 1)];
-      if (Math.abs(p.lat - roadLat) < 0.000035) rgb = [96 + (noise >> 2), 96 + (noise >> 2), 100];
+      if (roads.some((roadLat) => Math.abs(p.lat - roadLat) < 0.000035)) rgb = [96 + (noise >> 2), 96 + (noise >> 2), 100];
       for (const f of faces) if (inside(p, f.poly)) rgb = f.rgb.map((c) => c + (noise >> 2));
       raw.set(rgb, y * (W * 3 + 1) + 1 + x * 3);
     }
@@ -174,7 +178,7 @@ http.createServer(async (req, res) => {
       if (/nowhere/i.test(address)) return send(res, 404, { error: "Google couldn't find that address. Check the spelling, or add the town and state." });
       if (/no roof/i.test(address)) return send(res, 404, { error: 'Google has no roof data for this spot. Tap the right roof on the image, or measure it from photos.' });
       await new Promise((r) => setTimeout(r, 1500)); // long enough to see the lookup running
-      const answer = structuredClone(TAKEOFF);
+      const answer = structuredClone(/cross gable/i.test(address) ? CROSS_GABLE : TAKEOFF);
       // A spot tapped on the photo: no address, the pin as Google's point.
       if (pin) answer.place = { address: null, lat: pin.lat, lng: pin.lng, precision: 'PIN' };
       // The same house with a carport Google has no roof faces for (contract v1.1 unmatchedM2).
