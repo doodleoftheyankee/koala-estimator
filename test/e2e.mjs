@@ -294,6 +294,13 @@ async function main() {
     // Not shown when the outline matches the faces (under 5% of the footprint).
     await lookup(p, '1 Gable Ln');
     assert.equal(await p.locator('#faceBody tr.nodata').count(), 0);
+    // Nor when Google sent no roof faces at all (the whole outline would be "no roof data"), as in the Koala app.
+    const bare = { ...j, segments: [], faces: [], edges: [], attic: { ...j.attic, unmatchedM2: j.attic.footprintM2, perimeterByFaceM: {}, excluded: [], excludedM2: 0, deckM2: null } };
+    await p.route(/\/api\/takeoff\?/, r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bare) }));
+    await lookup(p, '4 Low Detail Dr');
+    await p.unroute(/\/api\/takeoff\?/);
+    assert.equal(await p.locator('#faceBody tr.nodata').count(), 0, 'no row without faces');
+    assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(bare, 12)), 'the attic floor is the whole outline less the overhang');
     assert.deepEqual(p.errors, []);
     await ctx.close();
   });

@@ -1257,10 +1257,11 @@ function imageryInfo() {
 
 /* ---------- the two numbers from a lookup ---------- */
 // "Parts with no roof data" (the outline beyond Google's faces) get their own row when they are more than 5%
-// of the footprint and more than 5 m².
+// of the footprint and more than 5 m². Not when Google has no faces at all: then it would be the whole roof
+// (the Koala app does the same).
 function noDataM2() {
   const a = look && look.attic, u = a && Number(a.unmatchedM2) || 0;
-  return a && u > 5 && u > 0.05 * (a.footprintM2 || 0) ? u : 0;
+  return a && look.segments.length && u > 5 && u > 0.05 * (a.footprintM2 || 0) ? u : 0;
 }
 // Attic floor with this page's overhang and face choices: the CONTRACT.md formula, as the server does it.
 function lookupAttic() {
