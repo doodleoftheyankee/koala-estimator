@@ -24,7 +24,7 @@ const row = (id: string, minutesAgo: number, extra: Partial<RecentRow> = {}): Re
 describe('recentLookups', () => {
   it('maps a row to the address Google matched and the headline numbers', () => {
     expect(recentLookups([row('a', 5)], ME)).toEqual([
-      { id: 'a', lookedUpAt: '2026-11-17T11:55:00.000Z', label: '12 Elkton Rd, Newark, DE 19711, USA', by: null, atticFloorSqft: 182.7 * SQFT_PER_M2, roofSqft: 237.5 * SQFT_PER_M2, mainPitch: 6 },
+      { id: 'a', lookedUpAt: '2026-11-17T11:55:00.000Z', label: '12 Elkton Rd, Newark, DE 19711, USA', tapped: false, by: null, atticFloorSqft: 182.7 * SQFT_PER_M2, roofSqft: 237.5 * SQFT_PER_M2, mainPitch: 6 },
     ]);
   });
 
@@ -46,7 +46,8 @@ describe('recentLookups', () => {
     ];
     const out = recentLookups(pins, ME);
     expect(out.map((r) => r.id)).toEqual(['pin', 'other pin']);
-    expect(out[0]!.label).toBe('Roof tapped on the photo');
+    expect(out[0]).toMatchObject({ label: 'Roof tapped at 39.68347, -75.75039', tapped: true });
+    expect(out[1]!.label).toBe('Roof tapped at 39.68350, -75.75040');
   });
 
   it("names who looked it up when it was someone else (the owner's list)", () => {

@@ -1,15 +1,16 @@
 'use client';
 // The Roof lookup page: the whole roof takeoff for any address, without an estimate. One address box
-// (?address= fills it in but never looks it up: each lookup is a paid Google request), the same
-// takeoff as the area sheet without its Use buttons, the person's recent lookups (opening one shows
-// the saved lookup, no new Google call), and "Start an estimate here": a new estimate with the
-// address Google matched and an Attic area that already has this lookup.
+// (?address= fills it in but never looks it up: each lookup is a paid Google request; "lat,lng", from
+// an old Roof Takeoff map-pin link, is looked up as that spot), the same takeoff as the area sheet
+// without its Use buttons, the person's recent lookups (opening one shows the saved lookup, no new
+// Google call), and "Start an estimate here": a new estimate with the house's address and an Attic
+// area that already has this lookup (a roof tapped on the photo too).
 import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
 import { fetchRecentLookups, fetchSavedLookup, houseLookup, LookupFailed, seedHouse, showLookup, startRoofLookup } from '@/lib/offline/roofLookup';
-import { lookupAddress, NOT_CONFIGURED_MESSAGE, pitchText, roundSqft, whenText } from '@/lib/roof/lookup';
+import { lookupAddress, NOT_CONFIGURED_MESSAGE, parseLatLng, pitchText, roundSqft, whenText, type LatLng } from '@/lib/roof/lookup';
 import { atticFloorNote } from '@/lib/roof/roofing';
-import { parseUsAddress } from '@/lib/roof/address';
+import { estimateAddress } from '@/lib/roof/address';
 import type { RecentLookup } from '@/lib/roof/recent';
 import { newArea, newDraft } from '@/lib/sync/draft';
 import { Alert, Button, Card, cx, Field, Input } from '@/components/ui';
@@ -28,8 +29,8 @@ function useAddressParam(): string {
   return useMemo(() => (new URLSearchParams(search).get('address') ?? '').replace(/\s+/g, ' ').trim().slice(0, 200), [search]);
 }
 
-/** The house on screen: the store's key for it and what to call it. */
-type Shown = { key: string; label: string };
+/** The house on screen: the store's key for it, what to call it, and its address as typed (none for a spot). */
+type Shown = { key: string; label: string; near: string | null };
 
 export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
   const online = useOnline();
@@ -39,7 +40,7 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
   const text = typed ?? prefill;
   const [formError, setFormError] = useState<string | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
-  const t = useTakeoff({ estimateId: null, areaId: null, address: shown?.key ?? '', job: 'attic' });
+  const t = useTakeoff({ estimateId: null, areaId: null, address: shown?.key ?? '', job: 'attic', near: shown?.near ?? null });
 
   const lookUp = (e: FormEvent) => {
     e.preventDefault();
@@ -49,9 +50,17 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
       return;
     }
     setFormError(null);
-    setShown({ key: address, label: address });
+    const pin = parseLatLng(address);
+    if (pin) {
+      // A spot ("lat,lng"): looked up there, like a roof tapped on the photo.
+      const key = `Map pin ${pin.lat},${pin.lng}`;
+      setShown({ key, label: `the map pin at ${pin.lat}, ${pin.lng}`, near: null });
+      startIfNew(key, pin);
+      return;
+    }
+    setShown({ key: address, label: address, near: address });
     // A house already looked up on this page shows again; "Look up again" pays for a new one.
-    startIfNew(address);
+    startIfNew(address, null);
   };
 
   return (
@@ -110,24 +119,24 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
           owner={profile.role === 'owner'}
           refreshKey={t.last?.lookupId ?? ''}
           onOpen={(r, lookup) => {
-            const key = r.label === 'Roof tapped on the photo' ? `${r.label} ${r.id}` : r.label;
+            const key = r.tapped ? `${r.label} ${r.id}` : r.label;
             showLookup(null, key, lookup);
-            setShown({ key, label: r.label });
-            if (r.label !== 'Roof tapped on the photo') setTyped(r.label);
+            setShown({ key, label: r.label, near: r.tapped ? null : r.label });
+            if (!r.tapped) setTyped(r.label);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         />
       </main>
 
-      {t.result && t.last && shown ? <StartBar t={t} profile={profile} /> : null}
+      {t.result && t.last && shown ? <StartBar t={t} typed={shown.near} profile={profile} /> : null}
     </div>
   );
 }
 
-/** Looks a typed address up unless this page already has (or is getting) it. */
-function startIfNew(address: string) {
-  const h = houseLookup(null, address);
-  if (!h.running && !h.last) startRoofLookup({ estimateId: null, areaId: null, address });
+/** Looks a typed address (or spot) up unless this page already has (or is getting) it. */
+function startIfNew(key: string, pin: LatLng | null) {
+  const h = houseLookup(null, key);
+  if (!h.running && !h.last) startRoofLookup({ estimateId: null, areaId: null, address: key, pin });
 }
 
 /** The two numbers that matter most here: the attic floor and the roof surface. */
@@ -136,9 +145,10 @@ function Headline({ t }: { t: Takeoff }) {
   const tile = (label: string, value: number | null) => (
     <div className="min-w-0 rounded-xl bg-brand-50 px-3 py-2 text-brand-800">
       <div className="text-xs font-bold uppercase tracking-wide">{label}</div>
-      <div className="whitespace-nowrap text-3xl font-extrabold tabular-nums">
-        {value === null ? '—' : comma(roundSqft(value))}
-        {value === null ? null : <span className="text-sm font-semibold"> sq ft</span>}
+      {/* The unit wraps under a five-digit number on a narrow phone instead of running out of the tile. */}
+      <div className="flex flex-wrap items-baseline gap-x-1 text-3xl font-extrabold tabular-nums">
+        <span>{value === null ? '—' : comma(roundSqft(value))}</span>
+        {value === null ? null : <span className="text-sm font-semibold">sq ft</span>}
       </div>
     </div>
   );
@@ -155,11 +165,15 @@ function Headline({ t }: { t: Takeoff }) {
   );
 }
 
-/** "Start an estimate here": a new estimate with the address Google matched and an Attic area that has this lookup. */
-function StartBar({ t, profile }: { t: Takeoff; profile: CachedProfile }) {
+/**
+ * "Start an estimate here": a new estimate with the house's address and an Attic area that has this
+ * lookup. The address is Google's, keeping the typed house number when Google matched only the road;
+ * for a roof tapped on the photo, the address the house was first looked up by.
+ */
+function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; profile: CachedProfile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const parsed = parseUsAddress(t.result?.address);
+  const parsed = estimateAddress(t.result?.address ?? t.state.matchedAddress, typed);
   const reason = !parsed
     ? t.result?.address
       ? "Google's address for this roof isn't a full street address. Start the estimate from the estimate list."
@@ -202,7 +216,7 @@ function StartBar({ t, profile }: { t: Takeoff; profile: CachedProfile }) {
           {busy ? 'Starting…' : 'Start an estimate here'}
         </Button>
         <p className={cx('mt-1 text-center text-xs', reason || error ? 'font-medium text-amber-800' : 'text-slate-500')}>
-          {error ?? reason ?? `A new estimate for ${parsed!.street}, ${parsed!.city}, with an Attic area.`}
+          {error ?? reason ?? `A new estimate for ${parsed!.street}, ${parsed!.city}, with an Attic area. Its Look up has these numbers: no new charge.`}
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchedKey, parseUsAddress } from './address';
+import { estimateAddress, matchedKey, parseUsAddress } from './address';
 import { addressKey, lookupAddress } from './lookup';
 
 describe('parseUsAddress', () => {
@@ -66,5 +66,29 @@ describe('matchedKey', () => {
   it('is null for a tapped roof or an address that is not a whole US address', () => {
     expect(matchedKey({ address: null })).toBeNull();
     expect(matchedKey({ address: 'Newark, DE 19711, USA' })).toBeNull();
+  });
+});
+
+describe('estimateAddress', () => {
+  it("takes Google's address when it has a house number", () => {
+    expect(estimateAddress('3 Cross Gable Ct, Newark, DE 19711, USA', '3 cross gable')).toEqual({ street: '3 Cross Gable Ct', city: 'Newark', state: 'DE', zip: '19711' });
+  });
+
+  it('keeps the typed house number when Google matched only the road', () => {
+    // Typed whole: the typed address.
+    expect(estimateAddress('Elkton Rd, Newark, DE 19711, USA', '123 Elkton Rd, Newark, DE 19711')).toEqual({ street: '123 Elkton Rd', city: 'Newark', state: 'DE', zip: '19711' });
+    // Typed without the ZIP: the typed number and street, Google's city, state and ZIP.
+    expect(estimateAddress('Elkton Rd, Newark, DE 19711, USA', '123 Elkton Rd, Newark DE')).toEqual({ street: '123 Elkton Rd', city: 'Newark', state: 'DE', zip: '19711' });
+    expect(estimateAddress('Elkton Rd, Newark, DE 19711, USA', '12B Elkton Rd')).toEqual({ street: '12B Elkton Rd', city: 'Newark', state: 'DE', zip: '19711' });
+    // Nothing better typed: Google's, as before.
+    expect(estimateAddress('Elkton Rd, Newark, DE 19711, USA', 'Elkton Rd Newark')).toEqual({ street: 'Elkton Rd', city: 'Newark', state: 'DE', zip: '19711' });
+    expect(estimateAddress('One Customs House, Wilmington, DE 19801, USA', 'customs house')?.street).toBe('One Customs House');
+  });
+
+  it('uses the typed address for a tapped roof when there is no earlier Google address', () => {
+    expect(estimateAddress(null, '12 Elkton Rd, Newark, DE 19711')).toEqual({ street: '12 Elkton Rd', city: 'Newark', state: 'DE', zip: '19711' });
+    expect(estimateAddress(null, '12 Elkton Rd')).toBeNull();
+    expect(estimateAddress(null, null)).toBeNull();
+    expect(estimateAddress(undefined, '39.6834,-75.7504')).toBeNull();
   });
 });

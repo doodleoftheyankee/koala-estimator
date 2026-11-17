@@ -2,6 +2,7 @@
 // owner's RLS shows everyone's) turned into short rows with the headline numbers. Pure: app/api/roof
 // reads the rows with the person's own client and maps them here.
 import { addressKey, mainPitch, SQFT_PER_M2, type RoofSegment } from './lookup';
+import { tappedTitle } from './roofing';
 
 /** How many recent lookups the page lists. */
 export const RECENT_LIMIT = 10;
@@ -28,8 +29,10 @@ export interface RecentRow {
 export interface RecentLookup {
   id: string;
   lookedUpAt: string;
-  /** The address Google matched, the address as typed, or "Roof tapped on the photo". */
+  /** The address Google matched, the address as typed, or "Roof tapped at <lat>, <lng>". */
   label: string;
+  /** A roof tapped on the photo (no address). */
+  tapped: boolean;
   /** Who looked it up when it wasn't the caller (the owner sees everyone's); null for the caller. */
   by: string | null;
   atticFloorSqft: number | null;
@@ -66,7 +69,8 @@ export function recentLookups(rows: readonly RecentRow[], me: string, names: Rea
     out.push({
       id: row.id,
       lookedUpAt: row.created_at,
-      label: matched ?? row.address ?? 'Roof tapped on the photo',
+      label: matched ?? row.address ?? (row.pin_lat !== null && row.pin_lng !== null ? tappedTitle({ lat: row.pin_lat, lng: row.pin_lng }, null) : 'Roof tapped on the photo'),
+      tapped: !matched && !row.address,
       by: row.created_by === me ? null : (names[row.created_by] ?? 'Someone else'),
       atticFloorSqft: floor === null ? null : floor * SQFT_PER_M2,
       roofSqft: roof === null ? null : roof * SQFT_PER_M2,

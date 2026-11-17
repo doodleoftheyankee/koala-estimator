@@ -50,6 +50,11 @@ export interface HouseLookup {
   confirmed: boolean;
   /** Roofing waste percent chosen for this house; null = the default. */
   wastePct: number | null;
+  /**
+   * The address Google matched when this house was last looked up by its address, kept when a roof
+   * tapped on the photo (which has none) replaces it: "Start an estimate here" uses it.
+   */
+  matchedAddress: string | null;
 }
 
 export interface LookupRequest {
@@ -64,7 +69,9 @@ export interface LookupRequest {
   fresh?: boolean;
 }
 
-const EMPTY: HouseLookup = { running: null, last: null, error: null, failed: null, overhangIn: null, faces: {}, confirmed: false, wastePct: null };
+const EMPTY: HouseLookup = { running: null, last: null, error: null, failed: null, overhangIn: null, faces: {}, confirmed: false, wastePct: null, matchedAddress: null };
+/** A new result's address, or the one kept from the house's earlier address lookup. */
+const matchedFor = (key: string, lookup: RoofLookup) => lookup.result.address ?? houses.get(key)?.matchedAddress ?? null;
 const houses = new Map<string, HouseLookup>();
 const picks = new Map<string, RoofPick>();
 const listeners = new Set<() => void>();
@@ -148,7 +155,7 @@ export function startRoofLookup(req: LookupRequest): void {
   patch(key, { running: { startedAt: Date.now(), pin, controller }, error: null, failed: null });
   requestLookup(req, controller.signal).then(
     // A new result: the overhang stays (same house), the face numbers may differ, so they start over.
-    (lookup) => patch(key, { running: null, last: lookup, faces: {}, confirmed: false }),
+    (lookup) => patch(key, { running: null, last: lookup, faces: {}, confirmed: false, matchedAddress: matchedFor(key, lookup) }),
     (e: unknown) => {
       const error = e instanceof LookupFailed ? e : new LookupFailed('The lookup failed. Try again.', 'failed');
       if (error.code === 'not_configured') service = null;
@@ -187,7 +194,7 @@ export function confirmHouse(estimateId: string | null, address: string): void {
 export function showLookup(estimateId: string | null, address: string, lookup: RoofLookup): void {
   const key = houseKey(estimateId, address);
   if (houses.get(key)?.running) return;
-  patch(key, { last: lookup, error: null, failed: null, faces: {}, confirmed: false });
+  patch(key, { last: lookup, error: null, failed: null, faces: {}, confirmed: false, matchedAddress: matchedFor(key, lookup) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -210,7 +217,7 @@ export interface HouseSeed {
 function adopt(seed: HouseSeed) {
   const key = houseKey(seed.estimateId, seed.address);
   if (houses.get(key)?.last) return;
-  houses.set(key, { ...EMPTY, last: seed.lookup, overhangIn: seed.overhangIn, faces: seed.faces, confirmed: seed.confirmed, wastePct: seed.wastePct });
+  houses.set(key, { ...EMPTY, last: seed.lookup, overhangIn: seed.overhangIn, faces: seed.faces, confirmed: seed.confirmed, wastePct: seed.wastePct, matchedAddress: seed.lookup.result.address });
 }
 
 /**
