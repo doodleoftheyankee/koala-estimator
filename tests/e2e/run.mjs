@@ -106,6 +106,10 @@ step('pitch from a photo of the gable, in Measure');
   let sheet = await openFor('roof pitch');
   check((await sheet.getByRole('button', { name: 'How to shoot the gable' }).getAttribute('aria-expanded')) === 'true', 'the photo sheet opens with how to shoot the gable');
   check((await sheet.getByText(/Shooting from off to the side makes the pitch read steep/).count()) === 1, 'the tips say to shoot from straight in front');
+  check(
+    (await sheet.getByText(/^Hold the phone upright, not tipped back\. Tipping it up to fit the roof in makes the pitch read low/).count()) === 1 && (await sheet.getByText(/Tilting the phone is fine/).count()) === 0,
+    'and to hold the phone upright, not tipped back',
+  );
   await page.screenshot({ path: SHOTS + '03a1-pitch-start.png' });
   await page.keyboard.press('Escape');
   await sheet.waitFor({ state: 'detached' });
@@ -131,11 +135,11 @@ step('pitch from a photo of the gable, in Measure');
     return [box.x + (x * box.width) / gable.W, box.y + (y * box.height) / gable.H];
   };
   const hint = async () => (await sheet.locator('p[aria-live]').innerText()).trim();
-  check((await hint()) === 'Tap 1 of 3: the left eave corner, at the bottom left of the roof triangle.', 'the hint asks for the left eave corner first');
+  check((await hint()) === 'Tap 1 of 3: the left eave corner, on the top edge of the rake trim.', 'the hint asks for the left eave corner first, on the edge to tap');
   await page.touchscreen.tap(...(await onScreen(gable.L)));
-  check((await hint()) === 'Tap 2 of 3: the peak.', 'then the peak');
+  check((await hint()) === 'Tap 2 of 3: the peak, on that same edge.', 'then the peak');
   await page.touchscreen.tap(...(await onScreen(gable.P)));
-  check((await hint()) === 'Tap 3 of 3: the right eave corner, at the bottom right.', 'then the right eave corner');
+  check((await hint()) === 'Tap 3 of 3: the right eave corner, on the same edge.', 'then the right eave corner');
   await page.touchscreen.tap(...(await onScreen(gable.R)));
   check((await hint()) === 'Drag any point to fine-tune it. A magnifier shows while you drag.', 'then how to fine-tune');
   const reading = sheet.getByRole('region', { name: 'Pitch reading' });
@@ -360,7 +364,7 @@ check(
 );
 check((await roof.getByRole('radio', { name: /Attic floor/ }).getAttribute('aria-checked')) === 'true', 'an attic measured on the floor starts on the attic floor');
 check(roofText.includes('Top-floor ceiling seen from above. Finished attic rooms, cathedral ceilings and knee walls need measuring on site.'), 'says the attic floor is one level');
-check(/Roofing\s*2,560 sq ft · 25\.6 squares · order 29⅔ squares/.test(roofText) && !/Bundles/.test(roofText), 'Roofing starts closed, saying the roof surface, squares and the order');
+check(/Roofing\s*2,560 sq ft · 24\.0 squares · order 27⅔ squares/.test(roofText) && !/Bundles/.test(roofText), 'Roofing starts closed, saying the roof surface, squares and the order (the 1/12 porch roof is not shingles)');
 check(/Main pitch:\s*6\/12/.test(roofText) && /Roof outline \(to the drip edge\):\s*2,340 sq ft/.test(roofText) && /Wall run:\s*184 ft/.test(roofText), 'main pitch, roof outline and wall run (porch walls left out)');
 check((await roof.getByText("Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.").count()) === 1, 'warns when Google placed the address roughly');
 check((await roof.getByText('Lower-detail imagery. Check the pitch on site.').count()) === 1, "Roof Takeoff's warnings are listed");
@@ -371,6 +375,7 @@ check((await roof.getByText('12 Elkton Rd, Newark, DE 19711, USA').count()) === 
 check((await roof.getByText('Good photo', { exact: true }).count()) === 1, 'a medium-detail photo is a "Good photo"');
 check((await roof.getByRole('switch', { name: 'Face 5: over the attic' }).getAttribute('aria-checked')) === 'false', 'the porch starts left out (Roof Takeoff’s choice)');
 check((await roof.getByText('Lower roof: garage, porch or addition?').count()) === 3, 'lower roofs (garage and porch) are pointed out');
+check((await roof.getByText('Low slope: not for shingles').count()) === 1, 'and the 1/12 porch roof as low slope');
 const useFloor = roof.getByRole('button', { name: 'Use 1,970 sq ft' });
 check(await useFloor.isDisabled(), 'Use waits until the estimator checks the house (Google placed it roughly)');
 check((await roof.getByText('Check the house on the photo first: tap “Yes, this is the house”.').count()) === 1, 'and says so');
@@ -407,12 +412,15 @@ await page.screenshot({ path: SHOTS + '03e3-roof-edges-375.png' });
 await roof.getByRole('button', { name: /^Roofing/ }).click();
 const roofing = roof.locator('section', { has: page.getByRole('button', { name: /^Roofing/ }) });
 const tilesText = async () => (await roofing.innerText()).replace(/\s+/g, ' ');
-check(/Roof surface 2,560 sq ft .*Squares 25\.6 .*Order with 15% waste 29⅔ squares Bundles 89 /.test(await tilesText()), 'Roofing: 2,560 sq ft of roof, 25.6 squares, 29⅔ squares (89 bundles) with 15% waste: ' + (await tilesText()).slice(0, 160));
+check(
+  /Roof surface 2,560 sq ft .*Squares \(2\/12 and up\) 24\.0 .*Order with 15% waste 27⅔ squares Bundles 83 .*Low-slope roof \(under 2\/12, not shingles\): 160 sq ft\. Membrane or rolled roofing\./.test(await tilesText()),
+  'Roofing: 2,560 sq ft of roof; 24.0 squares and 27⅔ squares (83 bundles) with 15% waste, without the 160 sq ft low-slope porch roof: ' + (await tilesText()).slice(0, 260),
+);
 check((await roofing.getByRole('radio', { name: 'Hip 15%' }).getAttribute('aria-checked')) === 'true' && /Main pitch: 6\/12/.test(await tilesText()), 'hip 15% waste to start, and the main pitch');
 await roofing.getByRole('radio', { name: 'Cut-up 20%' }).click();
-check(/Order with 20% waste 31 squares Bundles 93 /.test(await tilesText()), 'cut-up 20%: 31 squares, 93 bundles');
+check(/Order with 20% waste 29 squares Bundles 87 /.test(await tilesText()), 'cut-up 20%: 29 squares, 87 bundles');
 await roofing.getByLabel('Waste percent').fill('0');
-check(/Order with 0% waste 25⅔ squares Bundles 77 /.test(await tilesText()) && (await roofing.getByRole('radio', { checked: true }).count()) === 0, 'a typed 0%: 25⅔ squares, 77 bundles, no chip chosen');
+check(/Order with 0% waste 24 squares Bundles 72 /.test(await tilesText()) && (await roofing.getByRole('radio', { checked: true }).count()) === 0, 'a typed 0%: 24 squares, 72 bundles, no chip chosen');
 await roofing.getByLabel('Waste percent').fill('80');
 check(/Order with 50% waste/.test(await tilesText()) && (await roofing.getByLabel('Waste percent').inputValue()) === '50', 'a typed waste over 50 is kept to 50');
 await roofing.getByRole('radio', { name: 'Hip 15%' }).click();
@@ -449,22 +457,24 @@ for (const bit of [
   'Medium-detail aerial photo from Jun 2023.',
   'Attic floor 1,970 sq ft',
   'Roof surface 2,560 sq ft',
-  'Roof deck over the attic floor 2,170 sq ft',
+  'Roof deck over the attic (spray foam) 2,170 sq ft',
   'Footprint (to the drip edge) 2,340 sq ft',
   'Wall run 184 ft',
-  'Squares 25.6',
-  'Order with 15% waste 29⅔ sq · 89 bundles',
+  'Low slope (under 2/12, not shingles) 160 sq ft',
+  'Squares (2/12 and up) 24.0',
+  'Order with 15% waste 27⅔ sq · 83 bundles',
   'Main pitch 6/12',
   'Attic floor: Roof outline minus a 12" overhang all the way around, without face 5.',
-  '5 1/12 faces south 160 No',
+  '5 1/12 (low slope) faces south 160 No',
   'Ridge 50',
   'Drip edge Eaves + rakes 75',
-  "Google placed this address roughly, so the outline may be on a neighbour's house.",
+  "Not confirmed: Google placed this address roughly, so the outline may be on a neighbour's house.",
   'Estimates from Google aerial imagery. Verify on site.',
 ]) {
   check(reportText.includes(bit), `the report says "${bit}"`);
 }
 check(/Looked up [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M\./.test(reportText), 'and when it was looked up');
+check(!/photo below|white outline/.test(reportText), 'in words for paper (no "photo below")');
 check((await report.locator('img').evaluate((img) => img.complete && img.naturalWidth === 960)), 'the photo is painted into the report with its outline and edges');
 await page.setViewportSize({ width: 816, height: 1056 });
 await page.screenshot({ path: SHOTS + '03e6-roof-print-letter.png', fullPage: true });
@@ -475,14 +485,28 @@ const areaPdf = await page.pdf({ path: SHOTS + 'roof-report-area.pdf', format: '
 check(PDF_PAGES(areaPdf) === 1, 'the report prints on one letter page');
 await page.emulateMedia({ media: 'screen' });
 check(!(await report.isVisible()) && (await roof.isVisible()), 'back on screen, the sheet shows again');
+// Print or save PDF: the page is named after the house while printing (the saved PDF's file name), then back.
+await page.evaluate(() => {
+  window.print = () => {
+    window.__printedAs = document.title;
+    window.dispatchEvent(new Event('afterprint'));
+  };
+});
+const titleBefore = await page.title();
+await roof.getByRole('button', { name: /Print or save PDF/ }).click();
+check((await page.evaluate(() => window.__printedAs)) === 'Roof takeoff - 12 Elkton Rd, Newark, DE 19711, USA' && (await page.title()) === titleBefore, 'Print names the PDF after the house, then puts the page title back');
 
 await roof.getByRole('button', { name: /Copy summary/ }).click();
 await roof.getByText('Summary copied. Paste it into a note, text or email.').waitFor();
 const copied = await page.evaluate(() => navigator.clipboard.readText());
 check(copied.startsWith('Koala Insulation of Newark: roof takeoff\n12 Elkton Rd, Newark, DE 19711, USA\n'), 'Copy summary copies the takeoff as text');
 check(
-  copied.includes('Order with 15% waste: 29⅔ squares (89 bundles)') && copied.includes('Materials (rounded up; estimates from aerial data, check on site): drip edge 75 ft') && copied.endsWith('Estimates from Google aerial imagery. Verify on site.'),
-  'with the order, the materials and the footer',
+  copied.includes('Order with 15% waste: 27⅔ squares (83 bundles)') &&
+    copied.includes('Low-slope roof (under 2/12, not shingles): 160 sq ft') &&
+    copied.includes('Materials (rounded up; estimates from aerial data, check on site): drip edge 75 ft') &&
+    copied.endsWith('Estimates from Google aerial imagery. Verify on site.') &&
+    !copied.includes('photo below'),
+  'with the order, the low-slope roof, the materials and the footer, in words for paper',
 );
 await roof.getByRole('button', { name: 'Yes, this is the house' }).click();
 check(!(await useFloor.isDisabled()), 'Use works once the estimator says it is the house');
@@ -671,7 +695,7 @@ await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}
 const pageText = (await page.locator('main').innerText()).replace(/\s+/g, ' ');
 check(/ATTIC FLOOR 1,610 sq ft ROOF SURFACE 2,140 sq ft/i.test(pageText), 'the page shows the attic floor and the roof surface');
 check((await page.getByRole('button', { name: /^Use / }).count()) === 0 && (await page.getByRole('radiogroup', { name: 'Which number to use' }).count()) === 0, 'and no Use buttons');
-check(/Order with 15% waste 24⅔ squares Bundles 74 /.test(pageText) && /Drip edge Eaves \+ rakes 238 ft Starter strip Eaves 137 ft Ridge cap Ridges \+ hips 81 ft Valley \(ice and water, flashing\) Valleys 31 ft Headwall \(apron\) flashing Headwalls 16 ft/.test(pageText), 'Roofing and the materials are open: 74 bundles, 238 ft of drip edge');
+check(/Order with 15% waste 23⅓ squares Bundles 70 /.test(pageText) && /Drip edge Eaves \+ rakes 238 ft Starter strip Eaves 137 ft Ridge cap Ridges \+ hips 81 ft Valley \(ice and water, flashing\) Valleys 31 ft Headwall \(apron\) flashing Headwalls 16 ft/.test(pageText), 'Roofing and the materials are open: 70 bundles (not the 1/12 porch), 238 ft of drip edge');
 check((await page.locator('svg [data-edge]').count()) === 18 && (await page.locator('svg [data-edge="headwall"]').count()) === 1, "all of Roof Takeoff's edges are drawn, headwalls too");
 check((await page.getByRole('list', { name: 'Map key' }).innerText()).replace(/\s+/g, ' ').trim() === 'Roof outline Ridge 80 ft Valley 30 ft Eave 136 ft Rake 101 ft Headwall 16 ft Left out', 'with their key');
 await page.screenshot({ path: SHOTS + '03q-roof-page-result-375.png' });
@@ -687,7 +711,7 @@ check(PDF_PAGES(pagePdf) === 1, 'on one letter page');
 await page.emulateMedia({ media: 'screen' });
 await page.getByRole('button', { name: /Copy summary/ }).click();
 await page.getByText('Summary copied. Paste it into a note, text or email.').waitFor();
-check((await page.evaluate(() => navigator.clipboard.readText())).includes('Order with 15% waste: 24⅔ squares (74 bundles)'), 'Copy summary works on the page too');
+check((await page.evaluate(() => navigator.clipboard.readText())).includes('Order with 15% waste: 23⅓ squares (70 bundles)'), 'Copy summary works on the page too');
 await page.setViewportSize(phone.viewport);
 
 step('Roof lookup page: a recent lookup opens without a new lookup');
@@ -696,14 +720,14 @@ const recent = page.locator('section', { has: page.getByRole('heading', { name: 
 await recent.getByRole('button', { name: /12 Elkton Rd, Newark, DE 19711, USA/ }).waitFor({ timeout: 15000 });
 const recentText = (await recent.innerText()).replace(/\s+/g, ' ');
 check(/3 Cross Gable Ct, Newark, DE 19711, USA today .* attic floor 1,610 sq ft · roof 2,140 sq ft · 6\/12/.test(recentText), 'recent lookups list each house with when and its numbers: ' + recentText.slice(0, 220));
-check((recentText.match(/12 Elkton Rd, Newark, DE 19711, USA/g) ?? []).length === 1 && recentText.includes('Roof tapped on the photo'), 'one row per house, and the roof tapped on the photo');
+check((recentText.match(/12 Elkton Rd, Newark, DE 19711, USA/g) ?? []).length === 1 && /Roof tapped at 39\.683\d\d, -75\.750\d\d/.test(recentText), 'one row per house, and the roof tapped on the photo, by where');
 const paidBeforeRecent = roofCalls().length;
 await recent.getByRole('button', { name: /12 Elkton Rd, Newark, DE 19711, USA/ }).click();
 await page.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 15000 });
 await page.getByText(/Saved lookup from today/).waitFor();
 check(roofCalls().length === paidBeforeRecent && (await addressBox.inputValue()) === '12 Elkton Rd, Newark, DE 19711, USA', 'opening one shows the saved lookup, with no new lookup');
 await recent.getByRole('button', { name: /3 Cross Gable Ct, Newark, DE 19711, USA/ }).click();
-await page.getByText('A new estimate for 3 Cross Gable Ct, Newark, with an Attic area.').waitFor({ timeout: 15000 });
+await page.getByText('A new estimate for 3 Cross Gable Ct, Newark, with an Attic area. Its Look up has these numbers: no new charge.').waitFor({ timeout: 15000 });
 check(roofCalls().length === paidBeforeRecent, 'nor for the next one');
 
 step('Roof lookup page: Start an estimate here');
@@ -741,6 +765,82 @@ await roof.getByText(/Saved lookup from today/).waitFor({ timeout: 15000 });
 check(roofCalls().length === paidBeforeRecent, "after a reload the server finds the page's lookup by the address Google matched: still no new lookup");
 await waitForDb(`select count(*) from roof_lookups where address_key = '3 cross gable ct newark de 19711'`, '0', 'and logs none');
 await roof.getByRole('button', { name: 'Close' }).click();
+
+step('Roof lookup page: an old map-pin link is looked up at the pin');
+const paidBeforePin = roofCalls().length;
+await page.goto(BASE + '/field/roof?address=39.6829%2C-75.7509');
+await page.waitForFunction(() => document.querySelector('input[autocomplete="street-address"]')?.value === '39.6829,-75.7509');
+await page.getByRole('button', { name: 'Look up', exact: true }).click();
+await page.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+const pinCall = roofCalls().at(-1);
+check(roofCalls().length === paidBeforePin + 1 && !pinCall.address && pinCall.pin?.lat === 39.6829 && pinCall.pin?.lng === -75.7509, `Roof Takeoff is asked for that spot, not for "39.6829,-75.7509" as an address: ${JSON.stringify(pinCall)}`);
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'done' and address is null and abs(pin_lat - 39.6829) < 1e-9 and abs(pin_lng + 75.7509) < 1e-9`, '1', 'logged as a pin lookup');
+check((await page.getByText('Is the white outline on the roof you tapped?').count()) === 1, 'and the estimator is asked to check the roof');
+check((await page.getByTestId('roof-report').textContent()).includes('Roof tapped at 39.68290, -75.75090'), 'the report names the spot');
+
+step('Roof lookup page: the right roof tapped, then Start an estimate here');
+await page.goto(BASE + '/field/roof');
+await page.getByLabel('Address').fill('12 Elkton Rd, Newark, DE 19711');
+await page.getByRole('button', { name: 'Look up', exact: true }).click();
+await page.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+await page.waitForFunction(() => { const i = document.querySelector('main img'); return i && i.complete && i.naturalWidth === 1280; });
+await page.getByRole('button', { name: 'Wrong house? Tap the right roof' }).click();
+const pagePhoto = page.getByRole('button', { name: 'Tap the right roof on the photo' });
+const pagePhotoBox = await pagePhoto.boundingBox();
+await pagePhoto.click({ position: { x: pagePhotoBox.width * 0.72, y: pagePhotoBox.height * 0.3 } });
+await page.getByText('Look up this roof instead?').locator('..').getByRole('button', { name: 'Look up', exact: true }).click();
+await page.getByText('The roof you tapped on the photo').waitFor({ timeout: 30000 });
+await page.getByRole('button', { name: 'Yes, this is the house' }).click();
+await page.getByText('A new estimate for 12 Elkton Rd, Newark, with an Attic area. Its Look up has these numbers: no new charge.').waitFor({ timeout: 15000 });
+check(await page.getByRole('button', { name: 'Start an estimate here' }).isEnabled(), "a roof tapped on the photo can start an estimate, with the address the house was looked up by");
+check((await page.getByTestId('roof-report').textContent()).includes('Roof tapped near 12 Elkton Rd, Newark, DE 19711 (39.683'), 'and the report says which house the tapped roof is');
+const paidBeforeTappedStart = roofCalls().length;
+await page.getByRole('button', { name: 'Start an estimate here' }).click();
+await page.waitForURL(/\/field\?e=[0-9a-f-]{36}$/, { timeout: 30000 });
+await page.getByLabel('Street address').waitFor();
+check(
+  (await page.getByLabel('Street address').inputValue()) === '12 Elkton Rd' && (await page.getByLabel('City').inputValue()) === 'Newark' && (await page.getByLabel('ZIP').inputValue()) === '19711',
+  'the new estimate has the house address',
+);
+await page.getByRole('navigation', { name: 'Estimate steps' }).getByRole('button', { name: 'Areas' }).click();
+const tappedAttic = page.getByRole('button', { name: /^Attic/ });
+await tappedAttic.waitFor();
+if ((await tappedAttic.getAttribute('aria-expanded')) !== 'true') await tappedAttic.click();
+await page.getByRole('button', { name: /Look up from the address/ }).click();
+await roof.getByText('The roof you tapped on the photo').waitFor({ timeout: 5000 });
+check(roofCalls().length === paidBeforeTappedStart && (await roof.getByRole('button', { name: /^Use / }).isEnabled()), "the attic opens on the tapped roof, already checked, with no new lookup");
+await roof.getByRole('button', { name: 'Close' }).click();
+
+step('Roof lookup page: a roof with 24 faces still prints on one page');
+await page.goto(BASE + '/field/roof');
+await page.setViewportSize({ width: 360, height: 780 });
+await page.getByLabel('Address').fill('24 Many Faces Ln, Newark, DE 19711');
+await page.getByRole('button', { name: 'Look up', exact: true }).click();
+await page.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+const tileFits = await page.locator('main .grid-cols-2 > div').first().locator('xpath=..').evaluate((grid) =>
+  [...grid.children].every((tile) => [...tile.querySelectorAll('span')].every((s) => s.getBoundingClientRect().right <= tile.getBoundingClientRect().right + 0.5)),
+);
+check(tileFits && /ROOF SURFACE 12,\d{3} sq ft/i.test((await page.locator('main').innerText()).replace(/\s+/g, ' ')), 'a five-digit roof surface stays inside its tile on a 360 px phone');
+await page.screenshot({ path: SHOTS + '03u-roof-page-many-faces-360.png' });
+await page.setViewportSize(phone.viewport);
+await page.waitForFunction(() => document.querySelector('#roof-report img')?.getAttribute('src')?.startsWith('data:image/jpeg'), null, { timeout: 15000 });
+await page.emulateMedia({ media: 'print' });
+const manyReport = page.getByTestId('roof-report');
+check((await manyReport.locator('[data-columns]').getAttribute('data-columns')) === '2' && (await manyReport.locator('table').count()) >= 3, 'the 24 faces go in two tables side by side');
+await page.setViewportSize({ width: 816, height: 1056 });
+await page.screenshot({ path: SHOTS + '03v-roof-print-many-faces-letter.png', fullPage: true });
+await page.setViewportSize(phone.viewport);
+const manyPdf = await page.pdf({ path: SHOTS + 'roof-report-many-faces.pdf', format: 'Letter', printBackground: true });
+check(PDF_PAGES(manyPdf) === 1, 'and the report still prints on one letter page');
+await page.emulateMedia({ media: 'screen' });
+await page.evaluate(() => {
+  window.print = () => {
+    window.__printedAs = document.title;
+    window.dispatchEvent(new Event('afterprint'));
+  };
+});
+await page.getByRole('button', { name: /Print or save PDF/ }).click();
+check((await page.evaluate(() => window.__printedAs)) === 'Roof takeoff - 24 Many Faces Ln, Newark, DE 19711, USA', 'Print names the PDF after the house on the page too');
 
 step('offline estimate');
 await page.goto(BASE + '/field');

@@ -183,6 +183,13 @@ http.createServer(async (req, res) => {
       if (pin) answer.place = { address: null, lat: pin.lat, lng: pin.lng, precision: 'PIN' };
       // The same house with a carport Google has no roof faces for (contract v1.1 unmatchedM2).
       if (/carport/i.test(address)) Object.assign(answer.attic, { footprintM2: 242, unmatchedM2: 25 });
+      // A house with 24 roof faces (dormers, porches, a garage): the report still fits one page.
+      if (/many faces/i.test(address)) {
+        answer.place.address = '24 Many Faces Ln, Newark, DE 19711, USA';
+        const { segments, faces } = answer;
+        answer.segments = Array.from({ length: 24 }, (_, i) => ({ ...segments[i % segments.length], n: i + 1 }));
+        answer.faces = Array.from({ length: 24 }, (_, i) => ({ ...faces[i % faces.length], n: i + 1 }));
+      }
       // An older Roof Takeoff (contract v1): none of the v1.1 additions.
       if (/old rd/i.test(address)) {
         for (const k of ['sharedWallM', 'unmatchedM2', 'perimeterByFaceM', 'deckM2']) delete answer.attic[k];
