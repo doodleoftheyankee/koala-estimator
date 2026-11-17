@@ -41,7 +41,8 @@ const ctx = await browser.newContext(phone);
 await ctx.addCookies([sessionCookie(EST)]);
 const page = await ctx.newPage();
 const logs = [];
-page.on('console', (m) => m.type() === 'error' && logs.push(m.text()));
+let roofNotFoundStep = false; // the lookup of an unknown address answers 404 on purpose
+page.on('console', (m) => m.type() === 'error' && !(roofNotFoundStep && m.location().url.endsWith('/api/roof')) && logs.push(m.text()));
 page.on('pageerror', (e) => logs.push('PAGEERROR ' + e.message));
 const step = (s) => console.log('•', s);
 
@@ -181,6 +182,244 @@ console.log('  quote:', psql("select version, status, signed_tier, signed_price,
 console.log('  events:', psql("select string_agg(event, ',' order by id) from quote_events"));
 console.log('  audit:', psql("select string_agg(distinct action, ',') from audit_log where action like '%.%'"));
 
+step('satellite roof lookup from the address');
+/** Every lookup the Roof Takeoff stand-in was paid for, oldest first. */
+const roofCalls = () => {
+  try {
+    return execSync(`cat ${process.env.E2E_STORAGE}/roof-calls.log`).toString().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  } catch {
+    return [];
+  }
+};
+const roofImageLoaded = () => page.waitForFunction(() => { const i = document.querySelector('[role=dialog] img'); return i && i.complete && i.naturalWidth === 1280; });
+await page.goto(BASE + '/field');
+await page.getByRole('heading', { name: 'Estimates' }).waitFor();
+await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByLabel('First name').fill('Robin');
+await page.getByLabel('Last name').fill('Roof');
+await page.getByLabel('Street address').fill('12 Elkton Rd');
+await page.getByRole('button', { name: 'Next' }).click();
+await page.getByRole('button', { name: '+ Attic' }).click();
+const lookupButton = page.getByRole('button', { name: /Look up from the address/ });
+check(await lookupButton.isDisabled(), 'the lookup waits for a whole address');
+check((await page.getByText(/Fill in the street, city, state and ZIP first/).count()) === 1, 'and says why');
+await page.getByRole('button', { name: 'Customer' }).first().click();
+await page.getByLabel('ZIP').fill('19711');
+await page.getByRole('button', { name: 'Next' }).click();
+await lookupButton.waitFor();
+await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent.includes('Look up from the address') && !b.disabled));
+await page.screenshot({ path: SHOTS + '03c-roof-button.png', fullPage: true });
+await lookupButton.click();
+const roof = page.getByRole('dialog', { name: /Satellite lookup/ });
+const focusIs = (fn) => page.waitForFunction(fn, null, { timeout: 3000 }).then(() => true, () => false);
+check(await focusIs(() => document.activeElement?.getAttribute('role') === 'dialog'), 'focus moves into the sheet when it opens');
+await roof.getByRole('button', { name: 'Stop' }).click();
+await roof.getByRole('button', { name: 'Look up', exact: true }).waitFor();
+check(true, 'Stop ends a lookup that is running');
+check((await roof.locator('[role=status]').innerText()) === '', 'the status line is empty once stopped');
+await roof.getByRole('button', { name: 'Look up', exact: true }).click();
+await roof.getByRole('button', { name: 'Stop' }).waitFor();
+check((await roof.locator('[role=status]').innerText()) === 'Looking up 12 Elkton Rd, Newark, DE 19711.', 'screen readers hear what is being looked up');
+check((await roof.locator('[role=status]').evaluate((el) => getComputedStyle(el).display)) !== 'contents', 'the live region is a real box');
+check(await roof.getByText(/^\d+s$/).evaluate((el) => el.closest('[aria-hidden=true]') !== null), 'the seconds counter is hidden from screen readers');
+await page.screenshot({ path: SHOTS + '03d-roof-running.png' });
+await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+await roofImageLoaded();
+check((await roof.locator('[role=status]').innerText()) === 'Found the roof.', 'and then that the roof was found (not every number)');
+const roofLast = JSON.parse(execSync(`cat ${process.env.E2E_STORAGE}/roof-last.json`).toString());
+check(roofLast.address === '12 Elkton Rd, Newark, DE 19711' && roofLast.key, 'Roof Takeoff is asked for the whole address with the partner key: ' + roofLast.address);
+const paidOnce = roofCalls().length;
+const roofText = await roof.innerText();
+check(
+  /Attic floor \(blown-in\)\s*1,970\s*sq ft/.test(roofText) && /Roof deck \(spray foam under the roof\)\s*2,170\s*sq ft/.test(roofText),
+  'attic floor 1,970 and roof deck 2,170 sq ft at a 12" overhang, porch left out',
+);
+check((await roof.getByRole('radio', { name: /Attic floor/ }).getAttribute('aria-checked')) === 'true', 'an attic measured on the floor starts on the attic floor');
+check(roofText.includes('Top-floor ceiling seen from above. Finished attic rooms, cathedral ceilings and knee walls need measuring on site.'), 'says the attic floor is one level');
+check(/Whole roof incl\. overhangs:\s*2,560 sq ft/.test(roofText) && !/ROOF SURFACE/i.test(roofText), 'the whole roof with overhangs is only an info line');
+check(/Main pitch:\s*6\/12/.test(roofText) && /Roof outline \(to the drip edge\):\s*2,340 sq ft/.test(roofText) && /Wall run:\s*184 ft/.test(roofText), 'main pitch, roof outline and wall run (porch walls left out)');
+check((await roof.getByText("Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.").count()) === 1, 'warns when Google placed the address roughly');
+check((await roof.getByText('Lower-detail imagery. Check the pitch on site.').count()) === 1, "Roof Takeoff's warnings are listed");
+const warnBox = await roof.getByRole('heading', { name: 'Check on site' }).boundingBox();
+const facesBox = await roof.getByRole('heading', { name: 'Roof faces' }).boundingBox();
+check(warnBox && facesBox && warnBox.y < facesBox.y && warnBox.y + warnBox.height < 844, 'the things to check sit under the numbers, above the faces, on the first screen');
+check((await roof.getByText('12 Elkton Rd, Newark, DE 19711, USA').count()) === 1 && (await roof.getByText('Aerial photo from Jun 2023').count()) === 1, "shows the address Google matched and the photo's month");
+check((await roof.getByText('Good photo', { exact: true }).count()) === 1, 'a medium-detail photo is a "Good photo"');
+check((await roof.getByRole('switch', { name: 'Face 5: over the attic' }).getAttribute('aria-checked')) === 'false', 'the porch starts left out (Roof Takeoff’s choice)');
+check((await roof.getByText('Lower roof: garage, porch or addition?').count()) === 3, 'lower roofs (garage and porch) are pointed out');
+const useFloor = roof.getByRole('button', { name: 'Use 1,970 sq ft' });
+check(await useFloor.isDisabled(), 'Use waits until the estimator checks the house (Google placed it roughly)');
+check((await roof.getByText('Check the house on the photo first: tap “Yes, this is the house”.').count()) === 1, 'and says so');
+check((await roof.getByRole('link', { name: 'Open the Roof Takeoff site ↗' }).getAttribute('href')) === 'http://localhost:54321/?address=12%20Elkton%20Rd%2C%20Newark%2C%20DE%2019711', 'links to the Roof Takeoff site for the address');
+check((await roof.getByText('A separate site with the roof edges for roofing. It fills in this address; it looks the house up again only if you press Look up there.').count()) === 1, 'and says it is a separate site that looks up only on Look up');
+await page.screenshot({ path: SHOTS + '03e-roof-result.png' });
+await page.setViewportSize({ width: 390, height: 2600 });
+await page.screenshot({ path: SHOTS + '03f-roof-result-full.png' });
+await page.emulateMedia({ colorScheme: 'dark' });
+await page.screenshot({ path: SHOTS + '03g-roof-result-dark.png' });
+await page.emulateMedia({ colorScheme: 'light' });
+await page.setViewportSize(phone.viewport);
+await roof.getByRole('button', { name: 'Yes, this is the house' }).click();
+check(!(await useFloor.isDisabled()), 'Use works once the estimator says it is the house');
+check((await roof.getByText(/Google placed this address roughly/).count()) === 0, 'and the rough-placement warning goes');
+await roof.getByRole('radio', { name: /Roof deck/ }).click();
+check(!(await roof.getByRole('button', { name: 'Use 2,170 sq ft' }).isDisabled()), 'choosing the roof deck: Use 2,170 sq ft');
+await roof.getByRole('radio', { name: '18"' }).click();
+await roof.getByRole('switch', { name: 'Face 3: over the attic' }).click();
+await roof.getByRole('switch', { name: 'Face 4: over the attic' }).click();
+const choiceText = await roof.innerText();
+check(/Attic floor \(blown-in\)\s*1,370/.test(choiceText) && /Roof deck \(spray foam under the roof\)\s*1,530/.test(choiceText), 'an 18" overhang with the garage left out: attic floor 1,370, roof deck 1,530');
+await roof.getByRole('heading', { name: 'Roof faces' }).scrollIntoViewIfNeeded();
+await page.screenshot({ path: SHOTS + '03e2-roof-choices.png' });
+await roof.getByRole('button', { name: 'Use 1,530 sq ft' }).click();
+await roof.waitFor({ state: 'detached' });
+check((await page.getByLabel('Square feet').inputValue()) === '1530', 'Use puts the roof deck into the area');
+check((await page.getByText(/Square feet set to 1,530 \(roof deck\) from the satellite lookup/).count()) === 1, 'and says so');
+check(await focusIs(() => document.activeElement?.textContent?.includes('Look up from the address')), 'focus goes back to the button that opened the sheet');
+check(
+  (await page.getByLabel('Prep notes / obstructions').inputValue()) ===
+    'From satellite lookup:\n• Satellite (Google imagery Jun 2023): roof deck about 1,530 sq ft over the attic floor (18-inch eaves removed; left out faces 3 at 4/12, 4 at 4/12 and 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+  'a line goes into the prep notes: what the number is and what was left out',
+);
+await lookupButton.click();
+check(
+  /Attic floor \(blown-in\)\s*1,370/.test(await roof.innerText()) &&
+    (await roof.getByRole('radio', { name: '18"' }).getAttribute('aria-checked')) === 'true' &&
+    (await roof.getByRole('radio', { name: /Roof deck/ }).getAttribute('aria-checked')) === 'true',
+  'reopening shows the last result, the choices and the number chosen, without another lookup',
+);
+await roof.getByRole('button', { name: 'Close' }).click();
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'done' and (result->>'footprintM2')::numeric = 217 and address_key = '12 elkton rd newark de 19711'`, '1', 'the lookup is logged with its result and match key');
+
+step('satellite: another area of the same house shares the lookup');
+await page.getByRole('button', { name: '+ Walls' }).click();
+await page.getByRole('button', { name: /Look up from the address/ }).click();
+await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 5000 });
+check(roofCalls().length === paidOnce, 'no second paid lookup for the same house');
+check((await roof.getByRole('radio', { name: '18"' }).getAttribute('aria-checked')) === 'true', 'the overhang chosen on the attic carries over');
+check((await roof.getByRole('switch', { name: 'Face 3: count its walls' }).getAttribute('aria-checked')) === 'false', 'and so do the faces left out');
+check(/WALL RUN\s*108\s*ft/i.test(await roof.innerText()), 'walls show the wall run without the garage and porch: 108 ft');
+check((await roof.getByText('Porch and garage walls count unless their faces are off.').count()) >= 1, 'and say which walls count');
+await roof.getByRole('switch', { name: 'Face 3: count its walls' }).click();
+await roof.getByRole('switch', { name: 'Face 4: count its walls' }).click();
+await roof.getByRole('button', { name: 'Use 180 ft as the wall run' }).waitFor();
+check(!(await roof.getByRole('button', { name: 'Use 180 ft as the wall run' }).isDisabled()), 'the house was already checked on the attic');
+await page.screenshot({ path: SHOTS + '03h-roof-walls.png' });
+await roof.getByRole('button', { name: 'Use 180 ft as the wall run' }).click();
+await roof.waitFor({ state: 'detached' });
+check((await page.getByText(/Wall run set to 180 ft. Add the wall height in Measure/).count()) === 1, 'the wall run goes into Measure, waiting for the height');
+check((await page.getByText(/Walls: wall run, \? high/).count()) === 1, 'the walls measurement has the wall run');
+await page.getByRole('button', { name: /Edit measurement/ }).click();
+const wallSheet = page.getByRole('dialog', { name: /Measure/ });
+check((await wallSheet.getByLabel('Total wall length (optional)').inputValue()) === '180', 'Measure shows the 180 ft wall run');
+await wallSheet.getByLabel('Average wall height').fill('8');
+await wallSheet.getByRole('button', { name: 'Use 1,440 sq ft' }).click();
+check((await page.getByLabel('Square feet').inputValue()) === '1440', 'with an 8 ft height: 1,440 sq ft of wall');
+await page.screenshot({ path: SHOTS + '03i-roof-walls-applied.png', fullPage: true });
+
+step('satellite: a garage starts with every face off');
+await page.getByRole('button', { name: '+ Garage' }).click();
+await page.getByRole('button', { name: /Look up from the address/ }).click();
+await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 5000 });
+check(roofCalls().length === paidOnce, 'still no second paid lookup');
+const garageSwitches = await roof.getByRole('switch', { name: /: part of the garage$/ }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-checked')));
+check(garageSwitches.length === 5 && garageSwitches.every((v) => v === 'false'), 'every face starts off for a garage');
+check(/GARAGE CEILING\s*—/i.test(await roof.innerText()) && (await roof.getByText("Turn on the garage's roof faces.").count()) >= 1, "the garage ceiling waits: Turn on the garage's roof faces.");
+check(await roof.getByRole('button', { name: 'Use', exact: true }).isDisabled(), 'nothing to use yet');
+await page.screenshot({ path: SHOTS + '03k-roof-garage-empty.png' });
+await roof.getByRole('switch', { name: 'Face 3: part of the garage' }).click();
+await roof.getByRole('switch', { name: 'Face 4: part of the garage' }).click();
+check(/GARAGE CEILING\s*490\s*sq ft/i.test(await roof.innerText()), 'garage ceiling from the two garage faces at 18": 490 sq ft');
+check((await roof.getByRole('switch', { name: 'Face 1: part of the garage' }).getAttribute('aria-checked')) === 'false', "the house's faces stay off for the garage");
+await page.screenshot({ path: SHOTS + '03k2-roof-garage.png' });
+await roof.getByRole('button', { name: 'Use 490 sq ft' }).click();
+await roof.waitFor({ state: 'detached' });
+check((await page.getByLabel('Square feet').inputValue()) === '490', 'Use puts the garage ceiling into the garage');
+check((await page.getByLabel('Prep notes / obstructions').inputValue()).includes('garage ceiling about 490 sq ft inside the walls (18-inch eaves removed; from faces 3 at 4/12 and 4 at 4/12)'), 'the note says which faces the garage ceiling came from');
+
+step('satellite: a saved lookup of the same house after a reload');
+await page.reload();
+await page.getByRole('navigation', { name: 'Estimate steps' }).getByRole('button', { name: 'Areas' }).click();
+const atticHeader = page.getByRole('button', { name: /^Attic/ });
+await atticHeader.waitFor();
+if ((await atticHeader.getAttribute('aria-expanded')) !== 'true') await atticHeader.click();
+await page.getByRole('button', { name: /Look up from the address/ }).click();
+await roof.getByText(/Saved lookup from today/).waitFor({ timeout: 15000 });
+check(roofCalls().length === paidOnce, 'the server sends back its saved lookup instead of paying Google again');
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'done' and address_key = '12 elkton rd newark de 19711'`, '1', 'and logs no second lookup');
+check((await roof.locator('[role=status]').innerText()) === 'Found the roof: a saved lookup.', 'screen readers hear it is a saved lookup');
+await page.screenshot({ path: SHOTS + '03l-roof-saved.png' });
+await roof.getByRole('button', { name: 'Look up again' }).click();
+await roof.getByRole('button', { name: 'Stop' }).waitFor();
+await roof.getByRole('button', { name: 'Stop' }).waitFor({ state: 'detached', timeout: 30000 });
+check(roofCalls().length === paidOnce + 1 && (await roof.getByText(/Saved lookup from/).count()) === 0, 'Look up again pays for a fresh lookup');
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'done' and address_key = '12 elkton rd newark de 19711'`, '2', 'which is logged');
+
+step('satellite: wrong house, tap the right roof');
+await roofImageLoaded();
+await roof.getByRole('button', { name: 'Wrong house? Tap the right roof' }).click();
+const photo = roof.getByRole('button', { name: 'Tap the right roof on the photo' });
+const photoBox = await photo.boundingBox();
+await photo.click({ position: { x: photoBox.width * 0.72, y: photoBox.height * 0.3 } });
+await roof.getByText('Look up this roof instead?').waitFor();
+const pickButtons = await roof.getByRole('button', { name: 'Look up', exact: true }).boundingBox();
+check(pickButtons && pickButtons.y + pickButtons.height <= 844 && (await roof.getByRole('button', { name: /^Use / }).count()) === 0, 'the tapped spot is marked and Cancel / Look up are in view (the Use bar steps aside)');
+await page.screenshot({ path: SHOTS + '03m-roof-wrong-house-tap.png' });
+await roof.getByRole('button', { name: 'Look up', exact: true }).click();
+await roof.getByText('Looking up the roof you tapped', { exact: true }).waitFor();
+await roof.getByText('The roof you tapped on the photo').waitFor({ timeout: 30000 });
+const pinLast = JSON.parse(execSync(`cat ${process.env.E2E_STORAGE}/roof-last.json`).toString());
+check(pinLast.pin && !pinLast.address && Math.abs(pinLast.pin.lat - 39.68347) < 0.0003 && Math.abs(pinLast.pin.lng + 75.75039) < 0.0003, `Roof Takeoff is asked for the tapped spot by lat and lng: ${JSON.stringify(pinLast.pin)}`);
+check(roofCalls().length === paidOnce + 2, 'one paid lookup for the tapped roof');
+const usePin = roof.getByRole('button', { name: /^Use / });
+check(await usePin.isDisabled(), 'Use waits for the estimator to check the tapped roof too');
+check((await roof.getByText('Is the yellow outline on the roof you tapped?').count()) === 1, 'and asks about the tapped roof');
+await page.screenshot({ path: SHOTS + '03n-roof-wrong-house-result.png' });
+await roof.getByRole('button', { name: 'Yes, this is the house' }).click();
+check(!(await usePin.isDisabled()), 'then Use works');
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'done' and address is null and pin_lat is not null and abs(pin_lat - ${pinLast.pin.lat}) < 1e-9`, '1', 'the tapped lookup is logged with its pin');
+await roof.getByRole('button', { name: 'Close' }).click();
+
+step('satellite: what an unknown address, a house with no roof data, an older Roof Takeoff and a carport look like');
+const lookUpAddress = async (street) => {
+  await page.getByRole('button', { name: 'Customer' }).first().click();
+  await page.getByLabel('Street address').fill(street);
+  await page.getByRole('button', { name: 'Next' }).click();
+  await atticHeader.waitFor();
+  if ((await atticHeader.getAttribute('aria-expanded')) !== 'true') await atticHeader.click();
+  await page.getByRole('button', { name: /Look up from the address/ }).click();
+};
+roofNotFoundStep = true;
+await lookUpAddress('1 Nowhere Ln');
+await roof.getByRole('alert').waitFor({ timeout: 30000 });
+check((await roof.getByRole('alert').innerText()).includes("Google couldn't find that address. Check the spelling, or add the town and state."), "Google's not-found message reaches the estimator");
+check((await roof.getByRole('button', { name: 'Try again' }).count()) === 1, 'with Try again');
+check((await roof.locator('[role=status] [role=alert], [role=alert] [role=status]').count()) === 0, 'the alert is not inside the status line');
+await page.screenshot({ path: SHOTS + '03j-roof-not-found.png' });
+await roof.getByRole('button', { name: 'Close' }).click();
+await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'failed' and error like 'not_found:%'`, '1', 'the failed lookup is logged with its reason');
+await lookUpAddress('5 No Roof Ln');
+await roof.getByRole('alert').waitFor({ timeout: 30000 });
+check((await roof.getByRole('alert').innerText()).trim() === 'Google has no roof data for this house. Measure it with 📐 Measure this area.', "no roof data, in this app's words (no image to tap, no photo steps)");
+await roof.getByRole('button', { name: 'Close' }).click();
+roofNotFoundStep = false;
+await lookUpAddress('7 Old Rd');
+await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+const v1Text = await roof.innerText();
+check(/Attic floor \(blown-in\)\s*1,970/.test(v1Text) && /Wall run:\s*220 ft/.test(v1Text), 'an older (v1) Roof Takeoff answer still works: attic floor 1,970, wall run 220 ft');
+check((await roof.getByText('Lower roof: garage, porch or addition?').count()) === 0, 'with no lower-roof hints');
+await roof.getByRole('button', { name: 'Close' }).click();
+await lookUpAddress('9 Carport Ct');
+await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
+check((await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).getAttribute('aria-checked')) === 'true', 'parts with no roof data are offered, and start on');
+check((await roof.getByText('Parts with no roof data (270 sq ft)').count()) === 1, 'with their size');
+const withCarport = await roof.getByRole('radio', { name: /Attic floor/ }).innerText();
+await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).click();
+check((await roof.getByRole('radio', { name: /Attic floor/ }).innerText()) !== withCarport, 'turning them off changes the attic floor');
+await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).scrollIntoViewIfNeeded();
+await page.screenshot({ path: SHOTS + '03o-roof-carport.png' });
+await roof.getByRole('button', { name: 'Close' }).click();
+
 step('offline estimate');
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor();
@@ -196,6 +435,8 @@ await page.getByLabel('ZIP').fill('19702');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.getByRole('button', { name: '+ Crawlspace' }).click();
 await page.getByLabel('Square feet').fill('800');
+check(await page.getByRole('button', { name: /Look up from the address/ }).isDisabled(), 'the satellite lookup is off without signal');
+check((await page.getByText('No signal. The satellite lookup needs a connection.').count()) === 1, 'and says why');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.getByText('Good', { exact: true }).first().waitFor();
 await page.screenshot({ path: SHOTS + '08-offline-options.png', fullPage: true });

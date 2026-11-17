@@ -1,0 +1,448 @@
+{
+  "_fixture": "Made-up house for tests: 50 x 32 ft main roof at 6/12, attached 24 x 24 ft garage at 4/12, 20 x 8 ft porch at 1/12, turned 8 degrees. Contract v1.1: faces 3 to 5 sit well below the main roof (lower); the porch (5) is left out by default.",
+  "version": 1,
+  "place": {
+    "address": "12 Elkton Rd, Newark, DE 19711, USA",
+    "lat": 39.6833743,
+    "lng": -75.7503689,
+    "precision": "RANGE_INTERPOLATED"
+  },
+  "building": {
+    "center": {
+      "lat": 39.6834687,
+      "lng": -75.7503897
+    },
+    "box": {
+      "sw": {
+        "lat": 39.6834021,
+        "lng": -75.7505258
+      },
+      "ne": {
+        "lat": 39.6835353,
+        "lng": -75.7502536
+      }
+    },
+    "quality": "MEDIUM",
+    "imageryDate": {
+      "year": 2023,
+      "month": 6,
+      "day": 15
+    },
+    "faces": {
+      "areaM2": 237.5,
+      "groundM2": 217.1
+    },
+    "whole": {
+      "areaM2": 247,
+      "groundM2": 223.6
+    }
+  },
+  "segments": [
+    {
+      "n": 1,
+      "pitchDeg": 26.6,
+      "azimuthDeg": 172,
+      "areaM2": 83.1,
+      "groundM2": 74.3,
+      "center": {
+        "lat": 39.6834513,
+        "lng": -75.750426
+      },
+      "box": {
+        "sw": {
+          "lat": 39.68342,
+          "lng": -75.7505179
+        },
+        "ne": {
+          "lat": 39.6834826,
+          "lng": -75.7503341
+        }
+      },
+      "heightM": 7.4,
+      "rise": 6,
+      "lowSlope": false,
+      "lower": false
+    },
+    {
+      "n": 2,
+      "pitchDeg": 26.6,
+      "azimuthDeg": 352,
+      "areaM2": 83.1,
+      "groundM2": 74.3,
+      "center": {
+        "lat": 39.6834948,
+        "lng": -75.7504339
+      },
+      "box": {
+        "sw": {
+          "lat": 39.6834635,
+          "lng": -75.7505258
+        },
+        "ne": {
+          "lat": 39.6835261,
+          "lng": -75.750342
+        }
+      },
+      "heightM": 7.4,
+      "rise": 6,
+      "lowSlope": false,
+      "lower": false
+    },
+    {
+      "n": 3,
+      "pitchDeg": 18.4,
+      "azimuthDeg": 82,
+      "areaM2": 28.2,
+      "groundM2": 26.8,
+      "center": {
+        "lat": 39.6835004,
+        "lng": -75.7502806
+      },
+      "box": {
+        "sw": {
+          "lat": 39.6834654,
+          "lng": -75.7503077
+        },
+        "ne": {
+          "lat": 39.6835353,
+          "lng": -75.7502536
+        }
+      },
+      "heightM": 5.2,
+      "rise": 4,
+      "lowSlope": false,
+      "lower": true
+    },
+    {
+      "n": 4,
+      "pitchDeg": 18.4,
+      "azimuthDeg": 262,
+      "areaM2": 28.2,
+      "groundM2": 26.8,
+      "center": {
+        "lat": 39.6834958,
+        "lng": -75.7503229
+      },
+      "box": {
+        "sw": {
+          "lat": 39.6834609,
+          "lng": -75.7503499
+        },
+        "ne": {
+          "lat": 39.6835307,
+          "lng": -75.7502958
+        }
+      },
+      "heightM": 5.2,
+      "rise": 4,
+      "lowSlope": false,
+      "lower": true
+    },
+    {
+      "n": 5,
+      "pitchDeg": 4.8,
+      "azimuthDeg": 172,
+      "areaM2": 14.9,
+      "groundM2": 14.9,
+      "center": {
+        "lat": 39.6834168,
+        "lng": -75.7504377
+      },
+      "box": {
+        "sw": {
+          "lat": 39.6834021,
+          "lng": -75.7504748
+        },
+        "ne": {
+          "lat": 39.6834315,
+          "lng": -75.7504005
+        }
+      },
+      "heightM": 3.1,
+      "rise": 1,
+      "lowSlope": true,
+      "lower": true
+    }
+  ],
+  "photo": {
+    "rgb": "e2e-rgb-file",
+    "imageryDate": {
+      "year": 2023,
+      "month": 6
+    },
+    "pixel": 0.1,
+    "quality": "MEDIUM"
+  },
+  "outline": {
+    "polys": [
+      [
+        {
+          "lat": 39.68342,
+          "lng": -75.75051
+        },
+        {
+          "lat": 39.6834238,
+          "lng": -75.7504748
+        },
+        {
+          "lat": 39.6834021,
+          "lng": -75.7504709
+        },
+        {
+          "lat": 39.6834097,
+          "lng": -75.7504005
+        },
+        {
+          "lat": 39.6834315,
+          "lng": -75.7504044
+        },
+        {
+          "lat": 39.6834391,
+          "lng": -75.7503341
+        },
+        {
+          "lat": 39.6834609,
+          "lng": -75.750338
+        },
+        {
+          "lat": 39.68347,
+          "lng": -75.7502536
+        },
+        {
+          "lat": 39.6835353,
+          "lng": -75.7502655
+        },
+        {
+          "lat": 39.683507,
+          "lng": -75.7505258
+        }
+      ]
+    ],
+    "areaM2": 217,
+    "perimeterM": 69.5
+  },
+  "faces": [
+    {
+      "n": 1,
+      "poly": [
+        {
+          "lat": 39.68342,
+          "lng": -75.75051
+        },
+        {
+          "lat": 39.6834391,
+          "lng": -75.7503341
+        },
+        {
+          "lat": 39.6834826,
+          "lng": -75.750342
+        },
+        {
+          "lat": 39.6834635,
+          "lng": -75.7505179
+        }
+      ],
+      "planM2": 74.3
+    },
+    {
+      "n": 2,
+      "poly": [
+        {
+          "lat": 39.6834635,
+          "lng": -75.7505179
+        },
+        {
+          "lat": 39.6834826,
+          "lng": -75.750342
+        },
+        {
+          "lat": 39.6835261,
+          "lng": -75.7503499
+        },
+        {
+          "lat": 39.683507,
+          "lng": -75.7505258
+        }
+      ],
+      "planM2": 74.3
+    },
+    {
+      "n": 3,
+      "poly": [
+        {
+          "lat": 39.6834654,
+          "lng": -75.7502958
+        },
+        {
+          "lat": 39.68347,
+          "lng": -75.7502536
+        },
+        {
+          "lat": 39.6835353,
+          "lng": -75.7502655
+        },
+        {
+          "lat": 39.6835307,
+          "lng": -75.7503077
+        }
+      ],
+      "planM2": 26.8
+    },
+    {
+      "n": 4,
+      "poly": [
+        {
+          "lat": 39.6834609,
+          "lng": -75.750338
+        },
+        {
+          "lat": 39.6834654,
+          "lng": -75.7502958
+        },
+        {
+          "lat": 39.6835307,
+          "lng": -75.7503077
+        },
+        {
+          "lat": 39.6835261,
+          "lng": -75.7503499
+        }
+      ],
+      "planM2": 26.8
+    },
+    {
+      "n": 5,
+      "poly": [
+        {
+          "lat": 39.6834021,
+          "lng": -75.7504709
+        },
+        {
+          "lat": 39.6834097,
+          "lng": -75.7504005
+        },
+        {
+          "lat": 39.6834315,
+          "lng": -75.7504044
+        },
+        {
+          "lat": 39.6834238,
+          "lng": -75.7504748
+        }
+      ],
+      "planM2": 14.9
+    }
+  ],
+  "edges": [
+    {
+      "type": "ridge",
+      "faces": [
+        1,
+        2
+      ],
+      "lengthM": 15.2,
+      "planM": 15.2,
+      "path": [
+        {
+          "lat": 39.6834635,
+          "lng": -75.7505179
+        },
+        {
+          "lat": 39.6834826,
+          "lng": -75.750342
+        }
+      ]
+    },
+    {
+      "type": "eave",
+      "faces": [
+        2
+      ],
+      "lengthM": 22.6,
+      "planM": 22.6,
+      "path": [
+        {
+          "lat": 39.683507,
+          "lng": -75.7505258
+        },
+        {
+          "lat": 39.6835353,
+          "lng": -75.7502655
+        }
+      ]
+    },
+    {
+      "type": "valley",
+      "faces": [
+        2,
+        4
+      ],
+      "lengthM": 4.4,
+      "planM": 3.7,
+      "path": [
+        {
+          "lat": 39.6834935,
+          "lng": -75.750344
+        },
+        {
+          "lat": 39.6835307,
+          "lng": -75.7503077
+        }
+      ]
+    },
+    {
+      "type": "break",
+      "faces": [
+        1,
+        5
+      ],
+      "lengthM": 6.1,
+      "planM": 6.1,
+      "path": [
+        {
+          "lat": 39.6834238,
+          "lng": -75.7504748
+        },
+        {
+          "lat": 39.6834315,
+          "lng": -75.7504044
+        }
+      ]
+    }
+  ],
+  "edgeTotalsM": {
+    "ridge": 15.2,
+    "hip": 0,
+    "valley": 4.4,
+    "eave": 22.6,
+    "rake": 0,
+    "step": 0,
+    "headwall": 0,
+    "break": 6.1
+  },
+  "attic": {
+    "overhangM": 0.3048,
+    "footprintM2": 217,
+    "perimeterM": 69.5,
+    "perimeterSource": "outline",
+    "sharedWallM": 0,
+    "unmatchedM2": 0,
+    "perimeterByFaceM": {
+      "1": 16.4,
+      "2": 20.1,
+      "3": 14.5,
+      "4": 7.4,
+      "5": 10.9
+    },
+    "excluded": [
+      5
+    ],
+    "excludedM2": 14.9,
+    "floorM2": 182.7,
+    "wallRunM": 56.16,
+    "deckM2": 201.13
+  },
+  "warnings": [
+    "Lower-detail imagery. Check the pitch on site."
+  ]
+}
