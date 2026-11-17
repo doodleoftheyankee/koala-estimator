@@ -3,8 +3,10 @@
 // It never touches the network.
 //
 // Addresses: "1 Gable Ln", "2 Hip Rd", "3 Cross Gable Ct", "4 Low Detail Dr" (LOW quality, its surface-heights
-// file fails). Any other address finds 3 Cross Gable Ct. An address containing "404" finds nothing
-// (ZERO_RESULTS); one containing "no roof" lands on an empty field, where the Solar API answers 404.
+// file fails), "5 Twin Ave" (one half of a twin), "6 Flat Roof Plaza" (commercial, low slope everywhere),
+// "7 Cape Dormer Way" (Cape with a shed dormer, an attached garage and a porch). Any other address finds
+// 3 Cross Gable Ct. An address containing "404" finds nothing (ZERO_RESULTS); one containing "no roof" lands on
+// an empty field, where the Solar API answers 404.
 
 import { HOUSES, EMPTY_FIELD, houseFor, nearestHouse, insightsFor, renderLayers, colorAtLatLng } from './houses.js';
 import { encodeGeoTiff } from './tiff.js';
@@ -23,6 +25,7 @@ const decodeId = id => { try { return JSON.parse(Buffer.from(id, 'base64url').to
  * opts.throwOn: same names -> throw a network error instead (its message includes the request URL).
  * opts.epsg: projection code written into every GeoTIFF (default: the UTM zone, 32618 here).
  * opts.tiffDelayMs: delay before each GeoTIFF answer (to check that downloads run in parallel).
+ * opts.tweakInsights(insights, house): changes the buildingInsights answer (tests: a wrong box, an extra face).
  */
 export function createMockGoogle(opts = {}) {
   const fail = opts.fail || {}, throwOn = opts.throwOn || {};
@@ -77,7 +80,8 @@ export function createMockGoogle(opts = {}) {
     if (route === 'insights') {
       const h = nearestHouse(lat, lng, 50);
       if (!h) return googleError(404, 'Requested entity was not found.', 'NOT_FOUND');
-      return json(200, insightsFor(h));
+      const ins = insightsFor(h);
+      return json(200, opts.tweakInsights ? opts.tweakInsights(ins, h) : ins);
     }
 
     if (route === 'dataLayers') {

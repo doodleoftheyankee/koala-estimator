@@ -20,11 +20,39 @@
 //     house wall, 0.6 m below the main eave, so its top edge is a wall line (step). A 3 x 2 ft chimney stands
 //     3 ft proud on the back face.
 //     Outline 50x28 + 20x20 + 16x8 = 1928 sq ft, perimeter 212 ft.
-//     Ridges 50 + 30 = 80. Valleys 2 x 14.14 plan x 1.0607 = 2 x 15.0 = 30.0. Step (porch wall) 16.
-//     Rakes 4 x 14 x 1.1180 + 2 x 10 x 1.1180 + 2 x 8 x 1.0035 = 101.02. Eaves 50 + 14 + 20 + 20 + 16 = 120.
-//     Porch is low slope (1/12): excluded 128 sq ft. Attic at 12 in: (1928 - 212 + 4) x (1 - 128/1928) = 1605.8.
+//     Ridges 50 + 30 = 80. Valleys 2 x 14.14 plan x 1.0607 = 2 x 15.0 = 30.0. Headwall (porch wall) 16.
+//     Rakes 4 x 14 x 1.1180 + 2 x 10 x 1.1180 + 2 x 8 x 1.0035 = 101.02.
+//     Eaves 50 + 30 + 20 + 20 + 16 = 136: the main front eave over the porch still counts (it has drip edge).
+//     Porch is low slope (1/12) and 2 m below the main roof: excluded 128 sq ft. Attic at 12 in:
+//     (1928 - 212 + 4) x (1 - 128/1928) = 1605.8.
 // (d) 4 Low Detail Dr: LOW quality imagery; gable 36 x 26 ft at 8/12 plus a flat 12 x 16 ft carport with no
 //     Solar face (faces cover 936 of 1128 sq ft = 83%). The mock's surface-heights file for it fails.
+// (e) 5 Twin Ave: one half of a side-gable twin, 22 x 36 ft at 8/12 (slope factor 1.2019), ridge east-west.
+//     The other half (x 11..33 ft) is the same roof, in the rooftop mask and the surface heights, but not in
+//     Google's building (no Solar faces), so the two roofs touch along the party wall at x = 11.
+//     This half: outline 792 sq ft, perimeter 80 ft of outside walls plus the 36 ft party wall. Attic at 12 in:
+//     21 x 34 = 714 sq ft. Ridge 22, eaves 44, rakes 2 x 18 x 1.2019 = 43.27 (west end only). No edge along the
+//     party wall. The outline is cut 0.5 m past Google's box (CONTRACT.md), so it measures about
+//     23.64 x 36 = 851 sq ft and the attic about 772 (+8%), with sharedWallM about 36 ft.
+// (f) 6 Flat Roof Plaza: commercial, every face 1/4 in per ft. Main block 80 x 50 ft (two faces from a crown at
+//     y = 0, eaves 4.5 m up) and a 20 x 30 ft loading bay on the east side, 1.5 m lower, sloping east.
+//     Outline 4600 sq ft, perimeter 300 ft. Nothing is left out by default (no steep faces): attic at 12 in
+//     4600 - 300 + 4 = 4304. Headwall (bay against the main wall) 30. Crown ("ridge") 80.
+// (g) 7 Cape Dormer Way: 1.5-story Cape, turned 12 degrees. Main block 36 x 28 ft at 12/12 (slope 1.4142), ridge
+//     east-west, eaves 2.9 m up. A 24 x 12 ft shed dormer at 1.5/12 (1.0078) on the back runs from the ridge to
+//     2 ft short of the back eave. An attached one-story garage, 22 x 20 ft at 3/12 (1.0308), on the east gable
+//     end, eaves 2.4 m up. A 16 x 8 ft front porch at 1/12 (1.0035), its top 0.6 m under the main eave.
+//     Outline 1008 + 440 + 128 = 1576 sq ft, perimeter 188 ft. Defaults: the porch is left out (low slope, more
+//     than 1 m under the main roof), the dormer stays in (low slope but high), the garage stays in but is
+//     marked lower. Attic at 12 in: (1576 - 188 + 4) x (1 - 128/1576) = 1278.9 (true: main + garage inset by
+//     the overhang, 1448 - 172 + 4 = 1280). Outline length per face: front 38, back 54, dormer 0, garage
+//     32 + 32, porch 32. Wall run with the porch out: 188 - 32 - 8 = 148.
+//     Ridges 12 (main, two pieces) + 24 (dormer meets the front at the ridge) + 22 (garage) = 58.
+//     Eaves 36 + 36 + 24 (dormer, over the back roof) + 44 (garage) + 16 (porch) = 156.
+//     Rakes 28 x 1.4142 x 2 (both main gables, also where they rise above the garage) + 24 x 1.0078 (dormer
+//     sides) + 20 x 1.0308 (garage) + 16 x 1.0035 (porch) = 140.05.
+//     Step: dormer cheeks 2 x 12 x 1.4142 = 33.94 plus the garage against the gable wall 20 x 1.0308 = 20.62,
+//     54.56 in all. Headwall: back roof under the dormer front 24 + porch top 16 = 40.
 
 import { utm, zoneOfLatLng } from '../lib/takeoff.js';
 
@@ -66,11 +94,13 @@ const rot = (deg) => {
 
 /**
  * spec: { id, address, lat, lng, rotDeg, quality, imageryDate, color: [r,g,b],
- *   faces: [{ name, poly: [[x,y] ft], rise, az (deg, before turning), ref: [x,y] ft, zRef (m above lawn) }],
+ *   faces: [{ name, poly: [[x,y] ft], rise, az (deg, before turning), ref: [x,y] ft, zRef (m above lawn),
+ *             solar (default true; false = a neighbour's roof: in the mask and heights, not in Google's building) }],
  *   flats: [{ poly, z }]  (flat roof parts with no Solar face, in the rooftop mask)
  *   chimneys: [{ poly, above (ft over the roof at its center) }]
  *   sheds: [{ poly, z }] (separate small buildings, in the mask, no Solar face)
- *   trees: [{ at: [x,y] ft, r ft, h m }], drive: poly ft, truth: {...} }
+ *   trees: [{ at: [x,y] ft, r ft, h m, over (hangs over the roof), inMask (the rooftop mask counts it as roof) }],
+ *   drive: poly ft, truth: {...} }
  */
 export function makeHouse(spec) {
   const turn = rot(spec.rotDeg || 0);
@@ -84,7 +114,7 @@ export function makeHouse(spec) {
     const az = f.az + (spec.rotDeg || 0);
     const d = [Math.sin(az * D2R), Math.cos(az * D2R)];
     const poly = f.poly.map(m);
-    return { name: f.name, poly, box: box(poly), m: f.rise / 12, rise: f.rise, azDeg: ((az % 360) + 360) % 360, d, ref: m(f.ref), zRef: f.zRef };
+    return { name: f.name, poly, box: box(poly), m: f.rise / 12, rise: f.rise, azDeg: ((az % 360) + 360) % 360, d, ref: m(f.ref), zRef: f.zRef, solar: f.solar !== false };
   });
   const flats = (spec.flats || []).map(f => { const poly = f.poly.map(m); return { poly, box: box(poly), z: f.z }; });
   const sheds = (spec.sheds || []).map(f => { const poly = f.poly.map(m); return { poly, box: box(poly), z: f.z }; });
@@ -93,9 +123,9 @@ export function makeHouse(spec) {
     const under = faces.map(f => (inPoly(f.poly, cx, cy) ? planeZ(f, cx, cy) : -Infinity)).reduce((a, b) => Math.max(a, b), 0);
     return { poly, box: bx, z: under + c.above * FT };
   });
-  const trees = (spec.trees || []).map(t => { const [x, y] = m(t.at); return { x, y, r: t.r * FT, h: t.h }; });
+  const trees = (spec.trees || []).map(t => { const [x, y] = m(t.at); return { x, y, r: t.r * FT, h: t.h, over: !!t.over, inMask: !!t.inMask }; });
   const drive = spec.drive ? spec.drive.map(m) : null;
-  const all = [...faces, ...flats, ...chimneys].map(f => f.box);
+  const all = [...faces.filter(f => f.solar), ...flats, ...chimneys].map(f => f.box);
   const bbox = { x0: Math.min(...all.map(b => b.x0)), x1: Math.max(...all.map(b => b.x1)), y0: Math.min(...all.map(b => b.y0)), y1: Math.max(...all.map(b => b.y1)) };
   const frame = localFrame(spec.lat, spec.lng);
   const zone = zoneOfLatLng(spec.lat, spec.lng);
@@ -115,7 +145,13 @@ const inBox = (b, x, y, pad = 0) => x >= b.x0 - pad && x <= b.x1 + pad && y >= b
 export const planeZ = (f, x, y) => f.zRef - f.m * ((x - f.ref[0]) * f.d[0] + (y - f.ref[1]) * f.d[1]);
 
 // What is at local point (x, y) meters: { kind, z (m above lawn), face (index) }.
+const treeZ = (t, r2) => t.h * Math.sqrt(1 - r2 / (t.r * t.r)) * 0.4 + t.h * 0.6;
 export function surfaceAt(h, x, y) {
+  for (const t of h.trees) {
+    if (!t.over) continue;
+    const r2 = (x - t.x) ** 2 + (y - t.y) ** 2;
+    if (r2 < t.r * t.r) return { kind: t.inMask ? 'canopy' : 'tree', z: treeZ(t, r2), face: -1, tree: t };
+  }
   for (const c of h.chimneys) if (inBox(c.box, x, y) && inPoly(c.poly, x, y)) return { kind: 'chimney', z: c.z, face: -1 };
   for (let k = 0; k < h.faces.length; k++) {
     const f = h.faces[k];
@@ -125,19 +161,20 @@ export function surfaceAt(h, x, y) {
   for (const f of h.sheds) if (inBox(f.box, x, y) && inPoly(f.poly, x, y)) return { kind: 'shed', z: f.z, face: -1 };
   for (const t of h.trees) {
     const r2 = (x - t.x) ** 2 + (y - t.y) ** 2;
-    if (r2 < t.r * t.r) return { kind: 'tree', z: t.h * Math.sqrt(1 - r2 / (t.r * t.r)) * 0.4 + t.h * 0.6, face: -1, tree: t };
+    if (r2 < t.r * t.r) return { kind: 'tree', z: treeZ(t, r2), face: -1, tree: t };
   }
   if (h.drive && inPoly(h.drive, x, y)) return { kind: 'drive', z: 0, face: -1 };
   return { kind: 'ground', z: 0, face: -1 };
 }
 
-const isRoof = s => s.kind === 'face' || s.kind === 'flat' || s.kind === 'chimney' || s.kind === 'shed';
+const isRoof = s => s.kind === 'face' || s.kind === 'flat' || s.kind === 'chimney' || s.kind === 'shed' || s.kind === 'canopy';
 
-/* ---------- the four mock houses ---------- */
+/* ---------- the mock houses ---------- */
 
 
-export const HOUSES = [
-  makeHouse({
+// The drawings (feet), for tests that redraw a house with a change; HOUSES below are the built houses.
+export const HOUSE_SPECS = [
+  {
     id: 'gable', address: '1 Gable Ln, Newark, DE 19711, USA', match: /\b1\s+gable\b/i,
     lat: 39.68, lng: -75.75, rotDeg: 0, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [70, 72, 78],
     faces: [
@@ -148,8 +185,8 @@ export const HOUSES = [
     trees: [{ at: [36, 22], r: 11, h: 8 }],
     drive: [[6, -15], [18, -15], [18, -80], [6, -80]],
     truth: { outlineFt2: 1200, perimeterFt: 140, attic12Ft2: 1064, ft: { ridge: 40, eave: 80, rake: 4 * 15 * Math.sqrt(1.25), hip: 0, valley: 0, step: 0, break: 0 } },
-  }),
-  makeHouse({
+  },
+  {
     id: 'hip', address: '2 Hip Rd, Newark, DE 19711, USA', match: /\b2\s+hip\b/i,
     lat: 39.68, lng: -75.748, rotDeg: 25, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [104, 80, 62],
     faces: [
@@ -161,8 +198,8 @@ export const HOUSES = [
     trees: [{ at: [-40, 25], r: 12, h: 9 }],
     drive: [[-20, -15], [-8, -15], [-8, -70], [-20, -70]],
     truth: { outlineFt2: 1500, perimeterFt: 160, attic12Ft2: 1344, ft: { ridge: 20, hip: 90, eave: 160, rake: 0, valley: 0, step: 0, break: 0 } },
-  }),
-  makeHouse({
+  },
+  {
     id: 'cross', address: '3 Cross Gable Ct, Newark, DE 19711, USA', match: /\b3\s+cross\b/i,
     lat: 39.6815, lng: -75.75, rotDeg: -10, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [78, 88, 104],
     faces: [
@@ -177,10 +214,10 @@ export const HOUSES = [
     drive: [[8, -20], [18, -20], [18, -75], [8, -75]],
     truth: {
       outlineFt2: 1928, perimeterFt: 212, attic12Ft2: (1928 - 212 + 4) * (1 - 128 / 1928), excludedFt2: 128,
-      ft: { ridge: 80, valley: 2 * Math.hypot(10, 10) * Math.sqrt(1 + 0.125), step: 16, rake: 4 * 14 * Math.sqrt(1.25) + 2 * 10 * Math.sqrt(1.25) + 2 * 8 * Math.sqrt(1 + 1 / 144), eave: 120, hip: 0, break: 0 },
+      ft: { ridge: 80, valley: 2 * Math.hypot(10, 10) * Math.sqrt(1 + 0.125), step: 0, headwall: 16, rake: 4 * 14 * Math.sqrt(1.25) + 2 * 10 * Math.sqrt(1.25) + 2 * 8 * Math.sqrt(1 + 1 / 144), eave: 136, hip: 0, break: 0 },
     },
-  }),
-  makeHouse({
+  },
+  {
     id: 'low', address: '4 Low Detail Dr, Newark, DE 19711, USA', match: /\b4\s+low\b/i,
     lat: 39.6815, lng: -75.748, rotDeg: 15, quality: 'LOW', imageryDate: { year: 2019, month: 9 }, color: [120, 70, 58], dsmFails: true,
     faces: [
@@ -190,8 +227,62 @@ export const HOUSES = [
     flats: [{ poly: [[18, -8], [30, -8], [30, 8], [18, 8]], z: 2.6 }],
     drive: [[20, -8], [30, -8], [30, -70], [20, -70]],
     truth: { outlineFt2: 1128, perimeterFt: 2 * (36 + 26) + 2 * 12, ft: {} },
-  }),
+  },
+  {
+    id: 'twin', address: '5 Twin Ave, Newark, DE 19711, USA', match: /\b5\s+twin\b/i,
+    lat: 39.6785, lng: -75.75, rotDeg: 0, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [92, 84, 80],
+    faces: [
+      { name: 'front', poly: [[-11, -18], [11, -18], [11, 0], [-11, 0]], rise: 8, az: 180, ref: [0, -18], zRef: 5.6 },
+      { name: 'back', poly: [[-11, 0], [11, 0], [11, 18], [-11, 18]], rise: 8, az: 0, ref: [0, 18], zRef: 5.6 },
+      // The other half of the twin: the same roof, but not Google's building.
+      { name: 'next door front', poly: [[11, -18], [33, -18], [33, 0], [11, 0]], rise: 8, az: 180, ref: [22, -18], zRef: 5.6, solar: false },
+      { name: 'next door back', poly: [[11, 0], [33, 0], [33, 18], [11, 18]], rise: 8, az: 0, ref: [22, 18], zRef: 5.6, solar: false },
+    ],
+    trees: [{ at: [-26, 26], r: 9, h: 9 }],
+    drive: [[-9, -18], [1, -18], [1, -75], [-9, -75]],
+    truth: {
+      outlineFt2: 792, perimeterFt: 80 + 36, sharedWallFt: 36, attic12Ft2: 21 * 34,
+      // What the contract's 0.5 m allowance past Google's box gives (see the note above).
+      cutOutlineFt2: (22 + 0.5 / FT) * 36, cutAttic12Ft2: (22 + 0.5 / FT) * 36 - (2 * (22 + 0.5 / FT) + 36) + 4,
+      ft: { ridge: 22, eave: 44, rake: 2 * 18 * Math.sqrt(1 + (8 / 12) ** 2), hip: 0, valley: 0, step: 0, headwall: 0, break: 0 },
+    },
+  },
+  {
+    id: 'flat', address: '6 Flat Roof Plaza, Newark, DE 19711, USA', match: /\b6\s+flat\b/i,
+    lat: 39.6785, lng: -75.748, rotDeg: -6, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [150, 150, 146],
+    faces: [
+      { name: 'south', poly: [[-40, -25], [40, -25], [40, 0], [-40, 0]], rise: 0.25, az: 180, ref: [0, -25], zRef: 4.5 },
+      { name: 'north', poly: [[-40, 0], [40, 0], [40, 25], [-40, 25]], rise: 0.25, az: 0, ref: [0, 25], zRef: 4.5 },
+      { name: 'loading bay', poly: [[40, -15], [60, -15], [60, 15], [40, 15]], rise: 0.25, az: 90, ref: [40, 0], zRef: 3.0 },
+    ],
+    drive: [[-30, -25], [30, -25], [30, -70], [-30, -70]],
+    truth: { outlineFt2: 4600, perimeterFt: 300, attic12Ft2: 4600 - 300 + 4, ft: { headwall: 30, ridge: 80 } },
+  },
+  {
+    id: 'cape', address: '7 Cape Dormer Way, Newark, DE 19711, USA', match: /\b7\s+cape\b/i,
+    lat: 39.6785, lng: -75.746, rotDeg: 12, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [84, 76, 70],
+    faces: [
+      { name: 'front', poly: [[-18, -14], [18, -14], [18, 0], [-18, 0]], rise: 12, az: 180, ref: [0, -14], zRef: 2.9 },
+      { name: 'back', poly: [[-18, 0], [-12, 0], [-12, 12], [12, 12], [12, 0], [18, 0], [18, 14], [-18, 14]], rise: 12, az: 0, ref: [0, 14], zRef: 2.9 },
+      { name: 'dormer', poly: [[-12, 0], [12, 0], [12, 12], [-12, 12]], rise: 1.5, az: 0, ref: [0, 0], zRef: 2.9 + 14 * FT },
+      { name: 'garage south', poly: [[18, -10], [40, -10], [40, 0], [18, 0]], rise: 3, az: 180, ref: [29, -10], zRef: 2.4 },
+      { name: 'garage north', poly: [[18, 0], [40, 0], [40, 10], [18, 10]], rise: 3, az: 0, ref: [29, 10], zRef: 2.4 },
+      { name: 'porch', poly: [[-10, -22], [6, -22], [6, -14], [-10, -14]], rise: 1, az: 180, ref: [-2, -14], zRef: 2.3 },
+    ],
+    trees: [{ at: [-34, 30], r: 10, h: 10 }],
+    drive: [[22, -10], [36, -10], [36, -75], [22, -75]],
+    truth: {
+      outlineFt2: 1576, perimeterFt: 188, attic12Ft2: (1576 - 188 + 4) * (1 - 128 / 1576), excludedFt2: 128, wallRun12Ft: 148,
+      perimeterByFaceFt: { front: 38, back: 54, dormer: 0, 'garage south': 32, 'garage north': 32, porch: 32 },
+      ft: {
+        ridge: 58, eave: 156, valley: 0, hip: 0, break: 0, headwall: 40,
+        rake: 4 * 14 * Math.SQRT2 + 24 * Math.sqrt(1 + (1.5 / 12) ** 2) + 20 * Math.sqrt(1 + (3 / 12) ** 2) + 16 * Math.sqrt(1 + (1 / 12) ** 2),
+        step: 24 * Math.SQRT2 + 20 * Math.sqrt(1 + (3 / 12) ** 2),
+      },
+    },
+  },
 ];
+export const HOUSES = HOUSE_SPECS.map(makeHouse);
 
 // Where "no roof" addresses land: an empty field with no building nearby.
 export const EMPTY_FIELD = { lat: 39.683, lng: -75.753 };
@@ -226,7 +317,7 @@ export function insightsFor(h) {
   const ll = (x, y) => { const p = h.frame.toLatLng(x, y); return { latitude: p.lat, longitude: p.lng }; };
   const bb = b => ({ sw: ll(b.x0, b.y0), ne: ll(b.x1, b.y1) });
   const quant = [0, 900, 1100, 1200, 1250, 1300, 1320, 1340, 1360, 1380, 1400];
-  const segs = h.faces.map(f => {
+  const segs = h.faces.filter(f => f.solar).map(f => {
     const g = polyArea(f.poly), [cx, cy] = centroid(f.poly);
     return {
       pitchDegrees: Math.atan(f.m) / D2R, azimuthDegrees: f.azDeg,
@@ -304,7 +395,7 @@ function colorAt(h, x, y, wx, wy) {
   if (s.kind === 'flat') return [clamp8(168 + n * 0.6), clamp8(168 + n * 0.6), clamp8(162 + n * 0.6)];
   if (s.kind === 'shed') return [clamp8(126 + n * 0.5), clamp8(118 + n * 0.5), clamp8(108 + n * 0.5)];
   let col;
-  if (s.kind === 'tree') {
+  if (s.kind === 'tree' || s.kind === 'canopy') {
     const t = s.tree, r = Math.hypot(x - t.x, y - t.y) / t.r, lit = 0.75 + 0.35 * ((x - t.x) * Math.sin(SUN_AZ) + (y - t.y) * Math.cos(SUN_AZ)) / t.r;
     const leaf = smoothNoise(wx, wy, 0.6, 3) * 18;
     return [clamp8((38 + leaf) * lit * (1.05 - 0.2 * r)), clamp8((80 + leaf) * lit * (1.05 - 0.2 * r)), clamp8((34 + leaf * 0.5) * lit)];
