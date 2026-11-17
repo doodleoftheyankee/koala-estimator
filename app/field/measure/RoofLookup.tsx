@@ -68,7 +68,7 @@ export function RoofLookupButton({ estimateId, address, street, onOpen }: { esti
     ? `Looking up ${street.trim()}…`
     : state.last
       ? `Looked up ${street.trim()} on this visit. Tap to see it again.`
-      : `Measures ${street.trim()} from Google's aerial photo: attic floor, roof deck, wall run and the roof for roofing.`;
+      : `Measures ${street.trim()} from Google's aerial photo: attic floor, roof deck, wall run, and roofing squares and materials.`;
   return (
     <div className="space-y-1">
       <Button variant="secondary" size="lg" className="w-full" disabled={Boolean(reason)} onClick={onOpen}>
