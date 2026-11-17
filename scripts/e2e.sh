@@ -2,7 +2,8 @@
 # Local end-to-end test: real Postgres + PostgREST behind a tiny Supabase stand-in
 # (tests/e2e/mock-supabase.mjs), a production build of the app, and Playwright driving a phone.
 # Covers: offline-capable estimate -> sync -> quote PDF -> customer e-sign -> DB/audit checks,
-# an estimate created fully offline that syncs on reconnect, owner/estimator access, and Phase 2:
+# a satellite roof lookup applied to an attic and to walls, an estimate created fully offline that
+# syncs on reconnect, owner/estimator access, and Phase 2:
 # crew actuals on a phone, office verification, the nightly learning cron and the dashboard.
 #
 # Requires: DATABASE_URL (Postgres 15+ superuser), POSTGREST_BIN (PostgREST 12 binary),
@@ -39,6 +40,8 @@ node tests/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 & pids+=($!)
 export NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321 APP_URL=http://localhost:3000 NEXT_TELEMETRY_DISABLED=1 CRON_SECRET=e2e-cron-secret
 # AI photo reading talks to the stand-in in mock-supabase.mjs instead of Anthropic.
 export ANTHROPIC_API_KEY=e2e-test-key ANTHROPIC_BASE_URL=http://localhost:54321
+# Satellite lookups talk to the Roof Takeoff stand-in in the same file (it expects this partner key).
+export ROOF_TAKEOFF_URL=http://localhost:54321 ROOF_TAKEOFF_KEY=e2e-roof-key
 NEXT_PUBLIC_SUPABASE_ANON_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.ANON))")"
 SUPABASE_SERVICE_ROLE_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.SERVICE))")"
 export NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY
