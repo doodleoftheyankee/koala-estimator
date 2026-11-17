@@ -1,6 +1,8 @@
 // Roof pitch from a photo of a gable end, ported from the Roof Takeoff page's step 1. Pure.
-// The estimator taps the left eave corner, the peak and the right eave corner. The line between the
-// two eave corners sets level, so a tilted phone doesn't matter. Pitch = rise over half the span × 12.
+// The estimator taps the left eave corner, the peak and the right eave corner, all on the same edge.
+// The line between the two eave corners sets level, so a phone turned a little sideways doesn't
+// matter; a phone tipped back does (the gable is foreshortened and reads low on both sides, so the
+// sides still agree): the sheet says to hold it upright. Pitch = rise over half the span × 12.
 import { pitchFactor } from './measure';
 
 export interface Pt {
@@ -55,7 +57,7 @@ export type PitchCheck = { tone: 'idle' | 'ok' | 'warn' | 'bad'; text: string; s
 export function pitchCheck(r: PitchReading | null): PitchCheck {
   if (!r) return { tone: 'idle', text: 'Tap three points to read the pitch.', short: 'Tap the three points first.' };
   if (r.bad) return { tone: 'bad', text: "Those points don't make a roof triangle. The peak has to sit above and between the two corners.", short: 'Move the points to make a roof triangle.' };
-  if (Math.abs(r.left - r.right) < SIDES_AGREE) return { tone: 'ok', text: 'Both sides agree.', short: '✓ Both sides agree.' };
+  if (Math.abs(r.left - r.right) < SIDES_AGREE) return { tone: 'ok', text: 'Both sides agree. A phone tipped back reads low on both sides, so shoot with it upright.', short: '✓ Both sides agree.' };
   return {
     tone: 'warn',
     text: `Sides read ${fmt1(r.left)}/12 and ${fmt1(r.right)}/12. Retake from straight in front, unless this gable really has unequal sides.`,
@@ -78,13 +80,23 @@ export function pitchChoices(pitch: number): { rounded: string; measured: string
   return { rounded: `${round}/12`, measured: one === round.toFixed(1) ? null : `${one}/12` };
 }
 
+/** "How to shoot the gable". Tipping the phone back is the one tilt that skews the reading. */
+export const PITCH_TIPS = [
+  'Stand straight in front of the gable end. Shooting from off to the side makes the pitch read steep.',
+  'Hold the phone upright, not tipped back. Tipping it up to fit the roof in makes the pitch read low, on both sides alike.',
+  'Back up (and zoom in) until the whole gable fits with the phone upright. Distance also cuts down lens distortion.',
+  'Turning the phone a little sideways is fine: the line between the two bottom corners sets level.',
+  'Tap the same edge at all three points, such as the top of the rake trim.',
+  'Hip roof with no gable? Use a garage or dormer gable with the same pitch.',
+] as const;
+
 /** The hint under the photo after `placed` points (0 to 3). */
 export function pitchHint(placed: number): { step: string | null; text: string } {
   return (
     [
-      { step: 'Tap 1 of 3', text: 'the left eave corner, at the bottom left of the roof triangle.' },
-      { step: 'Tap 2 of 3', text: 'the peak.' },
-      { step: 'Tap 3 of 3', text: 'the right eave corner, at the bottom right.' },
+      { step: 'Tap 1 of 3', text: 'the left eave corner, on the top edge of the rake trim.' },
+      { step: 'Tap 2 of 3', text: 'the peak, on that same edge.' },
+      { step: 'Tap 3 of 3', text: 'the right eave corner, on the same edge.' },
     ][placed] ?? { step: null, text: 'Drag any point to fine-tune it. A magnifier shows while you drag.' }
   );
 }

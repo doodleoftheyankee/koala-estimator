@@ -12,6 +12,7 @@ import {
   pitchFacts,
   pitchFrom,
   pitchHint,
+  PITCH_TIPS,
   shrunkSize,
   SIDES_AGREE,
   type PitchReading,
@@ -119,7 +120,7 @@ describe('pitchCheck', () => {
 
   it('agrees under 0.75/12 apart', () => {
     expect(SIDES_AGREE).toBe(0.75);
-    expect(pitchCheck(reading(6, 6))).toEqual({ tone: 'ok', text: 'Both sides agree.', short: '✓ Both sides agree.' });
+    expect(pitchCheck(reading(6, 6))).toEqual({ tone: 'ok', text: 'Both sides agree. A phone tipped back reads low on both sides, so shoot with it upright.', short: '✓ Both sides agree.' });
     expect(pitchCheck(reading(6, 6.74)).tone).toBe('ok');
     expect(pitchCheck(reading(6.74, 6)).tone).toBe('ok');
   });
@@ -158,9 +159,10 @@ describe('pitchFacts and pitchChoices', () => {
 
 describe('pitchHint', () => {
   it('walks through the three taps, then says how to fine-tune', () => {
-    expect(pitchHint(0)).toEqual({ step: 'Tap 1 of 3', text: 'the left eave corner, at the bottom left of the roof triangle.' });
-    expect(pitchHint(1)).toEqual({ step: 'Tap 2 of 3', text: 'the peak.' });
-    expect(pitchHint(2)).toEqual({ step: 'Tap 3 of 3', text: 'the right eave corner, at the bottom right.' });
+    // Each tap names the edge, so the peak and the corners are taken on the same one.
+    expect(pitchHint(0)).toEqual({ step: 'Tap 1 of 3', text: 'the left eave corner, on the top edge of the rake trim.' });
+    expect(pitchHint(1)).toEqual({ step: 'Tap 2 of 3', text: 'the peak, on that same edge.' });
+    expect(pitchHint(2)).toEqual({ step: 'Tap 3 of 3', text: 'the right eave corner, on the same edge.' });
     expect(pitchHint(3)).toEqual({ step: null, text: 'Drag any point to fine-tune it. A magnifier shows while you drag.' });
   });
 });
@@ -231,5 +233,29 @@ describe('dragging points', () => {
     const far = loupeFor({ x: 1200, y: 800 }, photo, 360, 0.3);
     expect(far.src).toEqual({ x: 1145, y: 745, w: 55, h: 55 });
     expect(far.dst.w).toBeCloseTo(66, 9);
+  });
+});
+
+describe('tips', () => {
+  // A camera tipped back to fit a gable in: the rise is foreshortened more than the run, so the
+  // pitch reads low, the same on both sides (so "Both sides agree" can't catch it). Pinhole camera
+  // 5 ft up, aimed at the middle of a 24 ft wide 6/12 gable with its eaves 20 ft up, 25 ft away.
+  const project = (tipDeg: number) => (x: number, y: number) => {
+    const t = (tipDeg * Math.PI) / 180;
+    const [dy, dz] = [y - 5, 25];
+    const zc = dz * Math.cos(t) + dy * Math.sin(t);
+    const yc = dy * Math.cos(t) - dz * Math.sin(t);
+    return { x: (1000 * x) / zc, y: (-1000 * yc) / zc };
+  };
+  it('a phone tipped back reads low on both sides, which is why the tips say to hold it upright', () => {
+    const level = project(0);
+    const upright = good(pitchFrom(level(-12, 20), level(0, 26), level(12, 20)));
+    expect(upright.pitch).toBeCloseTo(6, 6);
+    const tipped = project(Math.atan2(23 - 5, 25) * (180 / Math.PI));
+    const read = good(pitchFrom(tipped(-12, 20), tipped(0, 26), tipped(12, 20)));
+    expect(read.pitch).toBeLessThan(5);
+    expect(pitchCheck(read).tone).toBe('ok');
+    expect(PITCH_TIPS.join(' ')).toMatch(/upright, not tipped back/);
+    expect(PITCH_TIPS.join(' ')).not.toMatch(/Tilting the phone is fine/);
   });
 });

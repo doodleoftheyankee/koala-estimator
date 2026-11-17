@@ -17,6 +17,7 @@ import {
   pitchFacts,
   pitchFrom,
   pitchHint,
+  PITCH_TIPS,
   shrunkSize,
   type PitchCheck,
   type PitchReading,
@@ -29,13 +30,6 @@ import { Section, Tile } from './RoofTakeoff';
 const MARK = '#F26B1D';
 const LABEL_FONT = '600 13px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 
-const TIPS = [
-  'Stand straight in front of the gable end. Shooting from off to the side makes the pitch read steep.',
-  'Back up and zoom in. Distance cuts down lens distortion.',
-  'Tilting the phone is fine: the line between the two bottom corners sets level.',
-  'Tap the same edge at all three points, such as the top of the rake trim.',
-  'Hip roof with no gable? Use a garage or dormer gable with the same pitch.',
-];
 
 /** Opens a picked photo, shrunk to at most 2400 px on its long side, as a canvas to draw from. */
 async function openPhoto(file: File): Promise<HTMLCanvasElement> {
@@ -179,7 +173,7 @@ export function PitchPhotoSheet({ field, onUse, onClose }: { field: string; onUs
           </div>
         ) : (
           <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-            <p className="text-slate-800">Take a photo of a gable end from straight in front. Then tap the two bottom corners of the roof triangle and its peak.</p>
+            <p className="text-slate-800">Take a photo of a gable end from straight in front, with the phone upright (not tipped back). Then tap the two bottom corners of the roof triangle and its peak.</p>
             <div className="grid grid-cols-2 gap-2">
               <Button disabled={opening} onClick={() => camera.current?.click()}>
                 📷 Take photo
@@ -199,7 +193,7 @@ export function PitchPhotoSheet({ field, onUse, onClose }: { field: string; onUs
         {/* Open until there is a photo, then folded away to make room. */}
         <Section key={photo ? 'photo' : 'none'} title="How to shoot the gable" summary="Straight in front, from a distance" startOpen={!photo}>
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-slate-700">
-            {TIPS.map((t) => (
+            {PITCH_TIPS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
