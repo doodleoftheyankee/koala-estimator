@@ -3,8 +3,9 @@
 A one-page tool for roof and attic takeoffs. Live at https://roof-takeoff-ten.vercel.app.
 
 - **From photos:** measure pitch from a gable photo and trace roof sections on an overhead photo.
-- **By address:** Google's Solar API finds the building and every roof face (pitch, direction, area).
-  Google's aerial photo shows the roof outline.
+- **By address:** one call to `/api/takeoff` gives the two numbers a takeoff needs: the **attic floor** (for
+  blown-in insulation) and the **sloped roof area** (for roofing and roof-deck spray foam), plus every roof face
+  and the roof edges (ridge, hip, valley, eave, rake, step, break) drawn on Google's aerial photo.
 - **`GET /api/takeoff`:** one call that returns the roof outline, each face's plan shape, the roof edges
   (ridge, hip, valley, eave, rake, step, break) and the attic floor area (roof outline minus the overhang,
   without low-slope parts such as porches). The Koala field app calls it server to server.
@@ -19,8 +20,8 @@ reaches the browser.
 | Path | What it is |
 |---|---|
 | `index.html` | The page (one inline script; reads the aerial photo with geotiff@2.1.3 from a CDN) |
-| `api/lookup.js` | Address or map pin → building and roof faces |
-| `api/layers.js` | Asks Google for the aerial photo and rooftop mask; returns file ids |
+| `api/lookup.js` | Address or map pin → building and roof faces (the page no longer calls it) |
+| `api/layers.js` | Asks Google for the aerial photo and rooftop mask; returns file ids (the page no longer calls it) |
 | `api/geotiff.js` | Downloads one of those files by id (adds the key on the server) |
 | `api/satellite.js` | Regular satellite picture, the fallback when there is no aerial photo |
 | `api/takeoff.js` | The full takeoff (see CONTRACT.md) |
@@ -50,7 +51,11 @@ npm install
 npm run mock    # synthetic houses, no key, no network: http://localhost:8787
 npm run dev     # real Google, with the key from .env: http://localhost:8787
 npm test        # geometry and endpoint tests against the mock
+npm run e2e     # the page in Chromium against the mock (needs Playwright installed)
 ```
+
+`npm run e2e` starts its own mock servers on free ports, checks every feature of the page and saves
+screenshots (375 and 1280 px, light and dark, print) to a temp folder; `SHOTS=dir` keeps them elsewhere.
 
 `PORT=3000 npm run mock` picks another port.
 
@@ -69,6 +74,21 @@ npm test        # geometry and endpoint tests against the mock
 The analytic truth for each mock house (areas, edge lengths, attic floor) is in comments at the top of
 `dev/houses.js`. The mock serves real GeoTIFFs (color photo, rooftop mask, surface heights, UTM zone 18N)
 and a generated satellite picture, so the page and `/api/takeoff` run the same code as with Google.
+
+## The page
+
+- **Address lookup:** one call to `/api/takeoff`, then the color photo through `/api/geotiff` (the plain
+  satellite picture from `/api/satellite` if that fails). Tap the photo to look up the roof under your finger.
+- **Two numbers:** sloped roof area and attic floor, in the lookup panel and in the Roof total card. The
+  overhang chips (none to 24 in, one setting for the page) and the "Over the attic" checkboxes recompute the
+  attic floor with the CONTRACT.md formula. Faces under 2/12 start unchecked.
+- **Roof edges:** colored on the photo, totals per type and a materials helper (drip edge, starter strip,
+  ridge cap, valley, step flashing, rounded up to the next foot).
+- **Report:** Print or save PDF (one letter page), Copy summary (plain text), Copy link.
+- **Links:** `?address=...` or `?lat=..&lng=..` runs that lookup on load; the address bar follows each lookup.
+- **Recent lookups:** the last 12, kept in this browser only (`localStorage`).
+- **From photos (steps 1 to 3):** unchanged, plus an "Over the attic" checkbox per section. The Roof total
+  follows whichever method was used last; the "Totals from" switch changes it.
 
 ## Deploying
 
