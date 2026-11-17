@@ -37,9 +37,13 @@ import {
   EDGE_INFO,
   edgeFeet,
   EDGES_NOT_MEASURED,
+  LOW_SLOPE_LABEL,
+  NO_SHINGLES,
   oneDecimal,
   OUTLINE_COLOR,
   presentEdges,
+  reportFileTitle,
+  squaresLabel,
   summaryText,
   takeoffData,
   WASTE_CHOICES,
@@ -91,8 +95,23 @@ export interface Takeoff {
   setFaces: (c: Partial<Pick<RoofChoices, 'excluded' | 'unmatchedOut'>>) => void;
 }
 
-/** One house's lookup and the numbers from it, for an area (job) or the Roof lookup page ('attic'). */
-export function useTakeoff({ estimateId, areaId, address, job }: { estimateId: string | null; areaId: string | null; address: string; job: RoofJob }): Takeoff {
+/**
+ * One house's lookup and the numbers from it, for an area (job) or the Roof lookup page ('attic').
+ * `near` names the house on paper when a roof was tapped on the photo (default: the address).
+ */
+export function useTakeoff({
+  estimateId,
+  areaId,
+  address,
+  job,
+  near = address,
+}: {
+  estimateId: string | null;
+  areaId: string | null;
+  address: string;
+  job: RoofJob;
+  near?: string | null;
+}): Takeoff {
   const group = faceGroup(job);
   const state = useHouseLookup(estimateId, address);
   const last = state.last;
@@ -108,10 +127,10 @@ export function useTakeoff({ estimateId, areaId, address, job }: { estimateId: s
   const confirmed = state.confirmed;
   const data = useMemo(() => {
     if (!result || !houseChoices || !last) return null;
-    // The report's "Check on site" is the house's: what the attic sheet says, house faces and all.
-    const warnings = checkOnSite(result, roofFigures(result, houseChoices), 'attic', confirmed);
-    return takeoffData(result, houseChoices, wastePct, new Date(last.lookedUpAt), warnings);
-  }, [result, houseChoices, wastePct, last, confirmed]);
+    // The report's "Check on site" is the house's: what the attic sheet says, house faces and all, in its words for paper.
+    const warnings = checkOnSite(result, roofFigures(result, houseChoices), 'attic', confirmed, true);
+    return takeoffData(result, houseChoices, wastePct, new Date(last.lookedUpAt), { warnings, near });
+  }, [result, houseChoices, wastePct, last, confirmed, near]);
   // Kept for the result it was started on, so a new result ends it.
   const [pickFor, setPickFor] = useState<{ lookupId: string; at: 'tap' | LatLng } | null>(null);
   const picking: Picking = pickFor && last && pickFor.lookupId === last.lookupId ? pickFor.at : 'off';
@@ -254,7 +273,7 @@ export function TakeoffBody({ t, mode, label }: { t: Takeoff; mode: 'area' | 'pa
               </div>
             ) : null}
             <dl className="space-y-1 pt-1 text-sm">
-              {mode === 'page' ? <Fact label="Roof deck over the attic floor" value={f.deckSqft !== null ? `${comma(roundSqft(f.deckSqft))} sq ft` : '—'} /> : null}
+              {mode === 'page' ? <Fact label="Roof deck over the attic (spray foam)" value={f.deckSqft !== null ? `${comma(roundSqft(f.deckSqft))} sq ft` : '—'} /> : null}
               <Fact label="Main pitch" value={f.mainPitch !== null ? pitchText(f.mainPitch) : '—'} />
               <Fact label="Roof outline (to the drip edge)" value={`${comma(roundSqft(f.footprintSqft))} sq ft`} />
               <Fact label="Wall run" value={f.wallRunFt !== null ? `${comma(roundFt(f.wallRunFt))} ft${f.wallRunRough ? " (rough: from the building's size)" : ''}` : '—'} />
@@ -360,7 +379,7 @@ function FacesCard({ t }: { t: Takeoff }) {
               on={on}
               title={`${pitchText(s.rise)} · ${facing(s.azimuthDeg, s.rise)}`}
               detail={`${comma(roundSqft(s.areaM2 * SQFT_PER_M2))} sq ft of roof`}
-              hint={s.lower ? 'Lower roof: garage, porch or addition?' : null}
+              hint={[s.lowSlope ? 'Low slope: not for shingles' : null, s.lower ? 'Lower roof: garage, porch or addition?' : null].filter(Boolean).join(' · ') || null}
               switchLabel={switchWord(job)}
               ariaLabel={`Face ${s.n}: ${switchWord(job).toLowerCase()}`}
               onToggle={() => t.setFaces({ excluded: on ? [...choices.excluded, s.n] : choices.excluded.filter((n) => n !== s.n) })}
@@ -460,9 +479,10 @@ export function Tile({ label, value, unit, sub }: { label: string; value: string
   return (
     <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2">
       <div className="text-xs font-semibold text-slate-600">{label}</div>
-      <div className="whitespace-nowrap text-2xl font-extrabold tabular-nums text-slate-900">
-        {value}
-        {unit ? <span className="text-sm font-semibold"> {unit}</span> : null}
+      {/* The unit wraps under a long number on a narrow phone instead of running out of the tile. */}
+      <div className="flex flex-wrap items-baseline gap-x-1 text-2xl font-extrabold tabular-nums text-slate-900">
+        <span>{value}</span>
+        {unit ? <span className="text-sm font-semibold">{unit}</span> : null}
       </div>
       {sub ? <div className="text-xs text-slate-500">{sub}</div> : null}
     </div>
@@ -472,22 +492,34 @@ export function Tile({ label, value, unit, sub }: { label: string; value: string
 /** Roof surface, squares, waste and the order, as the Roof Takeoff page worked them out. */
 function RoofingSection({ t, data, startOpen }: { t: Takeoff; data: TakeoffData; startOpen: boolean }) {
   const chip = WASTE_CHOICES.some((w) => w.pct === data.wastePct) ? String(data.wastePct) : null;
+  const lowSlope = data.lowSlopeSqft > 0 ? `${LOW_SLOPE_LABEL}: ${comma(roundSqft(data.lowSlopeSqft))} sq ft. Membrane or rolled roofing.` : null;
   const summary =
-    data.roofSqft === null || !data.order
+    data.roofSqft === null
       ? 'No roof faces found'
-      : `${comma(roundSqft(data.roofSqft))} sq ft · ${oneDecimal(data.squares!)} squares · order ${data.order.text} squares`;
+      : !data.order
+        ? `${comma(roundSqft(data.roofSqft))} sq ft · no shingle area`
+        : `${comma(roundSqft(data.roofSqft))} sq ft · ${oneDecimal(data.squares!)} squares · order ${data.order.text} squares`;
   return (
     <Section title="Roofing" summary={summary} startOpen={startOpen}>
-      {data.roofSqft === null || !data.order ? (
+      {data.roofSqft === null ? (
         <p className="text-sm text-slate-600">Google has no roof faces for this house, so there is no roof surface to order for.</p>
+      ) : !data.order ? (
+        <>
+          <Tile label="Roof surface" value={comma(roundSqft(data.roofSqft))} unit="sq ft" sub="Every face, along the slope" />
+          <p className="text-sm text-slate-700">{NO_SHINGLES} Every face is under 2/12: membrane or rolled roofing, not shingles.</p>
+          <dl className="text-sm">
+            <Fact label="Main pitch" value={data.mainPitch !== null ? pitchText(data.mainPitch) : '—'} />
+          </dl>
+        </>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
             <Tile label="Roof surface" value={comma(roundSqft(data.roofSqft))} unit="sq ft" sub="Every face, along the slope" />
-            <Tile label="Squares" value={oneDecimal(data.squares!)} sub="1 square = 100 sq ft" />
+            <Tile label={squaresLabel(data)} value={oneDecimal(data.squares!)} sub="1 square = 100 sq ft" />
             <Tile label={`Order with ${data.wastePct}% waste`} value={data.order.text} unit="squares" />
             <Tile label="Bundles" value={comma(data.order.bundles)} sub="3 per square, rounded up" />
           </div>
+          {lowSlope ? <p className="text-sm font-medium text-amber-800">{lowSlope}</p> : null}
           <Field label="Waste" group hint="Gable roofs waste less; hips and cut-up roofs more.">
             <Chips label="Waste" value={chip} onChange={(v) => setLookupWaste(t.estimateId, t.address, Number(v))} options={WASTE_OPTIONS} />
             <div className="mt-2 flex items-center gap-2">
@@ -589,12 +621,25 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+let titleBeforePrint: string | null = null;
+/** Prints the report with the house as the page title, so a saved PDF is named after it; the title comes back after. */
+function printReport(data: TakeoffData) {
+  titleBeforePrint ??= document.title;
+  document.title = reportFileTitle(data);
+  const restore = () => {
+    if (titleBeforePrint !== null) document.title = titleBeforePrint;
+    titleBeforePrint = null;
+  };
+  window.addEventListener('afterprint', restore, { once: true });
+  window.print();
+}
+
 function ShareButtons({ data }: { data: TakeoffData }) {
   const [message, setMessage] = useState('');
   return (
     <div className="space-y-1">
       <div className="grid gap-2">
-        <Button variant="secondary" onClick={() => window.print()}>
+        <Button variant="secondary" onClick={() => printReport(data)}>
           🖨️ Print or save PDF
         </Button>
         <Button

@@ -14,6 +14,7 @@ import {
   roundSqft,
   SQFT_PER_M2,
   type EdgeType,
+  type LatLng,
   type RoofChoices,
   type RoofResult,
 } from './lookup';
@@ -62,13 +63,16 @@ export interface Material {
   ft: number;
 }
 
-/** Order quantities from the edge feet, each rounded up to the next foot; items with nothing to order are left out. */
-export function materials(ft: Record<EdgeType, number>): Material[] {
+/**
+ * Order quantities from the edge feet, each rounded up to the next foot; items with nothing to order
+ * are left out. A roof with no shingle area (flat or low-slope) gets no starter strip or ridge cap.
+ */
+export function materials(ft: Record<EdgeType, number>, shingles = true): Material[] {
   const up = (v: number) => Math.ceil(v - 1e-9);
   return [
     { item: 'Drip edge', from: 'Eaves + rakes', ft: up(ft.eave + ft.rake) },
-    { item: 'Starter strip', from: 'Eaves', ft: up(ft.eave) },
-    { item: 'Ridge cap', from: 'Ridges + hips', ft: up(ft.ridge + ft.hip) },
+    { item: 'Starter strip', from: 'Eaves', ft: shingles ? up(ft.eave) : 0 },
+    { item: 'Ridge cap', from: 'Ridges + hips', ft: shingles ? up(ft.ridge + ft.hip) : 0 },
     { item: 'Valley (ice and water, flashing)', from: 'Valleys', ft: up(ft.valley) },
     { item: 'Step flashing', from: 'Steps', ft: up(ft.step) },
     { item: 'Headwall (apron) flashing', from: 'Headwalls', ft: up(ft.headwall) },
@@ -99,6 +103,19 @@ export function roofSurfaceSqft(r: Pick<RoofResult, 'segments'>): number | null 
   return r.segments.length ? r.segments.reduce((sum, s) => sum + s.areaM2, 0) * SQFT_PER_M2 : null;
 }
 
+/**
+ * Roof surface of the faces under 2/12 (lowSlope): too flat for shingles (membrane or rolled
+ * roofing), so they are kept out of the squares and the order. 0 when there are none.
+ */
+export function lowSlopeSqft(r: Pick<RoofResult, 'segments'>): number {
+  return r.segments.filter((s) => s.lowSlope).reduce((sum, s) => sum + s.areaM2, 0) * SQFT_PER_M2;
+}
+
+/** Roof surface at 2/12 and steeper: what takes shingles. Null when Google has no roof faces. */
+export function shingleSqft(r: Pick<RoofResult, 'segments'>): number | null {
+  return r.segments.length ? r.segments.filter((s) => !s.lowSlope).reduce((sum, s) => sum + s.areaM2, 0) * SQFT_PER_M2 : null;
+}
+
 /** Roofing squares: 100 sq ft of roof surface each. */
 export const roofingSquares = (roofSqft: number) => roofSqft / 100;
 
@@ -122,6 +139,10 @@ export function orderFor(roofSqft: number, wastePct: number): Order {
 // ---------------------------------------------------------------------------------------------
 
 export const COMPANY = 'Koala Insulation of Newark';
+export const LOW_SLOPE_LABEL = 'Low-slope roof (under 2/12, not shingles)';
+export const NO_SHINGLES = 'No shingle area: flat or low-slope roof.';
+/** "Squares", or "Squares (2/12 and up)" when low-slope faces were kept out. */
+export const squaresLabel = (d: Pick<TakeoffData, 'lowSlopeSqft'>) => (d.lowSlopeSqft > 0 ? 'Squares (2/12 and up)' : 'Squares');
 export const REPORT_FOOTER = 'Estimates from Google aerial imagery. Verify on site.';
 
 const comma = (n: number) => n.toLocaleString('en-US');
@@ -168,6 +189,8 @@ export function atticFloorNote(r: RoofResult, c: RoofChoices): string {
 export interface TakeoffFace {
   n: number;
   pitch: string;
+  /** Under 2/12: not for shingles. */
+  lowSlope: boolean;
   /** "faces south" */
   direction: string;
   /** Roof surface of the face. */
@@ -177,7 +200,7 @@ export interface TakeoffFace {
 
 /** Everything the printed report and the copied summary say about a lookup. */
 export interface TakeoffData {
-  /** The address Google matched, or the roof tapped on the photo. */
+  /** The address Google matched, or the roof tapped on the photo (near which house, and where). */
   title: string;
   lookedUp: string;
   photo: string;
@@ -188,7 +211,11 @@ export interface TakeoffData {
   footprintSqft: number;
   wallRunFt: number | null;
   wallRunRough: boolean;
+  /** Every face along the slope; null with no faces. */
   roofSqft: number | null;
+  /** Faces under 2/12, kept out of the squares and the order (0 when none). */
+  lowSlopeSqft: number;
+  /** Squares and the order are for the faces at 2/12 and up; null with no faces, or none that steep. */
   squares: number | null;
   wastePct: number;
   order: Order | null;
@@ -200,17 +227,41 @@ export interface TakeoffData {
   warnings: string[];
 }
 
+const at = (p: LatLng) => `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`;
+/**
+ * What a roof tapped on the photo (no address from Google) is called on paper: near which house it
+ * was tapped, when that is known, and where.
+ */
+export function tappedTitle(point: LatLng, near: string | null): string {
+  return near ? `Roof tapped near ${near} (${at(point)})` : `Roof tapped at ${at(point)}`;
+}
+
+/** Side-by-side face tables on the report, so a roof with many faces still fits the page: 1 up to 12 faces, 2 up to 26, then 3. */
+export const reportFaceColumns = (faces: number) => (faces <= 12 ? 1 : faces <= 26 ? 2 : 3);
+
+/** The name the browser gives a saved PDF of the report: the house, not the page. */
+export const reportFileTitle = (d: Pick<TakeoffData, 'title'>) => `Roof takeoff - ${d.title}`;
+
 /**
  * The takeoff for a result with the house's overhang, face choices and waste. `warnings` replaces
- * Roof Takeoff's own (the app's fuller "Check on site" list).
+ * Roof Takeoff's own (the app's fuller "Check on site" list, in its words for paper); `near` is the
+ * house a tapped roof belongs to (the address it was looked up by).
  */
-export function takeoffData(r: RoofResult, c: RoofChoices, wastePct: number, lookedUpAt: Date, warnings: readonly string[] = r.warnings): TakeoffData {
+export function takeoffData(
+  r: RoofResult,
+  c: RoofChoices,
+  wastePct: number,
+  lookedUpAt: Date,
+  { warnings = r.warnings, near = null }: { warnings?: readonly string[]; near?: string | null } = {},
+): TakeoffData {
   const f = roofFigures(r, c);
   const roofSqft = roofSurfaceSqft(r);
+  const shingles = shingleSqft(r);
   const ft = edgeFeet(r);
   const waste = clampWaste(wastePct);
+  const ordered = shingles !== null && shingles > 0 ? shingles : null;
   return {
-    title: r.address ?? 'The roof tapped on the photo',
+    title: r.address ?? tappedTitle(r.point, near),
     lookedUp: lookedUpText(lookedUpAt),
     photo: photoText(r),
     overhangIn: c.overhangIn,
@@ -221,14 +272,22 @@ export function takeoffData(r: RoofResult, c: RoofChoices, wastePct: number, loo
     wallRunFt: f.wallRunFt,
     wallRunRough: f.wallRunRough,
     roofSqft,
-    squares: roofSqft === null ? null : roofingSquares(roofSqft),
+    lowSlopeSqft: lowSlopeSqft(r),
+    squares: ordered === null ? null : roofingSquares(ordered),
     wastePct: waste,
-    order: roofSqft === null ? null : orderFor(roofSqft, waste),
+    order: ordered === null ? null : orderFor(ordered, waste),
     mainPitch: mainPitch(r.segments),
-    faces: r.segments.map((s) => ({ n: s.n, pitch: pitchText(s.rise), direction: facing(s.azimuthDeg, s.rise), sqft: s.areaM2 * SQFT_PER_M2, overAttic: !c.excluded.includes(s.n) })),
+    faces: r.segments.map((s) => ({
+      n: s.n,
+      pitch: pitchText(s.rise),
+      lowSlope: s.lowSlope,
+      direction: facing(s.azimuthDeg, s.rise),
+      sqft: s.areaM2 * SQFT_PER_M2,
+      overAttic: !c.excluded.includes(s.n),
+    })),
     edgesMeasured: presentEdges(ft).length > 0,
     edges: presentEdges(ft).map((k) => ({ type: k, label: EDGE_INFO[k].label, ft: ft[k] })),
-    materials: materials(ft),
+    materials: materials(ft, ordered !== null),
     warnings: [...warnings],
   };
 }
@@ -238,18 +297,21 @@ export function summaryText(d: TakeoffData): string {
   const L: string[] = [];
   L.push(`${COMPANY}: roof takeoff`, d.title, `Looked up ${d.lookedUp}. ${d.photo}.`, '');
   L.push(`Attic floor: ${sqftText(d.atticFloorSqft)} (${d.atticNote.replace(/\.$/, '')})`);
-  if (d.deckSqft !== null) L.push(`Roof deck over the attic floor: ${sqftText(d.deckSqft)} (spray foam under the roof)`);
+  if (d.deckSqft !== null) L.push(`Roof deck over the attic (spray foam): ${sqftText(d.deckSqft)}`);
   L.push(`Footprint: ${sqftText(d.footprintSqft)} (roof outline seen from above, to the drip edge)`);
   if (d.wallRunFt !== null) L.push(`Wall run: ${comma(roundFt(d.wallRunFt))} ft${d.wallRunRough ? " (rough: from the building's size)" : ''}`);
   L.push(`Roof surface: ${sqftText(d.roofSqft)}`);
+  if (d.lowSlopeSqft > 0) L.push(`${LOW_SLOPE_LABEL}: ${sqftText(d.lowSlopeSqft)}`);
   if (d.squares !== null && d.order) {
-    L.push(`Squares: ${oneDecimal(d.squares)}`, `Order with ${d.wastePct}% waste: ${d.order.text} squares (${plural(d.order.bundles, 'bundle')})`);
+    L.push(`${squaresLabel(d)}: ${oneDecimal(d.squares)}`, `Order with ${d.wastePct}% waste: ${d.order.text} squares (${plural(d.order.bundles, 'bundle')})`);
+  } else if (d.roofSqft !== null) {
+    L.push(NO_SHINGLES);
   }
   if (d.mainPitch !== null) L.push(`Main pitch: ${pitchText(d.mainPitch)}`);
   L.push(`Overhang used: ${d.overhangIn ? overhangText(d.overhangIn) : 'none'}`, '');
   if (d.faces.length) {
     L.push('Roof faces:');
-    for (const f of d.faces) L.push(`  ${f.n}. ${f.pitch}, ${f.direction}, ${sqftText(f.sqft)}, ${f.overAttic ? 'over the attic' : 'not over the attic'}`);
+    for (const f of d.faces) L.push(`  ${f.n}. ${f.pitch}${f.lowSlope ? ' (low slope)' : ''}, ${f.direction}, ${sqftText(f.sqft)}, ${f.overAttic ? 'over the attic' : 'not over the attic'}`);
     L.push('');
   }
   if (d.edgesMeasured) {

@@ -342,11 +342,14 @@ export function deckM2(floorM2: number, included: readonly Pick<RoofSegment, 'ar
   return ground > 0 ? floorM2 * (area / ground) : null;
 }
 
-/** The main pitch: the whole-number rise whose faces cover the most ground. Null with no faces. */
+/**
+ * The main pitch: the rise whose faces cover the most ground, as pitchText says it (whole numbers
+ * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12). Null with no faces.
+ */
 export function mainPitch(segments: readonly RoofSegment[]): number | null {
   const ground = new Map<number, number>();
   for (const s of segments) {
-    const r = Math.round(s.rise);
+    const r = s.rise >= 2 ? Math.round(s.rise) : round(s.rise, 1);
     ground.set(r, (ground.get(r) ?? 0) + s.groundM2);
   }
   let best: number | null = null;
@@ -508,15 +511,27 @@ export const PICK_WORDS: Record<RoofPick, { label: string; note: string }> = {
   deck: { label: 'Roof deck (spray foam under the roof)', note: 'roof deck' },
 };
 
-/** Things to check on site, shown right under the numbers (before the faces and the Use button). */
-export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirmed: boolean): string[] {
+/**
+ * Things to check on site, shown right under the numbers (before the faces and the Use button).
+ * `paper`: in the words of the printed report and the copied summary, which have no photo below
+ * and nothing to turn off.
+ */
+export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirmed: boolean, paper = false): string[] {
   const out: string[] = [];
   if (r.precision !== 'ROOFTOP' && !confirmed) {
-    out.push(
-      r.precision === 'PIN'
-        ? 'Check the white outline is on the roof you tapped.'
-        : "Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.",
-    );
+    if (paper) {
+      out.push(
+        r.precision === 'PIN'
+          ? 'Not confirmed: a roof picked on the photo, not checked as the house.'
+          : "Not confirmed: Google placed this address roughly, so the outline may be on a neighbour's house.",
+      );
+    } else {
+      out.push(
+        r.precision === 'PIN'
+          ? 'Check the white outline is on the roof you tapped.'
+          : "Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.",
+      );
+    }
   }
   if (r.quality === 'LOW') out.push('Blurry photo: check the sizes and the pitch on site.');
   if (r.perimeterSource === 'none') out.push("No outline was found, so the overhang can't be taken off. Check the size on site.");
@@ -524,7 +539,7 @@ export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirm
   if (!r.segments.length) out.push('Google has no roof faces for this house, so no faces can be left out.');
   if (showUnmatched(r) && job !== 'walls') {
     const what = `${comma(roundSqft(f.unmatchedSqft))} sq ft of the outline has no roof data (a carport or flat part?).`;
-    out.push(job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
+    out.push(paper ? what : job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
   }
   // Roof Takeoff says "Lower-detail imagery. Check the pitch on site." for the same blurry photo: once is enough.
   const theirs = r.quality === 'LOW' ? r.warnings.filter((w) => !/^lower-detail imagery\b/i.test(w)) : r.warnings;

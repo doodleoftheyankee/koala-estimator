@@ -530,13 +530,32 @@ describe('check on site', () => {
     expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
     expect(checkOnSite(carport, f(carport), 'walls', true)).toEqual([]);
   });
+
+  it('has its own words on paper: no photo below, nothing to turn off', () => {
+    const r = result();
+    const f = roofFigures(r, choices(12, [5]));
+    expect(checkOnSite(r, f, 'attic', false, true)).toEqual([
+      "Not confirmed: Google placed this address roughly, so the outline may be on a neighbour's house.",
+      'Lower-detail imagery. Check the pitch on site.',
+    ]);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', false, true)).toEqual(['Not confirmed: a roof picked on the photo, not checked as the house.']);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', true, true)).toEqual([]);
+    const carport = { ...withCarport(), precision: 'ROOFTOP', warnings: [] };
+    expect(checkOnSite(carport, roofFigures(carport, choices(12, [])), 'attic', true, true)).toEqual(['270 sq ft of the outline has no roof data (a carport or flat part?).']);
+    for (const w of [...checkOnSite(r, f, 'attic', false, true), ...checkOnSite(carport, roofFigures(carport, choices(12, [])), 'attic', false, true)]) {
+      expect(w).not.toMatch(/below|white outline|you tapped/);
+    }
+  });
 });
 
 describe('words', () => {
   it('main pitch: the whole-number rise with the most ground', () => {
     expect(mainPitch([seg(1, 6.2, 50), seg(2, 5.8, 50), seg(3, 12, 80), seg(4, 1, 5)])).toBe(6);
     expect(mainPitch([seg(1, 12, 80), seg(2, 6, 50)])).toBe(12);
-    expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(1);
+    // A nearly flat roof is said in tenths, as pitchText says it: 0.5/12, not 1/12 or 0/12.
+    expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(0.5);
+    expect(mainPitch([seg(1, 0.3, 300)])).toBe(0.3);
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(2);
     expect(mainPitch([])).toBeNull();
   });
 

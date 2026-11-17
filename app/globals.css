@@ -76,7 +76,8 @@ input[type='number']::-webkit-outer-spin-button {
 /* Print preview narrower than letter paper (a phone): one column. */
 @media print and (max-width: 600px) {
   .roof-report-top,
-  .roof-report-two {
-    grid-template-columns: minmax(0, 1fr);
+  .roof-report-two,
+  .roof-report-faces {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }

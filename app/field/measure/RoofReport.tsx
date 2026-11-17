@@ -6,13 +6,14 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { pitchText, roundFt, roundSqft, type RoofResult } from '@/lib/roof/lookup';
-import { COMPANY, EDGE_INFO, EDGES_NOT_MEASURED, oneDecimal, OUTLINE_COLOR, REPORT_FOOTER, type TakeoffData } from '@/lib/roof/roofing';
+import { COMPANY, EDGE_INFO, EDGES_NOT_MEASURED, oneDecimal, OUTLINE_COLOR, REPORT_FOOTER, reportFaceColumns, squaresLabel, type TakeoffData, type TakeoffFace } from '@/lib/roof/roofing';
 import { mapShapes, paintRoofMap, satelliteUrl } from '@/lib/roof/draw';
 
 const comma = (n: number) => n.toLocaleString('en-US');
 const sqft = (n: number | null) => (n === null ? '–' : `${comma(roundSqft(n))} sq ft`);
 /** The printed photo is 960 pixels square: sharp at about 3 inches wide. */
 const PHOTO_PX = 960;
+
 
 const noSubscribe = () => () => undefined;
 /** True once on the phone (portals need the page's body). */
@@ -63,13 +64,17 @@ export function RoofReport({ data, result, excluded }: { data: TakeoffData; resu
   const nums: Array<[string, string, boolean?]> = [
     ['Attic floor', sqft(data.atticFloorSqft), true],
     ['Roof surface', sqft(data.roofSqft), true],
-    ['Roof deck over the attic floor', sqft(data.deckSqft)],
+    ['Roof deck over the attic (spray foam)', sqft(data.deckSqft)],
     ['Footprint (to the drip edge)', sqft(data.footprintSqft)],
     ['Wall run', data.wallRunFt === null ? '–' : `${comma(roundFt(data.wallRunFt))} ft${data.wallRunRough ? ' (rough)' : ''}`],
-    ['Squares', data.squares === null ? '–' : oneDecimal(data.squares)],
-    [`Order with ${data.wastePct}% waste`, data.order ? `${data.order.text} sq · ${comma(data.order.bundles)} bundles` : '–'],
+    ...(data.lowSlopeSqft > 0 ? [['Low slope (under 2/12, not shingles)', sqft(data.lowSlopeSqft)] as [string, string]] : []),
+    [squaresLabel(data), data.squares === null ? '–' : oneDecimal(data.squares)],
+    [`Order with ${data.wastePct}% waste`, data.order ? `${data.order.text} sq · ${comma(data.order.bundles)} bundles` : data.roofSqft !== null ? 'No shingle area' : '–'],
     ['Main pitch', data.mainPitch === null ? '–' : pitchText(data.mainPitch)],
   ];
+  const columns = reportFaceColumns(data.faces.length);
+  const perColumn = Math.ceil(data.faces.length / columns);
+  const faceTables = Array.from({ length: columns }, (_, i) => data.faces.slice(i * perColumn, (i + 1) * perColumn)).filter((f) => f.length);
   return createPortal(
     <div id="roof-report" className="roof-report" data-testid="roof-report">
       <header className="mb-2.5 border-b-2 border-slate-900 pb-1.5">
@@ -124,30 +129,14 @@ export function RoofReport({ data, result, excluded }: { data: TakeoffData; resu
       ) : null}
 
       {data.faces.length ? (
-        <section className="mb-2 [break-inside:avoid]">
+        // Not kept in one piece: a long list carries on onto a second page instead of leaving a gap.
+        <section className="mb-2">
           <h2 className="mb-0.5 text-[10.5pt] font-bold uppercase tracking-wide">Roof faces</h2>
-          <table className="w-full border-collapse text-[8.5pt] tabular-nums">
-            <thead>
-              <tr className="border-b border-slate-900 text-left text-[7.5pt] uppercase tracking-wide text-slate-600">
-                <th className="px-1 py-0.5 font-semibold">Face</th>
-                <th className="px-1 py-0.5 font-semibold">Pitch</th>
-                <th className="px-1 py-0.5 font-semibold">Direction</th>
-                <th className="px-1 py-0.5 text-right font-semibold">Sq ft (along the slope)</th>
-                <th className="px-1 py-0.5 font-semibold">Over the attic</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.faces.map((f) => (
-                <tr key={f.n} className="border-b border-slate-200">
-                  <td className="px-1 py-0.5">{f.n}</td>
-                  <td className="px-1 py-0.5">{f.pitch}</td>
-                  <td className="px-1 py-0.5">{f.direction}</td>
-                  <td className="px-1 py-0.5 text-right">{comma(roundSqft(f.sqft))}</td>
-                  <td className="px-1 py-0.5">{f.overAttic ? 'Yes' : 'No'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="roof-report-faces grid items-start gap-x-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }} data-columns={columns}>
+            {faceTables.map((faces) => (
+              <FacesTable key={faces[0]!.n} faces={faces} compact={columns > 1} />
+            ))}
+          </div>
         </section>
       ) : null}
 
@@ -211,6 +200,37 @@ export function RoofReport({ data, result, excluded }: { data: TakeoffData; resu
       </footer>
     </div>,
     document.body,
+  );
+}
+
+/** One table of roof faces; `compact` (side by side) uses shorter words. */
+function FacesTable({ faces, compact }: { faces: readonly TakeoffFace[]; compact: boolean }) {
+  return (
+    <table className={`w-full border-collapse tabular-nums ${compact ? 'text-[7.5pt]' : 'text-[8.5pt]'}`}>
+      <thead>
+        <tr className="border-b border-slate-900 text-left text-[7.5pt] uppercase tracking-wide text-slate-600">
+          <th className="px-1 py-0.5 font-semibold">Face</th>
+          <th className="px-1 py-0.5 font-semibold">Pitch</th>
+          <th className="px-1 py-0.5 font-semibold">{compact ? 'Faces' : 'Direction'}</th>
+          <th className="px-1 py-0.5 text-right font-semibold">{compact ? 'Sq ft' : 'Sq ft (along the slope)'}</th>
+          <th className="px-1 py-0.5 font-semibold">{compact ? 'Attic' : 'Over the attic'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {faces.map((f) => (
+          <tr key={f.n} className="border-b border-slate-200">
+            <td className="px-1 py-0.5">{f.n}</td>
+            <td className="px-1 py-0.5">
+              {f.pitch}
+              {f.lowSlope ? (compact ? ' low' : ' (low slope)') : ''}
+            </td>
+            <td className="px-1 py-0.5">{compact ? f.direction.replace(/^faces /, '') : f.direction}</td>
+            <td className="px-1 py-0.5 text-right">{comma(roundSqft(f.sqft))}</td>
+            <td className="px-1 py-0.5">{f.overAttic ? 'Yes' : 'No'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
