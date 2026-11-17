@@ -4,6 +4,10 @@
 // clockwise by rotDeg (compass) and converted to meters. Faces are flat planes that do not overlap in plan;
 // heights are meters above the lawn. The surface heights (DSM) put the lawn GROUND_ELEV meters up, while the
 // Solar numbers (planeHeightAtCenterMeters) are above the lawn, so the two do not share a datum, as with Google.
+// Like Google's, the surface heights round off every crease (SMOOTH below): along each ridge and hip between steep
+// faces they dip well below where the planes meet, leaving a band about 0.45 m wide that fits neither face (on a
+// real 10/12 gable the band was 0.3 to 0.8 m and the old code counted the ridge twice), a ridge vent stands proud,
+// and heights near every ridge, hip and valley are blurred. Eaves and walls stay sharp, as on the real gable.
 //
 // Analytic truth (feet; "true" = along the slope). 6/12 slope factor = sqrt(1 + 0.25) = 1.1180.
 //
@@ -129,7 +133,51 @@ export function makeHouse(spec) {
   const bbox = { x0: Math.min(...all.map(b => b.x0)), x1: Math.max(...all.map(b => b.x1)), y0: Math.min(...all.map(b => b.y0)), y1: Math.max(...all.map(b => b.y1)) };
   const frame = localFrame(spec.lat, spec.lng);
   const zone = zoneOfLatLng(spec.lat, spec.lng);
-  return { ...spec, faces, flats, sheds, chimneys, trees, drive, bbox, frame, zone, affine: utmAffine(frame, zone) };
+  return { ...spec, faces, flats, sheds, chimneys, trees, drive, bbox, frame, zone, affine: utmAffine(frame, zone), creases: creaseLines(faces) };
+}
+
+// Pieces of side that two face outlines share (collinear and overlapping), in meters.
+function sharedSides(pa, pb) {
+  const out = [];
+  for (let i = 0; i < pa.length; i++) {
+    const a0 = pa[i], a1 = pa[(i + 1) % pa.length], L = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
+    if (L < 1e-9) continue;
+    const tx = (a1[0] - a0[0]) / L, ty = (a1[1] - a0[1]) / L;
+    const off = p => Math.abs((p[0] - a0[0]) * ty - (p[1] - a0[1]) * tx), at = p => (p[0] - a0[0]) * tx + (p[1] - a0[1]) * ty;
+    for (let j = 0; j < pb.length; j++) {
+      const b0 = pb[j], b1 = pb[(j + 1) % pb.length];
+      if (off(b0) > 1e-6 || off(b1) > 1e-6) continue;
+      const lo = Math.max(0, Math.min(at(b0), at(b1))), hi = Math.min(L, Math.max(at(b0), at(b1)));
+      if (hi - lo > 1e-6) out.push({ a: [a0[0] + tx * lo, a0[1] + ty * lo], b: [a0[0] + tx * hi, a0[1] + ty * hi], tx, ty });
+    }
+  }
+  return out;
+}
+
+// Creases: sides two faces share where they meet at one height with different slopes. Convex ones (both faces fall
+// away from the line) are ridges (level, they get a ridge vent) and hips; the rest are valleys and pitch breaks.
+// fall: the lesser slope across the line of the two faces (negative when a face rises away from it).
+function creaseLines(faces) {
+  const out = [];
+  for (let i = 0; i < faces.length; i++) {
+    for (let j = i + 1; j < faces.length; j++) {
+      const A = faces[i], B = faces[j];
+      for (const s of sharedSides(A.poly, B.poly)) {
+        const mx = (s.a[0] + s.b[0]) / 2, my = (s.a[1] + s.b[1]) / 2, nx = -s.ty, ny = s.tx, e = 0.05;
+        if (Math.abs(planeZ(A, mx, my) - planeZ(B, mx, my)) > 0.02) continue; // a step, not a crease
+        const fall = f => {
+          const k = inPoly(f.poly, mx + nx * e, my + ny * e) ? 1 : -1; // into the face, across the side
+          return f.m * (f.d[0] * nx * k + f.d[1] * ny * k);
+        };
+        const fa = fall(A), fb = fall(B);
+        if (Math.abs(fa + fb) < 0.01) continue; // one plane carried on (the two halves of a twin)
+        const convex = fa > 1 / 12 && fb > 1 / 12;
+        const level = Math.abs(A.m * (A.d[0] * s.tx + A.d[1] * s.ty)) < Math.tan(10 * D2R);
+        out.push({ a: s.a, b: s.b, tx: s.tx, ty: s.ty, len: Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]), convex, ridge: convex && level, fall: Math.min(fa, fb) });
+      }
+    }
+  }
+  return out;
 }
 
 export function inPoly(poly, x, y) {
@@ -168,6 +216,57 @@ export function surfaceAt(h, x, y) {
 }
 
 const isRoof = s => s.kind === 'face' || s.kind === 'flat' || s.kind === 'chimney' || s.kind === 'shed' || s.kind === 'canopy';
+
+// What Google's surface heights do to a roof, as seen on real houses. Eaves and walls stay sharp (the eaves of a real
+// gable measured within 1%), but every crease is rounded off: along a ridge or hip between two steep faces the
+// heights dip below where the planes meet (ridge cap and vent, smoothing), so a band there fits neither face; a
+// ridge vent stands proud along most of each ridge; and the heights near every ridge, hip and valley are blurred
+// (over the roof faces only, so the eaves stay sharp).
+// dip: depth (m) of the dip on the line where the planes meet, dipWidth its reach (m) each side, dipFall the least
+// slope (rise/run) both faces need across the line for a dip (a low dormer meeting a ridge has none); vent: height
+// (m) of the ridge vent, ventWidth its half width, ventInset how far it stops short of each ridge end; sigma: the
+// blur (m), full within band (m) of a crease and fading out over the next fade (m). Pass smooth: false to
+// renderLayers for sharp, ideal planes.
+export const SMOOTH = { dip: 0.55, dipWidth: 0.6, dipFall: 4 / 12, vent: 0.12, ventWidth: 0.14, ventInset: 0.6, sigma: 0.3, band: 0.8, fade: 0.4 };
+
+// At local point (x, y) on a face: { dz: height change (m) of the ridge dip and vent, near: distance (m) to the
+// nearest crease }.
+export function creaseShape(h, x, y, sm = SMOOTH) {
+  let dev = 0, vent = 0, near = Infinity;
+  for (const l of h.creases) {
+    const t = (x - l.a[0]) * l.tx + (y - l.a[1]) * l.ty, tc = Math.max(0, Math.min(l.len, t));
+    const d = Math.hypot(x - (l.a[0] + l.tx * tc), y - (l.a[1] + l.ty * tc));
+    if (d < near) near = d;
+    // (the cap stops where the line does: no dip past a ridge's end into the roof beyond)
+    if (l.convex && l.fall >= sm.dipFall && d < sm.dipWidth && t >= 0 && t <= l.len) dev = Math.max(dev, sm.dip * (1 - (d / sm.dipWidth) ** 2) ** 2);
+    if (l.ridge && d < sm.ventWidth && t > sm.ventInset && t < l.len - sm.ventInset) vent = Math.max(vent, sm.vent * (1 - (d / sm.ventWidth) ** 2));
+  }
+  return { dz: vent - dev, near };
+}
+
+// Gaussian blur (sigma in pixels) of a w x h grid, edges held.
+function blur(data, w, h, sigma) {
+  const r = Math.ceil(3 * sigma), k = new Float64Array(2 * r + 1);
+  let sum = 0;
+  for (let i = -r; i <= r; i++) { k[i + r] = Math.exp(-i * i / (2 * sigma * sigma)); sum += k[i + r]; }
+  for (let i = 0; i < k.length; i++) k[i] /= sum;
+  const tmp = new Float64Array(w * h), out = new Float32Array(w * h);
+  for (let v = 0; v < h; v++) {
+    for (let u = 0; u < w; u++) {
+      let a = 0;
+      for (let i = -r; i <= r; i++) a += k[i + r] * data[v * w + Math.min(w - 1, Math.max(0, u + i))];
+      tmp[v * w + u] = a;
+    }
+  }
+  for (let v = 0; v < h; v++) {
+    for (let u = 0; u < w; u++) {
+      let a = 0;
+      for (let i = -r; i <= r; i++) a += k[i + r] * tmp[Math.min(h - 1, Math.max(0, v + i)) * w + u];
+      out[v * w + u] = a;
+    }
+  }
+  return out;
+}
 
 /* ---------- the mock houses ---------- */
 
@@ -425,8 +524,9 @@ const TOWN_AFFINE = utmAffine(TOWN, zoneOfLatLng(39.68, -75.75));
  * Renders Google-like rasters around (lat, lng). Returns { rgb, mask, dsm }, each a raster
  * { w, h, res, resY, minX, maxY, zone, data } (rgb data is 3-band interleaved Uint8Array).
  * opts: radius, pixel; dsmPixel (default pixel), dsmPad (extra DSM pixels each side, default 0),
- * dsmShift (meters added to the DSM grid origin), noise (DSM noise, default 0.03 m), house (render only this
- * house, for tests), layers (subset of ['rgb','mask','dsm']).
+ * dsmShift (meters added to the DSM grid origin), noise (DSM noise, default 0.03 m), smooth (overrides of SMOOTH
+ * for the surface heights, or false for sharp planes), house (render only this house, for tests), layers (subset of
+ * ['rgb','mask','dsm']).
  */
 export function renderLayers(lat, lng, opts) {
   const zone = zoneOfLatLng(lat, lng), c = utm(lat, lng, zone);
@@ -465,14 +565,30 @@ export function renderLayers(lat, lng, opts) {
   if (layers.includes('dsm')) {
     const px = opts.dsmPixel || pixel, g = grid(px, opts.dsmPad || 0, opts.dsmShift || 0), N = g.w * g.h;
     const noise = opts.noise == null ? 0.03 : opts.noise, seed = opts.seed || 1;
-    const data = new Float32Array(N);
+    const sm = opts.smooth === false ? null : { ...SMOOTH, ...(opts.smooth || {}) };
+    let data = new Float32Array(N);
+    const near = sm ? new Float32Array(N).fill(Infinity) : null, face = sm ? new Float32Array(N) : null;
     for (let v = 0; v < g.h; v++) {
       const Y = g.maxY - (v + 0.5) * px;
       for (let u = 0; u < g.w; u++) {
-        const X = g.minX + (u + 0.5) * px, sc = look(X, Y);
-        const z = sc ? surfaceAt(sc.h, sc.x, sc.y).z : 0;
-        data[v * g.w + u] = GROUND_ELEV + z + noise * hash2(Math.round(X / px), Math.round(Y / px), seed);
+        const X = g.minX + (u + 0.5) * px, sc = look(X, Y), i = v * g.w + u;
+        const s = sc ? surfaceAt(sc.h, sc.x, sc.y) : null;
+        let z = GROUND_ELEV + (s ? s.z : 0);
+        if (sm && s && s.kind === 'face') { const c = creaseShape(sc.h, sc.x, sc.y, sm); z += c.dz; near[i] = c.near; face[i] = 1; }
+        data[i] = z;
       }
+    }
+    if (sm && sm.sigma > 0) {
+      // Blur over roof faces only (the ground beyond an eave doesn't pull the roof down), near creases only.
+      const num = blur(data.map((z, i) => z * face[i]), g.w, g.h, sm.sigma / px), den = blur(face, g.w, g.h, sm.sigma / px);
+      for (let i = 0; i < N; i++) {
+        const k = Math.min(1, Math.max(0, (sm.band + sm.fade - near[i]) / sm.fade));
+        if (k > 0 && den[i] > 1e-3) data[i] = k * num[i] / den[i] + (1 - k) * data[i];
+      }
+    }
+    for (let v = 0; v < g.h; v++) {
+      const Y = g.maxY - (v + 0.5) * px;
+      for (let u = 0; u < g.w; u++) data[v * g.w + u] += noise * hash2(Math.round((g.minX + (u + 0.5) * px) / px), Math.round(Y / px), seed);
     }
     out.dsm = { ...g, data };
   }

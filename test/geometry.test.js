@@ -1,7 +1,7 @@
 // Geometry of lib/takeoff.js on in-memory synthetic rasters (dev/houses.js holds the analytic truth).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HOUSES, HOUSE_SPECS, makeHouse, insightsFor, renderLayers, FT, GROUND_ELEV } from '../dev/houses.js';
+import { HOUSES, HOUSE_SPECS, makeHouse, insightsFor, renderLayers, planeZ, FT, GROUND_ELEV } from '../dev/houses.js';
 import { encodeGeoTiff } from '../dev/tiff.js';
 import { trimInsights } from '../lib/google.js';
 import { readGeoTiff } from '../lib/raster.js';
@@ -13,6 +13,8 @@ import {
 const F2 = FT * FT;
 const [GABLE, HIP, CROSS, , TWIN, FLAT, CAPE] = HOUSES;
 
+// The surface heights round off every ridge, hip and valley as Google's do (dev/houses.js SMOOTH); pass
+// { smooth: false } for sharp, ideal planes.
 function setup(house, opts = {}) {
   const t = trimInsights(insightsFor(house));
   const segments = t.segments.map(s => ({ ...s, rise: riseOf(s.pitchDeg), lowSlope: riseOf(s.pitchDeg) < 2 }));
@@ -121,6 +123,79 @@ test('gable: outline, faces, ridge, eaves and rakes match the drawing', () => {
   near(m.attic.floorM2 / F2, 1064, 0.02, 'attic floor');
   assert.deepEqual(Object.keys(m.edgeTotalsM).sort(), [...EDGE_TYPES].sort());
   for (const e of m.edges) assert.ok(e.path.length === 2 && e.lengthM >= e.planM - 1e-9);
+});
+
+// Modelled on a real lookup (Hale-Byrnes House, Newark DE): a plain gable 48.5 ft (14.8 m) long, 10/12 and 9.5/12.
+// Google's surface heights rounded its apex off, the pixels along the ridge fit neither plane, and the old code
+// gave each face a one-sided "ridge" along its top: 28.9 m of ridge for a 14.8 m roof, in jagged pieces.
+const SMOOTH_GABLE = {
+  id: 'smoothed-gable', lat: 39.6835, lng: -75.7487, rotDeg: 33, quality: 'HIGH',
+  faces: [
+    { name: 'south', poly: [[-24.25, -15], [24.25, -15], [24.25, 0], [-24.25, 0]], rise: 10, az: 180, ref: [0, 0], zRef: 7.6 },
+    { name: 'north', poly: [[-24.25, 0], [24.25, 0], [24.25, 15], [-24.25, 15]], rise: 9.5, az: 0, ref: [0, 0], zRef: 7.6 },
+  ],
+};
+
+test('smoothed apex (a real 10/12 gable): the ridge is measured once, with no one-sided ridges', () => {
+  const house = makeHouse(SMOOTH_GABLE);
+  const s = setup(house);
+  // The mock really does what Google did: across the middle of the ridge, a band wider than the 3 pixels the
+  // inside edges bridge fits neither face within the labelling tolerance (0.3 m + half a pixel of slope).
+  const [south, north] = house.faces, a = 33 * Math.PI / 180, fits = (f, z, x, y) => Math.abs(z - planeZ(f, x, y)) <= 0.3 + 0.05 * f.m;
+  let band = 0;
+  for (let d = -1; d <= 1; d += 0.01) { // across the ridge at its middle (the house is turned 33 degrees)
+    const [X, Y] = house.affine.toUtm(d * Math.sin(a), d * Math.cos(a));
+    const u = Math.floor((X - s.dsm.minX) / s.dsm.res), v = Math.floor((s.dsm.maxY - Y) / s.dsm.resY);
+    const [x, y] = house.affine.toLocal(s.dsm.minX + (u + 0.5) * s.dsm.res, s.dsm.maxY - (v + 0.5) * s.dsm.resY);
+    const z = s.dsm.data[v * s.dsm.w + u] - GROUND_ELEV;
+    if (!fits(south, z, x, y) && !fits(north, z, x, y)) band += 0.01;
+  }
+  assert.ok(band > 0.35, `band that fits neither face: ${band.toFixed(2)} m`);
+
+  const m = measure(house), t = totalsFt(m);
+  const ridges = m.edges.filter(e => e.type === 'ridge');
+  assert.deepEqual(ridges.filter(e => e.faces.length !== 2), [], 'no one-sided ridge along either face\'s top');
+  assert.equal(ridges.length, 1, 'one ridge');
+  near(t.ridge, 48.5, 0.05, 'ridge');
+  near(t.eave, 2 * 48.5, 0.05, 'eaves');
+  near(t.rake, 2 * 15 * Math.sqrt(1 + (10 / 12) ** 2) + 2 * 15 * Math.sqrt(1 + (9.5 / 12) ** 2), 0.05, 'rakes');
+  assert.equal(m.edges.filter(e => e.type === 'rake').length, 4, 'four whole rakes, not pieces');
+  assert.equal(m.edges.filter(e => e.type === 'eave').length, 2);
+  for (const k of ['hip', 'valley', 'step', 'headwall', 'break']) assert.ok(t[k] < 1, `${k}: ${t[k]}`);
+  for (const f of m.faces) {
+    assert.ok(f.poly.length <= 6, `face ${f.n} outline has ${f.poly.length} corners`);
+    near(f.planM2 / F2, 48.5 * 15, 0.03, `face ${f.n} plan area`);
+  }
+  near(m.attic.floorM2 / F2, 46.5 * 28, 0.02, 'attic floor');
+  // The same house on sharp, ideal heights measures the same.
+  const sharp = totalsFt(measure(house, { smooth: false }));
+  for (const k of ['ridge', 'eave', 'rake']) near(sharp[k], t[k], 0.03, `${k}, sharp against smoothed`);
+});
+
+test('shed roofs: a free high edge is a one-sided ridge, a high edge against a taller wall is a headwall', () => {
+  const shed = extra => makeHouse({
+    id: 'shed', lat: 39.6845, lng: -75.7487, rotDeg: -17, quality: 'HIGH',
+    faces: [{ name: 'shed', poly: [[-15, -8], [15, -8], [15, 8], [-15, 8]], rise: 4, az: 180, ref: [0, -8], zRef: 2.6 }],
+    ...extra,
+  });
+  const slope = Math.sqrt(1 + (4 / 12) ** 2);
+  let m = measure(shed()), t = totalsFt(m);
+  const ridges = m.edges.filter(e => e.type === 'ridge');
+  assert.equal(ridges.length, 1);
+  assert.equal(ridges[0].faces.length, 1, 'the high edge of a shed roof, with nothing above it');
+  near(t.ridge, 30, 0.04, 'high edge');
+  near(t.eave, 30, 0.04, 'eave');
+  near(t.rake, 2 * 16 * slope, 0.04, 'rakes');
+  for (const k of ['hip', 'valley', 'step', 'headwall', 'break']) assert.ok(t[k] < 1, `${k}: ${t[k]}`);
+  // A lean-to against a two-story block with no face of its own: its top is a headwall, the block stays out.
+  m = measure(shed({ flats: [{ poly: [[-20, 8], [20, 8], [20, 30], [-20, 30]], z: 6.5 }] }));
+  t = totalsFt(m);
+  near(t.headwall, 30, 0.04, 'headwall along the wall');
+  assert.ok(t.ridge < 1, `no ridge: ${t.ridge}`);
+  near(t.rake, 2 * 16 * slope, 0.04, 'rakes');
+  near(t.eave, 30, 0.04, 'eave');
+  near(m.faces[0].planM2 / F2, 30 * 16, 0.03, 'the lean-to does not take in the block');
+  near(m.attic.unmatchedM2 / F2, 40 * 22, 0.04, 'the block is the part with no roof data');
 });
 
 test('hip: ridge, four hips and eaves match the drawing (house turned 25 degrees)', () => {
@@ -295,10 +370,27 @@ test('Cape: dormer stays in, porch out, garage marked lower but in; step, headwa
   // Porch: headwall, and the front keeps its whole eave.
   near(sum(edgesOf('headwall', [f.front, f.porch])), 16, 0.04, 'porch headwall');
   near(sum(edgesOf('eave', [f.front])), 36, 0.03, 'front eave, over the porch too');
-  // The main ridge is two pieces either side of the dormer; the dormer meets the front at the ridge.
+  // The main ridge is two pieces either side of the dormer; the dormer meets the front at the ridge. The rounded
+  // apex leaves no pixel to say exactly where one stops and the other starts, so each of those two points may move
+  // 0.25 m (the ridge as a whole is within 4% above, and on sharp heights the split holds to 6%: next test).
   assert.equal(edgesOf('ridge', [f.front, f.back]).length, 2);
-  near(sum(edgesOf('ridge', [f.front, f.back])), 12, 0.06, 'main ridge pieces');
-  near(sum(edgesOf('ridge', [f.front, f.dormer])), 24, 0.04, 'dormer at the ridge');
+  const slack = 2 * 0.25 / FT;
+  assert.ok(Math.abs(sum(edgesOf('ridge', [f.front, f.back])) - 12) <= slack, `main ridge pieces: ${sum(edgesOf('ridge', [f.front, f.back])).toFixed(2)} ft`);
+  assert.ok(Math.abs(sum(edgesOf('ridge', [f.front, f.dormer])) - 24) <= slack, `dormer at the ridge: ${sum(edgesOf('ridge', [f.front, f.dormer])).toFixed(2)} ft`);
+  near(sum(edgesOf('ridge', [f.front, f.back])) + sum(edgesOf('ridge', [f.front, f.dormer])), 36, 0.03, 'main ridge and dormer together');
+});
+
+test('Cape on sharp surface heights: the ridge splits where the dormer is, and every edge type holds', () => {
+  const m = measure(CAPE, { smooth: false }), f = byName(CAPE, m), t = totalsFt(m);
+  for (const k of EDGE_TYPES) {
+    if (CAPE.truth.ft[k]) near(t[k], CAPE.truth.ft[k], 0.04, k);
+    else assert.ok(t[k] < 1, `${k}: ${t[k]}`);
+  }
+  const ridge = faces => m.edges.filter(e => e.type === 'ridge' && String(e.faces) === String(faces.map(x => x.n).sort((a, b) => a - b)));
+  const sum = es => es.reduce((a, e) => a + e.planM, 0) / FT;
+  assert.equal(ridge([f.front, f.back]).length, 2);
+  near(sum(ridge([f.front, f.back])), 12, 0.06, 'main ridge pieces');
+  near(sum(ridge([f.front, f.dormer])), 24, 0.04, 'dormer at the ridge');
 });
 
 test('flat building: nothing left out by default, mostly-flat flag, bay headwall', () => {
@@ -362,6 +454,15 @@ test('outer sides check the outside height first: a gable end against a taller b
   near(m.attic.unmatchedM2 / F2, 20 * 36, 0.05, 'unmatched (the block)');
   // Its sides along the block are not on the outline.
   for (const s of m.segments) near(m.perimeterByFaceM[s.n] / FT, 40 + 15, 0.04, `face ${s.n} outline length`);
+  // A lower flat carport with no face against the east gable end: the faces don't grow over it; the gable keeps
+  // its rakes there (drip edge over the carport) and the carport is the part with no roof data.
+  const c = measure(g({ flats: [{ poly: [[20, -8], [32, -8], [32, 8], [20, 8]], z: 2.2 }] })), ct = totalsFt(c);
+  near(ct.ridge, 40, 0.05, 'ridge, carport');
+  near(ct.eave, 80, 0.05, 'eaves, carport');
+  near(ct.rake, 4 * 15 * Math.sqrt(1.25), 0.05, 'rakes, carport');
+  assert.ok(ct.step + ct.headwall < 1, `no wall: ${ct.step}, ${ct.headwall}`);
+  for (const f of c.faces) near(f.planM2 / F2, 600, 0.03, `face ${f.n} plan area, carport`);
+  near(c.attic.unmatchedM2 / F2, 12 * 16, 0.05, 'unmatched (the carport)');
 });
 
 test("surface heights and Solar plane heights don't share a datum, and that's fine", () => {
@@ -381,13 +482,15 @@ test('mask and surface heights on different grids (coarser, shifted, bigger)', (
   near(t.eave, 160, 0.05, 'eaves');
 });
 
-test('hip at 25 cm pixels (medium-detail imagery) stays within 5%', () => {
-  const m = measure(HIP, { pixel: 0.25 });
-  const t = totalsFt(m);
+test('hip and gable at 25 cm pixels (medium-detail imagery) stay within 5%', () => {
+  let m = measure(HIP, { pixel: 0.25 }), t = totalsFt(m);
   near(t.ridge, 20, 0.05, 'ridge');
   near(t.hip, 90, 0.05, 'hips');
   near(t.eave, 160, 0.05, 'eaves');
   near(m.outline.areaM2 / F2, 1500, 0.02, 'outline area');
+  m = measure(GABLE, { pixel: 0.25 }); t = totalsFt(m);
+  for (const [k, ft] of Object.entries(GABLE.truth.ft)) if (ft) near(t[k], ft, 0.05, `gable ${k}`);
+  assert.deepEqual(m.edges.filter(e => e.type === 'ridge').map(e => e.faces.length), [2]);
 });
 
 test('degrades without surface heights or mask, and falls back to the blob nearest the center', () => {
