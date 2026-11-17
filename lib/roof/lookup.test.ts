@@ -1,38 +1,72 @@
 import { describe, expect, it } from 'vitest';
 import fixture from './__fixtures__/takeoff.json';
 import {
+  addressKey,
   atticFloorM2,
+  checkOnSite,
   compactTakeoff,
+  deckM2,
+  defaultFaces,
+  faceGroup,
   facing,
   FT_PER_M,
   imageryText,
+  isRoofResult,
+  koalaWording,
   lookupAddress,
   M_PER_IN,
   mainPitch,
   mapFrame,
   mapZoom,
   mergeNotes,
+  metersBetween,
+  NO_ROOF_MESSAGE,
+  NOT_CONFIGURED_MESSAGE,
   NOTES_HEADER,
   noteLine,
+  offersUnmatched,
+  pickSaved,
+  pinBox,
   pitchText,
   project,
+  QUALITY_WORDS,
+  RESULT_FORMAT,
   roofFigures,
+  roofJob,
   roofRequestSchema,
-  roofUse,
   roundFt,
   roundSqft,
   satelliteQuerySchema,
+  showUnmatched,
   SQFT_PER_M2,
+  startPick,
   takeoffSchema,
   unproject,
   wallRunM,
+  whenText,
+  type RoofChoices,
   type RoofResult,
   type RoofSegment,
 } from './lookup';
 
 const clone = <T>(v: T): T => structuredClone(v);
 const result = (): RoofResult => compactTakeoff(takeoffSchema.parse(clone(fixture)));
-const seg = (n: number, rise: number, groundM2: number): RoofSegment => ({ n, rise, azimuthDeg: 180, areaM2: groundM2 * 1.1, groundM2, lowSlope: rise < 2, center: null });
+const seg = (n: number, rise: number, groundM2: number): RoofSegment => ({ n, rise, azimuthDeg: 180, areaM2: groundM2 * 1.1, groundM2, lowSlope: rise < 2, lower: false, center: null });
+/** The fixture as a v1 server sends it: none of the v1.1 additions. */
+function v1Answer() {
+  const t = clone(fixture) as Record<string, unknown> & typeof fixture;
+  const attic: Record<string, unknown> = { ...t.attic, wallRunM: 67.1 };
+  for (const k of ['sharedWallM', 'unmatchedM2', 'perimeterByFaceM', 'deckM2']) delete attic[k];
+  const segments = t.segments.map((s) => {
+    const v1: Record<string, unknown> = { ...s };
+    delete v1.lower;
+    return v1;
+  });
+  return { ...t, attic, segments };
+}
+const choices = (overhangIn: number, excluded: number[], unmatchedOut = false): RoofChoices => ({ overhangIn, excluded, unmatchedOut });
+/** The made-up house with 25 m² of the outline (a carport) that Google has no roof faces for. */
+const withCarport = (): RoofResult => ({ ...result(), footprintM2: 242, unmatchedM2: 25 });
 
 describe('units', () => {
   it('converts meters to feet and square meters to square feet', () => {
@@ -76,6 +110,31 @@ describe('the contract attic floor', () => {
     expect(atticFloorM2(A, P, d, A * 2)).toBe(0);
   });
 
+  it('takes no overhang off along a neighbour\'s roof (twins, rowhouses), and no wall run there', () => {
+    // A 20 x 40 ft twin half, sharing one 40 ft side: overhang on three sides only.
+    const l = 20 / FT_PER_M;
+    const w = 40 / FT_PER_M;
+    const d = 0.3048;
+    // The contract's formula keeps 4d² for the corners, so it is 2d² (2 sq ft) over the exact here.
+    expect(atticFloorM2(l * w, 2 * (l + w), d, 0, w)).toBeCloseTo(l * w - (2 * l + w) * d + 4 * d * d, 9);
+    expect(atticFloorM2(l * w, 2 * (l + w), d, 0, w) - (l - d) * (w - 2 * d)).toBeCloseTo(2 * d * d, 9);
+    expect(wallRunM(2 * (l + w), d, w)! * FT_PER_M).toBeCloseTo(2 * 20 + 40 - 8, 6);
+  });
+
+  it('wall run leaves out the outer sides of the faces left out', () => {
+    expect(wallRunM(70, 0.3048, 0, 10.9)).toBeCloseTo(70 - 10.9 - 8 * 0.3048, 9);
+    expect(wallRunM(70, 0, 5, 10)).toBeCloseTo(55, 9);
+    expect(wallRunM(20, 1, 0, 30)).toBe(0);
+  });
+
+  it('roof deck: the floor times the pitch factor of the faces kept, null with none kept', () => {
+    expect(deckM2(100, [{ areaM2: 112, groundM2: 100 }])).toBeCloseTo(112, 9);
+    // Area-weighted: 6/12 (1.118) over 80 m² and 12/12 (1.414) over 20 m².
+    expect(deckM2(50, [{ areaM2: 80 * 1.118, groundM2: 80 }, { areaM2: 20 * 1.414, groundM2: 20 }])).toBeCloseTo(50 * ((80 * 1.118 + 20 * 1.414) / 100), 9);
+    expect(deckM2(100, [])).toBeNull();
+    expect(deckM2(100, [{ areaM2: 0, groundM2: 0 }])).toBeNull();
+  });
+
   it('never goes below zero, and uses the footprint when there is no perimeter', () => {
     expect(atticFloorM2(10, 100, 1, 0)).toBe(0);
     expect(atticFloorM2(0, 10, 0.3, 0)).toBe(0);
@@ -91,6 +150,43 @@ describe('takeoffSchema', () => {
     expect(parsed.segments).toHaveLength(5);
     expect('edges' in parsed).toBe(false);
     expect('_fixture' in parsed).toBe(false);
+  });
+
+  it('reads the v1.1 additions', () => {
+    const parsed = takeoffSchema.parse(clone(fixture));
+    expect(parsed.attic.perimeterByFaceM).toEqual({ '1': 16.4, '2': 20.1, '3': 14.5, '4': 7.4, '5': 10.9 });
+    expect(parsed.attic.sharedWallM).toBe(0);
+    expect(parsed.segments.map((x) => x.lower)).toEqual([false, false, true, true, true]);
+  });
+
+  it('still accepts a v1 answer, with none of the v1.1 additions', () => {
+    const r = compactTakeoff(takeoffSchema.parse(v1Answer()));
+    expect(r.sharedWallM).toBe(0);
+    expect(r.unmatchedM2).toBe(0); // max(0, 217 - 217.1)
+    expect(r.perimeterByFaceM).toEqual({});
+    expect(r.segments.every((x) => x.lower === false)).toBe(true);
+    expect(r.takeoff.deckM2).toBeNull();
+    const f = roofFigures(r, choices(12, r.defaultExcluded));
+    expect(roundSqft(f.floorSqft)).toBe(1970);
+    expect(roundSqft(f.deckSqft!)).toBe(2170);
+    // No breakdown by face: the porch's walls can't be taken off, so the v1 wall run.
+    expect(roundFt(f.wallRunFt!)).toBe(220);
+  });
+
+  it('works out the parts with no roof data from a v1 answer', () => {
+    const t = v1Answer();
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, attic: { ...t.attic, footprintM2: 240 } }));
+    expect(r.unmatchedM2).toBeCloseTo(240 - 217.1, 9);
+    expect(compactTakeoff(takeoffSchema.parse({ ...t, segments: [] })).unmatchedM2).toBe(0);
+  });
+
+  it('refuses broken v1.1 numbers instead of guessing', () => {
+    const t = clone(fixture);
+    expect(takeoffSchema.safeParse({ ...t, attic: { ...t.attic, sharedWallM: -1 } }).success).toBe(false);
+    expect(takeoffSchema.safeParse({ ...t, attic: { ...t.attic, unmatchedM2: '12' } }).success).toBe(false);
+    expect(takeoffSchema.safeParse({ ...t, attic: { ...t.attic, perimeterByFaceM: { one: 3 } } }).success).toBe(false);
+    expect(takeoffSchema.safeParse({ ...t, attic: { ...t.attic, perimeterByFaceM: { '1': -3 } } }).success).toBe(false);
+    expect(takeoffSchema.safeParse({ ...t, attic: { ...t.attic, deckM2: null } }).success).toBe(true);
   });
 
   it('accepts the gaps the contract allows: no outline, no faces, no dates, a pin instead of an address', () => {
@@ -146,7 +242,39 @@ describe('compactTakeoff', () => {
     expect(r.faces.map((f) => f.n)).toEqual([1, 2, 3, 4, 5]);
     expect(r.segments[0]!.center).toEqual(fixture.segments[0]!.center);
     expect(r.warnings).toEqual(['Lower-detail imagery. Check the pitch on site.']);
-    expect(r.takeoff).toEqual({ overhangM: 0.3048, floorM2: 182.7, wallRunM: 67.1 });
+    expect(r.takeoff).toEqual({ overhangM: 0.3048, floorM2: 182.7, wallRunM: 56.16, deckM2: 201.13 });
+    expect(r.format).toBe(RESULT_FORMAT);
+    expect(r.segments.map((x) => x.lower)).toEqual([false, false, true, true, true]);
+    expect(r.perimeterByFaceM).toEqual({ '1': 16.4, '2': 20.1, '3': 14.5, '4': 7.4, '5': 10.9 });
+    expect([r.sharedWallM, r.unmatchedM2]).toEqual([0, 0]);
+    expect(isRoofResult(r)).toBe(true);
+    expect(isRoofResult(JSON.parse(JSON.stringify(r)))).toBe(true);
+  });
+
+  it('takes the default faces from attic.excluded, not from the slope', () => {
+    const t = clone(fixture);
+    // A low-slope shed dormer (face 5 here) that Roof Takeoff keeps in, and a steep face it leaves out.
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, attic: { ...t.attic, excluded: [3] } }));
+    expect(r.defaultExcluded).toEqual([3]);
+    expect(defaultFaces(r, 'house')).toEqual({ excluded: [3], unmatchedOut: false });
+    expect(compactTakeoff(takeoffSchema.parse({ ...t, attic: { ...t.attic, excluded: [] } })).defaultExcluded).toEqual([]);
+  });
+
+  it("drops face breakdowns for faces that aren't in the answer", () => {
+    const t = clone(fixture);
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, attic: { ...t.attic, perimeterByFaceM: { '1': 3, '9': 4 } } }));
+    expect(r.perimeterByFaceM).toEqual({ '1': 3 });
+  });
+
+  it("says Roof Takeoff's own-page steps in this app's terms", () => {
+    expect(koalaWording('Google has no roof data for this spot. Tap the right roof on the image, or measure it from photos.')).toBe(
+      'Google has no roof data for this spot. Wrong house? Tap the right roof under the photo.',
+    );
+    expect(koalaWording('Odd outline. Tap the right roof on the photo')).toBe('Odd outline. Wrong house? Tap the right roof under the photo.');
+    expect(koalaWording('No faces, so measure this one from photos.')).toBe('No faces, so measure it with 📐 Measure this area.');
+    expect(koalaWording('Lower-detail imagery. Check the pitch on site.')).toBe('Lower-detail imagery. Check the pitch on site.');
+    const r = compactTakeoff(takeoffSchema.parse({ ...clone(fixture), warnings: ['Wrong building? Tap the right roof on the image.'] }));
+    expect(r.warnings).toEqual(['Wrong building? Wrong house? Tap the right roof under the photo.']);
   });
 
   it('works out rise and low slope from the pitch when they are missing', () => {
@@ -177,30 +305,151 @@ describe('compactTakeoff', () => {
 describe('roofFigures', () => {
   it('gives the made-up house its numbers at the default 12" overhang, porch left out', () => {
     const r = result();
-    const f = roofFigures(r, { overhangIn: 12, excluded: r.defaultExcluded });
-    expect(roundSqft(f.atticFloorSqft)).toBe(1970);
-    expect(roundSqft(f.roofSqft)).toBe(2560);
+    const f = roofFigures(r, choices(12, r.defaultExcluded));
+    expect(roundSqft(f.floorSqft)).toBe(1970);
+    // Roof deck over that floor: 1,966.7 x (222.6 / 202.2) for faces 1 to 4.
+    expect(roundSqft(f.deckSqft!)).toBe(2170);
+    expect(f.deckSqft!).toBeCloseTo(f.floorSqft * ((83.1 * 2 + 28.2 * 2) / (74.3 * 2 + 26.8 * 2)), 9);
+    expect(roundSqft(f.wholeRoofSqft)).toBe(2560);
     expect(roundSqft(f.footprintSqft)).toBe(2340);
-    expect(roundFt(f.wallRunFt!)).toBe(220);
+    // 69.5 m less the porch's 10.9 m of outline, less 8 x 12": 56.2 m.
+    expect(roundFt(f.wallRunFt!)).toBe(184);
+    expect(f.wallRunRough).toBe(false);
     expect(f.mainPitch).toBe(6);
     expect(roundSqft(f.excludedSqft)).toBe(160);
-    // The same as Roof Takeoff's own figure at its 12" overhang.
-    expect(f.atticFloorSqft / SQFT_PER_M2).toBeCloseTo(r.takeoff.floorM2, 1);
+    expect(f.facesKept).toBe(4);
+    // The same as Roof Takeoff's own figures at its 12" overhang.
+    expect(f.floorSqft / SQFT_PER_M2).toBeCloseTo(r.takeoff.floorM2, 1);
     expect(f.wallRunFt! / FT_PER_M).toBeCloseTo(r.takeoff.wallRunM, 1);
+    expect(f.deckSqft! / SQFT_PER_M2).toBeCloseTo(r.takeoff.deckM2!, 1);
   });
 
-  it('recomputes for another overhang and other faces left out; the roof surface never changes', () => {
+  it('recomputes for another overhang and other faces left out; the whole roof never changes', () => {
     const r = result();
-    const base = roofFigures(r, { overhangIn: 12, excluded: [5] });
-    const wider = roofFigures(r, { overhangIn: 18, excluded: [5] });
-    const noGarage = roofFigures(r, { overhangIn: 18, excluded: [3, 4, 5] });
-    const everything = roofFigures(r, { overhangIn: 0, excluded: [] });
-    expect(wider.atticFloorSqft).toBeLessThan(base.atticFloorSqft);
-    expect(roundSqft(wider.atticFloorSqft)).toBe(1870);
-    expect(roundSqft(noGarage.atticFloorSqft)).toBe(1370);
-    expect(roundFt(noGarage.wallRunFt!)).toBe(216);
-    expect(everything.atticFloorSqft).toBeCloseTo(everything.footprintSqft, 9);
-    for (const f of [wider, noGarage, everything]) expect(f.roofSqft).toBe(base.roofSqft);
+    const base = roofFigures(r, choices(12, [5]));
+    const wider = roofFigures(r, choices(18, [5]));
+    const noGarage = roofFigures(r, choices(18, [3, 4, 5]));
+    const everything = roofFigures(r, choices(0, []));
+    expect(wider.floorSqft).toBeLessThan(base.floorSqft);
+    expect(roundSqft(wider.floorSqft)).toBe(1870);
+    expect(roundFt(wider.wallRunFt!)).toBe(180);
+    expect(roundSqft(noGarage.floorSqft)).toBe(1370);
+    // Faces 1 and 2 only, both 6/12: the deck is the floor times 83.1 / 74.3.
+    expect(noGarage.deckSqft!).toBeCloseTo(noGarage.floorSqft * (83.1 / 74.3), 9);
+    // The garage's 21.9 m and the porch's 10.9 m of outline come off the wall run.
+    expect(roundFt(noGarage.wallRunFt!)).toBe(108);
+    expect(everything.floorSqft).toBeCloseTo(everything.footprintSqft, 9);
+    expect(roundFt(everything.wallRunFt!)).toBe(228);
+    for (const f of [wider, noGarage, everything]) expect(f.wholeRoofSqft).toBe(base.wholeRoofSqft);
+  });
+
+  it('has no roof deck with every face off', () => {
+    const r = result();
+    const f = roofFigures(r, choices(12, [1, 2, 3, 4, 5]));
+    expect(f.deckSqft).toBeNull();
+    expect(f.facesKept).toBe(0);
+  });
+
+  it('leaves out the parts with no roof data only when asked', () => {
+    const r = withCarport();
+    const kept = roofFigures(r, choices(12, [5]));
+    const out = roofFigures(r, choices(12, [5], true));
+    expect(out.excludedSqft - kept.excludedSqft).toBeCloseTo(25 * SQFT_PER_M2, 6);
+    expect(out.floorSqft).toBeLessThan(kept.floorSqft);
+    const A = 242;
+    const floorAll = A - 69.5 * 0.3048 + 4 * 0.3048 ** 2;
+    expect(out.floorSqft / SQFT_PER_M2).toBeCloseTo(floorAll * (1 - (14.9 + 25) / A), 9);
+    // The wall run counts faces' outer sides only.
+    expect(out.wallRunFt).toBe(kept.wallRunFt);
+    expect(roundSqft(kept.unmatchedSqft)).toBe(270);
+  });
+
+  it('takes no overhang off along a neighbour, for the floor and the wall run', () => {
+    const r = { ...result(), sharedWallM: 10 };
+    const f = roofFigures(r, choices(12, []));
+    expect(f.floorSqft / SQFT_PER_M2).toBeCloseTo(217 - (69.5 - 10) * 0.3048 + 4 * 0.3048 ** 2, 9);
+    expect(f.wallRunFt! / FT_PER_M).toBeCloseTo(69.5 - 10 - 8 * 0.3048, 9);
+  });
+
+  it('says when the wall run is rough (estimated from the building box)', () => {
+    expect(roofFigures({ ...result(), perimeterSource: 'box' }, choices(12, [5])).wallRunRough).toBe(true);
+    expect(roofFigures({ ...result(), perimeterM: 0, perimeterSource: 'none' }, choices(12, [5])).wallRunFt).toBeNull();
+  });
+});
+
+describe('the parts with no roof data', () => {
+  it('are offered over 5% of the footprint and over 5 m², not for walls, not without faces', () => {
+    const r = result();
+    expect(showUnmatched(r)).toBe(false);
+    expect(showUnmatched(withCarport())).toBe(true);
+    expect(showUnmatched({ ...r, footprintM2: 400, unmatchedM2: 19 })).toBe(false); // under 5% of 400
+    expect(showUnmatched({ ...r, footprintM2: 60, unmatchedM2: 4.9 })).toBe(false); // under 5 m²
+    expect(showUnmatched({ ...r, footprintM2: 60, unmatchedM2: 5.1 })).toBe(true);
+    expect(showUnmatched({ ...r, segments: [], unmatchedM2: 217 })).toBe(false);
+    expect(offersUnmatched(withCarport(), 'attic')).toBe(true);
+    expect(offersUnmatched(withCarport(), 'walls')).toBe(false);
+  });
+});
+
+describe('what each area uses', () => {
+  it('attic and commercial areas choose attic floor or roof deck; the rest have one number', () => {
+    expect(roofJob('attic')).toBe('attic');
+    expect(roofJob('commercial')).toBe('attic');
+    expect(roofJob('crawlspace')).toBe('crawlspace');
+    expect(roofJob('garage')).toBe('garage');
+    expect(roofJob('walls')).toBe('walls');
+    expect(roofJob('rim_joist')).toBeNull();
+  });
+
+  it('starts on the roof deck when the area is measured on the roofline, else the attic floor', () => {
+    expect(startPick(undefined)).toBe('floor');
+    expect(startPick({ mode: 'floor' })).toBe('floor');
+    expect(startPick({ mode: 'roofline' })).toBe('deck');
+    expect(startPick({ mode: 'walls' })).toBe('floor');
+  });
+
+  it('a garage starts with every face off (and the parts with no roof data); the house with Roof Takeoff’s choice', () => {
+    const r = result();
+    expect(faceGroup('garage')).toBe('garage');
+    expect(faceGroup('attic')).toBe('house');
+    expect(faceGroup('walls')).toBe('house');
+    expect(faceGroup('crawlspace')).toBe('house');
+    expect(defaultFaces(r, 'garage')).toEqual({ excluded: [1, 2, 3, 4, 5], unmatchedOut: true });
+    expect(defaultFaces(r, 'house')).toEqual({ excluded: [5], unmatchedOut: false });
+    const none = roofFigures(r, { overhangIn: 12, ...defaultFaces(r, 'garage') });
+    expect(none.floorSqft).toBe(0);
+    // The garage's two 4/12 faces turned on: its share of the footprint inside the walls.
+    const garage = roofFigures(r, choices(12, [1, 2, 5], true));
+    expect(roundSqft(garage.floorSqft)).toBe(520);
+  });
+});
+
+describe('check on site', () => {
+  it('lists the rough placement until the house is confirmed, then the rest and Roof Takeoff’s warnings', () => {
+    const r = result();
+    const f = roofFigures(r, choices(12, [5]));
+    expect(checkOnSite(r, f, 'attic', false)).toEqual([
+      "Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.",
+      'Lower-detail imagery. Check the pitch on site.',
+    ]);
+    expect(checkOnSite(r, f, 'attic', true)).toEqual(['Lower-detail imagery. Check the pitch on site.']);
+    expect(checkOnSite({ ...r, precision: 'ROOFTOP', warnings: [] }, f, 'attic', false)).toEqual([]);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', false)).toEqual(['Check the yellow outline is on the roof you tapped.']);
+  });
+
+  it('adds a blurry photo, no outline, a rough wall run, no faces and the parts with no roof data', () => {
+    const base = { ...result(), precision: 'ROOFTOP', warnings: [] };
+    const f = (r: RoofResult) => roofFigures(r, choices(12, []));
+    expect(checkOnSite({ ...base, quality: 'LOW' }, f(base), 'attic', true)).toEqual(['Blurry photo: check the sizes and the pitch on site.']);
+    expect(checkOnSite({ ...base, perimeterSource: 'none' }, f(base), 'attic', true)[0]).toMatch(/overhang can't be taken off/);
+    const box = { ...base, perimeterSource: 'box' };
+    expect(checkOnSite(box, f(box), 'walls', true)).toEqual(["No outline was traced, so the wall run is rough: from the building's size. Measure it on site."]);
+    expect(checkOnSite(box, f(box), 'attic', true)).toEqual([]);
+    expect(checkOnSite({ ...base, segments: [] }, f(base), 'attic', true)).toEqual(['Google has no roof faces for this house, so no faces can be left out.']);
+    const carport = { ...withCarport(), precision: 'ROOFTOP', warnings: [] };
+    expect(checkOnSite(carport, f(carport), 'attic', true)).toEqual(["270 sq ft of the outline has no roof data (a carport or flat part?). Turn it off below if it isn't over the attic."]);
+    expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
+    expect(checkOnSite(carport, f(carport), 'walls', true)).toEqual([]);
   });
 });
 
@@ -226,19 +475,27 @@ describe('words', () => {
     expect(imageryText(result())).toBe('Jun 2023');
     expect(imageryText({ imagery: null })).toBeNull();
   });
+
+  it('photo badge: the blurry photo is amber, never calmer than a good one', () => {
+    expect(QUALITY_WORDS.HIGH).toEqual({ label: 'Sharp photo', tone: 'green' });
+    expect(QUALITY_WORDS.MEDIUM).toEqual({ label: 'Good photo', tone: 'slate' });
+    expect(QUALITY_WORDS.LOW).toEqual({ label: 'Blurry photo: check on site', tone: 'amber' });
+  });
+
+  it('plain words for the estimator: no setup jargon, no steps this app does not have', () => {
+    expect(NOT_CONFIGURED_MESSAGE).toBe("Satellite lookup isn't set up yet. Ask the office.");
+    expect(NO_ROOF_MESSAGE).toBe('Google has no roof data for this house. Measure it with 📐 Measure this area.');
+  });
+
+  it('when a saved lookup was made', () => {
+    const now = new Date(2026, 10, 17, 15, 30);
+    expect(whenText(new Date(2026, 10, 17, 14, 5), now)).toBe('today 2:05 PM');
+    expect(whenText(new Date(2026, 10, 16, 9, 40), now)).toBe('yesterday 9:40 AM');
+    expect(whenText(new Date(2026, 10, 14, 9, 40), now)).toBe('Nov 14, 9:40 AM');
+  });
 });
 
 describe('applying', () => {
-  it('fills the floor, the roof surface for a roofline measurement, or the wall run', () => {
-    expect(roofUse('attic', undefined)).toBe('floor');
-    expect(roofUse('attic', { mode: 'floor' })).toBe('floor');
-    expect(roofUse('attic', { mode: 'roofline' })).toBe('roof');
-    expect(roofUse('garage', { mode: 'roofline' })).toBe('roof');
-    expect(roofUse('walls', { mode: 'walls' })).toBe('walls');
-    expect(roofUse('walls', undefined)).toBe('walls');
-    expect(roofUse('rim_joist', undefined)).toBeNull();
-  });
-
   it('needs a whole address', () => {
     expect(lookupAddress({ street: ' 12  Elkton Rd ', city: 'Newark', state: 'de', zip: '19711' })).toBe('12 Elkton Rd, Newark, DE 19711');
     expect(lookupAddress({ street: '12 Elkton Rd', city: 'Newark', state: 'DE', zip: '19711-1234' })).toBe('12 Elkton Rd, Newark, DE 19711-1234');
@@ -249,22 +506,53 @@ describe('applying', () => {
     expect(lookupAddress({ street: 'x'.repeat(200), city: 'Newark', state: 'DE', zip: '19711' })).toBeNull();
   });
 
-  it('writes a prep-note line for what was applied', () => {
+  it('writes a prep-note line that says what the number is and what was left out', () => {
     const r = result();
-    const f = roofFigures(r, { overhangIn: 12, excluded: [5] });
-    expect(noteLine(r, f, 'floor')).toBe('• Satellite (Google, Jun 2023): attic floor about 1,970 sq ft with a 12-inch overhang; roof surface about 2,560 sq ft at 6/12.');
-    expect(noteLine(r, f, 'roof')).toBe('• Satellite (Google, Jun 2023): roof surface about 2,560 sq ft at 6/12; attic floor about 1,970 sq ft with a 12-inch overhang.');
-    expect(noteLine(r, f, 'walls')).toBe('• Satellite (Google, Jun 2023): wall run about 220 ft with a 12-inch overhang; footprint about 2,340 sq ft.');
-    expect(noteLine(r, roofFigures(r, { overhangIn: 18, excluded: [3, 4, 5] }), 'floor')).toBe('• Satellite (Google, Jun 2023): attic floor about 1,370 sq ft with an 18-inch overhang; roof surface about 2,560 sq ft at 6/12.');
-    expect(noteLine(r, roofFigures(r, { overhangIn: 6, excluded: [5] }), 'walls')).toMatch(/wall run about 224 ft with a 6-inch overhang/);
-    const none = roofFigures({ ...r, imagery: null }, { overhangIn: 0, excluded: [] });
-    expect(noteLine({ ...r, imagery: null }, none, 'floor')).toBe('• Satellite (Google): attic floor about 2,340 sq ft with no overhang; roof surface about 2,560 sq ft at 6/12.');
+    const at = (c: RoofChoices) => roofFigures(r, c);
+    const c12 = choices(12, [5]);
+    expect(noteLine(r, at(c12), c12, 'attic', 'floor')).toBe(
+      '• Satellite (Google imagery Jun 2023): attic floor about 1,970 sq ft inside the walls (12-inch eaves removed; left out face 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+    expect(noteLine(r, at(c12), c12, 'attic', 'deck')).toBe(
+      '• Satellite (Google imagery Jun 2023): roof deck about 2,170 sq ft over the attic floor (12-inch eaves removed; left out face 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+    const c18 = choices(18, [3, 4, 5]);
+    expect(noteLine(r, at(c18), c18, 'attic', 'floor')).toBe(
+      '• Satellite (Google imagery Jun 2023): attic floor about 1,370 sq ft inside the walls (18-inch eaves removed; left out faces 3 at 4/12, 4 at 4/12 and 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+    expect(noteLine(r, at(c12), c12, 'crawlspace')).toMatch(/: crawlspace floor about 1,970 sq ft inside the walls \(12-inch eaves removed; left out face 5 at 1\/12\)\./);
+    expect(noteLine(r, at(c12), c12, 'walls')).toBe(
+      '• Satellite (Google imagery Jun 2023): wall run about 184 ft (12-inch eaves removed; left out face 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+    const garage = choices(12, [1, 2, 5], true);
+    expect(noteLine(r, at(garage), garage, 'garage')).toBe(
+      '• Satellite (Google imagery Jun 2023): garage ceiling about 520 sq ft inside the walls (12-inch eaves removed; from faces 3 at 4/12 and 4 at 4/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+    const none = choices(0, []);
+    expect(noteLine({ ...r, imagery: null }, at(none), none, 'attic')).toBe(
+      '• Satellite (Google imagery): attic floor about 2,340 sq ft inside the walls (no overhang removed). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.',
+    );
+  });
+
+  it('says in the note when the wall run is rough, the neighbour wall and the parts with no roof data', () => {
+    const box = { ...result(), perimeterSource: 'box' };
+    const c = choices(12, [5]);
+    expect(noteLine(box, roofFigures(box, c), c, 'walls')).toMatch(/wall run about 184 ft, rough: from the building's size \(/);
+    const twin = { ...result(), sharedWallM: 10 };
+    expect(noteLine(twin, roofFigures(twin, c), c, 'attic')).toMatch(/\(12-inch eaves removed; no overhang along the neighbour; left out face 5 at 1\/12\)/);
+    const carport = withCarport();
+    const out = choices(12, [5], true);
+    expect(noteLine(carport, roofFigures(carport, out), out, 'attic')).toMatch(/left out face 5 at 1\/12 and 270 sq ft with no roof data\)/);
+    expect(noteLine(carport, roofFigures(carport, out), out, 'walls')).toMatch(/left out face 5 at 1\/12\)/);
+    const garageWith = choices(12, [1, 2, 5], false);
+    expect(noteLine(carport, roofFigures(carport, garageWith), garageWith, 'garage')).toMatch(/from faces 3 at 4\/12 and 4 at 4\/12 plus 270 sq ft with no roof data\)/);
   });
 });
 
 describe('mergeNotes', () => {
-  const line = '• Satellite (Google, Jun 2023): attic floor about 1,970 sq ft with a 12-inch overhang; roof surface about 2,560 sq ft at 6/12.';
-  const later = '• Satellite (Google, Jun 2023): attic floor about 1,370 sq ft with an 18-inch overhang; roof surface about 2,560 sq ft at 6/12.';
+  const line = '• Satellite (Google imagery Jun 2023): attic floor about 1,970 sq ft inside the walls (12-inch eaves removed; left out face 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.';
+  const later = '• Satellite (Google imagery Jun 2023): roof deck about 2,170 sq ft over the attic floor (12-inch eaves removed; left out face 5 at 1/12). Whole roof 2,560 sq ft incl. overhangs, main pitch 6/12. Check on site.';
+  const older = '• Satellite (Google, Jun 2023): attic floor about 1,970 sq ft with a 12-inch overhang; roof surface about 2,560 sq ft at 6/12.';
 
   it('adds the header and the line to empty or existing notes', () => {
     expect(mergeNotes(null, line)).toBe(`${NOTES_HEADER}\n${line}`);
@@ -276,6 +564,10 @@ describe('mergeNotes', () => {
     expect(mergeNotes(notes, later)).toBe(['Dog in the yard.', NOTES_HEADER, later, 'From photo read:', '• Caution: Recessed lights'].join('\n'));
     expect(mergeNotes(mergeNotes(notes, line), line)).toBe(notes);
     expect(mergeNotes(notes, later).split(NOTES_HEADER)).toHaveLength(2);
+  });
+
+  it('replaces a line in the earlier wording too', () => {
+    expect(mergeNotes(`${NOTES_HEADER}\n${older}`, line)).toBe(`${NOTES_HEADER}\n${line}`);
   });
 
   it('stays within the notes limit', () => {
@@ -329,10 +621,23 @@ describe('the map', () => {
 describe('requests', () => {
   it('checks a lookup request', () => {
     const ok = { estimateId: '00000000-0000-4000-8000-000000000001', areaId: '00000000-0000-4000-8000-000000000002', address: '  12 Elkton Rd, Newark, DE 19711 ' };
-    expect(roofRequestSchema.parse(ok).address).toBe('12 Elkton Rd, Newark, DE 19711');
+    expect(roofRequestSchema.parse(ok)).toEqual({ ...ok, address: '12 Elkton Rd, Newark, DE 19711' });
     expect(roofRequestSchema.safeParse({ ...ok, address: '12' }).success).toBe(false);
     expect(roofRequestSchema.safeParse({ ...ok, address: 'x'.repeat(201) }).success).toBe(false);
     expect(roofRequestSchema.safeParse({ ...ok, areaId: 'nope' }).success).toBe(false);
+    expect(roofRequestSchema.parse({ ...ok, fresh: true })).toMatchObject({ fresh: true });
+    expect(roofRequestSchema.safeParse({ ...ok, fresh: 'yes' }).success).toBe(false);
+  });
+
+  it('checks a lookup of a spot on the map: finite, latitude within 90 and longitude within 180', () => {
+    const ids = { estimateId: '00000000-0000-4000-8000-000000000001', areaId: '00000000-0000-4000-8000-000000000002' };
+    expect(roofRequestSchema.parse({ ...ids, lat: 39.68347, lng: -75.75039 })).toEqual({ ...ids, lat: 39.68347, lng: -75.75039 });
+    expect(roofRequestSchema.safeParse({ ...ids, lat: 90, lng: -180 }).success).toBe(true);
+    for (const bad of [{ lat: 90.1, lng: 0 }, { lat: 0, lng: 180.5 }, { lat: -91, lng: 0 }, { lat: '39.6', lng: -75.7 }, { lat: Infinity, lng: 0 }, { lat: Number.NaN, lng: 0 }, { lat: 39.6 }]) {
+      expect(roofRequestSchema.safeParse({ ...ids, ...bad }).success).toBe(false);
+    }
+    // One or the other, not both.
+    expect(roofRequestSchema.safeParse({ ...ids, lat: 39.6, lng: -75.7, address: '12 Elkton Rd, Newark, DE 19711' }).success).toBe(false);
   });
 
   it('checks a satellite request: coordinates and a whole zoom from 16 to 20', () => {
@@ -344,5 +649,36 @@ describe('requests', () => {
     expect(satelliteQuerySchema.safeParse({ lat: '39.6', lng: '-75.7', zoom: '15' }).success).toBe(false);
     expect(satelliteQuerySchema.safeParse({ lat: '39.6', lng: '-75.7', zoom: '21' }).success).toBe(false);
     expect(satelliteQuerySchema.safeParse({ lat: '39.6', lng: '-75.7', zoom: '18.5' }).success).toBe(false);
+  });
+});
+
+describe('using a saved lookup again', () => {
+  it('matches an address however it was typed', () => {
+    expect(addressKey('  12 Elkton Rd,  Newark, DE 19711 ')).toBe('12 elkton rd newark de 19711');
+    expect(addressKey('12 ELKTON RD NEWARK,DE   19711')).toBe(addressKey('12 Elkton Rd, Newark, DE 19711'));
+    expect(addressKey('12 Elkton Rd, Newark, DE 19711')).not.toBe(addressKey('14 Elkton Rd, Newark, DE 19711'));
+  });
+
+  it('measures short distances between pins', () => {
+    const a = { lat: 39.6834, lng: -75.7504 };
+    expect(metersBetween(a, a)).toBe(0);
+    expect(metersBetween(a, { lat: 39.6834 + 1e-5, lng: -75.7504 })).toBeCloseTo(1.11, 2);
+    expect(metersBetween(a, { lat: 39.6834, lng: -75.7504 + 1e-5 })).toBeCloseTo(0.856, 2);
+    const { dLat, dLng } = pinBox(a, 2);
+    expect(metersBetween(a, { lat: a.lat + dLat, lng: a.lng })).toBeGreaterThan(2);
+    expect(metersBetween(a, { lat: a.lat, lng: a.lng + dLng })).toBeGreaterThan(2);
+    expect(metersBetween(a, { lat: a.lat, lng: a.lng + dLng })).toBeLessThan(2.1);
+  });
+
+  it('picks the newest saved result this app can read, for a pin within 2 m', () => {
+    const r = result();
+    const row = (id: string, extra: Record<string, unknown> = {}) => ({ id, created_at: '2026-11-17T10:00:00Z', result: r, ...extra });
+    expect(pickSaved([row('a'), row('b')], null)?.id).toBe('a');
+    expect(pickSaved([row('old', { result: { footprintM2: 217 } }), row('b')], null)?.id).toBe('b');
+    expect(pickSaved([row('old', { result: { ...r, format: 1 } })], null)).toBeNull();
+    expect(pickSaved([], null)).toBeNull();
+    const pin = { lat: 39.6834, lng: -75.7504 };
+    expect(pickSaved([row('far', { pin_lat: 39.6834 + 3e-5, pin_lng: -75.7504 }), row('near', { pin_lat: 39.6834 + 1e-5, pin_lng: -75.7504 })], pin)?.id).toBe('near');
+    expect(pickSaved([row('address only')], pin)).toBeNull();
   });
 });

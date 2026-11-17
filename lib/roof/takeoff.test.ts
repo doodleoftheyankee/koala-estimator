@@ -66,6 +66,21 @@ describe('fetchTakeoff', () => {
     expect(bare.message).toMatch(/couldn't find that address or has no roof data/);
   });
 
+  it("says no roof data in this app's terms (Roof Takeoff's own text points to steps this app doesn't have)", async () => {
+    const { svc } = service(() => json(404, { error: 'Google has no roof data for this spot. Tap the right roof on the image, or measure it from photos.' }));
+    const e = await failure(fetchTakeoff('12 Elkton Rd', svc));
+    expect(e.message).toBe('Google has no roof data for this house. Measure it with 📐 Measure this area.');
+    expect([e.status, e.code]).toEqual([404, 'not_found']);
+  });
+
+  it('looks up a spot on the map by lat and lng', async () => {
+    const { svc, calls } = service(() => json(200, { ...fixture, place: { address: null, lat: 39.68347, lng: -75.75039, precision: 'PIN' } }));
+    const r = await fetchTakeoff({ lat: 39.68347, lng: -75.75039 }, svc);
+    expect(calls[0]!.url).toBe(`${BASE}/api/takeoff?lat=39.68347&lng=-75.75039`);
+    expect(new Headers(calls[0]!.init.headers).get('x-partner-key')).toBe('partner-123');
+    expect([r.address, r.precision]).toEqual([null, 'PIN']);
+  });
+
   it('maps busy and server problems to plain messages', async () => {
     const busy = await failure(fetchTakeoff('x', service(() => json(429, { error: 'Google is busy' })).svc));
     expect([busy.status, busy.code]).toEqual([429, 'busy']);

@@ -92,7 +92,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
     const wallSqft = a.use === 'walls' ? measuredSqft(wallsWith(draft.measurements[id], a.wallRunFt)) : null;
     const text =
       a.use !== 'walls'
-        ? `Square feet set to ${num(a.sqft)} from the satellite lookup, with a line in the prep notes.`
+        ? `Square feet set to ${num(a.sqft)} (${a.what}) from the satellite lookup, with a line in the prep notes.`
         : wallSqft === null
           ? `Wall run set to ${num(a.wallRunFt)} ft. Add the wall height in Measure to get the square feet.`
           : `Wall run set to ${num(a.wallRunFt)} ft: ${num(wallSqft)} sq ft of wall.`;
@@ -140,7 +140,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 />
                 {ROOF_LOOKUP_JOBS.has(a.jobType) ? (
                   <RoofLookupButton
-                    areaId={a.id}
+                    estimateId={draft.id}
                     address={address}
                     street={draft.property.street}
                     onOpen={() => {

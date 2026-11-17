@@ -1,5 +1,5 @@
 {
-  "_fixture": "Made-up house for tests: 50 x 32 ft main roof at 6/12, attached 24 x 24 ft garage at 4/12, 20 x 8 ft porch at 1/12, turned 8 degrees.",
+  "_fixture": "Made-up house for tests: 50 x 32 ft main roof at 6/12, attached 24 x 24 ft garage at 4/12, 20 x 8 ft porch at 1/12, turned 8 degrees. Contract v1.1: faces 3 to 5 sit well below the main roof (lower); the porch (5) is left out by default.",
   "version": 1,
   "place": {
     "address": "12 Elkton Rd, Newark, DE 19711, USA",
@@ -60,7 +60,8 @@
       },
       "heightM": 7.4,
       "rise": 6,
-      "lowSlope": false
+      "lowSlope": false,
+      "lower": false
     },
     {
       "n": 2,
@@ -84,7 +85,8 @@
       },
       "heightM": 7.4,
       "rise": 6,
-      "lowSlope": false
+      "lowSlope": false,
+      "lower": false
     },
     {
       "n": 3,
@@ -108,7 +110,8 @@
       },
       "heightM": 5.2,
       "rise": 4,
-      "lowSlope": false
+      "lowSlope": false,
+      "lower": true
     },
     {
       "n": 4,
@@ -132,7 +135,8 @@
       },
       "heightM": 5.2,
       "rise": 4,
-      "lowSlope": false
+      "lowSlope": false,
+      "lower": true
     },
     {
       "n": 5,
@@ -156,7 +160,8 @@
       },
       "heightM": 3.1,
       "rise": 1,
-      "lowSlope": true
+      "lowSlope": true,
+      "lower": true
     }
   ],
   "photo": {
@@ -412,6 +417,7 @@
     "eave": 22.6,
     "rake": 0,
     "step": 0,
+    "headwall": 0,
     "break": 6.1
   },
   "attic": {
@@ -419,12 +425,22 @@
     "footprintM2": 217,
     "perimeterM": 69.5,
     "perimeterSource": "outline",
+    "sharedWallM": 0,
+    "unmatchedM2": 0,
+    "perimeterByFaceM": {
+      "1": 16.4,
+      "2": 20.1,
+      "3": 14.5,
+      "4": 7.4,
+      "5": 10.9
+    },
     "excluded": [
       5
     ],
     "excludedM2": 14.9,
     "floorM2": 182.7,
-    "wallRunM": 67.1
+    "wallRunM": 56.16,
+    "deckM2": 201.13
   },
   "warnings": [
     "Lower-detail imagery. Check the pitch on site."

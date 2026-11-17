@@ -120,7 +120,7 @@ under Project → Settings → Environment Variables.
 | `APP_URL` | links in quote emails |
 | `RESEND_API_KEY`, `QUOTE_FROM_EMAIL`, `OFFICE_NOTIFY_EMAIL` | email. Without these, quotes still work: the estimator gets a link to share by hand. |
 | `GOOGLE_MAPS_API_KEY` | the drive-time lookup button (optional) |
-| `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite lookup on each area (optional): attic floor, roof surface and wall run from the address, through the Roof Takeoff site. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button says the lookup isn't set up. |
+| `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite lookup on each area (optional): attic floor or roof deck, crawlspace floor, garage ceiling or wall run from the address, through the Roof Takeoff site (contract v1.1, v1 answers still work). A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button says the lookup isn't set up. |
 | `CRON_SECRET` | the nightly learning run. Vercel Cron sends it automatically; without it the run is disabled. Any long random string. |
 | `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional) |
 

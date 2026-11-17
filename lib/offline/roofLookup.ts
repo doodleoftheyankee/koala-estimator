@@ -2,17 +2,24 @@
 // Asks the server for a satellite roof lookup (app/api/roof). Needs a connection; nothing here is
 // queued or saved with the estimate.
 //
-// Lookups live here, one per area, so the sheet can close and open again: a lookup in flight keeps
-// going (only Stop cancels it), and the last result for each area, with the estimator's overhang
-// and faces, stays in memory for this visit. Reopening the sheet doesn't pay for another lookup.
+// Lookups live here, one per house (estimate + address), so every area of the estimate shares the
+// result, the overhang and the face choices for this visit, and the sheet can close and open again:
+// a lookup in flight keeps going (only Stop cancels it). Reopening the sheet, or opening it on
+// another area of the same estimate, doesn't pay for another lookup; after a reload the server sends
+// back its saved lookup of the same house instead of paying again. Which number an attic area uses
+// (attic floor or roof deck) is kept per area.
 import { useSyncExternalStore } from 'react';
-import type { RoofChoices, RoofRequest, RoofResult } from '@/lib/roof/lookup';
+import { addressKey, type FaceGroup, type LatLng, type RoofChoices, type RoofPick, type RoofResult } from '@/lib/roof/lookup';
 
 export interface RoofLookup {
   lookupId: string;
   result: RoofResult;
-  /** The address that was looked up (as the app sent it). */
-  address: string;
+  /** The server sent back a saved lookup of the same house (no new charge). */
+  reused: boolean;
+  /** When the lookup was made (ISO time). */
+  lookedUpAt: string;
+  /** The spot the estimator tapped on the photo, or null for the address. */
+  pin: LatLng | null;
 }
 
 export class LookupFailed extends Error {
@@ -24,21 +31,48 @@ export class LookupFailed extends Error {
   }
 }
 
-export interface AreaLookup {
-  running: { startedAt: number; address: string; controller: AbortController } | null;
+export type FaceChoices = Pick<RoofChoices, 'excluded' | 'unmatchedOut'>;
+
+export interface HouseLookup {
+  running: { startedAt: number; pin: LatLng | null; controller: AbortController } | null;
   last: RoofLookup | null;
-  /** Overhang and faces chosen for `last`; null = the defaults. */
-  choices: RoofChoices | null;
   error: LookupFailed | null;
+  /** The request that failed, for Try again. */
+  failed: { pin: LatLng | null; fresh: boolean } | null;
+  /** The overhang chosen for this house; null = the default. */
+  overhangIn: number | null;
+  /** Face choices for `last`, per group (house areas share one, garages another); missing = the defaults. */
+  faces: Partial<Record<FaceGroup, FaceChoices>>;
+  /** The estimator said the outline is on the right house (for `last`). */
+  confirmed: boolean;
 }
 
-const EMPTY: AreaLookup = { running: null, last: null, choices: null, error: null };
-const areas = new Map<string, AreaLookup>();
+export interface LookupRequest {
+  estimateId: string;
+  areaId: string;
+  /** The estimate's address (the house this lookup belongs to). */
+  address: string;
+  /** Look up this spot instead of the address (the estimator tapped the right roof). */
+  pin?: LatLng | null;
+  /** Pay for a new lookup even if the server has a saved one ("Look up again"). */
+  fresh?: boolean;
+}
+
+const EMPTY: HouseLookup = { running: null, last: null, error: null, failed: null, overhangIn: null, faces: {}, confirmed: false };
+const houses = new Map<string, HouseLookup>();
+const picks = new Map<string, RoofPick>();
 const listeners = new Set<() => void>();
 
-function patch(areaId: string, change: Partial<AreaLookup>) {
-  areas.set(areaId, { ...(areas.get(areaId) ?? EMPTY), ...change });
+/** One house: the estimate and its address however it was typed. */
+export const houseKey = (estimateId: string, address: string) => `${estimateId}|${addressKey(address)}`;
+
+function notify() {
   listeners.forEach((fn) => fn());
+}
+
+function patch(key: string, change: Partial<HouseLookup>) {
+  houses.set(key, { ...(houses.get(key) ?? EMPTY), ...change });
+  notify();
 }
 
 function subscribe(fn: () => void) {
@@ -48,18 +82,33 @@ function subscribe(fn: () => void) {
   };
 }
 
-/** The lookup state of an area; re-renders when it changes. */
-export function useAreaLookup(areaId: string): AreaLookup {
+/** The lookup state of a house (estimate + address); re-renders when it changes. */
+export function useHouseLookup(estimateId: string, address: string | null): HouseLookup {
+  const key = address ? houseKey(estimateId, address) : null;
   return useSyncExternalStore(
     subscribe,
-    () => areas.get(areaId) ?? EMPTY,
+    () => (key ? (houses.get(key) ?? EMPTY) : EMPTY),
     () => EMPTY,
   );
 }
 
+/** Which number an attic area uses, once the estimator chose; null = not chosen. */
+export function useAreaPick(areaId: string): RoofPick | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => picks.get(areaId) ?? null,
+    () => null,
+  );
+}
+
+export function setAreaPick(areaId: string, pick: RoofPick): void {
+  picks.set(areaId, pick);
+  notify();
+}
+
 export interface RoofService {
   configured: boolean;
-  /** The Roof Takeoff site, for the "full takeoff" link; null when unknown. */
+  /** The Roof Takeoff site, for its link; null when unknown. */
   url: string | null;
 }
 
@@ -80,44 +129,66 @@ export function roofLookupService(): Promise<RoofService> {
   return service;
 }
 
-/** Starts a lookup for an area (does nothing while one is running). */
-export function startRoofLookup(req: RoofRequest): void {
-  if (areas.get(req.areaId)?.running) return;
+/** Starts a lookup for a house (does nothing while one is running for it). */
+export function startRoofLookup(req: LookupRequest): void {
+  const key = houseKey(req.estimateId, req.address);
+  if (houses.get(key)?.running) return;
   const controller = new AbortController();
-  patch(req.areaId, { running: { startedAt: Date.now(), address: req.address, controller }, error: null });
+  const pin = req.pin ?? null;
+  const fresh = req.fresh ?? false;
+  patch(key, { running: { startedAt: Date.now(), pin, controller }, error: null, failed: null });
   requestLookup(req, controller.signal).then(
-    (lookup) => patch(req.areaId, { running: null, last: lookup, choices: null }),
+    // A new result: the overhang stays (same house), the face numbers may differ, so they start over.
+    (lookup) => patch(key, { running: null, last: lookup, faces: {}, confirmed: false }),
     (e: unknown) => {
       const error = e instanceof LookupFailed ? e : new LookupFailed('The lookup failed. Try again.', 'failed');
       if (error.code === 'not_configured') service = null;
-      patch(req.areaId, { running: null, error: error.code === 'aborted' ? null : error });
+      patch(key, { running: null, error: error.code === 'aborted' ? null : error, failed: error.code === 'aborted' ? null : { pin, fresh } });
     },
   );
 }
 
-/** Stops the lookup running for an area. */
-export function stopRoofLookup(areaId: string): void {
-  areas.get(areaId)?.running?.controller.abort();
+/** Stops the lookup running for a house. */
+export function stopRoofLookup(estimateId: string, address: string): void {
+  houses.get(houseKey(estimateId, address))?.running?.controller.abort();
 }
 
-/** Remembers the overhang and faces chosen for an area's last result. */
-export function setLookupChoices(areaId: string, choices: RoofChoices): void {
-  patch(areaId, { choices });
+/** Remembers the overhang chosen for a house (every area of the estimate uses it). */
+export function setLookupOverhang(estimateId: string, address: string, overhangIn: number): void {
+  patch(houseKey(estimateId, address), { overhangIn });
 }
 
-/** Asks the server to look the address up (usually 10–30 seconds). */
-async function requestLookup(req: RoofRequest, signal: AbortSignal): Promise<RoofLookup> {
+/** Remembers the faces chosen for a house's last result, for the house areas or the garage. */
+export function setLookupFaces(estimateId: string, address: string, group: FaceGroup, faces: FaceChoices): void {
+  const key = houseKey(estimateId, address);
+  patch(key, { faces: { ...(houses.get(key) ?? EMPTY).faces, [group]: faces } });
+}
+
+/** The estimator says the outline is on the right house. */
+export function confirmHouse(estimateId: string, address: string): void {
+  patch(houseKey(estimateId, address), { confirmed: true });
+}
+
+/** Asks the server to look the address (or the tapped spot) up: usually 10–30 seconds, or at once for a saved lookup. */
+async function requestLookup(req: LookupRequest, signal: AbortSignal): Promise<RoofLookup> {
+  const pin = req.pin ?? null;
+  const body = {
+    estimateId: req.estimateId,
+    areaId: req.areaId,
+    ...(pin ? { lat: pin.lat, lng: pin.lng } : { address: req.address }),
+    ...(req.fresh ? { fresh: true } : {}),
+  };
   let res: Response;
   try {
-    res = await fetch('/api/roof', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req), signal });
+    res = await fetch('/api/roof', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw new LookupFailed('Stopped.', 'aborted');
     throw new LookupFailed(navigator.onLine ? "Couldn't reach the server. Try again." : 'No signal. The satellite lookup needs a connection.', 'unreachable');
   }
-  const body = (await res.json().catch(() => ({}))) as { lookupId?: string; result?: RoofResult; error?: string; code?: string };
-  if (!res.ok || !body.result) {
-    const timedOut = res.status === 504 && !body.error;
-    throw new LookupFailed(body.error ?? (timedOut ? 'The lookup took too long. Try again, or measure by hand.' : `The lookup failed (${res.status}). Try again.`), body.code ?? 'failed');
+  const answer = (await res.json().catch(() => ({}))) as { lookupId?: string; result?: RoofResult; reused?: boolean; lookedUpAt?: string; error?: string; code?: string };
+  if (!res.ok || !answer.result) {
+    const timedOut = res.status === 504 && !answer.error;
+    throw new LookupFailed(answer.error ?? (timedOut ? 'The lookup took too long. Try again, or measure by hand.' : `The lookup failed (${res.status}). Try again.`), answer.code ?? 'failed');
   }
-  return { lookupId: body.lookupId ?? '', result: body.result, address: req.address };
+  return { lookupId: answer.lookupId ?? '', result: answer.result, reused: answer.reused === true, lookedUpAt: answer.lookedUpAt ?? new Date().toISOString(), pin };
 }

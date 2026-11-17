@@ -2,7 +2,7 @@
 // key; this app sends only its partner key (x-partner-key), which never reaches the phone. Errors
 // become RoofLookupError with a message the estimator can act on. No env access here: the routes
 // pass the base URL and key in, so this can be tested with a stand-in fetch.
-import { compactTakeoff, LOOKUP_TIMEOUT_MS, NOT_CONFIGURED_MESSAGE, takeoffSchema, type RoofResult } from './lookup';
+import { compactTakeoff, LOOKUP_TIMEOUT_MS, NO_ROOF_MESSAGE, NOT_CONFIGURED_MESSAGE, takeoffSchema, type LatLng, type RoofResult } from './lookup';
 
 export type RoofErrorCode = 'not_configured' | 'refused' | 'not_found' | 'invalid' | 'busy' | 'timeout' | 'unreachable' | 'bad_response' | 'aborted' | 'failed';
 
@@ -40,6 +40,8 @@ function theirMessage(body: unknown): string | null {
 export function errorFor(status: number, body: unknown): RoofLookupError {
   const theirs = theirMessage(body);
   if (status === 401 || status === 403) return new RoofLookupError(REFUSED, 502, 'refused');
+  // Roof Takeoff's "no roof data" text points to its own page (tap the image, measure from photos).
+  if (status === 404 && theirs && /no roof data/i.test(theirs)) return new RoofLookupError(NO_ROOF_MESSAGE, 404, 'not_found');
   if (status === 404) return new RoofLookupError(theirs ?? "Google couldn't find that address or has no roof data for it. Check the address, or measure by hand.", 404, 'not_found');
   if (status === 400) return new RoofLookupError(theirs ?? "The lookup service couldn't use that address. Check it and try again.", 400, 'invalid');
   if (status === 429) return new RoofLookupError('The lookup service is busy or reached its daily limit. Try again in a few minutes.', 429, 'busy');
@@ -64,10 +66,14 @@ async function withDeadline<T>(signal: AbortSignal | undefined, timeoutMs: numbe
   }
 }
 
-/** GET /api/takeoff?address= on Roof Takeoff, validated against the contract and made compact. */
-export async function fetchTakeoff(address: string, service: RoofService, signal?: AbortSignal, timeoutMs = LOOKUP_TIMEOUT_MS): Promise<RoofResult> {
+/**
+ * GET /api/takeoff on Roof Takeoff for an address, or for a spot on the map (lat and lng, when the
+ * estimator tapped the right roof), validated against the contract and made compact.
+ */
+export async function fetchTakeoff(place: string | LatLng, service: RoofService, signal?: AbortSignal, timeoutMs = LOOKUP_TIMEOUT_MS): Promise<RoofResult> {
   const doFetch = service.fetch ?? fetch;
-  const url = `${service.baseUrl}/api/takeoff?${new URLSearchParams({ address })}`;
+  const q: Record<string, string> = typeof place === 'string' ? { address: place } : { lat: String(place.lat), lng: String(place.lng) };
+  const url = `${service.baseUrl}/api/takeoff?${new URLSearchParams(q)}`;
   const { res, body } = await withDeadline(signal, timeoutMs, async (s) => {
     const res = await doFetch(url, { headers: { 'x-partner-key': service.key, accept: 'application/json' }, signal: s, cache: 'no-store' });
     // Reading the body is part of the wait: a stalled answer still hits the deadline.
