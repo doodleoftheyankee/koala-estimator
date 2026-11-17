@@ -30,6 +30,22 @@ export interface LocalEstimate {
   summaryPrice?: number | null;
 }
 
+/** A new estimate as this phone first stores it: not synced, nothing from the server yet. */
+export function newLocalEstimate(draft: EstimateDraft, ownerId: string, now = new Date().toISOString()): LocalEstimate {
+  return {
+    id: draft.id,
+    ownerId,
+    draft,
+    syncState: 'local',
+    mutationId: crypto.randomUUID(),
+    lastError: null,
+    serverDoc: null,
+    serverRowVersion: null,
+    updatedAt: now,
+    syncedAt: null,
+  };
+}
+
 /** A photo of an estimate area, kept on the phone until it's uploaded (lib/offline/photos.ts). */
 export interface LocalPhoto {
   id: string;

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { DEMO_ACCOUNTS, demoEnabled, type DemoRole } from '@/lib/demo/accounts';
+import { safeNext } from '@/lib/safeNext';
 import { LoginForm } from './LoginForm';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
   const { next, error } = await searchParams;
-  const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
       <div className="mb-8 text-center">
@@ -36,7 +36,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="pt-2 text-center text-xs text-slate-500">Team members sign in with an email code below.</p>
         </section>
       ) : null}
-      <LoginForm next={safeNext} initialError={error ?? null} />
+      <LoginForm next={safeNext(next)} initialError={error ?? null} />
     </main>
   );
 }

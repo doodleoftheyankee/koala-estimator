@@ -105,11 +105,45 @@ do $$ begin
          'the address reuse index covers finished lookups by key, newest first';
 end $$;
 
+-- A finished lookup also keeps the key of the address Google matched (migration ..._matched), so an
+-- estimate started from it on the Roof lookup page finds it again by its own address.
+update roof_lookups set matched_key = '12 elkton rd newark de 19711' where id = 'f4000000-0000-0000-0000-000000000006';
+insert into roof_lookups (id, created_by, address, address_key, status, result, matched_key) values
+  ('f4000000-0000-0000-0000-000000000007', :'est2', '3 cross gable', '3 cross gable', 'done', '{"footprintM2": 179}', '3 cross gable ct newark de 19711');
+
+do $$ begin
+  assert (select id from roof_lookups
+          where status = 'done' and matched_key = '3 cross gable ct newark de 19711' and created_at >= now() - interval '24 hours'
+          order by created_at desc limit 1) = 'f4000000-0000-0000-0000-000000000007', 'found by the address Google matched, not only by what was typed';
+  assert (select count(*) from roof_lookups where status = 'done' and address_key = '3 cross gable ct newark de 19711') = 0, 'the typed key stays as typed';
+  assert (select count(*) from pg_indexes where tablename = 'roof_lookups' and indexname in ('roof_lookups_reuse_matched_idx', 'roof_lookups_recent_idx')) = 2, 'the matched-address and recent indexes exist';
+end $$;
+
+do $$
+begin
+  begin
+    insert into roof_lookups (created_by, address, address_key, status, matched_key) values ('00000000-0000-0000-0000-0000000000d2', 'x', 'x', 'pending', 'x');
+    raise exception 'a lookup that is not done should not have a matched key';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into roof_lookups (created_by, address, address_key, status, matched_key) values ('00000000-0000-0000-0000-0000000000d2', 'x', 'x', 'done', repeat('x', 201));
+    raise exception 'a matched key over 200 characters should be refused';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- A lookup from the Roof lookup page: no estimate, no area.
+insert into roof_lookups (id, created_by, address, address_key, status, result) values
+  ('f4000000-0000-0000-0000-000000000008', :'est1', '3 Cross Gable Ct', '3 cross gable ct', 'done', '{"footprintM2": 179}');
+
 set role authenticated;
 
 select set_config('request.jwt.claim.sub', :'est1', false);
 do $$ begin
-  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 2, 'the estimator sees their own lookups';
+  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 3, 'the estimator sees their own lookups, the Roof lookup page''s too';
+  assert (select count(*) from roof_lookups where status = 'done') = 2, 'and only theirs among the finished ones (their recent lookups)';
+  assert (select count(*) from roof_lookups where estimate_id is null and status = 'done') = 1, 'a page lookup has no estimate';
 end $$;
 
 select set_config('request.jwt.claim.sub', :'est2', false);
@@ -119,7 +153,8 @@ end $$;
 
 select set_config('request.jwt.claim.sub', :'owner', false);
 do $$ begin
-  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 2, 'the owner sees every lookup';
+  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 3, 'the owner sees every lookup';
+  assert (select count(*) from roof_lookups where status = 'done') = 6, 'every finished lookup, by anyone (the owner''s recent lookups)';
 end $$;
 
 -- Direct writes are refused or change nothing: lookups come only from the server.
@@ -142,7 +177,7 @@ delete from roof_lookups where id = 'f4000000-0000-0000-0000-000000000002';
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
 do $$ begin
-  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 2, 'nobody deletes lookups through RLS';
+  assert (select count(*) from roof_lookups where created_by = '00000000-0000-0000-0000-0000000000d2') = 3, 'nobody deletes lookups through RLS';
   assert (select status from roof_lookups where id = 'f4000000-0000-0000-0000-000000000002') = 'pending', 'the creator cannot update a lookup';
   assert (select error is null from roof_lookups where id = 'f4000000-0000-0000-0000-000000000001'), 'the owner cannot update a lookup';
 end $$;

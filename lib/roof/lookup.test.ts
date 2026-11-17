@@ -33,6 +33,7 @@ import {
   RESULT_FORMAT,
   roofFigures,
   roofJob,
+  parseLatLng,
   roofRequestSchema,
   roundFt,
   roundSqft,
@@ -151,8 +152,9 @@ describe('takeoffSchema', () => {
   it('accepts a realistic answer, ignoring fields it does not use', () => {
     const parsed = takeoffSchema.parse(clone(fixture));
     expect(parsed.segments).toHaveLength(5);
-    expect('edges' in parsed).toBe(false);
+    expect(parsed.edges).toHaveLength(4);
     expect('_fixture' in parsed).toBe(false);
+    expect('box' in parsed.segments[0]!).toBe(false);
   });
 
   it('reads the v1.1 additions', () => {
@@ -225,6 +227,74 @@ describe('takeoffSchema', () => {
     expect(takeoffSchema.safeParse({ ...t, version: 2 }).success).toBe(false);
     expect(takeoffSchema.safeParse({ error: 'Google has no roof data for this spot.' }).success).toBe(false);
     expect(takeoffSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe('roof edges', () => {
+  it('keeps the edges and the total of every edge type', () => {
+    const r = result();
+    expect(r.edges).toHaveLength(4);
+    expect(r.edges[0]).toEqual({ type: 'ridge', faces: [1, 2], lengthM: 15.2, planM: 15.2, path: fixture.edges[0]!.path });
+    expect(r.edgeTotalsM).toEqual({ ridge: 15.2, hip: 0, valley: 4.4, eave: 22.6, rake: 0, step: 0, headwall: 0, break: 6.1 });
+  });
+
+  it('a total the answer leaves out is 0 (an older answer has no headwall)', () => {
+    const t = clone(fixture) as Record<string, unknown> & typeof fixture;
+    const totals: Record<string, unknown> = { ...t.edgeTotalsM };
+    delete totals.headwall;
+    delete totals.valley;
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, edgeTotalsM: totals }));
+    expect(r.edgeTotalsM).toEqual({ ridge: 15.2, hip: 0, valley: 0, eave: 22.6, rake: 0, step: 0, headwall: 0, break: 6.1 });
+  });
+
+  it('adds the edges up when the answer sends no totals', () => {
+    const t = clone(fixture) as Record<string, unknown> & typeof fixture;
+    const edges = [...t.edges, { ...t.edges[0]!, lengthM: 4.8 }];
+    delete (t as Record<string, unknown>).edgeTotalsM;
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, edges }));
+    expect(r.edgeTotalsM.ridge).toBe(20);
+    expect(r.edgeTotalsM.valley).toBe(4.4);
+    expect(r.edgeTotalsM.hip).toBe(0);
+  });
+
+  it('still works without any edges (an answer from before edges were measured)', () => {
+    const t = clone(fixture) as Record<string, unknown> & typeof fixture;
+    delete (t as Record<string, unknown>).edges;
+    delete (t as Record<string, unknown>).edgeTotalsM;
+    const r = compactTakeoff(takeoffSchema.parse(t));
+    expect(r.edges).toEqual([]);
+    expect(Object.values(r.edgeTotalsM)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(isRoofResult(r)).toBe(true);
+  });
+
+  it('drops a broken edge on its own, and broken totals count as 0', () => {
+    const t = clone(fixture);
+    const edges = [
+      ...t.edges,
+      { ...t.edges[0], type: 'gutter' },
+      { ...t.edges[0], lengthM: -1 },
+      { ...t.edges[0], path: [t.edges[0]!.path[0]] },
+      { ...t.edges[0], faces: 'both', planM: 'x' },
+      null,
+      'ridge',
+    ];
+    const r = compactTakeoff(takeoffSchema.parse({ ...t, edges, edgeTotalsM: { ...t.edgeTotalsM, ridge: '15', hip: -2 } }));
+    expect(r.edges.map((e) => e.type)).toEqual(['ridge', 'eave', 'valley', 'break', 'ridge']);
+    expect(r.edges.at(-1)).toMatchObject({ faces: [], planM: null });
+    expect(r.edgeTotalsM.ridge).toBe(0);
+    expect(r.edgeTotalsM.hip).toBe(0);
+    expect(compactTakeoff(takeoffSchema.parse({ ...t, edges: 'none', edgeTotalsM: [] })).edges).toEqual([]);
+  });
+
+  it("a saved result from before the edges were kept isn't used again", () => {
+    const r = result();
+    const old: Record<string, unknown> = { ...r, format: 2 };
+    delete old.edges;
+    delete old.edgeTotalsM;
+    expect(RESULT_FORMAT).toBe(3);
+    expect(isRoofResult(old)).toBe(false);
+    expect(isRoofResult({ ...r, edges: undefined })).toBe(false);
+    expect(isRoofResult({ ...r, edgeTotalsM: null })).toBe(false);
   });
 });
 
@@ -437,7 +507,7 @@ describe('check on site', () => {
     ]);
     expect(checkOnSite(r, f, 'attic', true)).toEqual(['Lower-detail imagery. Check the pitch on site.']);
     expect(checkOnSite({ ...r, precision: 'ROOFTOP', warnings: [] }, f, 'attic', false)).toEqual([]);
-    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', false)).toEqual(['Check the yellow outline is on the roof you tapped.']);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', false)).toEqual(['Check the white outline is on the roof you tapped.']);
   });
 
   it('adds a blurry photo, no outline, a rough wall run, no faces and the parts with no roof data', () => {
@@ -460,13 +530,32 @@ describe('check on site', () => {
     expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
     expect(checkOnSite(carport, f(carport), 'walls', true)).toEqual([]);
   });
+
+  it('has its own words on paper: no photo below, nothing to turn off', () => {
+    const r = result();
+    const f = roofFigures(r, choices(12, [5]));
+    expect(checkOnSite(r, f, 'attic', false, true)).toEqual([
+      "Not confirmed: Google placed this address roughly, so the outline may be on a neighbour's house.",
+      'Lower-detail imagery. Check the pitch on site.',
+    ]);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', false, true)).toEqual(['Not confirmed: a roof picked on the photo, not checked as the house.']);
+    expect(checkOnSite({ ...r, precision: 'PIN', warnings: [] }, f, 'attic', true, true)).toEqual([]);
+    const carport = { ...withCarport(), precision: 'ROOFTOP', warnings: [] };
+    expect(checkOnSite(carport, roofFigures(carport, choices(12, [])), 'attic', true, true)).toEqual(['270 sq ft of the outline has no roof data (a carport or flat part?).']);
+    for (const w of [...checkOnSite(r, f, 'attic', false, true), ...checkOnSite(carport, roofFigures(carport, choices(12, [])), 'attic', false, true)]) {
+      expect(w).not.toMatch(/below|white outline|you tapped/);
+    }
+  });
 });
 
 describe('words', () => {
   it('main pitch: the whole-number rise with the most ground', () => {
     expect(mainPitch([seg(1, 6.2, 50), seg(2, 5.8, 50), seg(3, 12, 80), seg(4, 1, 5)])).toBe(6);
     expect(mainPitch([seg(1, 12, 80), seg(2, 6, 50)])).toBe(12);
-    expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(1);
+    // A nearly flat roof is said in tenths, as pitchText says it: 0.5/12, not 1/12 or 0/12.
+    expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(0.5);
+    expect(mainPitch([seg(1, 0.3, 300)])).toBe(0.3);
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(2);
     expect(mainPitch([])).toBeNull();
   });
 
@@ -636,6 +725,27 @@ describe('requests', () => {
     expect(roofRequestSchema.safeParse({ ...ok, areaId: 'nope' }).success).toBe(false);
     expect(roofRequestSchema.parse({ ...ok, fresh: true })).toMatchObject({ fresh: true });
     expect(roofRequestSchema.safeParse({ ...ok, fresh: 'yes' }).success).toBe(false);
+  });
+
+  it('takes a lookup with no estimate or area (the Roof lookup page), but checks ids that are sent', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    expect(roofRequestSchema.parse({ address: '3 Cross Gable Ct, Newark, DE' })).toEqual({ address: '3 Cross Gable Ct, Newark, DE' });
+    expect(roofRequestSchema.parse({ lat: 39.68, lng: -75.75, fresh: true })).toEqual({ lat: 39.68, lng: -75.75, fresh: true });
+    expect(roofRequestSchema.parse({ estimateId: id, address: '3 Cross Gable Ct' })).toEqual({ estimateId: id, address: '3 Cross Gable Ct' });
+    expect(roofRequestSchema.safeParse({ estimateId: 'nope', address: '3 Cross Gable Ct' }).success).toBe(false);
+    expect(roofRequestSchema.safeParse({ areaId: '', address: '3 Cross Gable Ct' }).success).toBe(false);
+    expect(roofRequestSchema.safeParse({ estimateId: null, address: '3 Cross Gable Ct' }).success).toBe(false);
+    expect(roofRequestSchema.safeParse({ address: '3 Cross Gable Ct', extra: 1 }).success).toBe(false);
+    expect(roofRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('reads a spot sent as text ("lat,lng", from an old Roof Takeoff map-pin link)', () => {
+    expect(parseLatLng('39.6834,-75.7504')).toEqual({ lat: 39.6834, lng: -75.7504 });
+    expect(parseLatLng(' 39.68347 , -75.75039 ')).toEqual({ lat: 39.68347, lng: -75.75039 });
+    expect(parseLatLng('-33.8,151')).toEqual({ lat: -33.8, lng: 151 });
+    for (const odd of ['12 Elkton Rd, Newark, DE 19711', '91.2,-75.75', '39.68,-181', '39.68', '39.68,-75.75,3', 'Newark, 19711', '39.68 -75.75', '']) {
+      expect(parseLatLng(odd), odd).toBeNull();
+    }
   });
 
   it('checks a lookup of a spot on the map: finite, latitude within 90 and longitude within 180', () => {

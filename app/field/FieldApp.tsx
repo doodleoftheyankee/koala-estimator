@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { db, switchUser, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
+import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
 import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
 import { newDraft } from '@/lib/sync/draft';
 import { Alert } from '@/components/ui';
@@ -36,20 +36,7 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
 
   const createEstimate = useCallback(async () => {
     const draft = newDraft();
-    const now = new Date().toISOString();
-    const rec: LocalEstimate = {
-      id: draft.id,
-      ownerId: profile.userId,
-      draft,
-      syncState: 'local',
-      mutationId: crypto.randomUUID(),
-      lastError: null,
-      serverDoc: null,
-      serverRowVersion: null,
-      updatedAt: now,
-      syncedAt: null,
-    };
-    await db().estimates.put(rec);
+    await db().estimates.put(newLocalEstimate(draft, profile.userId));
     go({ kind: 'edit', id: draft.id });
   }, [go, profile.userId]);
 

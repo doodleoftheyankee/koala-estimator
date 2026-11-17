@@ -1,9 +1,10 @@
-// Satellite roof lookup: what the field app takes from the Roof Takeoff site's GET /api/takeoff
-// (its CONTRACT.md, v1 with the v1.1 additions), the contract's formulas (attic floor, roof deck,
-// wall run) recomputed for the estimator's own overhang and roof faces, and the map math for drawing
-// the roof on the aerial photo. Pure (no network, no DOM): app/api/roof calls Roof Takeoff,
-// app/field/measure/RoofLookup shows the result. Roof Takeoff sends meters and square meters;
-// everything the estimator sees is in feet.
+// Satellite roof lookup: what the field app takes from the Roof Takeoff service's GET /api/takeoff
+// (its CONTRACT.md, v1 with the v1.1 and v1.2 additions), the contract's formulas (attic floor, roof
+// deck, wall run) recomputed for the estimator's own overhang and roof faces, and the map math for
+// drawing the roof on the aerial photo. Pure (no network, no DOM): app/api/roof calls Roof Takeoff,
+// app/field/measure/RoofLookup and app/field/roof show the result (lib/roof/roofing has the roofing
+// numbers from the edges). Roof Takeoff sends meters and square meters; everything the estimator
+// sees is in feet.
 import { z } from 'zod';
 import type { JobType } from '@/lib/pricing';
 import type { Measurement } from '@/lib/measure/measure';
@@ -48,6 +49,22 @@ const monthSchema = z.object({ year: z.number().int().min(1990).max(2100), month
 const areasSchema = z.object({ areaM2: nonNegative, groundM2: nonNegative });
 /** For the parts that only help (map, dates, labels): a broken one is dropped, not fatal. */
 const extra = <T extends z.ZodType>(s: T) => s.nullish().catch(null);
+
+/** Roof edge types, in the order the contract lists them. */
+export const EDGE_TYPES = ['ridge', 'hip', 'valley', 'eave', 'rake', 'step', 'headwall', 'break'] as const;
+export type EdgeType = (typeof EDGE_TYPES)[number];
+
+/** One roof edge: a broken one (unknown type, bad length, a path of fewer than two points) is dropped on its own. */
+const edgeSchema = z.object({
+  type: z.enum(EDGE_TYPES),
+  faces: z.array(z.number().int().min(1)).max(8).catch([]),
+  lengthM: nonNegative,
+  planM: nonNegative.nullish().catch(null),
+  path: z.array(latLngSchema).min(2),
+});
+/** A total that is missing or broken counts as 0. */
+const edgeTotal = nonNegative.nullish().catch(null);
+const edgeTotalsSchema = z.object(Object.fromEntries(EDGE_TYPES.map((k) => [k, edgeTotal])) as Record<EdgeType, typeof edgeTotal>);
 
 /**
  * The subset of Roof Takeoff's answer the app needs. Unknown fields are ignored (and dropped), so
@@ -107,6 +124,9 @@ export const takeoffSchema = z.object({
     perimeterByFaceM: z.record(z.string().regex(/^\d{1,4}$/), nonNegative).nullish(),
     deckM2: nonNegative.nullish(),
   }),
+  /** Roof edges and their totals (meters along the slope). Optional: an answer without them still works. */
+  edges: z.array(edgeSchema.nullable().catch(null)).max(2000).nullish().catch(null),
+  edgeTotalsM: extra(edgeTotalsSchema),
   warnings: z.array(z.string()).nullish().catch(null),
 });
 export type Takeoff = z.infer<typeof takeoffSchema>;
@@ -131,8 +151,19 @@ export interface RoofSegment {
   center: LatLng | null;
 }
 
+export interface RoofEdge {
+  type: EdgeType;
+  /** The faces on each side (one face for an outer edge). */
+  faces: number[];
+  /** True length along the slope. */
+  lengthM: number;
+  /** Length seen from above; null when not sent. */
+  planM: number | null;
+  path: LatLng[];
+}
+
 /** Bumped whenever RoofResult changes shape, so a saved lookup in the old shape isn't used again. */
-export const RESULT_FORMAT = 2;
+export const RESULT_FORMAT = 3;
 
 /** What the app keeps from a lookup (returned to the phone and logged in roof_lookups.result). */
 export interface RoofResult {
@@ -170,6 +201,10 @@ export interface RoofResult {
   outline: LatLng[][];
   /** Each face's shape seen from above, for drawing its number. */
   faces: Array<{ n: number; poly: LatLng[] }>;
+  /** Roof edges, for drawing ([] when not measured). */
+  edges: RoofEdge[];
+  /** Meters of each edge type along the slope (every type; 0 when none or not measured). */
+  edgeTotalsM: Record<EdgeType, number>;
   warnings: string[];
   /** Roof Takeoff's own figures at its overhang, kept for the record. */
   takeoff: { overhangM: number; floorM2: number; wallRunM: number; deckM2: number | null };
@@ -178,6 +213,7 @@ export interface RoofResult {
 const round = (n: number, digits: number) => Math.round(n * 10 ** digits) / 10 ** digits;
 const point = (p: LatLng): LatLng => ({ lat: round(p.lat, 7), lng: round(p.lng, 7) });
 const MAX_RING_POINTS = 600;
+const MAX_EDGES = 400;
 /** Keeps a ring drawable: every k-th point when Google's outline is very detailed. */
 function thin(ring: LatLng[], max = MAX_RING_POINTS): LatLng[] {
   const k = Math.ceil(ring.length / max);
@@ -197,6 +233,17 @@ export function koalaWording(text: string): string {
     .replace(/measure (?:it|this one) from photos/gi, `measure it with ${MEASURE_BUTTON}`);
 }
 
+/**
+ * Each edge type's total in meters: the answer's own totals (a type it left out is 0), or, when it
+ * sent no totals, the edges added up. Rounded to the millimeter.
+ */
+function edgeTotals(t: Pick<Takeoff, 'edgeTotalsM'>, edges: readonly RoofEdge[]): Record<EdgeType, number> {
+  const sent = t.edgeTotalsM;
+  return Object.fromEntries(
+    EDGE_TYPES.map((k) => [k, round(sent ? (sent[k] ?? 0) : edges.reduce((sum, e) => sum + (e.type === k ? e.lengthM : 0), 0), 3)]),
+  ) as Record<EdgeType, number>;
+}
+
 /** The compact result kept from a validated takeoff. */
 export function compactTakeoff(t: Takeoff): RoofResult {
   const segments: RoofSegment[] = t.segments.map((s) => {
@@ -210,6 +257,10 @@ export function compactTakeoff(t: Takeoff): RoofResult {
   // v1 answers don't send these: the contract's definitions give the same from what v1 sends.
   const unmatchedM2 = t.attic.unmatchedM2 ?? (segments.length ? Math.max(0, t.attic.footprintM2 - groundM2) : 0);
   const perimeterByFaceM = Object.fromEntries(Object.entries(t.attic.perimeterByFaceM ?? {}).filter(([n]) => known.has(Number(n))));
+  const edges: RoofEdge[] = (t.edges ?? [])
+    .filter((e) => e !== null)
+    .slice(0, MAX_EDGES)
+    .map((e) => ({ type: e.type, faces: e.faces, lengthM: e.lengthM, planM: e.planM ?? null, path: thin(e.path, 100) }));
   return {
     format: RESULT_FORMAT,
     address: t.place.address,
@@ -230,6 +281,8 @@ export function compactTakeoff(t: Takeoff): RoofResult {
     defaultExcluded: [...new Set(t.attic.excluded)].filter((n) => known.has(n)),
     outline: (t.outline?.polys ?? []).filter((r) => r.length >= 3).slice(0, 20).map((r) => thin(r)),
     faces: (t.faces ?? []).filter((f) => known.has(f.n) && f.poly.length >= 3).map((f) => ({ n: f.n, poly: thin(f.poly, 200) })),
+    edges,
+    edgeTotalsM: edgeTotals(t, edges),
     warnings: (t.warnings ?? [])
       .map((w) => koalaWording(w.replace(/\s+/g, ' ').trim()).slice(0, 300))
       .filter(Boolean)
@@ -242,7 +295,17 @@ export function compactTakeoff(t: Takeoff): RoofResult {
 export function isRoofResult(v: unknown): v is RoofResult {
   if (!v || typeof v !== 'object') return false;
   const r = v as Partial<RoofResult>;
-  return r.format === RESULT_FORMAT && Array.isArray(r.segments) && typeof r.footprintM2 === 'number' && typeof r.perimeterM === 'number' && !!r.center && !!r.point;
+  return (
+    r.format === RESULT_FORMAT &&
+    Array.isArray(r.segments) &&
+    Array.isArray(r.edges) &&
+    !!r.edgeTotalsM &&
+    typeof r.edgeTotalsM === 'object' &&
+    typeof r.footprintM2 === 'number' &&
+    typeof r.perimeterM === 'number' &&
+    !!r.center &&
+    !!r.point
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -279,11 +342,14 @@ export function deckM2(floorM2: number, included: readonly Pick<RoofSegment, 'ar
   return ground > 0 ? floorM2 * (area / ground) : null;
 }
 
-/** The main pitch: the whole-number rise whose faces cover the most ground. Null with no faces. */
+/**
+ * The main pitch: the rise whose faces cover the most ground, as pitchText says it (whole numbers
+ * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12). Null with no faces.
+ */
 export function mainPitch(segments: readonly RoofSegment[]): number | null {
   const ground = new Map<number, number>();
   for (const s of segments) {
-    const r = Math.round(s.rise);
+    const r = s.rise >= 2 ? Math.round(s.rise) : round(s.rise, 1);
     ground.set(r, (ground.get(r) ?? 0) + s.groundM2);
   }
   let best: number | null = null;
@@ -445,15 +511,27 @@ export const PICK_WORDS: Record<RoofPick, { label: string; note: string }> = {
   deck: { label: 'Roof deck (spray foam under the roof)', note: 'roof deck' },
 };
 
-/** Things to check on site, shown right under the numbers (before the faces and the Use button). */
-export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirmed: boolean): string[] {
+/**
+ * Things to check on site, shown right under the numbers (before the faces and the Use button).
+ * `paper`: in the words of the printed report and the copied summary, which have no photo below
+ * and nothing to turn off.
+ */
+export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirmed: boolean, paper = false): string[] {
   const out: string[] = [];
   if (r.precision !== 'ROOFTOP' && !confirmed) {
-    out.push(
-      r.precision === 'PIN'
-        ? 'Check the yellow outline is on the roof you tapped.'
-        : "Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.",
-    );
+    if (paper) {
+      out.push(
+        r.precision === 'PIN'
+          ? 'Not confirmed: a roof picked on the photo, not checked as the house.'
+          : "Not confirmed: Google placed this address roughly, so the outline may be on a neighbour's house.",
+      );
+    } else {
+      out.push(
+        r.precision === 'PIN'
+          ? 'Check the white outline is on the roof you tapped.'
+          : "Google placed this address roughly, so the outline may be on a neighbour's house. Check it on the photo below.",
+      );
+    }
   }
   if (r.quality === 'LOW') out.push('Blurry photo: check the sizes and the pitch on site.');
   if (r.perimeterSource === 'none') out.push("No outline was found, so the overhang can't be taken off. Check the size on site.");
@@ -461,7 +539,7 @@ export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirm
   if (!r.segments.length) out.push('Google has no roof faces for this house, so no faces can be left out.');
   if (showUnmatched(r) && job !== 'walls') {
     const what = `${comma(roundSqft(f.unmatchedSqft))} sq ft of the outline has no roof data (a carport or flat part?).`;
-    out.push(job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
+    out.push(paper ? what : job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
   }
   // Roof Takeoff says "Lower-detail imagery. Check the pitch on site." for the same blurry photo: once is enough.
   const theirs = r.quality === 'LOW' ? r.warnings.filter((w) => !/^lower-detail imagery\b/i.test(w)) : r.warnings;
@@ -630,10 +708,11 @@ export function mapFrame(center: LatLng, zoom: number) {
 // Requests to the app's own routes
 // ---------------------------------------------------------------------------------------------
 
-const lookupIds = { estimateId: z.uuid(), areaId: z.uuid(), fresh: z.boolean().optional() };
+const lookupIds = { estimateId: z.uuid().optional(), areaId: z.uuid().optional(), fresh: z.boolean().optional() };
 
 /**
  * POST /api/roof: an address, or a spot on the map (the estimator tapped the right roof).
+ * estimateId and areaId say which area it is for; both are left out on the Roof lookup page.
  * `fresh` skips a saved lookup of the same house and pays for a new one ("Look up again").
  */
 export const roofRequestSchema = z.union([
@@ -641,6 +720,18 @@ export const roofRequestSchema = z.union([
   z.strictObject({ ...lookupIds, lat: finite.min(-90).max(90), lng: finite.min(-180).max(180) }),
 ]);
 export type RoofRequest = z.infer<typeof roofRequestSchema>;
+
+/**
+ * A spot typed or linked as "39.6834,-75.7504" (an old Roof Takeoff map-pin link comes over as
+ * ?address=lat,lng), or null for anything else.
+ */
+export function parseLatLng(text: string): LatLng | null {
+  const m = /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(text);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
 
 const coordinate = (limit: number) =>
   z.string().trim().min(1).max(24).regex(/^-?\d+(\.\d+)?$/).transform(Number).pipe(z.number().finite().min(-limit).max(limit));

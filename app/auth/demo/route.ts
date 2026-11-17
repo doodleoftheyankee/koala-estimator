@@ -3,6 +3,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { DEMO_ACCOUNTS, demoEnabled, isDemoRole } from '@/lib/demo/accounts';
 import { createClient } from '@/lib/supabase/server';
+import { safeNext } from '@/lib/safeNext';
 
 export async function POST(request: NextRequest) {
   return signIn(request, (await request.formData()).get('as'));
@@ -19,6 +20,6 @@ async function signIn(request: NextRequest, role: unknown, next: string | null =
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email: account.email, password: process.env.DEMO_PASSWORD! });
   if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(`Demo sign-in failed: ${error.message}`)}`, origin), { status: 303 });
-  const target = next && next.startsWith('/') && !next.startsWith('//') ? next : account.home;
+  const target = safeNext(next, account.home);
   return NextResponse.redirect(new URL(target, origin), { status: 303 });
 }

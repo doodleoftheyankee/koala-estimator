@@ -5,6 +5,7 @@ import { SignOutButton } from './SignOutButton';
 export function AppNav({ profile }: { profile: SessionProfile }) {
   const links = [
     { href: '/field', label: 'Field app', roles: ['owner', 'office', 'estimator'] },
+    { href: '/field/roof', label: 'Roof lookup', roles: ['owner', 'office'] },
     { href: '/estimates', label: 'Estimates', roles: ['owner', 'office', 'estimator'] },
     { href: '/jobs', label: 'Jobs', roles: ['owner', 'office'] },
     { href: '/admin/pricing', label: 'Pricing', roles: ['owner', 'office'] },

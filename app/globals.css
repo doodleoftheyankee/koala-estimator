@@ -38,3 +38,46 @@ input[type='number']::-webkit-outer-spin-button {
 .safe-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+
+/* The printed roof takeoff (app/field/measure/RoofReport): never on screen; in print it is the
+   only thing on the page, one letter page on white. */
+.roof-report {
+  display: none;
+}
+
+@page roof-report {
+  size: letter;
+  margin: 0.45in 0.5in;
+}
+
+@media print {
+  body:has(> .roof-report) > :not(.roof-report) {
+    display: none !important;
+  }
+  html:has(.roof-report),
+  body:has(> .roof-report) {
+    background: #fff !important;
+    color: #0f172a;
+    /* The area sheet stops the page behind it from scrolling; paper must not be cut off by that. */
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .roof-report {
+    display: block;
+    page: roof-report;
+    font-size: 9pt;
+    line-height: 1.3;
+    color: #0f172a;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Print preview narrower than letter paper (a phone): one column. */
+@media print and (max-width: 600px) {
+  .roof-report-top,
+  .roof-report-two,
+  .roof-report-faces {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

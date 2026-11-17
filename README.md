@@ -120,7 +120,7 @@ under Project → Settings → Environment Variables.
 | `APP_URL` | links in quote emails |
 | `RESEND_API_KEY`, `QUOTE_FROM_EMAIL`, `OFFICE_NOTIFY_EMAIL` | email. Without these, quotes still work: the estimator gets a link to share by hand. |
 | `GOOGLE_MAPS_API_KEY` | the drive-time lookup button (optional) |
-| `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite lookup on each area (optional): attic floor or roof deck, crawlspace floor, garage ceiling or wall run from the address, through the Roof Takeoff site (contract v1.1, v1 answers still work). A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button says the lookup isn't set up. |
+| `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite roof takeoff (optional), on each area ("Look up from the address": attic floor or roof deck, crawlspace floor, garage ceiling or wall run) and on the Roof lookup page (`/field/roof`: any address, with roofing squares, waste, bundles, roof edges, materials, a one-page print and recent lookups). Only Roof Takeoff's `/api` is used, server to server (contract v1.2; older answers still work); its own page is retired. A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button and the page say the lookup isn't set up. |
 | `CRON_SECRET` | the nightly learning run. Vercel Cron sends it automatically; without it the run is disabled. Any long random string. |
 | `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional) |
 
@@ -147,6 +147,9 @@ each item is filled in:
 ### 5. Deploy
 Import the repository in Vercel (framework: Next.js) and set the environment variables.
 `vercel.json` schedules the nightly learning run; the Hobby plan allows one run a day.
+Vercel deploys `main` as soon as it changes, but migrations are applied by hand: apply any new
+migration in Supabase **before** merging the code that uses it (each one is safe for the code
+already running). The roof takeoff on the Roof lookup page needs `20261118000001_roof_lookups_matched.sql`.
 Then on your phone, open `/field` (estimators) or `/crew` (crews) once with signal and use
 **Add to Home Screen**.
 
@@ -206,6 +209,8 @@ POSTGREST_BIN=/path/to/postgrest NODE_PATH=$(npm root -g) \
   have no rate limiting yet. Add Vercel Firewall rate-limit rules for
   `/api/public/*` before launch.
 - The app icons are a placeholder "K". Swap in Koala's logo in `public/icons/`.
+- A satellite lookup another person paid for that day is used again for free, but it shows only
+  in their Recent lookups (row-level security), not in the list of the estimator it was reused for.
 - Rebates, lead scoring, follow-ups and scheduling suggestions are not built yet (Phase 4).
 - The learning loop needs verified jobs before it changes anything: a coefficient moves only
   with the equivalent of at least 3 recent jobs behind it (older jobs count for less), and
