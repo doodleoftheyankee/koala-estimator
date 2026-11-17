@@ -128,3 +128,13 @@ the git history (the commit before "Retire the Roof Takeoff page") if anything n
 
 Vercel deploys the folder as is (no build step). `vercel.json` gives `/api/takeoff` up to 60 seconds.
 `.vercelignore` keeps `.env*`, `dev/`, `dev-server.js`, `test/` and this README out of the deployment.
+
+**Order for retiring the page (once).** The notice sends everyone to Koala's `/field/roof` and clears the old page's
+saved data on the first visit, so Koala must have that page first:
+
+1. Apply Koala's Supabase migration `20261118000001_roof_lookups_matched.sql`.
+2. Deploy Koala's main branch, then check that `https://koala-estimator-indol.vercel.app/field/roof?address=1%20Main%20St`
+   opens the Roof lookup with the address filled in (signed in).
+3. Check that `PARTNER_KEY` is set in this project's Vercel settings (Koala's lookup already needs it), then deploy this
+   repo. From then on only Koala's key gets into `/api`: the old crew access code stops working.
+4. Run one lookup in Koala to check it still works. `ACCESS_CODE` can then be removed from the Vercel settings.
