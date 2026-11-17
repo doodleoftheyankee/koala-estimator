@@ -2,8 +2,9 @@
 # Local end-to-end test: real Postgres + PostgREST behind a tiny Supabase stand-in
 # (tests/e2e/mock-supabase.mjs), a production build of the app, and Playwright driving a phone.
 # Covers: offline-capable estimate -> sync -> quote PDF -> customer e-sign -> DB/audit checks,
-# a satellite roof lookup applied to an attic and to walls, an estimate created fully offline that
-# syncs on reconnect, owner/estimator access, and Phase 2:
+# satellite roof lookups (attic floor or roof deck, walls, a garage, a saved lookup used again after a
+# reload, a wrong house fixed by tapping the right roof, and an older Roof Takeoff answer), an
+# estimate created fully offline that syncs on reconnect, owner/estimator access, and Phase 2:
 # crew actuals on a phone, office verification, the nightly learning cron and the dashboard.
 #
 # Requires: DATABASE_URL (Postgres 15+ superuser), POSTGREST_BIN (PostgREST 12 binary),

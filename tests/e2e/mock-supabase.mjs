@@ -156,9 +156,10 @@ http.createServer(async (req, res) => {
       return res.end();
     }
     // Roof Takeoff stand-in (ROOF_TAKEOFF_URL points here): the partner key is required, as on the
-    // real site; the last lookup is kept so the test can check what was sent.
+    // real site. Every lookup is counted and the last one kept, so the test can check what was sent
+    // and that a saved lookup was used instead of paying again.
     if (url.pathname === '/api/takeoff' || url.pathname === '/api/satellite') {
-      if (req.headers['x-partner-key'] !== ROOF_KEY) return send(res, 401, { error: 'This tool needs an access code.' });
+      if (req.headers['x-partner-key'] !== ROOF_KEY) return send(res, 401, { error: "The partner key doesn't match." });
       if (url.pathname === '/api/satellite') {
         const [lat, lng, zoom] = ['lat', 'lng', 'zoom'].map((k) => Number(url.searchParams.get(k)));
         if (![lat, lng].every(Number.isFinite) || !Number.isInteger(zoom) || zoom < 1 || zoom > 21) return send(res, 400, { error: 'Bad map request.' });
@@ -166,11 +167,26 @@ http.createServer(async (req, res) => {
         return res.end(aerialPhoto(lat, lng, zoom));
       }
       const address = url.searchParams.get('address') ?? '';
+      const pin = url.searchParams.has('lat') ? { lat: Number(url.searchParams.get('lat')), lng: Number(url.searchParams.get('lng')) } : null;
       fs.mkdirSync(STORE, { recursive: true });
-      fs.writeFileSync(path.join(STORE, 'roof-last.json'), JSON.stringify({ address, key: true }));
+      fs.writeFileSync(path.join(STORE, 'roof-last.json'), JSON.stringify({ address, pin, key: true }));
+      fs.appendFileSync(path.join(STORE, 'roof-calls.log'), JSON.stringify({ address, pin }) + '\n');
       if (/nowhere/i.test(address)) return send(res, 404, { error: "Google couldn't find that address. Check the spelling, or add the town and state." });
+      if (/no roof/i.test(address)) return send(res, 404, { error: 'Google has no roof data for this spot. Tap the right roof on the image, or measure it from photos.' });
       await new Promise((r) => setTimeout(r, 1500)); // long enough to see the lookup running
-      return send(res, 200, TAKEOFF);
+      const answer = structuredClone(TAKEOFF);
+      // A spot tapped on the photo: no address, the pin as Google's point.
+      if (pin) answer.place = { address: null, lat: pin.lat, lng: pin.lng, precision: 'PIN' };
+      // The same house with a carport Google has no roof faces for (contract v1.1 unmatchedM2).
+      if (/carport/i.test(address)) Object.assign(answer.attic, { footprintM2: 242, unmatchedM2: 25 });
+      // An older Roof Takeoff (contract v1): none of the v1.1 additions.
+      if (/old rd/i.test(address)) {
+        for (const k of ['sharedWallM', 'unmatchedM2', 'perimeterByFaceM', 'deckM2']) delete answer.attic[k];
+        answer.attic.wallRunM = 67.1;
+        for (const s of answer.segments) delete s.lower;
+        delete answer.edgeTotalsM.headwall;
+      }
+      return send(res, 200, answer);
     }
     // remove: DELETE /object/<bucket> {prefixes}
     if (url.pathname.startsWith('/storage/v1/object/') && req.method === 'DELETE') {
