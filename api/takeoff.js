@@ -5,7 +5,7 @@ import {
   HttpError, query, apiKey, requireAccess, sendJson, sendError, readLatLng, redact,
   geocode, buildingInsights, trimInsights, dataLayers, geoTiff,
 } from '../lib/google.js';
-import { measureRoof, atticFloor, faceDefaults, planeHeightOf, untracedFaces, layerSize, riseOf } from '../lib/takeoff.js';
+import { measureRoof, atticFloor, outlineScale, faceDefaults, planeHeightOf, untracedFaces, layerSize, riseOf } from '../lib/takeoff.js';
 import { readGeoTiff } from '../lib/raster.js';
 
 const INCH = 0.0254;
@@ -105,15 +105,13 @@ export default async function handler(req, res) {
     if (mask && !measured.outline) warnings.push("Couldn't find this roof's outline on Google's photo. The attic floor uses Google's building size.");
     if (measured.outline && dsm && segments.length && !measured.faces.length) warnings.push("Couldn't match Google's roof faces to the surface heights, so the edges aren't measured.");
 
-    // Twins and rowhouses (CONTRACT.md): the outline was cut at Google's building box. If it is still far bigger
-    // than Google's building, it isn't this building alone: the attic floor falls back to Google's size.
-    let atticOutline = measured.outline, sharedWallM = measured.sharedWallM;
-    const whole = b.whole && b.whole.groundM2;
-    if (atticOutline && whole > 0 && atticOutline.areaM2 > 1.3 * whole) {
-      atticOutline = null; sharedWallM = 0;
-      warnings.push("The roof outline runs into a neighbouring roof, so the attic floor uses Google's building size. Check it on site.");
-    } else if (sharedWallM >= 1) {
+    // Twins and rowhouses (CONTRACT.md): the outline was cut at Google's building box. The attic floor's area is
+    // Google's building (its own roof pixels); the outline gives the edge length, scaled when the two disagree.
+    if (measured.sharedWallM >= 1) {
       warnings.push("This roof joins a neighbour's. Only this building is measured; check the shared wall on site.");
+    }
+    if (outlineScale(building, measured.outline) !== 1) {
+      warnings.push("The traced roof edge doesn't match Google's building size, so the edge length is scaled. Check the attic floor on site.");
     }
 
     // Default face choices (CONTRACT.md): porches and flat additions out, shed dormers in, lower roofs marked.
@@ -126,8 +124,8 @@ export default async function handler(req, res) {
     }
 
     const attic = atticFloor({
-      building, segments, outline: atticOutline, overhangM: Math.round(input.overhangIn * INCH * 1e6) / 1e6,
-      sharedWallM, excluded: choice.excluded, perimeterByFaceM: measured.perimeterByFaceM,
+      building, segments, outline: measured.outline, overhangM: Math.round(input.overhangIn * INCH * 1e6) / 1e6,
+      sharedWallM: measured.sharedWallM, excluded: choice.excluded, perimeterByFaceM: measured.perimeterByFaceM,
     });
 
     sendJson(res, 200, {

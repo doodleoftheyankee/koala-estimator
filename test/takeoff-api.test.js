@@ -166,9 +166,12 @@ test('every mock house: v1.1 fields, the CONTRACT formulas, and accuracy against
     assert.ok(c.deck == null ? j.attic.deckM2 == null : Math.abs(c.deck - j.attic.deckM2) < 0.02, `${h.id} deck`);
     assert.ok(Math.abs(c.excludedM2 - j.attic.excludedM2) < 0.01, `${h.id} excluded area`);
     assert.ok(Math.abs(c.unmatched - j.attic.unmatchedM2) < 0.01, `${h.id} unmatched`);
-    if (h.truth.outlineFt2 && h.id !== 'twin') near(j.outline.areaM2 / F2, h.truth.outlineFt2, 0.02, `${h.id} outline`);
-    const atticTruth = h.id === 'twin' ? h.truth.cutAttic12Ft2 : h.truth.attic12Ft2;
-    if (atticTruth) near(j.attic.floorM2 / F2, atticTruth, 0.02, `${h.id} attic floor`);
+    // The outline (for drawing) is what was traced, cut 0.5 m past Google's box; the attic floor's area is always
+    // Google's building.
+    const outlineTruth = h.truth.cutOutlineFt2 || h.truth.outlineFt2;
+    if (outlineTruth) near(j.outline.areaM2 / F2, outlineTruth, 0.02, `${h.id} outline`);
+    assert.equal(j.attic.footprintM2, j.building.whole.groundM2, `${h.id} footprint`);
+    if (h.truth.attic12Ft2) near(j.attic.floorM2 / F2, h.truth.attic12Ft2, 0.02, `${h.id} attic floor`);
     for (const [k, ft] of Object.entries(h.truth.ft || {})) {
       if (h.id === 'twin' && (k === 'ridge' || k === 'eave')) continue; // these run 0.5 m into the neighbour (see houses.js)
       if (ft > 0) near(j.edgeTotalsM[k] / FT, ft, 0.05, `${h.id} ${k}`);
@@ -176,14 +179,22 @@ test('every mock house: v1.1 fields, the CONTRACT formulas, and accuracy against
   }
 });
 
-test('twin: the neighbour\'s roof is cut off at the box, with a warning; a box that still takes in too much falls back', async () => {
+const SCALED = "The traced roof edge doesn't match Google's building size, so the edge length is scaled. Check the attic floor on site.";
+const JOINS = "This roof joins a neighbour's. Only this building is measured; check the shared wall on site.";
+
+test('twin: the neighbour\'s roof is cut off at the box, with a warning; a box that takes in both halves is scaled', async () => {
   let j = (await get(q({ address: '5 Twin Ave' }))).json();
   near(j.attic.sharedWallM / FT, 36, 0.03, 'shared wall');
   assert.equal(j.attic.perimeterSource, 'outline');
   near(j.outline.areaM2 / F2, TWIN.truth.cutOutlineFt2, 0.02, 'outline: this half and the 0.5 m allowance');
-  assert.deepEqual(j.warnings, ["This roof joins a neighbour's. Only this building is measured; check the shared wall on site."]);
+  // The attic floor: Google's area for this half, the outline's lengths as traced (within 10% of it).
+  near(j.attic.footprintM2 / F2, 792, 1e-3, 'footprint: this half');
+  assert.equal(j.attic.perimeterM, j.outline.perimeterM);
+  near(j.attic.floorM2 / F2, TWIN.truth.attic12Ft2, 0.01, 'attic floor against the true half');
+  assert.deepEqual(j.warnings, [JOINS]);
   assert.ok(!j.edges.some(e => e.type === 'rake' && e.planM > 8 && Math.abs(e.path[0].lng - e.path[1].lng) < 2e-6 && e.path[0].lng > j.building.center.lng), 'no rake along the party wall');
-  // Google's box takes in both halves: the outline is 2x Google's building, so the attic uses the building size.
+  // Google's box takes in both halves: the outline is 2x Google's building. The attic floor keeps Google's size and
+  // scales the traced edge length by sqrt(1/2); the outline is still drawn as traced.
   useMock({
     tweakInsights: ins => {
       const b = ins.boundingBox, w = b.ne.longitude - b.sw.longitude;
@@ -192,11 +203,33 @@ test('twin: the neighbour\'s roof is cut off at the box, with a warning; a box t
   });
   j = (await get(q({ address: '5 Twin Ave' }))).json();
   near(j.outline.areaM2 / F2, 2 * 792, 0.03, 'the outline (still drawn) is both halves');
-  assert.equal(j.attic.perimeterSource, 'box');
+  assert.equal(j.attic.perimeterSource, 'outline');
   assert.equal(j.attic.footprintM2, j.building.whole.groundM2);
+  const k = Math.sqrt(j.building.whole.groundM2 / j.outline.areaM2);
+  near(j.attic.perimeterM, j.outline.perimeterM * k, 1e-3, 'edge length scaled');
   assert.equal(j.attic.sharedWallM, 0);
-  assert.deepEqual(j.attic.perimeterByFaceM, {});
-  assert.deepEqual(j.warnings, ["The roof outline runs into a neighbouring roof, so the attic floor uses Google's building size. Check it on site."]);
+  near(j.attic.floorM2 / F2, TWIN.truth.attic12Ft2, 0.05, 'attic floor still near the true half');
+  assert.deepEqual(j.warnings, [SCALED]);
+  const c = contractAttic(j);
+  assert.ok(Math.abs(c.floor - j.attic.floorM2) < 0.01, 'clients redo it from the wire');
+});
+
+test('attached row with a loose box: the attic floor is the building\'s own, not 1.28 x it', async () => {
+  const ROW = HOUSES.find(h => h.id === 'row'), tr = ROW.truth;
+  const j = (await get(q({ address: '8 Main Row' }))).json();
+  near(j.building.whole.groundM2 / F2, 2400, 1e-3, "Google's building");
+  near(j.outline.areaM2 / F2, tr.cutOutlineFt2, 0.02, 'the outline as traced (drawn): 1.28 x the building');
+  near(j.outline.perimeterM / FT, tr.cutPerimeterFt, 0.02, 'its edge, the cuts included');
+  near(j.attic.footprintM2 / F2, 2400, 1e-3, 'footprint: Google\'s building');
+  const k = Math.sqrt(j.building.whole.groundM2 / j.outline.areaM2);
+  near(j.attic.perimeterM, j.outline.perimeterM * k, 1e-3, 'edge length scaled');
+  near(j.attic.sharedWallM / FT, tr.sharedWallFt * k, 0.03, 'both party walls, scaled');
+  assert.equal(j.attic.unmatchedM2, 0, 'all of Google\'s building has roof faces');
+  near(j.attic.floorM2 / F2, tr.attic12Ft2, 0.01, 'attic floor');
+  near(j.attic.floorM2 / F2, 40 * 58, 0.01, 'attic floor against the true middle unit');
+  assert.deepEqual(j.warnings, [JOINS, SCALED, 'Mostly flat or low-slope roof. Check whether there is an attic at all.']);
+  const c = contractAttic(j);
+  assert.ok(Math.abs(c.floor - j.attic.floorM2) < 0.01 && Math.abs(c.wallRun - j.attic.wallRunM) <= 0.002, 'clients redo it from the wire');
 });
 
 test('defaults: flat building keeps every face, Cape keeps its dormer and garage, porch out; lower faces marked', async () => {

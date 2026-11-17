@@ -184,8 +184,9 @@ async function main() {
       const want = fmt0(contractAttic(cross, oh));
       assert.equal(await text(p, '#lkAttic'), want, `overhang ${oh}`);
       assert.equal(await text(p, '#kAttic'), want, `summary at overhang ${oh}`);
+      // The server rounds to 0.01 m2 (0.05 sq ft), so a floor on a .5 boundary can round the other way.
       const server = await api({ address: '3 Cross Gable Ct', overhangIn: oh });
-      assert.equal(fmt0(server.attic.floorM2 * FT2), want, `server agrees at overhang ${oh}`);
+      assert.ok(Math.abs(server.attic.floorM2 * FT2 - contractAttic(cross, oh)) < 0.06, `server agrees at overhang ${oh}`);
       // the step 3 chips are the same setting
       assert.equal(await p.getAttribute(`.card:has(#secBody) .chips.oh button[data-oh="${oh}"]`, 'aria-pressed'), 'true');
     }

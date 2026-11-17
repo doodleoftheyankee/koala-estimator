@@ -37,7 +37,9 @@
 //     This half: outline 792 sq ft, perimeter 80 ft of outside walls plus the 36 ft party wall. Attic at 12 in:
 //     21 x 34 = 714 sq ft. Ridge 22, eaves 44, rakes 2 x 18 x 1.2019 = 43.27 (west end only). No edge along the
 //     party wall. The outline is cut 0.5 m past Google's box (CONTRACT.md), so it measures about
-//     23.64 x 36 = 851 sq ft and the attic about 772 (+8%), with sharedWallM about 36 ft.
+//     23.64 x 36 = 851 sq ft (+7.5%), with sharedWallM about 36 ft. The attic floor takes its area from Google's
+//     building (792) and its edge length from the outline (2 x 23.64 + 36 outside, 36 shared): 792 - 83.3 + 4 =
+//     712.7 sq ft (-0.2%; it was 772, +8%, when the area came from the outline).
 // (f) 6 Flat Roof Plaza: commercial, every face 1/4 in per ft. Main block 80 x 50 ft (two faces from a crown at
 //     y = 0, eaves 4.5 m up) and a 20 x 30 ft loading bay on the east side, 1.5 m lower, sloping east.
 //     Outline 4600 sq ft, perimeter 300 ft. Nothing is left out by default (no steep faces): attic at 12 in
@@ -57,6 +59,15 @@
 //     sides) + 20 x 1.0308 (garage) + 16 x 1.0035 (porch) = 140.05.
 //     Step: dormer cheeks 2 x 12 x 1.4142 = 33.94 plus the garage against the gable wall 20 x 1.0308 = 20.62,
 //     54.56 in all. Headwall: back roof under the dormer front 24 + porch top 16 = 40.
+// (h) 8 Main Row: the middle building of an attached commercial row, 40 x 60 ft, one roof face at 1/4 in per ft
+//     draining to the back, with neighbours of the same roof 30 ft wide on either side (not Google's building).
+//     Google's box for it is loose, 4 ft into each neighbour, as for a real row (152 E Main St, Newark: outline
+//     1.25 x Google's building). Building 2400 sq ft; 80 ft of outside wall (front and back) and 2 x 60 ft of party
+//     wall. Attic at 12 in: 2400 - 80 + 4 = 2324 by the contract formula (true 40 x 58 = 2320). The outline is cut
+//     0.5 m past the box: 51.28 x 60 = 3077 sq ft (1.28 x the building), edge length 222.6 ft with 120 ft shared.
+//     The attic takes Google's 2400 sq ft and scales the lengths by sqrt(2400 / 3077) = 0.883: 196.6 and 106.0 ft,
+//     2400 - 90.6 + 4 = 2313.4 (-0.3%). With the outline's own area (before v1.2) it was 3077 - 102.6 + 4 = 2978
+//     (+28%).
 
 import { utm, zoneOfLatLng } from '../lib/takeoff.js';
 
@@ -97,7 +108,8 @@ const rot = (deg) => {
 };
 
 /**
- * spec: { id, address, lat, lng, rotDeg, quality, imageryDate, color: [r,g,b],
+ * spec: { id, address, lat, lng, rotDeg, quality, imageryDate, color: [r,g,b], boxPadFt: [x, y] (Google's box this
+ *   much bigger each side),
  *   faces: [{ name, poly: [[x,y] ft], rise, az (deg, before turning), ref: [x,y] ft, zRef (m above lawn),
  *             solar (default true; false = a neighbour's roof: in the mask and heights, not in Google's building) }],
  *   flats: [{ poly, z }]  (flat roof parts with no Solar face, in the rooftop mask)
@@ -342,7 +354,7 @@ export const HOUSE_SPECS = [
     truth: {
       outlineFt2: 792, perimeterFt: 80 + 36, sharedWallFt: 36, attic12Ft2: 21 * 34,
       // What the contract's 0.5 m allowance past Google's box gives (see the note above).
-      cutOutlineFt2: (22 + 0.5 / FT) * 36, cutAttic12Ft2: (22 + 0.5 / FT) * 36 - (2 * (22 + 0.5 / FT) + 36) + 4,
+      cutOutlineFt2: (22 + 0.5 / FT) * 36, cutAttic12Ft2: 792 - (2 * (22 + 0.5 / FT) + 36) + 4,
       ft: { ridge: 22, eave: 44, rake: 2 * 18 * Math.sqrt(1 + (8 / 12) ** 2), hip: 0, valley: 0, step: 0, headwall: 0, break: 0 },
     },
   },
@@ -378,6 +390,22 @@ export const HOUSE_SPECS = [
         rake: 4 * 14 * Math.SQRT2 + 24 * Math.sqrt(1 + (1.5 / 12) ** 2) + 20 * Math.sqrt(1 + (3 / 12) ** 2) + 16 * Math.sqrt(1 + (1 / 12) ** 2),
         step: 24 * Math.SQRT2 + 20 * Math.sqrt(1 + (3 / 12) ** 2),
       },
+    },
+  },
+  {
+    id: 'row', address: '8 Main Row, Newark, DE 19711, USA', match: /\b8\s+main\b/i,
+    lat: 39.68, lng: -75.746, rotDeg: 0, quality: 'HIGH', imageryDate: { year: 2024, month: 5, day: 14 }, color: [126, 118, 110],
+    boxPadFt: [4, 0], // Google's box reaches 4 ft into each neighbour
+    faces: [
+      { name: 'roof', poly: [[-20, -30], [20, -30], [20, 30], [-20, 30]], rise: 0.25, az: 0, ref: [0, -30], zRef: 6.2 },
+      { name: 'west neighbour', poly: [[-50, -30], [-20, -30], [-20, 30], [-50, 30]], rise: 0.25, az: 0, ref: [-35, -30], zRef: 6.2, solar: false },
+      { name: 'east neighbour', poly: [[20, -30], [50, -30], [50, 30], [20, 30]], rise: 0.25, az: 0, ref: [35, -30], zRef: 6.2, solar: false },
+    ],
+    drive: [[-50, -30], [50, -30], [50, -50], [-50, -50]],
+    truth: {
+      outlineFt2: 2400, perimeterFt: 200, sharedWallFt: 120, attic12Ft2: 2400 - 80 + 4,
+      cutOutlineFt2: (40 + 2 * (4 + 0.5 / FT)) * 60, cutPerimeterFt: 2 * (40 + 2 * (4 + 0.5 / FT)) + 120,
+      ft: {},
     },
   },
 ];
@@ -427,13 +455,15 @@ export function insightsFor(h) {
   const faceGround = segs.reduce((s, x) => s + x.stats.groundAreaMeters2, 0), faceArea = segs.reduce((s, x) => s + x.stats.areaMeters2, 0);
   const flatGround = h.flats.reduce((s, f) => s + polyArea(f.poly), 0);
   const c = ll((h.bbox.x0 + h.bbox.x1) / 2, (h.bbox.y0 + h.bbox.y1) / 2);
+  const [px, py] = (h.boxPadFt || [0, 0]).map(v => v * FT); // a loose box, as Google's often is on a row
+  const box = { x0: h.bbox.x0 - px, x1: h.bbox.x1 + px, y0: h.bbox.y0 - py, y1: h.bbox.y1 + py };
   return {
     name: `buildings/mock-${h.id}`,
     center: c,
     imageryDate: h.imageryDate,
     imageryProcessedDate: { year: 2025, month: 1, day: 10 },
     postalCode: '19711', administrativeArea: 'DE', statisticalArea: '10003014900', regionCode: 'US',
-    boundingBox: bb(h.bbox),
+    boundingBox: bb(box),
     imageryQuality: h.quality,
     solarPotential: {
       maxArrayPanelsCount: Math.round(faceGround / 2), panelCapacityWatts: 400,

@@ -50,7 +50,7 @@ Response 200:
   ],
   "photo": { "rgb": "<geotiff id>", "imageryDate": { "year": 2023, "month": 6 }, "pixel": 0.1, "quality": "HIGH" } /* or null */,
   "outline": { /* roof edge seen from above (drip edge), from Google's rooftop mask; null if unavailable */
-    "polys": [[{ "lat": 0, "lng": 0 }]], "areaM2": 290.4, "perimeterM": 74.2
+    "polys": [[{ "lat": 0, "lng": 0 }]], "areaM2": 290.4 /* the traced area, for drawing: the attic uses attic.footprintM2 */, "perimeterM": 74.2
   },
   "faces": [ /* plan shape of each Solar face as found in the surface heights; [] if no DSM */
     { "n": 1, "poly": [{ "lat": 0, "lng": 0 }], "planM2": 48.7 }
@@ -91,10 +91,16 @@ starter). Outer sides check the outside height before the rake/eave test, so a s
 
 ### Attic floor (the same formula everywhere)
 
-`A` = footprint (outline area if found, else `building.whole.groundM2`, else `building.faces.groundM2`).
-`P` = perimeter (outline perimeter including any inner rings such as courtyards, if found; else estimated from the
-box's aspect ratio scaled to `A`).
+`A` = `attic.footprintM2` = `building.whole.groundM2` when present and > 0 (Google's building area is exactly this
+building's own roof pixels; on real lookups it matched the traced outline to the hundredth), else the outline area,
+else `building.faces.groundM2`.
+`P` = `attic.perimeterM`: the outline perimeter including any inner rings such as courtyards, if found; else
+estimated from the box's aspect ratio scaled to `A`.
 `S` = `attic.sharedWallM`: outline length cut along a neighbour's roof (twins, rowhouses). No overhang there.
+When the outline's area differs from `A` by more than 10% (a neighbour's roof or a loose box in the outline), `P` and
+`S` are the outline's lengths × √(`A` / outline area), and a warning says "The traced roof edge doesn't match
+Google's building size, so the edge length is scaled. Check the attic floor on site." `outline.areaM2` and
+`outline.perimeterM` stay as traced. (v1.2; before, `A` was the outline area.)
 `d` = overhang in meters.
 
 ```
@@ -106,6 +112,7 @@ deck     = floor × (Σ areaM2 / Σ groundM2 over the INCLUDED faces)   // roof 
 
 - `excludedM2` = Σ `groundM2` of the faces left out, plus `attic.unmatchedM2` when the client leaves out
   "parts with no roof data".
+- Clients take `A`, `P` and `S` from `attic`, never from `outline`.
 - `excludedPerimM` = Σ `attic.perimeterByFaceM[n]` of the faces left out (0 when the server sent no breakdown).
 - `deck` is null when no face is included.
 
@@ -113,8 +120,9 @@ deck     = floor × (Σ areaM2 / Σ groundM2 over the INCLUDED faces)   // roof 
 
 Google's rooftop mask joins roofs that touch. The outline keeps only mask pixels inside `building.box` grown by
 0.5 m (projected to mask pixels). The outline length along that cut is `attic.sharedWallM`, and a warning says
-the roof joins a neighbour's. If the outline is still more than 1.3 × `building.whole.groundM2`, the outline is
-dropped for the attic (fallback `A`/`P` from `building.whole` and the box) and a warning says so.
+the roof joins a neighbour's. Google's box can be loose on an attached row, so the outline can still take in some
+of a neighbour's roof: the attic floor's area is always Google's building, and its lengths are scaled as in
+"Attic floor" (v1.2: this replaces the 1.3 × fallback to the box). The outline is still returned and drawn as traced.
 
 ### Default face choices (v1.1)
 
@@ -134,9 +142,9 @@ steep faces (DSM-fitted heights when the DSM loaded, else `heightM`).
 ```jsonc
 "attic": {
   "overhangM": 0.3048, "footprintM2": 290.4, "perimeterM": 74.2, "perimeterSource": "outline",
-  "sharedWallM": 0,                       // outline length cut along a neighbour's roof
-  "unmatchedM2": 12.5,                    // max(0, A − Σ segments groundM2): outline with no roof data (carports, flat bits)
-  "perimeterByFaceM": { "1": 20.1, "2": 18.4 },  // plan length of each face's outer sides on the outline ({} if no DSM)
+  "sharedWallM": 0,                       // outline length cut along a neighbour's roof (scaled with P, see "Attic floor")
+  "unmatchedM2": 12.5,                    // max(0, A − Σ segments groundM2): building with no roof data (carports, flat bits)
+  "perimeterByFaceM": { "1": 20.1, "2": 18.4 },  // plan length of each face's outer sides on the outline, as measured ({} if no DSM)
   "excluded": [5], "excludedM2": 11.9, "floorM2": 241.7, "wallRunM": 71.8, "deckM2": 270.3
 }
 ```

@@ -4,7 +4,8 @@
 //
 // Addresses: "1 Gable Ln", "2 Hip Rd", "3 Cross Gable Ct", "4 Low Detail Dr" (LOW quality, its surface-heights
 // file fails), "5 Twin Ave" (one half of a twin), "6 Flat Roof Plaza" (commercial, low slope everywhere),
-// "7 Cape Dormer Way" (Cape with a shed dormer, an attached garage and a porch). Any other address finds
+// "7 Cape Dormer Way" (Cape with a shed dormer, an attached garage and a porch), "8 Main Row" (the middle of an
+// attached commercial row, with a loose building box). Any other address finds
 // 3 Cross Gable Ct. An address containing "404" finds nothing (ZERO_RESULTS); one containing "no roof" lands on
 // an empty field, where the Solar API answers 404.
 

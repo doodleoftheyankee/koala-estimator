@@ -6,7 +6,7 @@ import { encodeGeoTiff } from '../dev/tiff.js';
 import { trimInsights } from '../lib/google.js';
 import { readGeoTiff } from '../lib/raster.js';
 import {
-  measureRoof, atticFloor, faceDefaults, planeHeightOf, layerSize, riseOf, utm, utmInverse, zoneOfLatLng, latLngFrame,
+  measureRoof, atticFloor, outlineScale, faceDefaults, planeHeightOf, layerSize, riseOf, utm, utmInverse, zoneOfLatLng, latLngFrame,
   offsetPoly, roofOutline, untracedFaces, EDGE_TYPES,
 } from '../lib/takeoff.js';
 
@@ -268,12 +268,44 @@ test('twin: the outline is cut 0.5 m past Google\'s box, the cut is the shared w
   assert.equal(m.edges.filter(e => e.type === 'rake').length, 2);
   // The cut doesn't count as each face's outline length either (eave + west rake only).
   for (const n of [1, 2]) near(m.perimeterByFaceM[n] / FT, 18 + 22 + 0.5 / FT, 0.04, `face ${n} outline length`);
-  // Attic: the CONTRACT formula with S, no overhang taken off along the party wall.
-  const A = m.outline.areaM2, P = m.outline.perimeterM, S = m.sharedWallM, d = FT;
+  // Attic: the CONTRACT formula with Google's building area (this half alone) and the outline's edge length and
+  // shared wall (the outline is within 10% of Google's area, so they are not scaled); no overhang along the party wall.
+  const A = m.building.whole.groundM2, P = m.outline.perimeterM, S = m.sharedWallM, d = FT;
+  near(A / F2, tr.outlineFt2, 1e-3, "Google's building is this half");
+  assert.equal(m.attic.footprintM2, A);
+  assert.equal(m.attic.perimeterM, P);
   near(m.attic.floorM2, A - (P - S) * d + 4 * d * d, 1e-4, 'floor formula with the shared wall');
-  near(m.attic.floorM2 / F2, tr.cutAttic12Ft2, 0.02, 'attic floor');
+  near(m.attic.floorM2 / F2, tr.cutAttic12Ft2, 0.01, 'attic floor');
+  near(m.attic.floorM2 / F2, tr.attic12Ft2, 0.01, 'attic floor against the true half (21 x 34 ft)');
   near(m.attic.wallRunM, P - S - 8 * d, 1e-4, 'wall run leaves out the party wall');
   assert.equal(m.attic.sharedWallM, Math.round(S * 1000) / 1000);
+  assert.equal(m.attic.unmatchedM2, 0, 'Google\'s building is all roof faces');
+});
+
+test('attic floor: A is Google\'s building area; an outline more than 10% off it has its lengths scaled', () => {
+  const building = { whole: { groundM2: 2400 * F2 }, faces: { groundM2: 2400 * F2 } };
+  const segments = [{ n: 1, groundM2: 2400 * F2, areaM2: 2400 * F2, lowSlope: true }];
+  // An attached row's outline taking in 1.28 x the building (Google's box is loose), with both party walls cut.
+  const outline = { areaM2: 3077 * F2, perimeterM: 222.6 * FT };
+  const a = atticFloor({ building, segments, outline, overhangM: FT, sharedWallM: 120 * FT, excluded: [] });
+  const k = Math.sqrt(2400 / 3077);
+  assert.equal(outlineScale(building, outline), k);
+  near(a.footprintM2 / F2, 2400, 1e-9, 'A');
+  near(a.perimeterM / FT, 222.6 * k, 1e-4, 'P scaled');
+  near(a.sharedWallM / FT, 120 * k, 1e-4, 'S scaled');
+  near(a.floorM2 / F2, 2400 - (222.6 - 120) * k + 4, 1e-4, 'floor');
+  near(a.floorM2 / F2, 40 * 58, 0.005, 'floor against the true middle unit (40 x 58 ft)');
+  assert.equal(a.unmatchedM2, 0);
+  assert.equal(a.perimeterSource, 'outline');
+  // Within 10%: nothing is scaled. Without Google's building area: the outline's area, unscaled.
+  assert.equal(outlineScale(building, { areaM2: 2600 * F2, perimeterM: 1 }), 1);
+  assert.equal(outlineScale({}, outline), 1);
+  const b = atticFloor({ building: { faces: { groundM2: 100 } }, segments, outline, overhangM: FT, sharedWallM: 120 * FT });
+  near(b.footprintM2 / F2, 3077, 1e-6, 'no building area: the outline');
+  near(b.perimeterM / FT, 222.6, 1e-4, 'unscaled');
+  // unmatched = A - sum of the faces' ground areas, with Google's A.
+  const c = atticFloor({ building, segments: [{ n: 1, groundM2: 2000 * F2, lowSlope: false }], outline, overhangM: FT });
+  near(c.unmatchedM2 / F2, 400, 1e-3, 'unmatched');
 });
 
 test('roofOutline: a cut at the box, scraps of the neighbour dropped, small holes filled, courtyards outlined', () => {
