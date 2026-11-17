@@ -17,7 +17,7 @@ export const serverEnv = {
   quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>',
   officeNotifyEmail: () => process.env.OFFICE_NOTIFY_EMAIL || null,
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || null,
-  /** The Roof Takeoff site behind the satellite lookup (no trailing slash). */
+  /** The Roof Takeoff service behind the satellite lookup: only its /api is used (no trailing slash). */
   roofTakeoffUrl: () => (process.env.ROOF_TAKEOFF_URL || 'https://roof-takeoff-ten.vercel.app').trim().replace(/\/+$/, ''),
   /** Partner key Roof Takeoff checks (sent as x-partner-key, server to server). Unset = the lookup is off. */
   roofTakeoffKey: () => process.env.ROOF_TAKEOFF_KEY?.trim() || null,
