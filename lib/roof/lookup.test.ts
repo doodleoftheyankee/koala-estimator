@@ -444,6 +444,12 @@ describe('check on site', () => {
     const base = { ...result(), precision: 'ROOFTOP', warnings: [] };
     const f = (r: RoofResult) => roofFigures(r, choices(12, []));
     expect(checkOnSite({ ...base, quality: 'LOW' }, f(base), 'attic', true)).toEqual(['Blurry photo: check the sizes and the pitch on site.']);
+    // Roof Takeoff's own line for the same blurry photo isn't repeated; its other warnings are kept.
+    const theirs = ['Lower-detail imagery. Check the pitch on site.', 'Mostly flat or low-slope roof. Check whether there is an attic at all.'];
+    expect(checkOnSite({ ...base, quality: 'LOW', warnings: theirs }, f(base), 'attic', true)).toEqual([
+      'Blurry photo: check the sizes and the pitch on site.',
+      'Mostly flat or low-slope roof. Check whether there is an attic at all.',
+    ]);
     expect(checkOnSite({ ...base, perimeterSource: 'none' }, f(base), 'attic', true)[0]).toMatch(/overhang can't be taken off/);
     const box = { ...base, perimeterSource: 'box' };
     expect(checkOnSite(box, f(box), 'walls', true)).toEqual(["No outline was traced, so the wall run is rough: from the building's size. Measure it on site."]);

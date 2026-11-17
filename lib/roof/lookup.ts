@@ -463,7 +463,9 @@ export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirm
     const what = `${comma(roundSqft(f.unmatchedSqft))} sq ft of the outline has no roof data (a carport or flat part?).`;
     out.push(job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
   }
-  return [...out, ...r.warnings];
+  // Roof Takeoff says "Lower-detail imagery. Check the pitch on site." for the same blurry photo: once is enough.
+  const theirs = r.quality === 'LOW' ? r.warnings.filter((w) => !/^lower-detail imagery\b/i.test(w)) : r.warnings;
+  return [...out, ...theirs];
 }
 
 /** Whether the "Parts with no roof data" switch matters for this kind of area (the wall run doesn't use it). */
