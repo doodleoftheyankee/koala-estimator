@@ -200,8 +200,11 @@ export interface TakeoffData {
   warnings: string[];
 }
 
-/** The takeoff for a result with the house's overhang, face choices and waste. */
-export function takeoffData(r: RoofResult, c: RoofChoices, wastePct: number, lookedUpAt: Date): TakeoffData {
+/**
+ * The takeoff for a result with the house's overhang, face choices and waste. `warnings` replaces
+ * Roof Takeoff's own (the app's fuller "Check on site" list).
+ */
+export function takeoffData(r: RoofResult, c: RoofChoices, wastePct: number, lookedUpAt: Date, warnings: readonly string[] = r.warnings): TakeoffData {
   const f = roofFigures(r, c);
   const roofSqft = roofSurfaceSqft(r);
   const ft = edgeFeet(r);
@@ -226,7 +229,7 @@ export function takeoffData(r: RoofResult, c: RoofChoices, wastePct: number, loo
     edgesMeasured: presentEdges(ft).length > 0,
     edges: presentEdges(ft).map((k) => ({ type: k, label: EDGE_INFO[k].label, ft: ft[k] })),
     materials: materials(ft),
-    warnings: r.warnings,
+    warnings: [...warnings],
   };
 }
 

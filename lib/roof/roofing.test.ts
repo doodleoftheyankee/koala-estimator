@@ -229,4 +229,10 @@ describe('the report and the summary', () => {
     expect(text).toContain('Order with 10% waste:');
     expect(text).not.toContain('Materials');
   });
+
+  it("can carry the app's own check-on-site list instead of Roof Takeoff's warnings", () => {
+    const d = takeoffData(elkton(), choices(12, [5]), 15, noon, ['Check the white outline is on the roof you tapped.']);
+    expect(d.warnings).toEqual(['Check the white outline is on the roof you tapped.']);
+    expect(takeoffData(elkton(), choices(12, [5]), 15, noon).warnings).toEqual(['Lower-detail imagery. Check the pitch on site.']);
+  });
 });

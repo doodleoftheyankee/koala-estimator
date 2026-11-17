@@ -23,6 +23,18 @@ describe('mapShapes', () => {
     expect(Math.abs(middle.y - 320)).toBeLessThan(60);
   });
 
+  it('enlarges a small roof, up to twice, keeping all of it on the photo', () => {
+    const s = mapShapes(r, []);
+    expect(s.magnify).toBeGreaterThan(1);
+    expect(s.magnify).toBeLessThanOrEqual(2);
+    const on = (p: { x: number; y: number }) => Math.abs((p.x - 320) * s.magnify) < 320 && Math.abs((p.y - 320) * s.magnify) < 320;
+    for (const ring of s.outline) expect(ring.every(on)).toBe(true);
+    // A roof that already fills the photo is not enlarged; nothing to draw, nothing enlarged.
+    const big = mapShapes({ ...r, outline: [[{ lat: r.center.lat + 0.0004, lng: r.center.lng }, { lat: r.center.lat, lng: r.center.lng + 0.0005 }, { lat: r.center.lat - 0.0004, lng: r.center.lng }]] }, []);
+    expect(big.magnify).toBe(1);
+    expect(mapShapes({ ...r, outline: [], faces: [], edges: [], segments: [] }, []).magnify).toBe(1);
+  });
+
   it('numbers a face with no shape at Google’s middle of it', () => {
     const s = mapShapes({ ...r, faces: [] }, []);
     expect(s.faces).toEqual([]);
