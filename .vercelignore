@@ -1,5 +1,7 @@
+# Local-only files. Anchored to the project root so nothing inside node_modules is ever matched.
 .env*
 .vercel
-dev
-dev-server.js
-README.md
+/dev
+/dev-server.js
+/test
+/README.md
