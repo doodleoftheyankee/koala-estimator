@@ -16,7 +16,7 @@ export interface MapShapes {
   faces: Array<{ n: number; pts: Pt[]; out: boolean }>;
   outline: Pt[][];
   edges: Array<{ type: EdgeType; pts: Pt[] }>;
-  /** Where each face's number goes: the middle of its shape, or Google's middle of the face. */
+  /** Where each face's number goes: inside its shape (labelPoint), or Google's middle of the face. */
   labels: Array<{ n: number; at: Pt; out: boolean }>;
   /** Where Google placed the address (or the spot looked up). */
   point: Pt;
@@ -36,17 +36,67 @@ export function satelliteUrl(r: Pick<RoofResult, 'center' | 'box'>): string {
   return `/api/roof/satellite?${new URLSearchParams({ lat: String(r.center.lat), lng: String(r.center.lng), zoom: String(mapZoom(r.box)) })}`;
 }
 
+/** Whether a point is inside a shape (even-odd rule). */
+export function insideShape(pts: readonly Pt[], p: Pt): boolean {
+  let hit = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i]!;
+    const b = pts[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < a.x + ((p.y - a.y) * (b.x - a.x)) / (b.y - a.y)) hit = !hit;
+  }
+  return hit;
+}
+
+/**
+ * Where a face's number goes: the middle of its area when that is inside it, else the middle of the
+ * widest run across the shape at a few heights (a face with a notch, like an L or a dormer cut-out,
+ * whose middle falls on another face).
+ */
+export function labelPoint(pts: readonly Pt[]): Pt {
+  const average = pts.reduce((a, p) => ({ x: a.x + p.x / pts.length, y: a.y + p.y / pts.length }), { x: 0, y: 0 });
+  if (pts.length < 3) return average;
+  let twice = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[j]!;
+    const b = pts[i]!;
+    const cross = a.x * b.y - b.x * a.y;
+    twice += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+  const middle = Math.abs(twice) > 1e-9 ? { x: cx / (3 * twice), y: cy / (3 * twice) } : average;
+  if (insideShape(pts, middle)) return middle;
+  const ys = pts.map((p) => p.y);
+  const [top, bottom] = [Math.min(...ys), Math.max(...ys)];
+  let best: { at: Pt; width: number } | null = null;
+  for (const y of [middle.y, ...[0.2, 0.35, 0.5, 0.65, 0.8].map((k) => top + k * (bottom - top))]) {
+    const xs: number[] = [];
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i]!;
+      const b = pts[j]!;
+      if (a.y > y !== b.y > y) xs.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
+    }
+    xs.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const width = xs[k + 1]! - xs[k]!;
+      if (!best || width > best.width) best = { at: { x: (xs[k]! + xs[k + 1]!) / 2, y }, width };
+    }
+  }
+  return best?.at ?? middle;
+}
+
 export function mapShapes(r: RoofResult, excluded: readonly number[]): MapShapes {
   const zoom = mapZoom(r.box);
   const view = mapFrame(r.center, zoom);
   const out = new Set(excluded);
   const faces = r.faces.map((f) => ({ n: f.n, pts: f.poly.map(view.toPx), out: out.has(f.n) }));
   const shaped = new Set(r.faces.map((f) => f.n));
-  const middle = (pts: Pt[]) => pts.reduce((a, p) => ({ x: a.x + p.x / pts.length, y: a.y + p.y / pts.length }), { x: 0, y: 0 });
   const outline = r.outline.map((ring) => ring.map(view.toPx));
   const edges = r.edges.filter((e) => e.path.length >= 2 && EDGE_INFO[e.type]).map((e) => ({ type: e.type, pts: e.path.map(view.toPx) }));
   const labels = [
-    ...faces.map((f) => ({ n: f.n, at: middle(f.pts), out: f.out })),
+    ...faces.map((f) => ({ n: f.n, at: labelPoint(f.pts), out: f.out })),
     ...r.segments.filter((s) => !shaped.has(s.n) && s.center).map((s) => ({ n: s.n, at: view.toPx(s.center!), out: out.has(s.n) })),
   ];
   const half = MAP_SIZE / 2;
