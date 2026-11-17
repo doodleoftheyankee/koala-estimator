@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Local end-to-end test: real Postgres + PostgREST behind a tiny Supabase stand-in
 # (tests/e2e/mock-supabase.mjs), a production build of the app, and Playwright driving a phone.
-# Covers: offline-capable estimate -> sync -> quote PDF -> customer e-sign -> DB/audit checks,
+# Covers: offline-capable estimate (Measure, with the pitch read from a gable photo) -> sync -> quote PDF
+# -> customer e-sign -> DB/audit checks,
 # satellite roof lookups (attic floor or roof deck, walls, a garage, a saved lookup used again after a
 # reload, a wrong house fixed by tapping the right roof, and an older Roof Takeoff answer), an
 # estimate created fully offline that syncs on reconnect, owner/estimator access, and Phase 2:

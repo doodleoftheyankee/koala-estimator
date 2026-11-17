@@ -1,11 +1,13 @@
-// End-to-end (local only): estimator builds an estimate on a phone (with a line changed from the
-// model and the deviation explained), sends it, customer signs; then the offline flow; owner and
+// End-to-end (local only): estimator builds an estimate on a phone (measured with Measure, the roof
+// pitch read from a gable photo, a line changed from the model and the deviation explained), sends
+// it, customer signs; then the offline flow; owner and
 // estimator access; then Phase 2: the office schedules the job, the crew starts it, enters actuals
 // and completes it on a phone, the office verifies, the nightly learning run, the learning dashboard.
 // Run via scripts/e2e.sh. Needs the `playwright` package resolvable (NODE_PATH or local install).
 import { createRequire } from 'node:module';
 const pw = createRequire(import.meta.url)('playwright');
 import { sign } from './jwt.mjs';
+import { drawGable, turn } from './gable.mjs';
 import { execSync } from 'node:child_process';
 
 const BASE = 'http://localhost:3000';
@@ -84,6 +86,126 @@ check((await page.getByText(/Floor: rectangle, 1 cutout · 1,200 sq ft net/).cou
 await page.locator('input[type=file][multiple]').first().setInputFiles(new URL('../../public/icons/icon-512.png', import.meta.url).pathname);
 await page.getByText('On phone').first().waitFor();
 check(true, 'photo saved on the phone, waiting to upload');
+
+step('pitch from a photo of the gable, in Measure');
+{
+  // Nothing from this tool may leave the phone: no request carries a PNG (the test photos are PNGs;
+  // area photos are sent as JPEGs).
+  const pngSent = [];
+  const watchPng = (req) => req.postDataBuffer()?.includes(Buffer.from([0x89, 0x50, 0x4e, 0x47])) && pngSent.push(req.url());
+  page.on('request', watchPng);
+  await page.getByRole('button', { name: /Edit measurement/ }).click();
+  const measure = page.getByRole('dialog', { name: /^Measure/ });
+  await measure.getByRole('radio', { name: 'Roofline' }).click();
+  const openFor = async (field) => {
+    await measure.getByRole('button', { name: `Pitch from a photo, for the ${field}` }).click();
+    const sheet = page.getByRole('dialog', { name: `Pitch from a photo for the ${field}` });
+    await sheet.waitFor();
+    return sheet;
+  };
+  let sheet = await openFor('roof pitch');
+  check((await sheet.getByRole('button', { name: 'How to shoot the gable' }).getAttribute('aria-expanded')) === 'true', 'the photo sheet opens with how to shoot the gable');
+  check((await sheet.getByText(/Shooting from off to the side makes the pitch read steep/).count()) === 1, 'the tips say to shoot from straight in front');
+  await page.screenshot({ path: SHOTS + '03a1-pitch-start.png' });
+  await page.keyboard.press('Escape');
+  await sheet.waitFor({ state: 'detached' });
+  check(await measure.isVisible(), 'Escape closes the photo sheet and leaves Measure open');
+
+  sheet = await openFor('roof pitch');
+  await sheet.locator('input[type=file]:not([capture])').setInputFiles({ name: 'IMG_0001.HEIC', mimeType: 'image/heic', buffer: Buffer.from('not a photo this browser can open') });
+  await sheet.getByText(/^This browser can't open HEIC photos\. Take a new photo with the camera instead, or pick a JPG\./).waitFor();
+  check(true, "a HEIC photo the browser can't open gets a plain message");
+
+  // A big photo of a 6.3/12 gable, taken with the phone tilted 4°.
+  const gable = { W: 3200, H: 2400, L: [600, 1640], P: [1600, 1115], R: [2600, 1640], tilt: -4 };
+  const png = Buffer.from(await page.evaluate(drawGable, gable), 'base64');
+  await sheet.locator('input[type=file][capture]').setInputFiles({ name: 'gable.png', mimeType: 'image/png', buffer: png });
+  const board = sheet.getByTestId('pitch-photo');
+  await board.waitFor();
+  check((await sheet.getByText(/HEIC/).count()) === 0, 'opening a photo clears the message');
+  check((await board.getAttribute('data-photo-size')) === '2400x1800', 'a 3200 × 2400 photo is shrunk to 2400 px on its long side');
+  /** Where a point of the drawing is on the screen. */
+  const onScreen = async (pt) => {
+    const box = await board.boundingBox();
+    const [x, y] = turn(gable, pt);
+    return [box.x + (x * box.width) / gable.W, box.y + (y * box.height) / gable.H];
+  };
+  const hint = async () => (await sheet.locator('p[aria-live]').innerText()).trim();
+  check((await hint()) === 'Tap 1 of 3: the left eave corner, at the bottom left of the roof triangle.', 'the hint asks for the left eave corner first');
+  await page.touchscreen.tap(...(await onScreen(gable.L)));
+  check((await hint()) === 'Tap 2 of 3: the peak.', 'then the peak');
+  await page.touchscreen.tap(...(await onScreen(gable.P)));
+  check((await hint()) === 'Tap 3 of 3: the right eave corner, at the bottom right.', 'then the right eave corner');
+  await page.touchscreen.tap(...(await onScreen(gable.R)));
+  check((await hint()) === 'Drag any point to fine-tune it. A magnifier shows while you drag.', 'then how to fine-tune');
+  const reading = sheet.getByRole('region', { name: 'Pitch reading' });
+  const readingText = async () => (await reading.innerText()).replace(/\s+/g, ' ');
+  const read = await readingText();
+  check((await sheet.getByTestId('pitch-value').innerText()).replace(/\s+/g, '') === '6.3/12', 'three taps on a tilted photo read 6.3/12');
+  check(read.includes('Angle 27.7°') && read.includes('Pitch factor ×1.129'), 'with its angle and pitch factor: ' + read);
+  check(read.includes('Left side 6.3/12') && read.includes('Right side 6.3/12') && read.includes('✓ Both sides agree.'), 'both sides read 6.3/12 and agree');
+  await page.screenshot({ path: SHOTS + '03a2-pitch-read.png' });
+
+  // Dragging the peak sideways: a magnifier while dragging, and the sides stop agreeing.
+  const peak = await onScreen(gable.P);
+  await page.mouse.move(...peak);
+  await page.mouse.down();
+  await page.mouse.move(peak[0] + 30, peak[1], { steps: 5 });
+  await page.screenshot({ path: SHOTS + '03a3-pitch-drag.png' });
+  await page.mouse.up();
+  check(/Sides read \d+\.\d\/12 and \d+\.\d\/12\. Retake from straight in front, unless this gable really has unequal sides\./.test(await readingText()), 'a peak off the middle asks for a retake');
+  check((await sheet.getByText("The sides don't agree. Retake from straight in front?").count()) === 1, 'and says so next to the Use buttons');
+  // Onto the eave line: not a roof triangle, nothing to use.
+  const [l, r] = [await onScreen(gable.L), await onScreen(gable.R)];
+  await page.mouse.move(peak[0] + 30, peak[1]);
+  await page.mouse.down();
+  await page.mouse.move((l[0] + r[0]) / 2, (l[1] + r[1]) / 2, { steps: 3 });
+  await page.mouse.up();
+  check((await readingText()).includes("Those points don't make a roof triangle. The peak has to sit above and between the two corners."), 'a peak on the eave line is not a roof triangle');
+  check(await sheet.getByRole('button', { name: 'Use', exact: true }).isDisabled(), 'and there is nothing to use');
+  await page.mouse.move((l[0] + r[0]) / 2, (l[1] + r[1]) / 2);
+  await page.mouse.down();
+  await page.mouse.move(...peak, { steps: 3 });
+  await page.mouse.up();
+  check((await sheet.getByTestId('pitch-value').innerText()).replace(/\s+/g, '') === '6.3/12', 'back on the peak it reads 6.3/12 again');
+  check((await sheet.getByRole('button', { name: 'Use 6/12' }).count()) === 1, 'Use offers the whole pitch, 6/12');
+  await sheet.getByRole('button', { name: 'Use 6.3/12 (as measured)' }).click();
+  await sheet.waitFor({ state: 'detached' });
+  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', '"Use 6.3/12 (as measured)" fills the roof pitch');
+  check((await measure.getByText('×1.129', { exact: true }).count()) === 1, 'and its pitch factor');
+  check((await measure.getByRole('button', { name: 'Use 1,363 sq ft' }).count()) === 1, '1,260 sq ft footprint × 1.129 − 60 sq ft chimney → 1,363 sq ft of roof deck');
+
+  // The second pitch, from a level photo of a 12/12 gable: a whole pitch has one Use button.
+  await measure.getByRole('switch', { name: 'Two different slopes' }).click();
+  sheet = await openFor('second pitch');
+  const steep = { W: 1600, H: 1200, L: [400, 900], P: [800, 500], R: [1200, 900], tilt: 0 };
+  await sheet.locator('input[type=file][capture]').setInputFiles({ name: 'steep.png', mimeType: 'image/png', buffer: Buffer.from(await page.evaluate(drawGable, steep), 'base64') });
+  await sheet.getByTestId('pitch-photo').waitFor();
+  check((await sheet.getByTestId('pitch-photo').getAttribute('data-photo-size')) === '1600x1200', 'a photo under 2400 px keeps its size');
+  for (const pt of [steep.L, steep.P, steep.R]) {
+    const box = await sheet.getByTestId('pitch-photo').boundingBox();
+    await page.touchscreen.tap(box.x + (pt[0] * box.width) / steep.W, box.y + (pt[1] * box.height) / steep.H);
+  }
+  check((await sheet.getByTestId('pitch-value').innerText()).replace(/\s+/g, '') === '12.0/12', 'a level photo of a 12/12 gable reads 12.0/12');
+  check((await sheet.getByRole('button', { name: /as measured/ }).count()) === 0, 'a whole pitch has no "as measured" button');
+  await page.screenshot({ path: SHOTS + '03a4-pitch-second.png' });
+  await sheet.getByRole('button', { name: 'Use 12/12' }).click();
+  await sheet.waitFor({ state: 'detached' });
+  check((await measure.getByLabel('Second pitch (rise / 12)').inputValue()) === '12/12', '"Use 12/12" fills the second pitch, not the first');
+  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', 'the first pitch is unchanged');
+  await measure.getByRole('heading', { name: 'Pitch' }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: SHOTS + '03a5-pitch-used.png' });
+
+  // Back to the attic floor this estimate is priced on.
+  await measure.getByRole('switch', { name: 'Two different slopes' }).click();
+  await measure.getByRole('radio', { name: 'Floor' }).click();
+  await measure.getByRole('button', { name: 'Use 1,200 sq ft' }).click();
+  check((await page.getByLabel('Square feet').inputValue()) === '1200', 'back on the floor: 1,200 sq ft');
+  check((await page.getByText(/Floor: rectangle, 1 cutout · 1,200 sq ft net/).count()) === 1, 'the area card shows the floor measurement again');
+  check((await page.getByText('1/6', { exact: true }).count()) === 1, 'the gable photos were not added to the area photos');
+  page.off('request', watchPng);
+  check(pngSent.length === 0, 'the gable photos were never sent anywhere: ' + pngSent.join(', '));
+}
 
 step('AI photo read');
 await page.getByRole('button', { name: /Read this photo/ }).click();
