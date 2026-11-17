@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
 <title>Roof Takeoff</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,13 +74,13 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-siz
 .hint{margin:0;font-weight:600;display:flex;gap:9px;align-items:flex-start}
 .hint::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--mark);margin-top:7px;flex:none}
 
-.btn{font:inherit;font-weight:600;font-size:.92rem;border-radius:7px;padding:8px 14px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.2;min-height:38px;position:relative}
+.btn{font:inherit;font-weight:600;font-size:.92rem;border-radius:7px;padding:8px 14px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.2;min-height:44px;position:relative}
 .btn.ghost{background:transparent;color:var(--accent);border-color:var(--line)}
 .btn.ghost:hover:not(:disabled){border-color:var(--accent)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,label.btn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-.seg button{font:inherit;font-weight:600;font-size:.92rem;background:transparent;color:var(--ink);border:0;padding:8px 12px;cursor:pointer;min-height:38px}
+.seg button{font:inherit;font-weight:600;font-size:.92rem;background:transparent;color:var(--ink);border:0;padding:8px 12px;cursor:pointer;min-height:44px}
 .seg button+button{border-left:1px solid var(--line)}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
 .tag{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}
@@ -98,7 +99,7 @@ dl.facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-wei
 .tray{display:grid;gap:8px;padding:12px;border-radius:8px;background:var(--sunk)}
 .tray .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tray label{font-weight:600;font-size:.88rem}
-select,.in{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;min-height:38px;min-width:0}
+select,.in{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;min-height:44px;min-width:0}
 select{max-width:100%}
 .field{display:grid;gap:6px}
 .field>label{font-weight:600;font-size:.88rem}
@@ -126,13 +127,13 @@ table.secs{width:100%;border-collapse:collapse;min-width:620px;font-variant-nume
 .c-foot .in{width:104px;text-align:right}
 .traced{font-weight:600;white-space:nowrap}
 .traced small{color:var(--muted);font-weight:500;margin-left:5px}
-.icon-btn{font:inherit;font-size:1.25rem;line-height:1;width:36px;height:36px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.icon-btn{font:inherit;font-size:1.25rem;line-height:1;width:44px;height:44px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
 .icon-btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
 .icon-btn:disabled{opacity:.35;cursor:not-allowed}
 .waste{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
 .waste .lbl{font-weight:600}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chips button{font:inherit;font-weight:600;font-size:.88rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;min-height:34px}
+.chips button{font:inherit;font-weight:600;font-size:.88rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;min-height:44px}
 .chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .waste .with-unit .in{width:76px}
 
@@ -181,14 +182,30 @@ table.secs{width:100%;border-collapse:collapse;min-width:620px;font-variant-nume
 .edge-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:16px 26px;align-items:start}
 table.secs.compact{min-width:0}
 table.secs.faces{min-width:560px}
+.dir-inline,.narrow-only{display:none}
+.dir-inline{color:var(--muted);font-size:.84rem;font-weight:500}
+.secs.faces .tag{display:inline-block;margin:4px 0 0}
+.secs.faces tr.nodata td{color:var(--muted)}
+/* Phones: face number, pitch, direction and hints stack in one cell so both sq ft columns fit on screen. */
+@media (max-width:560px){
+  table.secs.faces{min-width:0}
+  .secs.faces .col-wide,.secs.faces .wide-only{display:none}
+  .secs.faces .dir-inline{display:block}
+  .secs.faces .narrow-only{display:inline}
+  .secs.faces th,.secs.faces td{padding:8px 4px}
+  .secs.faces th{font-size:.68rem;letter-spacing:0}
+  .secs.faces td.c-name{white-space:normal;min-width:86px}
+  .secs.faces .tag.low{margin-left:0}
+}
 .secs.faces th{white-space:normal;vertical-align:bottom}
 .secs caption{text-align:left;font-weight:600;padding:0 0 6px;font-size:.95rem}
 .secs td.what{color:var(--muted);font-size:.88rem}
 .edge-name{display:inline-flex;align-items:center;gap:8px;font-weight:600;white-space:nowrap}
-.att{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;cursor:pointer;font-weight:600}
+.att{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;cursor:pointer;font-weight:600;min-width:44px;min-height:44px}
 .att input{width:20px;height:20px;margin:0;accent-color:var(--accent);cursor:pointer;flex:none}
 .att span{min-width:3.2em;text-align:right}
 .tag.low{font-size:.68rem;padding:2px 7px;margin-left:6px;vertical-align:1px}
+.tag.hint{text-transform:none;letter-spacing:0;font-size:.78rem;font-weight:600;background:var(--sunk);color:var(--ink);margin-left:0;white-space:normal;line-height:1.3;border-radius:6px}
 .recent{display:grid;gap:8px}
 .recent-head{display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline}
 .recent-head h3{margin:0}
@@ -199,9 +216,20 @@ table.secs.faces{min-width:560px}
 .recent-item:disabled{opacity:.55;cursor:not-allowed}
 .r-addr{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92rem}
 .r-meta{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.linkish{font:inherit;font-size:.86rem;font-weight:600;background:none;border:0;color:var(--accent);cursor:pointer;padding:6px 2px;text-decoration:underline;text-underline-offset:2px}
+.linkish{font:inherit;font-size:.86rem;font-weight:600;background:none;border:0;color:var(--accent);cursor:pointer;padding:6px 4px;min-height:44px;text-decoration:underline;text-underline-offset:2px}
 .linkish:focus-visible,.recent-item:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .board.map[aria-busy="true"] canvas{opacity:.75}
+/* Paid lookups: a pin waiting for a yes, an old result while a new lookup runs, notes to check on site */
+.pin-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-radius:8px;background:var(--accent-soft);color:var(--ink)}
+.pin-bar p{margin:0;flex:1 1 100%;font-weight:600;overflow-wrap:anywhere}
+.stale{opacity:.4;pointer-events:none;transition:opacity .2s}
+#sumCard[data-stale] .kpis,#sumCard[data-stale] .sum-from{opacity:.4}
+.check{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-weight:600;font-size:.9rem;text-decoration:none;line-height:1.3}
+.check::before{content:"!";flex:none;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--warn);color:var(--surface);font-weight:700;font-size:.8rem}
+.check span{margin-left:auto;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+.check:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.fact{margin:0;font-size:.92rem}.fact b{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){.stale{transition:none}}
 
 /* The printed report: built from the same numbers, hidden on screen. */
 .report{display:none}
@@ -289,6 +317,7 @@ table.secs.faces{min-width:560px}
       <div class="kpi"><span class="k-label" id="kOrderLbl">Order with waste</span><span class="k-val"><span id="kOrder">–</span><small>sq</small></span><span class="k-sub" id="kBundles"></span></div>
       <div class="kpi"><span class="k-label">Flat footprint</span><span class="k-val"><span id="kFoot">–</span><small>sq ft</small></span><span class="k-sub" id="kFootSub">As seen from above</span></div>
     </div>
+    <a class="check" id="sumCheck" href="#lkWarn" hidden></a>
     <p class="sample-note" id="sampleNote">These numbers come from the sample house. Look up an address, or upload photos in steps 1 and 2, to measure a real roof.</p>
     <div class="bar actions">
       <button class="btn ghost" id="printBtn" type="button">Print or save PDF</button>
@@ -310,6 +339,11 @@ table.secs.faces{min-width:560px}
       <button class="btn ghost" id="codeSave" type="button">Save code</button>
     </div>
     <p class="chip idle" id="lookupStatus" role="status" aria-live="polite">Measures the attic floor, the sloped roof area and the roof edges from Google's aerial imagery. Each lookup is a paid Google request.</p>
+    <div class="pin-bar" id="pinBar" hidden>
+      <p id="pinText"></p>
+      <button class="btn" id="pinGo" type="button">Look up the roof here (paid)</button>
+      <button class="btn ghost" id="pinCancel" type="button">Cancel</button>
+    </div>
     <div class="recent" id="recentBox" hidden>
       <div class="recent-head">
         <h3 class="eyebrow" id="recentTitle">Recent lookups</h3>
@@ -323,6 +357,7 @@ table.secs.faces{min-width:560px}
       <div class="step-grid">
         <div class="board-col">
           <div class="board map" id="mapBoard" data-kind="none"><canvas id="mapCanvas" role="img" aria-label="Aerial photo with the roof outline, the roof edges and numbered roof faces"></canvas></div>
+          <div id="pinSlot"></div>
           <ul class="legend" id="edgeLegend" aria-label="What the lines on the photo mean"></ul>
           <p class="small" id="mapNote">Numbers mark each roof face Google found. Wrong building? Tap the right roof on the image.</p>
           <p class="small attrib">Source: Includes solar data from Google.</p>
@@ -335,6 +370,7 @@ table.secs.faces{min-width:560px}
             <div class="kpi"><span class="k-label">Main pitch</span><span class="k-val"><span id="lkPitch">–</span><small>/12</small></span></div>
             <div class="kpi"><span class="k-label">Roof faces</span><span class="k-val" id="lkFaces">–</span></div>
           </div>
+          <a class="check" id="lkCheck" href="#lkWarn" hidden></a>
           <div class="oh-row">
             <span class="k-label" id="ohLbl1">Overhang at the eaves and rakes</span>
             <div class="chips oh" role="group" aria-labelledby="ohLbl1">
@@ -342,6 +378,7 @@ table.secs.faces{min-width:560px}
             </div>
             <p class="small" id="lkAtticNote"></p>
           </div>
+          <p class="fact" id="lkDeck" hidden></p>
           <dl class="facts">
             <dt>Footprint of the faces</dt><dd id="lkFoot">–</dd>
             <dt>Roof outline footprint</dt><dd id="lkOutFoot">–</dd>
@@ -356,11 +393,11 @@ table.secs.faces{min-width:560px}
       <h3 class="sub-h" id="facesTitle">Roof faces</h3>
       <div class="table-wrap">
         <table class="secs faces" aria-labelledby="facesTitle">
-          <thead><tr><th>Face</th><th>Pitch</th><th>Over the attic</th><th>Angle</th><th>Faces</th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th></tr></thead>
+          <thead><tr><th class="col-wide">Face</th><th><span class="wide-only">Pitch</span><span class="narrow-only">Face and pitch</span></th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th><th>Over the attic</th><th class="col-wide">Slopes toward</th><th class="col-wide">Angle</th></tr></thead>
           <tbody id="faceBody"></tbody>
         </table>
       </div>
-      <p class="small" id="lowNote" hidden>Faces under 2/12 start unchecked: low-slope parts such as porches and flat roofs usually have no attic.</p>
+      <p class="small" id="lowNote" hidden></p>
       <h3 class="sub-h" id="edgesTitle">Roof edges</h3>
       <div id="edgesBlock">
         <div class="edge-grid">
@@ -507,7 +544,7 @@ table.secs.faces{min-width:560px}
         <button type="button" data-oh="0">None</button><button type="button" data-oh="6">6"</button><button type="button" data-oh="12">12"</button><button type="button" data-oh="18">18"</button><button type="button" data-oh="24">24"</button>
       </div>
     </div>
-    <p class="small">A section's footprint comes from its traced outline. With no outline, type the footprint in. Attic floor: traced sections lose the overhang all the way around; typed footprints count as entered (no overhang removed); faces from the address lookup lose the same share as the lookup.</p>
+    <p class="small">A section's footprint comes from its traced outline. With no outline, type the footprint in. Attic floor: traced sections lose the overhang all the way around, except along a side they share with another traced section over the attic; typed footprints count as entered (no overhang removed); faces from the address lookup lose the same share as the lookup.</p>
     <p class="small">Measuring from photos doesn't give ridge, hip, valley, rake or eave lengths. Look up the address for those.</p>
   </section>
 
@@ -594,14 +631,43 @@ function footprint(s) {
   if (s.pts.length >= 3) { const k = ftPerPx(); return { traced: true, area: k ? polyArea(s.pts) * k * k : null }; }
   return { traced: false, area: (s.manual != null && s.manual >= 0) ? s.manual : null };
 }
-// A section's share of the attic floor: traced outlines lose the overhang band all the way around,
-// sections from the lookup lose the lookup's share, typed footprints count as entered.
+// Length (feet) of a traced section's sides that lie along a side of another traced section over the attic:
+// parallel within 5 degrees, within 0.75 ft (or 3 px) of each other, counted where they overlap.
+function sharedFt(s) {
+  const k = ftPerPx();
+  if (!k || s.pts.length < 3) return 0;
+  const tol = Math.max(3, 0.75 / k), others = state.sections.filter(o => o !== s && o.attic && o.pts.length >= 3);
+  let total = 0;
+  s.pts.forEach((a, i) => {
+    const b = s.pts[(i + 1) % s.pts.length], L = dist(a, b);
+    if (L < 1e-6) return;
+    const ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, spans = [];
+    for (const o of others) {
+      o.pts.forEach((c, j) => {
+        const d = o.pts[(j + 1) % o.pts.length], M = dist(c, d);
+        if (M < 1e-6 || Math.abs(ux * (d.y - c.y) / M - uy * (d.x - c.x) / M) > Math.sin(5 * Math.PI / 180)) return;
+        const off = q => Math.abs((q.x - a.x) * uy - (q.y - a.y) * ux);
+        if (off(c) > tol || off(d) > tol) return;
+        const t0 = (c.x - a.x) * ux + (c.y - a.y) * uy, t1 = (d.x - a.x) * ux + (d.y - a.y) * uy;
+        const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(L, Math.max(t0, t1));
+        if (hi > lo) spans.push([lo, hi]);
+      });
+    }
+    spans.sort((x, y) => x[0] - y[0]);
+    let end = -Infinity;
+    for (const [lo, hi] of spans) { if (hi > end) { total += hi - Math.max(lo, end); end = hi; } }
+  });
+  return total * k;
+}
+// A section's share of the attic floor: traced outlines lose the overhang band all the way around except
+// along sides shared with another traced section over the attic (no overhang there), sections from the
+// lookup lose the lookup's share, typed footprints count as entered.
 function sectionAttic(s) {
   const f = footprint(s);
   if (f.area == null) return { area: null, kind: null };
   if (f.traced) {
-    const d = state.overhang / 12;
-    return { area: atticAll(f.area, perimeter(s.pts) * ftPerPx(), d), kind: 'traced' };
+    const d = state.overhang / 12, shared = s.attic ? sharedFt(s) : 0;
+    return { area: atticAll(f.area, perimeter(s.pts) * ftPerPx() - shared, d), kind: 'traced', shared };
   }
   if (s.fromLookup && s.fromLookup.A > 0) {
     const { A, P } = s.fromLookup;
@@ -1123,22 +1189,26 @@ const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const minusOh = () => state.overhang ? `minus ${ohText(state.overhang)}` : 'no overhang removed';
 // Roof edge types, in the order the contract lists them. Colors are picked to read on an aerial photo.
-const EDGE_ORDER = ['ridge', 'hip', 'valley', 'eave', 'rake', 'step', 'break'];
+const EDGE_ORDER = ['ridge', 'hip', 'valley', 'eave', 'rake', 'step', 'headwall', 'break'];
 const EDGE_INFO = {
   ridge: { label: 'Ridge', color: '#FF5A5A', what: 'Top line where two faces meet' },
   hip: { label: 'Hip', color: '#FFC21A', what: 'Sloped outside corner between two faces' },
   valley: { label: 'Valley', color: '#3FA9FF', what: 'Inside corner where two faces drain together' },
   eave: { label: 'Eave', color: '#4CD07D', what: 'Low, level edge at the gutter' },
   rake: { label: 'Rake', color: '#FF7AD0', what: 'Sloped edge at a gable end' },
-  step: { label: 'Step', color: '#B794FF', what: 'Roof meets a wall or a higher roof' },
+  step: { label: 'Step', color: '#B794FF', what: 'Sloped side of a roof against a wall' },
+  headwall: { label: 'Headwall', color: '#4FE3E3', what: 'Level top of a roof against a wall' },
   break: { label: 'Pitch break', color: '#FFFFFF', dash: [7, 5], what: 'Pitch changes between two faces' },
 };
 let look = null;            // the last /api/takeoff answer (CONTRACT.md)
 let lookAt = null;          // when it was looked up
-let lookParams = null;      // what was asked: { address } or { lat, lng }
+let lookParams = null;      // what was asked: { address } or { lat, lng, near } (near: the address it was tapped from)
 let faceAttic = new Map();  // face number -> over the attic?
+let noDataIn = true;        // the outline's parts with no roof data count in the attic floor
 let outlineSides = [];      // length in meters of each side of each outline ring
-let mapView = null, busy = false, lastParams = null, mapW = 0;
+let mapView = null, busy = false, lastParams = null, lastOpts = null, mapW = 0;
+let pendingPin = null;      // a spot tapped on the photo (or from a link), waiting for "Look up the roof here"
+const LAST_KEY = 'roofTakeoff.last'; // this tab's last lookup, shown again on reload without a new paid call
 
 function project(lat, lng, z) {
   const s = 256 * 2 ** z, sin = Math.sin(lat * Math.PI / 180);
@@ -1168,7 +1238,15 @@ function groupFaces(segs) {
 }
 const fmtDate = d => (d && d.year ? `${d.month ? MONTHS[d.month - 1] + ' ' : ''}${d.month && d.day ? d.day + ', ' : ''}${d.year}` : null);
 const fmtWhen = t => t.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-const placeLabel = () => look.place.address || `Pin at ${look.place.lat.toFixed(5)}, ${look.place.lng.toFixed(5)}`;
+const pinText = (lat, lng) => `Pin at ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
+const placeLabel = () => look.place.address || (lookParams && lookParams.near ? `Near ${lookParams.near}` : pinText(look.place.lat, look.place.lng));
+// What a new pin is near: this lookup's street address, or what this pin was near.
+const nearLabel = () => (look ? look.place.address || (lookParams && lookParams.near) || null : null);
+// The faces left out by default: the server's choice (CONTRACT.md v1.1), or low-slope faces from an older answer.
+const defaultFaceAttic = j => {
+  const ex = j.attic && Array.isArray(j.attic.excluded) ? j.attic.excluded : j.segments.filter(s => s.lowSlope).map(s => s.n);
+  return new Map(j.segments.map(s => [s.n, !ex.includes(s.n)]));
+};
 const PIXEL_IN = { 0.1: 'about 4 inches', 0.25: 'about 10 inches', 0.5: 'about 20 inches', 1: 'about 39 inches' };
 function imageryInfo() {
   const p = look.photo, b = look.building, q = (p && p.quality) || b.quality;
@@ -1178,21 +1256,33 @@ function imageryInfo() {
 }
 
 /* ---------- the two numbers from a lookup ---------- */
+// "Parts with no roof data" (the outline beyond Google's faces) get their own row when they are more than 5%
+// of the footprint and more than 5 m².
+function noDataM2() {
+  const a = look && look.attic, u = a && Number(a.unmatchedM2) || 0;
+  return a && u > 5 && u > 0.05 * (a.footprintM2 || 0) ? u : 0;
+}
 // Attic floor with this page's overhang and face choices: the CONTRACT.md formula, as the server does it.
 function lookupAttic() {
   if (!look || !look.attic) return null;
-  const a = look.attic, A = a.footprintM2 || 0, P = a.perimeterM || 0;
-  const out = look.segments.filter(s => !faceAttic.get(s.n));
-  const excludedM2 = out.reduce((t, s) => t + (s.groundM2 || 0), 0);
-  const floorM2 = A > 0 ? atticAll(A, P, state.overhang * INCH) * Math.max(0, 1 - excludedM2 / A) : 0;
-  return { floorM2, excludedM2, out: out.map(s => s.n), A, P, source: a.perimeterSource };
+  const a = look.attic, A = a.footprintM2 || 0, P = a.perimeterM || 0, S = Math.max(0, Number(a.sharedWallM) || 0);
+  const byFace = a.perimeterByFaceM || {}, d = state.overhang * INCH;
+  const out = look.segments.filter(s => !faceAttic.get(s.n)), kept = look.segments.filter(s => faceAttic.get(s.n));
+  const noData = noDataM2(), noDataOut = noData > 0 && !noDataIn;
+  const excludedM2 = out.reduce((t, s) => t + (s.groundM2 || 0), 0) + (noDataOut ? noData : 0);
+  const floorM2 = A > 0 ? atticAll(A, P - S, d) * Math.max(0, 1 - excludedM2 / A) : 0;
+  const wallRunM = P > 0 ? Math.max(0, P - S - out.reduce((t, s) => t + (Number(byFace[s.n]) || 0), 0) - 8 * d) : null;
+  const g = kept.reduce((t, s) => t + (s.groundM2 || 0), 0), ar = kept.reduce((t, s) => t + (s.areaM2 || 0), 0);
+  const deckM2 = kept.length && g > 0 ? floorM2 * ar / g : null;
+  return { floorM2, excludedM2, out: out.map(s => s.n), noDataOut, A, P, S, source: a.perimeterSource, wallRunM, deckM2 };
 }
 function lookupTotals() {
   const segs = look.segments, has = segs.length > 0, groups = groupFaces(segs), la = lookupAttic();
   return {
     sloped: has ? segs.reduce((t, s) => t + s.areaM2, 0) * FT2 : null,
     foot: has ? segs.reduce((t, s) => t + s.groundM2, 0) * FT2 : null,
-    attic: la ? la.floorM2 * FT2 : null, la, pitch: groups.length ? groups[0].p : null, faces: segs.length,
+    attic: la ? la.floorM2 * FT2 : null, deck: la && la.deckM2 != null ? la.deckM2 * FT2 : null,
+    la, pitch: groups.length ? groups[0].p : null, faces: segs.length,
   };
 }
 function edgeFeet() {
@@ -1208,6 +1298,7 @@ function materials(ft) {
     { item: 'Ridge cap', from: 'Ridges + hips', ft: up(ft.ridge + ft.hip) },
     { item: 'Valley (ice and water, flashing)', from: 'Valleys', ft: up(ft.valley) },
     { item: 'Step flashing', from: 'Steps', ft: up(ft.step) },
+    { item: 'Headwall (apron) flashing', from: 'Headwalls', ft: up(ft.headwall) },
   ].filter(m => m.ft > 0);
 }
 
@@ -1225,10 +1316,12 @@ function currentTotals() {
     let atticSub = '';
     if (la) {
       atticSub = la.source === 'outline' ? `Roof outline ${minusOh()}` : la.source === 'box' ? `Building size ${minusOh()}` : "Google's building size, no overhang removed";
+      if (la.S > 0 && la.source === 'outline' && state.overhang) atticSub += ' (none along the shared wall)';
       if (la.out.length) atticSub += `, ${plural(la.out.length, 'face')} left out`;
+      if (la.noDataOut) atticSub += ', parts with no roof data left out';
     }
     return {
-      source: 'lookup', sloped: t.sloped, foot: t.foot, attic: t.attic, pitch: t.pitch, order: order(t.sloped), atticSub,
+      source: 'lookup', sloped: t.sloped, foot: t.foot, attic: t.attic, deck: t.deck, pitch: t.pitch, order: order(t.sloped), atticSub,
       sub: t.faces ? `${plural(t.faces, 'roof face')}, main pitch ${t.pitch}/12` : 'No roof faces found',
       footSub: 'Roof faces, seen from above',
     };
@@ -1266,6 +1359,9 @@ function updateSummary() {
   const from = $('#sumFrom');
   from.hidden = !look;
   from.textContent = isLookup ? `From the address lookup: ${placeLabel()}` : 'From steps 1 to 3 (photos and typed footprints)';
+  const nw = isLookup ? (look.warnings || []).length : 0, chk = $('#sumCheck');
+  chk.hidden = !nw;
+  chk.innerHTML = nw ? `Check on site: ${esc(plural(nw, 'note'))} from the address lookup <span>See notes</span>` : '';
   $('#sampleNote').hidden = !sample;
   $('#sumSample').hidden = !sample;
   $('#copyLink').disabled = !look;
@@ -1274,7 +1370,7 @@ function updateSummary() {
 function setOverhang(v) {
   state.overhang = v;
   document.querySelectorAll('.chips.oh button').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.oh) === v));
-  if (look) renderAttic();
+  if (look) { renderAttic(); saveLastSoon(); }
   updateNumbers();
 }
 
@@ -1294,15 +1390,32 @@ function renderLookup() {
   const im = imageryInfo(), qc = $('#lkQuality');
   qc.className = 'chip ' + (im.q === 'HIGH' || im.q === 'MEDIUM' ? 'ok' : 'idle');
   qc.textContent = im.text;
-  $('#lkWarn').innerHTML = (d.warnings || []).map(w => `<li class="chip warn">${esc(w)}</li>`).join('');
+  const warns = d.warnings || [];
+  $('#lkWarn').innerHTML = warns.map(w => `<li class="chip warn">${esc(w)}</li>`).join('');
+  const chk = $('#lkCheck');
+  chk.hidden = !warns.length;
+  chk.innerHTML = warns.length ? `Check on site: ${esc(plural(warns.length, 'note'))} about this roof <span>See notes</span>` : '';
   $('#lkUse').disabled = !segs.length;
-  $('#faceBody').innerHTML = segs.map(s => `<tr>
-    <td>${s.n}</td>
-    <td class="c-name">${fmt1(s.rise ?? riseOf(s.pitchDeg))}/12${s.lowSlope ? '<span class="tag low">Low slope</span>' : ''}</td>
+  const noData = noDataM2();
+  $('#faceBody').innerHTML = segs.map(s => `<tr data-face="${s.n}">
+    <td class="col-wide">${s.n}</td>
+    <td class="c-name"><span class="narrow-only">${s.n}: </span>${fmt1(s.rise ?? riseOf(s.pitchDeg))}/12${s.lowSlope ? '<span class="tag low">Low slope</span>' : ''}<span class="dir-inline">Slopes ${dirOf(s.azimuthDeg).toLowerCase()}</span>${s.lower ? '<span class="tag hint">Lower roof: garage, porch or addition?</span>' : ''}</td>
+    <td class="num">${fmt0(s.groundM2 * FT2)}</td><td class="num strong">${fmt0(s.areaM2 * FT2)}</td>
     <td><label class="att"><input type="checkbox" data-n="${s.n}" aria-label="Face ${s.n} is over the attic"${faceAttic.get(s.n) ? ' checked' : ''}></label></td>
-    <td>${fmt1(s.pitchDeg)}°</td><td>${dirOf(s.azimuthDeg)}</td>
-    <td class="num">${fmt0(s.groundM2 * FT2)}</td><td class="num strong">${fmt0(s.areaM2 * FT2)}</td></tr>`).join('');
-  $('#lowNote').hidden = !segs.some(s => s.lowSlope);
+    <td class="col-wide">${dirOf(s.azimuthDeg)}</td><td class="col-wide">${fmt1(s.pitchDeg)}°</td></tr>`).join('')
+    + (noData ? `<tr class="nodata">
+    <td class="col-wide">–</td><td>Parts with no roof data</td><td class="num">${fmt0(noData * FT2)}</td><td class="num">–</td>
+    <td><label class="att"><input type="checkbox" data-nodata="1" aria-label="Parts with no roof data (${fmt0(noData * FT2)} sq ft) are over the attic"${noDataIn ? ' checked' : ''}></label></td>
+    <td class="col-wide"></td><td class="col-wide"></td></tr>` : '');
+  const notes = [];
+  const nums = (a, one, many) => `${a.length === 1 ? 'Face' : 'Faces'} ${a.map(s => s.n).join(', ')} ${a.length === 1 ? one : many}`;
+  const outAtStart = d.attic && Array.isArray(d.attic.excluded) ? segs.filter(s => d.attic.excluded.includes(s.n)) : segs.filter(s => s.lowSlope);
+  const lowIn = segs.filter(s => s.lower && !outAtStart.includes(s));
+  if (outAtStart.length) notes.push(`${nums(outAtStart, 'starts', 'start')} unchecked: low porch or flat roofs usually have no attic.`);
+  if (lowIn.length) notes.push(`${nums(lowIn, 'sits', 'sit')} lower than the main roof (a garage, porch or addition?). Untick any with no attic over it.`);
+  if (noData) notes.push(`Parts with no roof data: the roof outline beyond Google's faces (often a carport or flat part). Untick it if there is no attic there.`);
+  $('#lowNote').textContent = notes.join(' ');
+  $('#lowNote').hidden = !notes.length;
   outlineSides = (o ? o.polys : []).map(poly => poly.map((p, i) => {
     const q = poly[(i + 1) % poly.length], z = { zone: Math.floor((p.lng + 180) / 6) + 1, south: p.lat < 0 };
     const a = utm(p.lat, p.lng, z), b = utm(q.lat, q.lng, z);
@@ -1334,22 +1447,30 @@ function renderAttic() {
   let note = '';
   if (la) {
     const A = fmt0(la.A * FT2);
-    if (la.source === 'outline') note = state.overhang ? `Roof outline (${A} sq ft) minus a ${ohText(state.overhang)} all the way around` : `Roof outline (${A} sq ft), no overhang removed`;
+    if (la.source === 'outline') {
+      note = state.overhang ? `Roof outline (${A} sq ft) minus a ${ohText(state.overhang)} all the way around` : `Roof outline (${A} sq ft), no overhang removed`;
+      if (state.overhang && la.S > 0) note += `, except the ${fmt0(la.S * M2FT)} ft shared wall`;
+    }
     else if (la.source === 'box') note = `Google's building size (${A} sq ft) ${minusOh()}, with the roof edge estimated from the building's shape`;
     else note = `Google's building size (${A} sq ft). No overhang removed: the length of the roof edge isn't known`;
     if (la.out.length) note += `, without face${la.out.length === 1 ? '' : 's'} ${la.out.join(', ')}`;
+    if (la.noDataOut) note += `${la.out.length ? ' and' : ', without'} the parts with no roof data`;
     note += '.';
   }
   $('#lkAtticNote').textContent = note;
+  const deck = $('#lkDeck');
+  deck.hidden = !(la && la.deckM2 != null);
+  deck.innerHTML = la && la.deckM2 != null ? `Roof deck over the attic floor: <b>${fmt0(la.deckM2 * FT2)} sq ft</b> (for spray foam under the roof)` : '';
   renderLegend();
   updateRecentNumbers();
 }
 $('#faceBody').addEventListener('change', e => {
-  const cb = e.target.closest('input[data-n]');
+  const cb = e.target.closest('input[data-n], input[data-nodata]');
   if (!cb || !look) return;
-  faceAttic.set(Number(cb.dataset.n), cb.checked);
+  if (cb.dataset.nodata) noDataIn = cb.checked;
+  else faceAttic.set(Number(cb.dataset.n), cb.checked);
   state.source = 'lookup';
-  renderAttic(); updateSummary(); drawMap();
+  renderAttic(); updateSummary(); drawMap(); saveLastSoon();
 });
 
 /* ---------- the photo: Google's aerial photo (GeoTIFF), or a plain satellite picture as a fallback ---------- */
@@ -1391,7 +1512,7 @@ async function loadMap() {
   const ctr = project(c.lat, c.lng, z);
   // Every view maps lat/lng to image pixels and back, so drawing and tapping work the same for both photos.
   mapView = {
-    kind: 'satellite', img, imgW: 640, imgH: 640, k: null,
+    kind: 'satellite', img, imgW: 640, imgH: 640, k: null, frame: { type: 'merc', z, lat: c.lat, lng: c.lng },
     toPx: (lat, lng) => { const p = project(lat, lng, z); return { x: p.x - ctr.x + 320, y: p.y - ctr.y + 320 }; },
     toLatLng: (x, y) => unproject(ctr.x + x - 320, ctr.y + y - 320, z),
   };
@@ -1468,11 +1589,14 @@ async function loadPhoto() {
     px.data[i * 4] = raw[s]; px.data[i * 4 + 1] = raw[s + (spp > 1 ? 1 : 0)]; px.data[i * 4 + 2] = raw[s + (spp > 2 ? 2 : 0)]; px.data[i * 4 + 3] = 255;
   }
   g2.putImageData(px, 0, 0);
-  mapView = { kind: 'photo', img: cv, imgW: t.w, imgH: t.h, k: null, toPx: f.toPx, toLatLng: f.toLatLng, date: p.imageryDate || look.building.imageryDate, pixel: p.pixel };
+  mapView = {
+    kind: 'photo', img: cv, imgW: t.w, imgH: t.h, k: null, toPx: f.toPx, toLatLng: f.toLatLng, date: p.imageryDate || look.building.imageryDate, pixel: p.pixel,
+    frame: { type: 'utm', box: t.box, w: t.w, h: t.h, zone: z, lat0: c.lat, lng0: c.lng },
+  };
   drawMap();
 }
 function setMapNote(kind) {
-  const el = $('#mapNote'), tail = ' Wrong building? Tap the right roof on the photo.';
+  const el = $('#mapNote'), tail = ' Wrong building? Tap the right roof on the photo, then look it up there.';
   $('#mapBoard').dataset.kind = kind;
   const lines = look.outline ? ' The white line is the roof outline, with the length of each side.' : '';
   if (kind === 'photo') {
@@ -1484,7 +1608,8 @@ function setMapNote(kind) {
   }
 }
 // Draws the photo with the outline, the edges and the face numbers into any square canvas W wide.
-function paintMap(g, W) {
+// onScreen: also the spot tapped for a new lookup, if any (never in the printed report).
+function paintMap(g, W, onScreen) {
   const k = W / mapView.imgW;
   g.fillStyle = '#1B232C'; g.fillRect(0, 0, W, W);
   g.drawImage(mapView.img, 0, 0, W, mapView.imgH * k);
@@ -1563,20 +1688,53 @@ function paintMap(g, W) {
     g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
     g.fillStyle = '#fff'; g.fillText(String(s.n), p.x, p.y + 0.5);
   }
+  if (onScreen && pendingPin && pendingPin.onPhoto) {
+    const p = P(Number(pendingPin.lat), Number(pendingPin.lng));
+    g.save();
+    g.beginPath(); g.moveTo(p.x, p.y); g.arc(p.x, p.y - 22, 11, Math.PI * 0.8, Math.PI * 2.2); g.closePath();
+    g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.55)'; g.stroke();
+    g.fillStyle = '#22A6DD'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+    g.beginPath(); g.arc(p.x, p.y - 22, 4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill();
+    g.restore();
+  }
 }
 function drawMap() {
   if (!mapView || !mapView.img || !look) return;
   const { g, W } = mapCanvas();
-  paintMap(g, W);
+  paintMap(g, W, true);
   mapView.k = W / mapView.imgW;
   scheduleReport();
 }
+// A tap on the photo only marks the spot: looking it up is a new paid request, so it waits for a yes.
 $('#mapCanvas').addEventListener('click', e => {
-  if (!mapView || !mapView.k || busy) return;
+  if (!mapView || !mapView.k || busy || !look) return;
   // Work in the image's own pixel frame so the tap lands right at any on-screen size.
   const r = e.currentTarget.getBoundingClientRect();
   const p = mapView.toLatLng((e.clientX - r.left) / r.width * mapView.imgW, (e.clientY - r.top) / r.height * mapView.imgH);
-  runLookup({ lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) });
+  showPin({ lat: p.lat.toFixed(6), lng: p.lng.toFixed(6), near: nearLabel(), onPhoto: true });
+});
+function showPin(pin) {
+  pendingPin = pin;
+  const bar = $('#pinBar');
+  // Under the photo for a tap on it; under the status line for a pin from a link.
+  (pin.onPhoto ? $('#pinSlot') : $('#lookupStatus')).after(bar);
+  $('#pinText').textContent = pin.onPhoto
+    ? `New spot marked on the photo${pin.near ? `, near ${pin.near}` : ''}. Each lookup is a paid Google request.`
+    : `${pinText(pin.lat, pin.lng)}. Each lookup is a paid Google request.`;
+  bar.hidden = false;
+  drawMap();
+}
+function clearPin() { pendingPin = null; $('#pinBar').hidden = true; drawMap(); }
+$('#pinGo').addEventListener('click', () => {
+  if (!pendingPin || busy) return;
+  const pin = pendingPin;
+  clearPin();
+  runLookup({ lat: pin.lat, lng: pin.lng }, { near: pin.near || null });
+});
+$('#pinCancel').addEventListener('click', () => {
+  const fromLink = pendingPin && !pendingPin.onPhoto;
+  clearPin();
+  if (fromLink) { setStatus("Measures the attic floor, the sloped roof area and the roof edges from Google's aerial imagery. Each lookup is a paid Google request.", 'idle'); setUrl(''); }
 });
 new ResizeObserver(() => { const w = Math.round($('#mapBoard').clientWidth); if (w && w !== mapW) drawMap(); }).observe($('#mapBoard'));
 
@@ -1586,17 +1744,35 @@ function setBusyUi(on) {
   $('#mapBoard').setAttribute('aria-busy', on ? 'true' : 'false');
   document.querySelectorAll('.recent-item').forEach(b => { b.disabled = on; });
 }
-function errorText(status, j) {
+// While a new lookup runs, the last house's numbers stay on screen but faded, so nobody copies them by mistake.
+function setStale(on) {
+  $('#lookupResult').classList.toggle('stale', on);
+  $('#lookupResult').toggleAttribute('inert', on);
+  if (on && state.source === 'lookup') $('#sumCard').dataset.stale = '1'; else delete $('#sumCard').dataset.stale;
+}
+function errorText(status, j, params) {
   const m = (j && j.error) || `Lookup failed (HTTP ${status}).`;
-  // The server's "no roof data" message says to tap the photo; with no photo on screen yet, point back to the address.
-  if (status === 404 && /no roof data/i.test(m) && !look) return 'Google has no roof data at that spot. Check the address, or measure the roof from photos in steps 1 to 3.';
+  // The server's "no roof data" message says to tap the photo, but a failed lookup takes the photo away.
+  if (status === 404 && /no roof data/i.test(m)) {
+    return params.address ? 'Google has no roof data at that spot. Check the address, or measure the roof from photos in steps 1 to 3.'
+      : 'Google has no roof data at that spot. Look up the address, or measure the roof from photos in steps 1 to 3.';
+  }
   return m;
 }
-async function runLookup(params) {
+const lookStatus = j => {
+  const n = j.segments.length, w = (j.warnings || []).length;
+  if (!n) return ['Google found the building but no roof faces on it. Measure this one from photos.', 'warn'];
+  if (w) return [`Found ${plural(n, 'roof face')}. ${w === 1 ? '1 thing' : `${w} things`} to check on site, see below.`, 'warn'];
+  return [`Found ${plural(n, 'roof face')}. Check the photo to make sure it's the right building.`, 'ok'];
+};
+// opts.near: the street address a tapped pin was near, to label the new result.
+async function runLookup(params, opts = {}) {
   if (busy) return;
-  busy = true; lastParams = params; setBusyUi(true);
+  busy = true; lastParams = params; lastOpts = opts; setBusyUi(true);
+  if (pendingPin) clearPin();
   const card = $('#lkCard');
   card.dataset.state = 'busy';
+  setStale(!!look);
   setStatus(params.address ? 'Finding the address…' : 'Finding the building…', 'idle');
   const slow = setTimeout(() => setStatus('Measuring the roof…', 'idle'), 2500);
   let ok = false;
@@ -1606,16 +1782,16 @@ async function runLookup(params) {
       r = await api('/api/takeoff?' + new URLSearchParams(params));
       j = await r.json().catch(() => null);
     } finally { clearTimeout(slow); }
-    if (!r.ok) throw new Error(errorText(r.status, j));
+    if (!r.ok) throw new Error(errorText(r.status, j, params));
     if (!j || j.version !== 1 || !Array.isArray(j.segments) || !j.place || !j.building) throw new Error("The lookup server sent an answer this page can't read. Reload the page and try again.");
-    look = j; lookAt = new Date(); lookParams = params;
-    faceAttic = new Map(j.segments.map(s => [s.n, !s.lowSlope]));
+    look = j; lookAt = new Date(); lookParams = { ...params, ...(opts.near && !j.place.address ? { near: opts.near } : {}) };
+    faceAttic = defaultFaceAttic(j); noDataIn = true;
     state.source = 'lookup';
     mapView = null;
+    setStale(false);
     renderLookup(); updateSummary();
-    const n = j.segments.length;
-    setStatus(n ? `Found ${plural(n, 'roof face')}. Check the photo to make sure it's the right building.` : 'Google found the building but no roof faces on it. Measure this one from photos.', n ? 'ok' : 'warn');
-    rememberLookup(); updateUrl();
+    setStatus(...lookStatus(j));
+    rememberLookup(); updateUrl(); saveLast();
     ok = true;
     try { await loadPhoto(); setMapNote('photo'); }
     catch (e1) {
@@ -1623,7 +1799,17 @@ async function runLookup(params) {
       try { await loadMap(); setMapNote('satellite'); }
       catch (e2) { drawMapMessage(e2.message || 'The satellite image did not load.'); setMapNote('none'); }
     }
+    saveLast();
   } catch (e) {
+    // The last house goes away: its numbers must not pass for the address that was just asked for.
+    if (look) {
+      look = null; lookParams = null; mapView = null;
+      $('#lookupResult').hidden = true;
+      state.source = 'steps';
+      updateSummary();
+    }
+    setStale(false);
+    setUrl(new URLSearchParams(params).toString());
     setStatus(e.message || 'Lookup failed.', 'warn');
   } finally {
     busy = false; setBusyUi(false);
@@ -1640,7 +1826,7 @@ $('#lookupForm').addEventListener('submit', e => {
 $('#codeSave').addEventListener('click', () => {
   saveCode($('#accessCode').value.trim()); $('#codeRow').hidden = true;
   toast('Access code saved on this device.');
-  if (lastParams) runLookup(lastParams);
+  if (lastParams) runLookup(lastParams, lastOpts || {});
 });
 $('#lkUse').addEventListener('click', () => {
   if (!look || !look.segments.length) return;
@@ -1651,7 +1837,7 @@ $('#lkUse').addEventListener('click', () => {
     const g = groups.get(key) || { p, at, n: 0, ground: 0 };
     g.n++; g.ground += s.groundM2 * FT2; groups.set(key, g);
   }
-  const a = look.attic, fromLookup = a && a.footprintM2 > 0 && a.perimeterSource !== 'none' ? { A: a.footprintM2, P: a.perimeterM } : null;
+  const a = look.attic, fromLookup = a && a.footprintM2 > 0 && a.perimeterSource !== 'none' ? { A: a.footprintM2, P: a.perimeterM - (Number(a.sharedWallM) || 0) } : null;
   nextId = 1;
   state.sections = [...groups.values()].sort((x, y) => y.ground - x.ground).map(g => {
     const s = newSection(`${g.p === 0 ? 'Flat faces' : `${g.p}/12 faces`}${g.at ? '' : ', no attic'} (${g.n})`, g.p);
@@ -1675,7 +1861,84 @@ function linkQuery() {
   return q.toString();
 }
 const shareUrl = () => location.origin + location.pathname + (look ? '?' + linkQuery() : '');
-function updateUrl() { try { history.replaceState(null, '', location.pathname + '?' + linkQuery() + location.hash); } catch (_) {} }
+function setUrl(q) { try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch (_) {} }
+function updateUrl() { setUrl(linkQuery()); }
+
+/* ---------- this tab's last lookup: a reload or a restored tab shows it again with no new paid call ---------- */
+function mapSnapshot() {
+  if (!mapView || !mapView.img || !mapView.frame) return null;
+  if (mapView.src) return { kind: mapView.kind, imgW: mapView.imgW, imgH: mapView.imgH, date: mapView.date || null, pixel: mapView.pixel || null, frame: mapView.frame, src: mapView.src };
+  try {
+    let cv = mapView.img;
+    if (!(cv instanceof HTMLCanvasElement)) {
+      cv = document.createElement('canvas'); cv.width = mapView.imgW; cv.height = mapView.imgH;
+      cv.getContext('2d').drawImage(mapView.img, 0, 0, mapView.imgW, mapView.imgH);
+    }
+    return { kind: mapView.kind, imgW: mapView.imgW, imgH: mapView.imgH, date: mapView.date || null, pixel: mapView.pixel || null, frame: mapView.frame, src: cv.toDataURL('image/jpeg', 0.85) };
+  } catch (_) { return null; }
+}
+function saveLast() {
+  if (!look || !lookParams) return;
+  const entry = { q: linkQuery(), look, at: lookAt.toISOString(), params: lookParams, faces: [...faceAttic], noDataIn, overhang: state.overhang, source: state.source };
+  let map = mapSnapshot();
+  if (!map) {
+    // the photo is still loading (or being shown again): keep the one already stored for this lookup
+    try { const old = JSON.parse(sessionStorage.getItem(LAST_KEY) || 'null'); if (old && old.q === entry.q && old.at === entry.at) map = old.map || null; } catch (_) {}
+  }
+  try { sessionStorage.setItem(LAST_KEY, JSON.stringify({ ...entry, map })); }
+  catch (_) { try { sessionStorage.setItem(LAST_KEY, JSON.stringify(entry)); } catch (_) {} }
+}
+let saveT = null;
+function saveLastSoon() { clearTimeout(saveT); saveT = setTimeout(saveLast, 300); }
+function frameOf(f) {
+  if (f.type === 'utm') return geoFrame({ box: f.box, w: f.w, h: f.h }, f.zone, f.lat0, f.lng0);
+  const ctr = project(f.lat, f.lng, f.z);
+  return {
+    toPx: (lat, lng) => { const p = project(lat, lng, f.z); return { x: p.x - ctr.x + 320, y: p.y - ctr.y + 320 }; },
+    toLatLng: (x, y) => unproject(ctr.x + x - 320, ctr.y + y - 320, f.z),
+  };
+}
+async function restoreMap(m) {
+  const img = new Image(); img.src = m.src;
+  await (img.decode ? img.decode() : new Promise((res, rej) => { img.onload = res; img.onerror = rej; }));
+  const f = frameOf(m.frame);
+  mapView = { kind: m.kind, img, imgW: m.imgW, imgH: m.imgH, k: null, toPx: f.toPx, toLatLng: f.toLatLng, date: m.date, pixel: m.pixel, frame: m.frame, src: m.src };
+  drawMap();
+  setMapNote(m.kind);
+}
+// Shows the stored result when it is for this page's link. Everything is wrapped: storage can be off or full.
+function restoreLast() {
+  let e = null;
+  try { e = JSON.parse(sessionStorage.getItem(LAST_KEY) || 'null'); } catch (_) { return false; }
+  try {
+    const here = new URLSearchParams(location.search).toString();
+    const j = e && e.look;
+    if (!j || !here || e.q !== here || j.version !== 1 || !Array.isArray(j.segments) || !j.place || !j.building) return false;
+    look = j; lookAt = new Date(e.at); lookParams = e.params || {};
+    if (isNaN(lookAt)) lookAt = new Date();
+    faceAttic = Array.isArray(e.faces) ? new Map(e.faces) : defaultFaceAttic(j);
+    noDataIn = e.noDataIn !== false;
+    if ([0, 6, 12, 18, 24].includes(e.overhang)) setOverhang(e.overhang);
+    state.source = e.source === 'steps' ? 'steps' : 'lookup';
+    if (lookParams.address) $('#addr').value = j.place.address || lookParams.address;
+    mapView = null;
+    renderLookup(); updateSummary();
+    const [msg, tone] = lookStatus(j);
+    setStatus(`Your last lookup, shown again (no new charge). ${msg}`, tone);
+    const card = $('#lkCard');
+    card.dataset.state = 'restored';
+    if (e.map && e.map.src && e.map.frame) {
+      restoreMap(e.map).catch(() => { drawMapMessage('The photo could not be shown again. Look it up again to see it.'); setMapNote('none'); });
+    } else {
+      drawMapMessage("The photo isn't kept after a reload. Look it up again to see it (a new paid lookup).");
+      setMapNote('none');
+    }
+    return true;
+  } catch (_) {
+    look = null; lookParams = null;
+    return false;
+  }
+}
 
 /* ---------- recent lookups (this device only) ---------- */
 function loadRecent() {
@@ -1689,7 +1952,7 @@ function saveRecent(list) { try { localStorage.setItem(RECENT_KEY, JSON.stringif
 const recentId = e => (typeof e.address === 'string' ? 'a:' + e.address.trim().toLowerCase() : `p:${Number(e.lat).toFixed(5)},${Number(e.lng).toFixed(5)}`);
 function currentRecent() {
   const t = lookupTotals();
-  const where = lookParams.address ? { address: look.place.address || lookParams.address } : { lat: Number(lookParams.lat), lng: Number(lookParams.lng) };
+  const where = lookParams.address ? { address: look.place.address || lookParams.address } : { lat: Number(lookParams.lat), lng: Number(lookParams.lng), ...(lookParams.near ? { near: lookParams.near } : {}) };
   return { ...where, at: lookAt.toISOString(), attic: t.attic != null ? Math.round(t.attic) : null, surface: t.sloped != null ? Math.round(t.sloped) : null, pitch: t.pitch };
 }
 function rememberLookup() {
@@ -1708,13 +1971,14 @@ function updateRecentNumbers() {
     list[i] = { ...list[i], attic: e.attic, surface: e.surface, pitch: e.pitch };
     saveRecent(list); renderRecent();
   }, 300);
+  saveLastSoon();
 }
 function renderRecent() {
   const list = loadRecent(), now = new Date();
   $('#recentBox').hidden = !list.length;
   const shown = recentAll ? list : list.slice(0, RECENT_SHOWN);
   $('#recentList').innerHTML = shown.map((e, i) => {
-    const label = typeof e.address === 'string' ? e.address : `Pin at ${Number(e.lat).toFixed(5)}, ${Number(e.lng).toFixed(5)}`;
+    const label = typeof e.address === 'string' ? e.address : typeof e.near === 'string' && e.near ? `Near ${e.near}` : pinText(e.lat, e.lng);
     const d = new Date(e.at);
     const when = isNaN(d) ? null : d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
     const meta = [when, Number.isFinite(e.attic) ? `attic ${fmt0(e.attic)}` : null, Number.isFinite(e.surface) ? `roof ${fmt0(e.surface)} sq ft` : null, Number.isFinite(e.pitch) ? `${e.pitch}/12` : null].filter(Boolean).join(' · ');
@@ -1731,7 +1995,7 @@ $('#recentList').addEventListener('click', e => {
   const entry = loadRecent()[Number(b.dataset.i)];
   if (!entry) return;
   if (typeof entry.address === 'string') { $('#addr').value = entry.address; runLookup({ address: entry.address }); }
-  else { $('#addr').value = ''; runLookup({ lat: String(entry.lat), lng: String(entry.lng) }); }
+  else { $('#addr').value = ''; runLookup({ lat: String(entry.lat), lng: String(entry.lng) }, { near: typeof entry.near === 'string' ? entry.near : null }); }
 });
 $('#recentMore').addEventListener('click', () => { recentAll = !recentAll; renderRecent(); });
 $('#recentClear').addEventListener('click', () => {
@@ -1773,6 +2037,7 @@ function summaryText() {
   const d = summaryData(), L = [];
   L.push(`Roof Takeoff: ${d.title}`, ...d.meta.map(m => m + '.'), '');
   L.push(`Attic floor: ${sqft(d.attic)}${d.attic != null ? ` (${d.atticSub})` : ''}`);
+  if (d.isLookup && d.deck != null) L.push(`Roof deck over the attic floor: ${sqft(d.deck)} (for spray foam under the roof)`);
   L.push(`Roof surface (sloped): ${sqft(d.sloped)}`);
   if (d.sloped != null) L.push(`Squares: ${fmt1(d.sloped / 100)}`, `Order with ${d.waste}% waste: ${d.order.text} squares (${d.order.bundles} bundles)`);
   L.push(`Footprint: ${sqft(d.foot)} (${d.footSub.toLowerCase()})`);
@@ -1820,6 +2085,7 @@ function renderReport() {
     ['', 'Squares', d.sloped != null ? fmt1(d.sloped / 100) : '–'],
     ['', `Order with ${d.waste}% waste`, d.order ? `${d.order.text} sq (${d.order.bundles} bundles)` : '–'],
     ['', 'Footprint', sqft(d.foot)],
+    ...(d.isLookup && d.deck != null ? [['', 'Roof deck over the attic floor', sqft(d.deck)]] : []),
     ...(d.isLookup && d.outlineFoot != null ? [['', 'Roof outline footprint', sqft(d.outlineFoot)]] : []),
     ['', 'Main pitch', d.pitch != null ? `${d.pitch}/12` : '–'],
     ['', 'Overhang used', d.overhang ? `${d.overhang}"` : 'None'],
@@ -1832,7 +2098,7 @@ function renderReport() {
   let body = '';
   if (d.isLookup) {
     if (d.faces.length) {
-      body += `<section class="r-sec"><h2>Roof faces</h2><table class="r-tab"><thead><tr><th>Face</th><th>Pitch</th><th>Faces</th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th><th>Over the attic</th></tr></thead><tbody>${
+      body += `<section class="r-sec"><h2>Roof faces</h2><table class="r-tab"><thead><tr><th>Face</th><th>Pitch</th><th>Slopes toward</th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th><th>Over the attic</th></tr></thead><tbody>${
         d.faces.map(f => `<tr><td>${f.n}</td><td>${f.pitch}/12</td><td>${f.dir}</td><td class="num">${fmt0(f.foot)}</td><td class="num">${fmt0(f.sloped)}</td><td>${f.attic ? 'Yes' : 'No'}</td></tr>`).join('')
       }</tbody></table></section>`;
     }
@@ -1845,7 +2111,6 @@ function renderReport() {
     } else {
       body += '<section class="r-sec"><h2>Roof edges</h2><p class="r-small">Not measured for this house.</p></section>';
     }
-    if (d.warnings.length) body += `<div class="r-warn">${d.warnings.map(w => `<p>${esc(w)}</p>`).join('')}</div>`;
   } else {
     body += `<section class="r-sec"><h2>Sections</h2><table class="r-tab"><thead><tr><th>Section</th><th>Pitch</th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th><th class="num">Attic floor (sq ft)</th></tr></thead><tbody>${
       d.sections.map(s => `<tr><td>${esc(s.name)}</td><td>${s.pitch ?? '–'}/12</td><td class="num">${s.foot != null ? fmt0(s.foot) : '–'}</td><td class="num">${s.sloped != null ? fmt0(s.sloped) : '–'}</td><td class="num">${s.inAttic ? (s.attic != null ? fmt0(s.attic) : '–') : 'Not over the attic'}</td></tr>`).join('')
@@ -1857,6 +2122,7 @@ function renderReport() {
       ${photo ? `<figure class="r-photo"><img src="${photo}" alt="Roof photo with the outline${d.isLookup ? ', edges and face numbers' : ''}"><figcaption class="r-legend">${legend}</figcaption></figure>` : ''}
       <dl class="r-nums">${nums.map(([cls, k, v]) => `<div class="${cls}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}<div class="note">Attic floor: ${esc(d.atticSub)}.</div></dl>
     </div>
+    ${d.isLookup && d.warnings.length ? `<div class="r-warn"><p><b>Check on site:</b></p>${d.warnings.map(w => `<p>${esc(w)}</p>`).join('')}</div>` : ''}
     ${body}
     <footer class="r-foot">${esc(d.footer)}${d.isLookup ? `<span>${esc(d.link)}</span>` : ''}</footer>`;
 }
@@ -1880,7 +2146,7 @@ $('#copySum').addEventListener('click', async () => {
 });
 $('#copyLink').addEventListener('click', async () => {
   if (!look) return;
-  toast(await copyText(shareUrl()) ? 'Link copied. Opening it runs a new paid lookup.' : "Couldn't copy here. Copy the address bar instead.");
+  toast(await copyText(shareUrl()) ? 'Link copied. It opens with the address filled in; looking it up there is a new paid lookup.' : "Couldn't copy here. Copy the address bar instead.");
 });
 
 /* ---------- start on the sample house ---------- */
@@ -1894,13 +2160,18 @@ gable.setImage(gs.canvas); over.setImage(os.canvas);
 renderSections(); updatePitch(); setMode('trace'); setWaste(15); setOverhang(12); updateSampleNote(); renderRecent();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { gable.draw(); over.draw(); drawMap(); });
 
-/* ---------- deep link: ?address=... or ?lat=..&lng=.. runs one lookup on load ---------- */
+/* ---------- links: ?address=... or ?lat=..&lng=.. never run a paid lookup on their own ----------
+   A reload or a restored tab shows this tab's last result again; any other link only fills in the address (or
+   marks the pin) and waits for a tap on Look up. */
 {
   const qs = new URLSearchParams(location.search), num = /^\s*-?\d+(\.\d+)?\s*$/;
   const qa = (qs.get('address') || '').trim().slice(0, 200), qlat = qs.get('lat') || '', qlng = qs.get('lng') || '';
-  if (qa) { $('#addr').value = qa; runLookup({ address: qa }); }
-  else if (num.test(qlat) && num.test(qlng) && Math.abs(Number(qlat)) <= 90 && Math.abs(Number(qlng)) <= 180) {
-    runLookup({ lat: qlat.trim(), lng: qlng.trim() });
+  if ((qa || qlat) && restoreLast()) { /* shown again from this tab's storage */ }
+  else if (qa) {
+    $('#addr').value = qa;
+    setStatus('Address filled in from the link. Tap Look up roof to measure it. Each lookup is a paid Google request.', 'idle');
+  } else if (num.test(qlat) && num.test(qlng) && Math.abs(Number(qlat)) <= 90 && Math.abs(Number(qlng)) <= 180) {
+    showPin({ lat: qlat.trim(), lng: qlng.trim(), near: null, onPhoto: false });
   }
 }
 })();

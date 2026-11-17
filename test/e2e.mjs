@@ -93,12 +93,20 @@ async function api(params, srv = server) {
   const r = await fetch(`${srv.url}/api/takeoff?${new URLSearchParams(params)}`);
   return r.json();
 }
-// CONTRACT.md attic floor, in sq ft, with an overhang in inches and a rule for which faces are over the attic.
-function contractAttic(j, overhangIn, over = s => !s.lowSlope) {
-  const A = j.attic.footprintM2, P = j.attic.perimeterM, d = overhangIn * INCH;
-  const ex = j.segments.filter(s => !over(s)).reduce((t, s) => t + s.groundM2, 0);
-  return (A > 0 ? Math.max(0, A - P * d + 4 * d * d) * Math.max(0, 1 - ex / A) : 0) * FT2;
+// CONTRACT.md attic floor, in sq ft, with an overhang in inches and a rule for which faces are over the attic
+// (default: the server's attic.excluded). noDataOut: leave out the parts with no roof data.
+function contractAttic(j, overhangIn, over = s => !j.attic.excluded.includes(s.n), noDataOut = false) {
+  const A = j.attic.footprintM2, P = j.attic.perimeterM, S = j.attic.sharedWallM || 0, d = overhangIn * INCH;
+  const ex = j.segments.filter(s => !over(s)).reduce((t, s) => t + s.groundM2, 0) + (noDataOut ? j.attic.unmatchedM2 : 0);
+  return (A > 0 ? Math.max(0, A - (P - S) * d + 4 * d * d) * Math.max(0, 1 - ex / A) : 0) * FT2;
 }
+// Roof deck over the attic floor (sq ft) with the same choices.
+function contractDeck(j, overhangIn, over = s => !j.attic.excluded.includes(s.n)) {
+  const kept = j.segments.filter(over);
+  return contractAttic(j, overhangIn, over) * kept.reduce((t, s) => t + s.areaM2, 0) / kept.reduce((t, s) => t + s.groundM2, 0);
+}
+const ADDRESSES = ['1 Gable Ln', '2 Hip Rd', '3 Cross Gable Ct', '4 Low Detail Dr', '5 Twin Ave', '6 Flat Roof Plaza', '7 Cape Dormer Way'];
+const box = (p, sel) => p.locator(sel).first().boundingBox();
 const sloped = j => j.segments.reduce((t, s) => t + s.areaM2, 0) * FT2;
 // Main pitch: the whole pitch with the most footprint.
 function mainPitch(j) {
@@ -117,7 +125,7 @@ async function main() {
   server = await startServer();
   coded = await startServer({ ACCESS_CODE: '4321' });
   const truth = {};
-  for (const a of ['1 Gable Ln', '2 Hip Rd', '3 Cross Gable Ct', '4 Low Detail Dr']) truth[a] = await api({ address: a });
+  for (const a of ADDRESSES) truth[a] = await api({ address: a });
   const cross = truth['3 Cross Gable Ct'];
 
   await test('first load shows the sample house totals, unchanged from before this page change', async () => {
@@ -150,14 +158,19 @@ async function main() {
       assert.equal(await text(p, '#lkArea'), fmt0(sloped(j)), addr);
       assert.equal(await text(p, '#lkAttic'), fmt0(j.attic.floorM2 * FT2), addr + ' attic = server attic.floorM2');
       assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(j, 12)), addr + ' attic = contract formula');
+      if (j.attic.deckM2 != null) assert.match(await text(p, '#lkDeck'), new RegExp(`^Roof deck over the attic floor: ${fmt0(j.attic.deckM2 * FT2)} sq ft \\(for spray foam under the roof\\)$`));
       assert.equal(await text(p, '#lkFaces'), String(j.segments.length));
       assert.equal(await text(p, '#lkPitch'), String(mainPitch(j)));
       assert.equal(await p.getAttribute('#mapBoard', 'data-kind'), 'photo', addr);
       assert.equal(await text(p, '#kArea'), fmt0(sloped(j)));
       assert.equal(await text(p, '#kAttic'), fmt0(j.attic.floorM2 * FT2));
       assert.equal(await p.getAttribute('#srcLookup', 'aria-pressed'), 'true');
-      assert.equal(await p.$$eval('#faceBody tr', r => r.length), j.segments.length);
+      assert.equal(await p.$$eval('#faceBody tr[data-face]', r => r.length), j.segments.length);
+      // default face choices come from attic.excluded
+      for (const s of j.segments) assert.equal(await p.isChecked(`#faceBody input[data-n="${s.n}"]`), !j.attic.excluded.includes(s.n), `${addr} face ${s.n}`);
+      assert.equal(await p.$$eval('#faceBody .tag.hint', r => r.length), j.segments.filter(s => s.lower).length, addr + ' lower-roof hints');
       assert.match(await text(p, '#lookupStatus'), /Found \d+ roof face/);
+      assert.match(await p.getAttribute('#lookupStatus', 'class'), j.warnings.length ? /warn/ : /ok/, addr + ' status tone');
     }
     assert.deepEqual(p.errors, []);
     await ctx.close();
@@ -196,18 +209,19 @@ async function main() {
     await lookup(p, '3 Cross Gable Ct');
     const ft = Object.fromEntries(Object.entries(cross.edgeTotalsM).map(([k, v]) => [k, v * M2FT]));
     const legend = await text(p, '#edgeLegend');
-    for (const [k, label] of [['ridge', 'Ridge'], ['valley', 'Valley'], ['eave', 'Eave'], ['rake', 'Rake'], ['step', 'Step']]) {
+    for (const [k, label] of [['ridge', 'Ridge'], ['valley', 'Valley'], ['eave', 'Eave'], ['rake', 'Rake'], ['headwall', 'Headwall']]) {
       assert.ok(ft[k] > 0); assert.ok(legend.includes(`${label} ${fmt0(ft[k])} ft`), `legend has ${label}`);
     }
-    assert.ok(!/Hip|Pitch break/.test(legend), 'types with zero length are left out');
+    assert.ok(!/Hip|Pitch break|Step/.test(legend), 'types with zero length are left out');
     assert.ok(legend.includes('Not over the attic'));
     const rows = await p.$$eval('#edgeBody tr', r => r.map(tr => [...tr.cells].map(c => c.textContent.trim())));
-    assert.deepEqual(rows.map(r => [r[0], r[2]]), [['Ridge', fmt0(ft.ridge)], ['Valley', fmt0(ft.valley)], ['Eave', fmt0(ft.eave)], ['Rake', fmt0(ft.rake)], ['Step', fmt0(ft.step)]]);
+    assert.deepEqual(rows.map(r => [r[0], r[2]]), [['Ridge', fmt0(ft.ridge)], ['Valley', fmt0(ft.valley)], ['Eave', fmt0(ft.eave)], ['Rake', fmt0(ft.rake)], ['Headwall', fmt0(ft.headwall)]]);
+    assert.equal(rows[4][1], 'Level top of a roof against a wall');
     const mats = await p.$$eval('#matBody tr', r => r.map(tr => [tr.cells[0].textContent.trim(), tr.cells[2].textContent.trim()]));
     const up = v => fmt0(Math.ceil(v - 1e-9));
     assert.deepEqual(mats, [
       ['Drip edge', up(ft.eave + ft.rake)], ['Starter strip', up(ft.eave)], ['Ridge cap', up(ft.ridge + ft.hip)],
-      ['Valley (ice and water, flashing)', up(ft.valley)], ['Step flashing', up(ft.step)],
+      ['Valley (ice and water, flashing)', up(ft.valley)], ['Headwall (apron) flashing', up(ft.headwall)],
     ]);
     assert.match(await text(p, '#edgesBlock'), /estimates from aerial data: check them on site/);
     // the photo-method note stays in step 3 only
@@ -228,6 +242,58 @@ async function main() {
     assert.ok(await p.isVisible('#edgesNone'));
     assert.ok(await p.isHidden('#edgesBlock'));
     assert.match(await text(p, '#lkQuality'), /Lower-detail aerial imagery from Sep 2019/);
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await test('warnings sit next to the numbers: amber status, "Check on site" under the lookup numbers and in the Roof total', async () => {
+    const ctx = await newContext({ viewport: { width: 375, height: 812 } }), p = await open(ctx), j = truth['4 Low Detail Dr'];
+    await lookup(p, '1 Gable Ln');
+    assert.match(await p.getAttribute('#lookupStatus', 'class'), /chip ok/);
+    assert.ok(await p.isHidden('#lkCheck'));
+    assert.ok(await p.isHidden('#sumCheck'));
+    await lookup(p, '4 Low Detail Dr');
+    assert.match(await p.getAttribute('#lookupStatus', 'class'), /chip warn/, 'amber, not green, when there are warnings');
+    assert.equal(await text(p, '#lookupStatus'), 'Found 2 roof faces. 3 things to check on site, see below.');
+    assert.equal(await text(p, '#lkCheck'), 'Check on site: 3 notes about this roof See notes');
+    const nums = await box(p, '#lkCard .kpis.two'), chk = await box(p, '#lkCheck');
+    assert.ok(chk.y >= nums.y + nums.height && chk.y - (nums.y + nums.height) < 30, 'right under the lookup numbers');
+    assert.ok(await p.isVisible('#sumCheck'), 'in the Roof total card too');
+    assert.equal(await text(p, '#sumCheck'), 'Check on site: 3 notes from the address lookup See notes');
+    const sk = await box(p, '#sumCard .kpis'), sc = await box(p, '#sumCheck');
+    assert.ok(sc.y >= sk.y + sk.height && sc.y - (sk.y + sk.height) < 30, 'right under the Roof total numbers');
+    assert.equal(await p.getAttribute('#lkCheck', 'href'), '#lkWarn');
+    assert.equal(await p.$$eval('#lkWarn li', l => l.length), j.warnings.length);
+    // The totals switch to steps 1-3: the summary's line goes, the lookup's stays.
+    await p.click('#srcSteps');
+    assert.ok(await p.isHidden('#sumCheck'));
+    assert.ok(await p.isVisible('#lkCheck'));
+    // Printed report: the notes come right after the numbers.
+    await p.click('#srcLookup');
+    await p.emulateMedia({ media: 'print' });
+    await p.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+    const order = await p.evaluate(() => [...document.querySelector('#report').children].map(el => el.className));
+    assert.ok(order.indexOf('r-warn') === order.indexOf('r-top') + 1, `report order: ${order}`);
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await test('parts with no roof data: their own row, in by default, toggles the attic floor', async () => {
+    const ctx = await newContext(), p = await open(ctx), j = truth['4 Low Detail Dr'];
+    await lookup(p, '4 Low Detail Dr');
+    const row = p.locator('#faceBody tr.nodata');
+    assert.equal(await row.count(), 1);
+    assert.match(await row.textContent(), new RegExp(`Parts with no roof data\\s*${fmt0(j.attic.unmatchedM2 * FT2)}`));
+    assert.ok(await p.isChecked('#faceBody input[data-nodata]'), 'included by default');
+    assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(j, 12)));
+    await p.uncheck('#faceBody input[data-nodata]');
+    assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(j, 12, undefined, true)));
+    assert.equal(await text(p, '#kAttic'), fmt0(contractAttic(j, 12, undefined, true)));
+    assert.match(await text(p, '#kAtticSub'), /parts with no roof data left out/);
+    assert.match(await text(p, '#lkAtticNote'), /without the parts with no roof data\.$/);
+    // Not shown when the outline matches the faces (under 5% of the footprint).
+    await lookup(p, '1 Gable Ln');
+    assert.equal(await p.locator('#faceBody tr.nodata').count(), 0);
     assert.deepEqual(p.errors, []);
     await ctx.close();
   });
@@ -291,46 +357,162 @@ async function main() {
     await ctx.close();
   });
 
-  await test('tapping the photo looks up the roof at that spot (lat/lng)', async () => {
-    const ctx = await newContext(), p = await open(ctx);
+  await test('tapping the photo only marks the spot; looking it up there takes a yes, and keeps the street name', async () => {
+    const ctx = await newContext({ viewport: { width: 375, height: 812 } }), p = await open(ctx);
     await lookup(p, '3 Cross Gable Ct');
-    const box = await p.locator('#mapCanvas').boundingBox();
-    await andWait(p, () => p.locator('#mapCanvas').click({ position: { x: box.width * 0.45, y: box.height * 0.4 } }));
+    await p.uncheck('#faceBody input[data-n="1"]');
+    const before = await text(p, '#lkAttic'), calls = p.takeoff.length;
+    const b = await p.locator('#mapCanvas').boundingBox();
+    const tap = () => p.locator('#mapCanvas').click({ position: { x: b.width * 0.45, y: b.height * 0.4 } });
+    await tap();
+    await sleep(400);
+    assert.equal(p.takeoff.length, calls, 'a tap alone runs nothing');
+    assert.ok(await p.isVisible('#pinBar'));
+    assert.equal(await text(p, '#pinGo'), 'Look up the roof here (paid)');
+    assert.match(await text(p, '#pinText'), /^New spot marked on the photo, near 3 Cross Gable Ct, Newark, DE 19711, USA\. Each lookup is a paid Google request\.$/);
+    const bar = await box(p, '#pinBar'), board = await box(p, '#mapBoard');
+    assert.ok(bar.y > board.y + board.height && bar.y - (board.y + board.height) < 200, 'the yes/cancel bar sits under the photo');
+    for (const id of ['#pinGo', '#pinCancel']) assert.ok((await box(p, id)).height >= 44);
+    // Cancel: nothing changes, face choices kept.
+    await p.click('#pinCancel');
+    assert.ok(await p.isHidden('#pinBar'));
+    assert.equal(await text(p, '#lkAttic'), before);
+    assert.equal(p.takeoff.length, calls);
+    // Tap again and say yes: one lookup by lat/lng, labelled near the old address.
+    await tap();
+    await andWait(p, () => p.click('#pinGo'));
+    assert.equal(p.takeoff.length, calls + 1);
     const last = p.takeoff[p.takeoff.length - 1];
-    assert.ok(last.searchParams.has('lat') && last.searchParams.has('lng') && !last.searchParams.has('address'));
-    assert.match(await text(p, '#lkAddress'), /^Pin at 39\.68\d+, -75\.7\d+$/);
+    assert.ok(last.searchParams.has('lat') && last.searchParams.has('lng') && !last.searchParams.has('address') && !last.searchParams.has('near'));
+    assert.equal(await text(p, '#lkAddress'), 'Near 3 Cross Gable Ct, Newark, DE 19711, USA');
+    assert.equal(await text(p, '#sumFrom'), 'From the address lookup: Near 3 Cross Gable Ct, Newark, DE 19711, USA');
+    assert.ok(await p.isHidden('#pinBar'));
     const u = new URL(p.url());
     assert.equal(u.searchParams.get('lat'), last.searchParams.get('lat'));
     assert.equal(u.searchParams.get('lng'), last.searchParams.get('lng'));
     const j = await api({ lat: last.searchParams.get('lat'), lng: last.searchParams.get('lng') });
     assert.equal(await text(p, '#lkAttic'), fmt0(j.attic.floorM2 * FT2));
+    assert.match(await text(p, '#recentList'), /Near 3 Cross Gable Ct/);
     assert.deepEqual(p.errors, []);
     await ctx.close();
   });
 
-  await test('deep links: ?address= and ?lat=&lng= run one lookup on load and keep the URL', async () => {
+  await test('a failed lookup takes the last house off the screen and out of the totals', async () => {
+    const ctx = await newContext(), p = await open(ctx);
+    await lookup(p, '4 Low Detail Dr');
+    // While the next lookup runs, the old result is faded and can't be used.
+    await p.route(/\/api\/takeoff\?/, async r => { await sleep(700); await r.continue(); });
+    await andWait(p, async () => {
+      await p.fill('#addr', '9 no roof Rd');
+      await p.click('#lookupBtn');
+      await sleep(250);
+      assert.match(await p.getAttribute('#lookupResult', 'class'), /stale/);
+      assert.equal(await p.getAttribute('#sumCard', 'data-stale'), '1');
+    });
+    assert.equal(await p.getAttribute('#lkCard', 'data-state'), 'error');
+    assert.ok(await p.isHidden('#lookupResult'), 'the old house is gone');
+    assert.equal(await text(p, '#lookupStatus'), 'Google has no roof data at that spot. Check the address, or measure the roof from photos in steps 1 to 3.');
+    assert.ok(!/tap/i.test(await text(p, '#lookupStatus')), 'no photo to tap');
+    assert.equal(await p.getAttribute('#sumCard', 'data-stale'), null);
+    assert.ok(await p.isHidden('#srcSeg'));
+    assert.ok(await p.isHidden('#sumFrom'));
+    assert.equal(await text(p, '#kArea'), '1,708', 'the Roof total is back on steps 1 to 3');
+    assert.equal(await text(p, '#kAttic'), '1,232');
+    await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: server.url });
+    await p.click('#copySum');
+    assert.match(await p.evaluate(() => navigator.clipboard.readText()), /^Roof Takeoff: Sample house\n/);
+    assert.ok(await p.isDisabled('#copyLink'));
+    assert.equal(new URL(p.url()).searchParams.get('address'), '9 no roof Rd', 'the link is the address in the box, not the old house');
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await test('links never run a paid lookup on their own: ?address= fills the box, ?lat=&lng= marks a pin', async () => {
     const ctx = await newContext();
     let p = await open(ctx, '/?address=' + encodeURIComponent('2 Hip Rd'));
-    await p.waitForFunction(() => document.querySelector('#lkCard').dataset.runs === '1', null, { timeout: 20000 });
-    await sleep(400);
-    assert.equal(p.takeoff.length, 1);
+    await sleep(600);
+    assert.equal(p.takeoff.length, 0, 'no call to /api/takeoff on load');
     assert.equal(await p.inputValue('#addr'), '2 Hip Rd');
-    assert.equal(new URL(p.url()).searchParams.get('address'), '2 Hip Rd, Newark, DE 19711, USA');
+    assert.equal(await text(p, '#lookupStatus'), 'Address filled in from the link. Tap Look up roof to measure it. Each lookup is a paid Google request.');
+    assert.ok(await p.isHidden('#lookupResult'));
+    assert.equal(await text(p, '#kArea'), '1,708');
+    await andWait(p, () => p.click('#lookupBtn'));
+    assert.equal(p.takeoff.length, 1, 'the button runs it');
+    assert.equal(new URL(p.url()).searchParams.get('address'), '2 Hip Rd, Newark, DE 19711, USA', 'the URL follows the lookup');
     assert.equal(await text(p, '#lkAttic'), fmt0(truth['2 Hip Rd'].attic.floorM2 * FT2));
     await p.close();
     const c = truth['1 Gable Ln'].building.center;
     p = await open(ctx, `/?lat=${c.lat}&lng=${c.lng}`);
-    await p.waitForFunction(() => document.querySelector('#lkCard').dataset.runs === '1', null, { timeout: 20000 });
-    await sleep(400);
+    await sleep(600);
+    assert.equal(p.takeoff.length, 0, 'a pin link runs nothing either');
+    assert.ok(await p.isVisible('#pinBar'));
+    assert.equal(await text(p, '#pinText'), `Pin at ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}. Each lookup is a paid Google request.`);
+    await andWait(p, () => p.click('#pinGo'));
     assert.equal(p.takeoff.length, 1);
     assert.equal(p.takeoff[0].searchParams.get('lat'), String(c.lat));
     assert.match(await text(p, '#lkAddress'), /^Pin at /);
     assert.equal(await text(p, '#lkAttic'), fmt0((await api({ lat: c.lat, lng: c.lng })).attic.floorM2 * FT2));
     await p.close();
+    p = await open(ctx, `/?lat=${c.lat}&lng=${c.lng}`);
+    await p.click('#pinCancel');
+    assert.ok(await p.isHidden('#pinBar'));
+    assert.equal(new URL(p.url()).search, '');
+    await p.close();
     p = await open(ctx, '/?lat=north&lng=-75.75');
     await sleep(500);
     assert.equal(p.takeoff.length, 0, 'a bad pin runs nothing');
+    assert.ok(await p.isHidden('#pinBar'));
     assert.equal(await text(p, '#kArea'), '1,708');
+    await ctx.close();
+  });
+
+  await test('reload and tab restore show this tab\'s last result again with no call to the server', async () => {
+    const ctx = await newContext(), p = await open(ctx), j = truth['3 Cross Gable Ct'];
+    await lookup(p, '3 Cross Gable Ct');
+    await p.click('#lkCard .chips.oh button[data-oh="18"]');
+    await p.uncheck('#faceBody input[data-n="1"]');
+    await sleep(500);
+    const want = await p.evaluate(() => ['#lkAttic', '#lkArea', '#kAttic', '#lkAddress', '#lkDeck', '#edgeLegend'].map(s => document.querySelector(s).textContent));
+    const seen = [];
+    p.on('request', r => { if (/\/api\//.test(r.url())) seen.push(r.url()); });
+    await p.reload();
+    await p.waitForSelector('#lkCard[data-state="restored"]');
+    await p.waitForFunction(() => document.querySelector('#mapBoard').dataset.kind === 'photo');
+    await sleep(300);
+    assert.deepEqual(seen, [], 'nothing reaches the server: no lookup, no photo download');
+    assert.deepEqual(await p.evaluate(() => ['#lkAttic', '#lkArea', '#kAttic', '#lkAddress', '#lkDeck', '#edgeLegend'].map(s => document.querySelector(s).textContent)), want);
+    assert.equal(await p.isChecked('#faceBody input[data-n="1"]'), false, 'face choices kept');
+    assert.equal(await p.getAttribute('#lkCard .chips.oh button[data-oh="18"]', 'aria-pressed'), 'true', 'overhang kept');
+    assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(j, 18, s => s.n !== 1 && s.n !== 5)));
+    assert.match(await text(p, '#lookupStatus'), /^Your last lookup, shown again \(no new charge\)\. Found 5 roof faces/);
+    assert.equal(await p.inputValue('#addr'), j.place.address);
+    // A second reload (choices saved again meanwhile) still has the photo.
+    await p.click('#lkCard .chips.oh button[data-oh="6"]');
+    await sleep(400);
+    await p.reload();
+    await p.waitForSelector('#lkCard[data-state="restored"]');
+    await p.waitForFunction(() => document.querySelector('#mapBoard').dataset.kind === 'photo');
+    assert.equal(await p.getAttribute('#lkCard .chips.oh button[data-oh="6"]', 'aria-pressed'), 'true');
+    assert.equal(await text(p, '#lkAttic'), fmt0(contractAttic(j, 6, s => s.n !== 1 && s.n !== 5)));
+    assert.deepEqual(seen, []);
+    // The photo still taps (marks a spot) after a restore.
+    const b = await p.locator('#mapCanvas').boundingBox();
+    await p.locator('#mapCanvas').click({ position: { x: b.width * 0.5, y: b.height * 0.5 } });
+    assert.ok(await p.isVisible('#pinBar'));
+    assert.deepEqual(seen, []);
+    // Another tab with the same link has no stored result: it only fills in the address.
+    const p2 = await open(ctx, '/?' + new URL(p.url()).searchParams.toString());
+    await sleep(500);
+    assert.equal(p2.takeoff.length, 0);
+    assert.ok(await p2.isHidden('#lookupResult'));
+    assert.equal(await p2.inputValue('#addr'), j.place.address);
+    // Storage that is broken or blocked: the page still loads and just fills in the address.
+    await p.evaluate(() => sessionStorage.setItem('roofTakeoff.last', '{broken'));
+    await p.reload();
+    await sleep(400);
+    assert.deepEqual(seen, []);
+    assert.ok(await p.isHidden('#lookupResult'));
+    assert.deepEqual([...p.errors, ...p2.errors], []);
     await ctx.close();
   });
 
@@ -342,7 +524,7 @@ async function main() {
     await lookup(p, '1 Gable Ln');
     await p.click('#lkCard .chips.oh button[data-oh="24"]');
     await sleep(500);
-    await p.goto(server.url + '/'); // not reload(): the URL now holds ?address=, which would run the lookup again
+    await p.goto(server.url + '/'); // a fresh page with no link: only the recent list is on it
     await p.waitForSelector('#recentBox:not([hidden])');
     let items = await p.$$eval('#recentList .recent-item', b => b.map(x => [x.querySelector('.r-addr').textContent, x.querySelector('.r-meta').textContent]));
     assert.equal(items.length, 2, 'same address is not listed twice');
@@ -356,7 +538,7 @@ async function main() {
     assert.equal(await text(p, '#lkAddress'), '2 Hip Rd, Newark, DE 19711, USA');
     // cap at 12, a pin entry, bad storage
     await p.evaluate(() => localStorage.setItem('roofTakeoff.recent', JSON.stringify(Array.from({ length: 15 }, (_, i) => ({ address: `${i + 10} Test St`, at: '2026-11-01T12:00:00Z', attic: 1000 + i, surface: 1500, pitch: 6 })))));
-    await p.goto(server.url + '/'); // not reload(): the URL now holds ?address=, which would run the lookup again
+    await p.goto(server.url + '/'); // a fresh page with no link: only the recent list is on it
     items = await p.$$eval('#recentList .recent-item', b => b.length);
     assert.equal(items, 4, 'compact: four shown');
     await p.click('#recentMore');
@@ -366,11 +548,11 @@ async function main() {
     assert.equal(stored.length, 12);
     assert.equal(stored[0].address, '2 Hip Rd, Newark, DE 19711, USA');
     await p.evaluate(() => localStorage.setItem('roofTakeoff.recent', '{not json'));
-    await p.goto(server.url + '/'); // not reload(): the URL now holds ?address=, which would run the lookup again
+    await p.goto(server.url + '/'); // a fresh page with no link: only the recent list is on it
     assert.ok(await p.isHidden('#recentBox'));
     assert.equal(await text(p, '#kArea'), '1,708');
     await p.evaluate(() => localStorage.setItem('roofTakeoff.recent', JSON.stringify([{ lat: 39.6815172, lng: -75.7500077, at: '2026-11-02T12:00:00Z', attic: 1, surface: 2, pitch: 6 }])));
-    await p.goto(server.url + '/'); // not reload(): the URL now holds ?address=, which would run the lookup again
+    await p.goto(server.url + '/'); // a fresh page with no link: only the recent list is on it
     assert.match(await text(p, '#recentList'), /Pin at 39\.68152, -75\.75001/);
     await andWait(p, () => p.click('#recentList .recent-item'));
     assert.equal(p.takeoff[p.takeoff.length - 1].searchParams.get('lat'), '39.6815172');
@@ -401,7 +583,9 @@ async function main() {
       `Squares: ${fmt1(sloped(cross) / 100)}`,
       'Main pitch: 6/12', 'Overhang used: 12"',
       '5. 1.0/12, faces south, footprint 128 sq ft, sloped 128 sq ft, not over the attic',
-      `Roof edges (feet, along the slope): ridge ${ft('ridge')}, valley ${ft('valley')}, eave ${ft('eave')}, rake ${ft('rake')}, step ${ft('step')}`,
+      `Roof edges (feet, along the slope): ridge ${ft('ridge')}, valley ${ft('valley')}, eave ${ft('eave')}, rake ${ft('rake')}, headwall ${ft('headwall')}`,
+      `Roof deck over the attic floor: ${fmt0(contractDeck(cross, 12))} sq ft (for spray foam under the roof)`,
+      'headwall (apron) flashing',
       `drip edge ${fmt0(Math.ceil((cross.edgeTotalsM.eave + cross.edgeTotalsM.rake) * M2FT))} ft`,
       'Estimates from Google aerial imagery. Verify on site.',
       `Link: ${server.url}/?address=3+Cross+Gable+Ct%2C+Newark%2C+DE+19711%2C+USA`,
@@ -410,6 +594,7 @@ async function main() {
     assert.ok(await p.isEnabled('#copyLink'));
     await p.click('#copyLink');
     assert.equal(await p.evaluate(() => navigator.clipboard.readText()), `${server.url}/?address=3+Cross+Gable+Ct%2C+Newark%2C+DE+19711%2C+USA`);
+    assert.match(await text(p, '#toast'), /looking it up there is a new paid lookup/);
     assert.deepEqual(p.errors, []);
     await ctx.close();
   });
@@ -534,18 +719,67 @@ async function main() {
     await ctx.close();
   });
 
+  await test('phones: key controls are at least 44 px, and the faces table shows both sq ft columns at 375 px', async () => {
+    const ctx = await newContext({ viewport: { width: 375, height: 812 } }), p = await open(ctx);
+    await lookup(p, '4 Low Detail Dr');
+    await lookup(p, '7 Cape Dormer Way');
+    const small = await p.evaluate(() => {
+      const sel = ['#addr', '#lookupBtn', '#lkCard .chips.oh button', '#faceBody label.att', '#lkUse', '#printBtn', '#copySum', '#copyLink',
+        '#srcLookup', '#srcSteps', '.recent-item', '#recentClear', '#lkCheck', '#wasteChips button', '#addSec', '#secBody .icon-btn',
+        '#secBody input.in', '#modeScale', '#modeTrace', '#applyTo'];
+      const out = [];
+      for (const q of sel) for (const el of document.querySelectorAll(q)) {
+        const r = el.getBoundingClientRect();
+        if (!r.width || el.closest('[hidden]')) continue;
+        if (r.height < 44 || (el.matches('label.att') && r.width < 44)) out.push(`${q}: ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+      return out;
+    });
+    assert.deepEqual(small, []);
+    const fit = await p.evaluate(() => {
+      const wrap = document.querySelector('#facesTitle + .table-wrap').getBoundingClientRect();
+      const ths = [...document.querySelectorAll('.secs.faces thead th')].filter(th => th.getBoundingClientRect().width);
+      const cells = [...document.querySelectorAll('#faceBody tr[data-face]')].map(tr => [...tr.cells].filter(td => td.getBoundingClientRect().width).map(td => td.getBoundingClientRect().right));
+      return { wrapRight: wrap.right, heads: ths.map(th => [th.innerText.trim().replace(/\s+/g, ' '), th.getBoundingClientRect().right]), cells, scroll: document.querySelector('#facesTitle + .table-wrap').scrollWidth - document.querySelector('#facesTitle + .table-wrap').clientWidth };
+    });
+    assert.deepEqual(fit.heads.map(h => h[0].toLowerCase()), ['face and pitch', 'footprint (sq ft)', 'sloped (sq ft)', 'over the attic']);
+    for (const [name, right] of fit.heads) assert.ok(right <= fit.wrapRight + 0.5, `${name} is on screen (${right} > ${fit.wrapRight})`);
+    for (const row of fit.cells) for (const right of row) assert.ok(right <= fit.wrapRight + 0.5);
+    assert.ok(fit.scroll <= 1, 'the faces table does not scroll sideways');
+    assert.match(await text(p, '#faceBody tr[data-face]'), /Slopes (north|south|east|west)/i);
+    assert.equal(await p.$$eval('#faceBody .tag.hint', t => t.map(x => x.textContent)).then(t => t.length), 3);
+    assert.equal(await text(p, '#faceBody .tag.hint'), 'Lower roof: garage, porch or addition?');
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
+  await test('step 3: two traced sections over the attic keep the overhang along the side they share', async () => {
+    const ctx = await newContext(), p = await open(ctx);
+    // Sample: main roof 46 x 30 ft and porch 20 x 8 ft (280 x 112 px at 14 px per foot) share the porch's 20 ft top side.
+    assert.equal(await text(p, '#kAttic'), '1,232', 'porch not over the attic: main loses the overhang all round');
+    await p.check('#secBody tr:nth-child(2) input[type=checkbox]');
+    // main 1380 - (152 - 20) + 4 = 1252, porch 160 - (56 - 20) + 4 = 128 (the union is 1540 - 168 + 4 = 1376)
+    assert.equal(await text(p, '#attv-2'), '128');
+    assert.equal(await text(p, '#attv-1'), '1,252');
+    assert.equal(await text(p, '#kAttic'), '1,380');
+    await p.click('.card:has(#secBody) .chips.oh button[data-oh="0"]');
+    assert.equal(await text(p, '#kAttic'), '1,540', 'no overhang: the whole footprint');
+    assert.deepEqual(p.errors, []);
+    await ctx.close();
+  });
+
   await test('phones and desktops, light and dark: tidy layout, screenshots', async () => {
     for (const [w, h] of [[375, 812], [1280, 900]]) {
       for (const scheme of ['light', 'dark']) {
         const ctx = await newContext({ viewport: { width: w, height: h }, colorScheme: scheme }), p = await open(ctx);
         await noSideScroll(p);
-        await lookup(p, '3 Cross Gable Ct');
+        await lookup(p, '7 Cape Dormer Way');
         await p.mouse.move(0, 0);
         await noSideScroll(p);
         // tables scroll inside their own wrapper, never the page
         const wrapOk = await p.$$eval('.table-wrap', ws => ws.every(x => x.getBoundingClientRect().right <= innerWidth + 0.5));
         assert.ok(wrapOk);
-        await shot(p, `cross-gable-${w}-${scheme}`);
+        await shot(p, `cape-dormer-${w}-${scheme}`);
         if (w === 375) {
           await p.emulateMedia({ media: 'print' });
           await p.evaluate(() => new Promise(r => { scrollTo(0, 0); requestAnimationFrame(() => r()); }));
