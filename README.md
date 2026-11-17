@@ -26,9 +26,7 @@ makes every call to Google on the server, so the API key never leaves it.
 | `index.html` | The retired page: a notice that sends people and old links to Koala (one small inline script, no `/api` calls) |
 | `api/takeoff.js` | The full takeoff (see CONTRACT.md). Koala calls it. |
 | `api/satellite.js` | Regular satellite picture of a spot. Koala calls it. |
-| `api/geotiff.js` | Downloads one of Google's aerial-data files by id (adds the key on the server) |
-| `api/lookup.js` | Address or map pin → building and roof faces (older; kept working) |
-| `api/layers.js` | Asks Google for the aerial photo and rooftop mask; returns file ids (older; kept working) |
+| `api/geotiff.js` | Downloads one of Google's aerial-data files by id (adds the key on the server), for `photo.rgb` |
 | `lib/google.js` | Google calls, access check, error messages |
 | `lib/takeoff.js` | Roof geometry: pure functions, no I/O |
 | `lib/raster.js` | Reads Google's GeoTIFF files for `lib/takeoff.js` |
@@ -40,8 +38,8 @@ makes every call to Google on the server, so the API key never leaves it.
 | Name | Needed | What it does |
 |---|---|---|
 | `GOOGLE_MAPS_API_KEY` | yes | Server-side Google key. Turn on **Geocoding API**, **Solar API** and **Maps Static API** for it. |
-| `PARTNER_KEY` | yes, for Koala | The shared key Koala's server sends in the `x-partner-key` header (Koala's `ROOF_TAKEOFF_KEY`). On its own it locks nothing, but a call that sends a partner key that doesn't match is refused (401 "The partner key doesn't match."), so a wrong Koala key shows up at once. |
-| `ACCESS_CODE` | recommended | When set, every `/api/*` call needs the `x-access-code` header, except Koala's (a matching partner key gets through). Each lookup costs money and Koala is now the only client, so set this to a long random value nobody needs to type: it shuts out everyone else. |
+| `PARTNER_KEY` | yes | The shared key Koala's server sends in the `x-partner-key` header (Koala's `ROOF_TAKEOFF_KEY`). When set, every `/api/*` call needs it: Koala is the only client and each lookup costs money, so the old crew access code and calls with no key are refused (401). |
+| `ACCESS_CODE` | no | Only for local work without `PARTNER_KEY`: then every `/api/*` call needs the `x-access-code` header. Ignored when `PARTNER_KEY` is set; it can be removed from the Vercel settings. |
 
 Values are trimmed, so a key saved with a trailing newline still works. Set them in the Vercel project settings, then redeploy. For local work put them in a `.env` file
 (`KEY=value` lines; it is git-ignored and never deployed).
@@ -72,7 +70,8 @@ dark (no sideways scroll, a 56 px button). It also checks that the same dev serv
 picks the browser.
 
 `PORT=3000 npm run mock` picks another port. Try the API by hand:
-`curl 'http://localhost:8787/api/takeoff?address=7%20Cape%20Dormer%20Way'`.
+`curl 'http://localhost:8787/api/takeoff?address=7%20Cape%20Dormer%20Way'` (add `-H 'x-partner-key: ...'` when
+`PARTNER_KEY` is set).
 
 ### Mock addresses (`npm run mock`)
 

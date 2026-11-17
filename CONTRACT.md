@@ -9,15 +9,14 @@ All lengths are meters and all areas square meters on the wire. Clients convert 
 
 Every `/api/*` handler calls `requireAccess(req)`:
 
-1. If `PARTNER_KEY` is set and the `x-partner-key` header equals it (constant-time compare), the call is allowed.
-   The Koala server sends this header.
-2. Else if an `x-partner-key` header was sent (wrong, or `PARTNER_KEY` is unset): allowed only if `ACCESS_CODE` is
-   set and `x-access-code` matches it; otherwise 401 "The partner key doesn't match.", so a misconfigured Koala key
-   shows up at once instead of when the site is locked.
+1. If `PARTNER_KEY` is set, the `x-partner-key` header must equal it (constant-time compare), or 401. Nothing else
+   gets through: not `x-access-code`, not a call with no key. The Koala server sends this header and is the only
+   client, so production always has `PARTNER_KEY` set. (Until November 2026 the crew's `ACCESS_CODE` also worked.)
+2. Else (no `PARTNER_KEY`: local work and the mock) a call that sends `x-partner-key` gets 401 "The partner key
+   doesn't match.", so a server missing its key shows up at once.
 3. Else if `ACCESS_CODE` is set, the `x-access-code` header must equal it (constant-time compare), or 401.
-4. Else (no `ACCESS_CODE` set) the call is allowed, as today. `PARTNER_KEY` on its own does not lock the tool;
-   it only lets the Koala server past an `ACCESS_CODE`.
-- A header of a different length is a mismatch. Env values and headers are trimmed before comparing.
+4. Else the call is allowed.
+- A header of a different length is a mismatch. Env values and headers are trimmed before comparing; blank is unset.
 
 ## GET /api/takeoff
 

@@ -1,11 +1,9 @@
-// GET /api/takeoff (and the older endpoints) through the full mock Google path: GeoTIFFs are written by the
+// GET /api/takeoff (and /api/satellite, /api/geotiff) through the full mock Google path: GeoTIFFs are written by the
 // mock and read back by the server, exactly as with Google.
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fromArrayBuffer } from 'geotiff';
 import takeoff from '../api/takeoff.js';
-import lookup from '../api/lookup.js';
-import layers from '../api/layers.js';
 import geotiff from '../api/geotiff.js';
 import satellite from '../api/satellite.js';
 import { createMockGoogle } from '../dev/mock-google.js';
@@ -406,82 +404,80 @@ test('degraded: mask or surface heights fail, or come in an unexpected projectio
   assert.ok(j.photo, 'the photo id still goes to the page');
 });
 
-for (const [name, handler, url] of [['takeoff', takeoff, q({ address: '1 Gable Ln' })], ['lookup', lookup, '/api/lookup?address=1%20Gable%20Ln']]) {
-  test(`auth on /api/${name}: open, access code, partner key`, async () => {
-    // Neither set: open, as before.
-    assert.equal((await call(handler, url)).status, 200);
-    // PARTNER_KEY alone does not lock the tool.
+// Koala's two endpoints. A satellite picture of the gable's spot is enough for the auth checks.
+const SAT = (() => { const c = GABLE.frame.toLatLng(0, 0); return `/api/satellite?lat=${c.lat.toFixed(7)}&lng=${c.lng.toFixed(7)}&zoom=20`; })();
+for (const [name, handler, url] of [['takeoff', takeoff, q({ address: '1 Gable Ln' })], ['satellite', satellite, SAT]]) {
+  test(`auth on /api/${name}: with PARTNER_KEY set, only Koala's key gets through`, async () => {
     process.env.PARTNER_KEY = 'partner-secret-123';
-    assert.equal((await call(handler, url)).status, 200);
-    // ACCESS_CODE set: the code (or the partner key) is needed.
     process.env.ACCESS_CODE = 'crew-code';
-    assert.equal((await call(handler, url)).status, 401);
-    assert.equal((await call(handler, url, { 'x-access-code': 'wrong-cod' })).status, 401);
-    assert.equal((await call(handler, url, { 'x-access-code': 'crew-code-longer' })).status, 401, 'different length');
-    assert.equal((await call(handler, url, { 'x-access-code': 'crew-code' })).status, 200);
     assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
-    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-12' })).status, 401);
-    assert.equal((await call(handler, url, { 'x-partner-key': 'nope', 'x-access-code': 'crew-code' })).status, 200);
-    // ACCESS_CODE without PARTNER_KEY: a partner header alone gets nowhere.
-    delete process.env.PARTNER_KEY;
-    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 401);
-    const r = await call(handler, url);
-    assert.match(r.json().error, /access code/);
-  });
-
-  test(`auth on /api/${name}: a wrong partner key is refused even while the tool is open; keys are trimmed`, async () => {
-    process.env.PARTNER_KEY = 'partner-secret-123';
-    // No ACCESS_CODE: the tool is open, but a partner key that doesn't match says so at once.
-    assert.equal((await call(handler, url)).status, 200, 'the page sends no partner key');
+    // No key, the old crew access code, or a wrong key: refused, and nothing reaches Google.
+    const before = mock.calls.length;
+    let r = await call(handler, url);
+    assert.equal(r.status, 401);
+    assert.equal(r.json().error, 'Only the Koala app can use this.');
+    r = await call(handler, url, { 'x-access-code': 'crew-code' });
+    assert.equal(r.status, 401, 'the old crew code no longer works');
+    assert.equal(r.json().error, 'Only the Koala app can use this.');
     for (const wrong of ['wrong-typo', 'partner-secret-12', 'partner-secret-1234', 'x']) {
-      const r = await call(handler, url, { 'x-partner-key': wrong });
+      r = await call(handler, url, { 'x-partner-key': wrong, 'x-access-code': 'crew-code' });
       assert.equal(r.status, 401, wrong);
       assert.equal(r.json().error, "The partner key doesn't match.");
     }
-    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
+    // Without ACCESS_CODE it is just as closed.
+    delete process.env.ACCESS_CODE;
+    assert.equal((await call(handler, url)).status, 401, 'no key while ACCESS_CODE is unset');
+    assert.equal(mock.calls.length, before, 'a refused call never reaches Google');
     // A key saved with a trailing newline (echo key | vercel env add) and a padded header both match.
     process.env.PARTNER_KEY = 'partner-secret-123\n';
     assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
     assert.equal((await call(handler, url, { 'x-partner-key': '  partner-secret-123 ' })).status, 200);
-    process.env.ACCESS_CODE = ' crew-code\n';
+  });
+
+  test(`auth on /api/${name}: without PARTNER_KEY (local work), ACCESS_CODE or open; any partner key is refused`, async () => {
+    // Neither set: open, for the mock and local work.
+    assert.equal((await call(handler, url)).status, 200);
+    // ACCESS_CODE set: the code is needed.
+    process.env.ACCESS_CODE = 'crew-code';
+    let r = await call(handler, url);
+    assert.equal(r.status, 401);
+    assert.match(r.json().error, /access code/);
+    assert.equal((await call(handler, url, { 'x-access-code': 'wrong-cod' })).status, 401);
+    assert.equal((await call(handler, url, { 'x-access-code': 'crew-code-longer' })).status, 401, 'different length');
     assert.equal((await call(handler, url, { 'x-access-code': 'crew-code' })).status, 200);
-    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
-    let r = await call(handler, url, { 'x-partner-key': 'wrong-typo' });
-    assert.equal(r.status, 401);
-    assert.equal(r.json().error, "The partner key doesn't match.");
-    // No PARTNER_KEY on the server at all: any partner key is a mismatch.
-    delete process.env.PARTNER_KEY; delete process.env.ACCESS_CODE;
-    r = await call(handler, url, { 'x-partner-key': 'partner-secret-123' });
-    assert.equal(r.status, 401);
-    assert.equal(r.json().error, "The partner key doesn't match.");
-    // A refused call never reaches Google.
-    const before = mock.calls.length;
-    await call(handler, url, { 'x-partner-key': 'nope' });
-    assert.equal(mock.calls.length, before);
+    process.env.ACCESS_CODE = ' crew-code\n';
+    assert.equal((await call(handler, url, { 'x-access-code': 'crew-code' })).status, 200, 'trimmed');
+    // A partner key sent to a server without PARTNER_KEY is a mismatch, even with the right code, so a
+    // Koala key with nothing to match shows up at once.
+    for (const headers of [{ 'x-partner-key': 'partner-secret-123' }, { 'x-partner-key': 'partner-secret-123', 'x-access-code': 'crew-code' }]) {
+      r = await call(handler, url, headers);
+      assert.equal(r.status, 401);
+      assert.equal(r.json().error, "The partner key doesn't match.");
+    }
+    delete process.env.ACCESS_CODE;
+    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 401);
     // Blank settings count as unset.
     process.env.ACCESS_CODE = '   ';
+    process.env.PARTNER_KEY = ' \n';
     assert.equal((await call(handler, url)).status, 200);
   });
 }
 
-test('the older endpoints still work through the mock', async () => {
-  const lk = (await call(lookup, '/api/lookup?address=2%20Hip%20Rd')).json();
-  assert.equal(lk.segments.length, 4);
-  assert.equal(lk.place.address, HIP.address);
-  const c = lk.building.center;
-  const ly = await call(layers, `/api/layers?lat=${c.lat}&lng=${c.lng}&radius=20&pixel=0.1`);
-  assert.equal(ly.status, 200);
-  const ids = ly.json();
+test('the photo file and the satellite picture come through the mock', async () => {
+  const j = (await get(q({ address: '2 Hip Rd' }))).json();
+  assert.equal(j.segments.length, 4);
+  assert.equal(j.place.address, HIP.address);
+  const c = j.building.center;
+  const ids = j.photo;
   const tif = await call(geotiff, `/api/geotiff?id=${ids.rgb}`);
   assert.equal(tif.status, 200);
   assert.equal(tif.headers['content-type'], 'image/tiff');
   const img = await (await fromArrayBuffer(tif.buf.buffer.slice(tif.buf.byteOffset, tif.buf.byteOffset + tif.buf.byteLength))).getImage();
   assert.equal(img.getSamplesPerPixel(), 3);
-  assert.equal(img.getWidth(), 400);
   assert.equal(img.getGeoKeys().ProjectedCSTypeGeoKey, 32618);
   const [minX, minY, maxX, maxY] = img.getBoundingBox();
-  near(maxX - minX, 40, 1e-9, 'photo width');
-  near(maxY - minY, 40, 1e-9, 'photo height');
+  near(maxX - minX, img.getWidth() * ids.pixel, 1e-9, 'photo width');
+  near(maxY - minY, img.getHeight() * ids.pixel, 1e-9, 'photo height');
   const sat = await call(satellite, `/api/satellite?lat=${c.lat}&lng=${c.lng}&zoom=20`);
   assert.equal(sat.status, 200);
   assert.equal(sat.headers['content-type'], 'image/png');
