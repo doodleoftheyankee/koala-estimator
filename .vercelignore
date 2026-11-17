@@ -1,0 +1,5 @@
+.env*
+.vercel
+dev
+dev-server.js
+README.md

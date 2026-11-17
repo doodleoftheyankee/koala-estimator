@@ -1,0 +1,14 @@
+{
+  "name": "roof-takeoff",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Roof pitch and sloped area from photos, or by address with Google's Solar API.",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "mock": "node -e \"process.env.MOCK='1'; import('./dev-server.js')\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

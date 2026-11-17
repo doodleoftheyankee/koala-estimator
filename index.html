@@ -1,0 +1,1332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Roof Takeoff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<script async src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<style>
+[hidden]{display:none!important}
+html{color-scheme:light}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+/* Layout: summary on top, then three steps in order (photo board beside its readout), pitch-factor reference at the foot. */
+:root{
+  --bg:#EDF0F3; --surface:#FFFFFF; --sunk:#E4E9EE; --ink:#15202B; --muted:#56657A; --line:#D2D9E1;
+  --accent:#1C5DB8; --accent-ink:#FFFFFF; --accent-soft:#DCE7F7;
+  --ok:#1D7F47; --ok-soft:#DDF1E5; --warn:#94560A; --warn-soft:#FBEBD1;
+  --board:#1B232C; --mark:#F26B1D;
+  --font-display:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
+  --font-body:"Barlow","Segoe UI",system-ui,-apple-system,sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141A; --surface:#161F28; --sunk:#1D2833; --ink:#E4EAF0; --muted:#94A3B3; --line:#283543;
+    --accent:#6AA3F2; --accent-ink:#0A1420; --accent-soft:#1A2D47;
+    --ok:#5CC88A; --ok-soft:#173326; --warn:#E6AE52; --warn-soft:#3A2A10;
+    --board:#0A0F14; --mark:#F26B1D; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141A; --surface:#161F28; --sunk:#1D2833; --ink:#E4EAF0; --muted:#94A3B3; --line:#283543;
+  --accent:#6AA3F2; --accent-ink:#0A1420; --accent-soft:#1A2D47;
+  --ok:#5CC88A; --ok-soft:#173326; --warn:#E6AE52; --warn-soft:#3A2A10;
+  --board:#0A0F14; --mark:#F26B1D; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.page{max-width:1140px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:grid;gap:20px}
+
+.top{display:flex;gap:14px;align-items:flex-start}
+.logo{width:46px;height:46px;color:var(--accent);flex:none;margin-top:2px}
+.top h1{font-family:var(--font-display);font-weight:700;font-size:2.2rem;line-height:1;letter-spacing:.01em;margin:0 0 6px;text-transform:uppercase}
+.lede{margin:0;color:var(--muted);max-width:64ch}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px 20px;display:grid;gap:14px;min-width:0}
+.eyebrow{font-family:var(--font-display);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:.9rem;color:var(--muted);margin:0}
+.summary-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 22px}
+.kpi{display:flex;flex-direction:column;gap:2px;min-width:0}
+.k-label{font-size:.84rem;color:var(--muted);font-weight:500}
+.k-val{font-family:var(--font-display);font-weight:700;font-size:2.5rem;line-height:1.02;font-variant-numeric:tabular-nums}
+.k-val small{font-size:1.05rem;font-weight:600;color:var(--muted);margin-left:4px}
+.kpi.main .k-val{color:var(--accent)}
+.k-sub{font-size:.84rem;color:var(--muted)}
+.sample-note{margin:0;font-size:.9rem;color:var(--warn);background:var(--warn-soft);padding:8px 12px;border-radius:8px}
+
+.step-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.step-no{font-family:var(--font-display);font-weight:700;font-size:.9rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);background:var(--accent);padding:2px 9px;border-radius:4px}
+.card h2{font-family:var(--font-display);font-weight:600;font-size:1.55rem;margin:0;line-height:1.15;text-wrap:balance}
+.step-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+@media (max-width:860px){.step-grid{grid-template-columns:minmax(0,1fr)}}
+.board-col{display:grid;gap:10px;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar .spacer{flex:1}
+.board{background:var(--board);border-radius:8px;display:flex;justify-content:center;align-items:center;min-height:220px;overflow:hidden;position:relative}
+.board.drop{outline:3px dashed var(--accent);outline-offset:-3px}
+.board canvas{display:block;touch-action:none;cursor:crosshair;max-width:100%}
+.hint{margin:0;font-weight:600;display:flex;gap:9px;align-items:flex-start}
+.hint::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--mark);margin-top:7px;flex:none}
+
+.btn{font:inherit;font-weight:600;font-size:.92rem;border-radius:7px;padding:8px 14px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.2;min-height:38px;position:relative}
+.btn.ghost{background:transparent;color:var(--accent);border-color:var(--line)}
+.btn.ghost:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,label.btn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{font:inherit;font-weight:600;font-size:.92rem;background:transparent;color:var(--ink);border:0;padding:8px 12px;cursor:pointer;min-height:38px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+.tag{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 9px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;opacity:0}
+
+.panel{display:grid;gap:14px;min-width:0}
+.pitch-big{font-family:var(--font-display);font-weight:700;font-size:4.2rem;line-height:.95;font-variant-numeric:tabular-nums}
+.pitch-big .per{font-size:2rem;color:var(--muted);font-weight:600}
+dl.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
+dl.facts dt{color:var(--muted)}
+dl.facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.chip{font-size:.88rem;font-weight:600;padding:7px 10px;border-radius:7px;margin:0}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.idle{background:var(--sunk);color:var(--muted)}
+.tray{display:grid;gap:8px;padding:12px;border-radius:8px;background:var(--sunk)}
+.tray .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tray label{font-weight:600;font-size:.88rem}
+select,.in{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;min-height:38px;min-width:0}
+select{max-width:100%}
+.field{display:grid;gap:6px}
+.field>label{font-weight:600;font-size:.88rem}
+.with-unit{display:flex;align-items:center;gap:6px}
+.with-unit .in{width:110px;text-align:right}
+.small{font-size:.86rem;color:var(--muted);margin:0}
+.stat{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 12px;border-radius:8px;background:var(--sunk)}
+.stat strong{font-family:var(--font-display);font-size:1.5rem;font-variant-numeric:tabular-nums}
+details.tips{border-top:1px solid var(--line);padding-top:10px}
+details.tips summary{cursor:pointer;font-weight:600}
+details.tips ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;color:var(--muted);font-size:.9rem}
+
+.table-wrap{overflow-x:auto}
+table.secs{width:100%;border-collapse:collapse;min-width:620px;font-variant-numeric:tabular-nums}
+.secs th{font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.secs td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.secs .num{text-align:right}
+.secs tbody td.strong{font-weight:700}
+.secs tfoot td{font-weight:700;border-bottom:0;font-family:var(--font-display);font-size:1.2rem}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:8px;vertical-align:middle;flex:none}
+.c-name{white-space:nowrap}
+.c-name .in{width:160px}
+.pitch-in{display:flex;align-items:center;gap:4px}
+.pitch-in .in{width:74px;text-align:right}
+.c-foot .in{width:104px;text-align:right}
+.traced{font-weight:600;white-space:nowrap}
+.traced small{color:var(--muted);font-weight:500;margin-left:5px}
+.icon-btn{font:inherit;font-size:1.25rem;line-height:1;width:36px;height:36px;border-radius:7px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.icon-btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
+.icon-btn:disabled{opacity:.35;cursor:not-allowed}
+.waste{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center}
+.waste .lbl{font-weight:600}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{font:inherit;font-weight:600;font-size:.88rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;min-height:34px}
+.chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.waste .with-unit .in{width:76px}
+
+.ref h2{font-size:1.25rem}
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.ref-cell{background:var(--surface);padding:8px 10px;display:grid}
+.ref-cell b{font-family:var(--font-display);font-size:1.3rem;line-height:1.1}
+.ref-cell span{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom, 0px));transform:translate(-50%,16px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:calc(100% - 32px);z-index:20;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+@media (max-width:520px){.k-val{font-size:2.1rem}.pitch-big{font-size:3.6rem}.top h1{font-size:1.9rem}}
+
+.step-no.alt{background:var(--ink);color:var(--surface)}
+.lookup-form{display:flex;gap:8px;flex-wrap:wrap}
+.lookup-form .in{flex:1 1 260px}
+.code-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.code-row label{font-weight:600}
+.lookup-result{display:grid;gap:14px}
+.kpis.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kpis.two .k-val{font-size:2rem}
+.board.map{min-height:0;aspect-ratio:1/1;width:100%;max-width:640px;justify-self:center}
+.board.map canvas{cursor:pointer;touch-action:manipulation;width:100%;height:100%}
+.lk-addr{font-weight:600;color:var(--ink);font-size:1rem}
+.attrib{font-size:.8rem}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <svg class="logo" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true">
+      <path d="M5 38 L24 10 L43 38"/>
+      <path d="M24 38 V10" stroke-dasharray="3 3" stroke-width="2"/>
+      <path d="M8 43 H22" stroke-width="2"/>
+      <path d="M8 40 v6 M22 40 v6" stroke-width="2"/>
+    </svg>
+    <div>
+      <h1>Roof Takeoff</h1>
+      <p class="lede">Look up a roof by address, or measure it from photos. Sloped area is the footprint times the pitch factor, so any roof shape works.</p>
+    </div>
+  </header>
+
+  <section class="card" aria-labelledby="sumTitle">
+    <div class="summary-head">
+      <h2 class="eyebrow" id="sumTitle">Roof total</h2>
+      <span class="tag" id="sumSample">Sample house</span>
+    </div>
+    <div class="kpis" aria-live="polite">
+      <div class="kpi main"><span class="k-label">Sloped roof area</span><span class="k-val"><span id="kArea">–</span><small>sq ft</small></span><span class="k-sub" id="kSecs"></span></div>
+      <div class="kpi"><span class="k-label">Squares</span><span class="k-val" id="kSq">–</span><span class="k-sub">1 square = 100 sq ft</span></div>
+      <div class="kpi"><span class="k-label" id="kOrderLbl">Order with waste</span><span class="k-val"><span id="kOrder">–</span><small>sq</small></span><span class="k-sub" id="kBundles"></span></div>
+      <div class="kpi"><span class="k-label">Flat footprint</span><span class="k-val"><span id="kFoot">–</span><small>sq ft</small></span><span class="k-sub">As seen from above</span></div>
+    </div>
+    <p class="sample-note" id="sampleNote">These numbers come from the sample house. Look up an address, or upload photos in steps 1 and 2, to measure a real roof.</p>
+  </section>
+
+  <section class="card" aria-labelledby="lkTitle">
+    <div class="step-head"><span class="step-no alt">By address</span><h2 id="lkTitle">Look up the roof by address</h2></div>
+    <form class="lookup-form" id="lookupForm" novalidate>
+      <label class="vh" for="addr">Property address</label>
+      <input class="in" id="addr" type="text" autocomplete="street-address" placeholder="123 Main St, Wilmington, DE">
+      <button class="btn" id="lookupBtn" type="submit">Look up roof</button>
+    </form>
+    <div class="code-row" id="codeRow" hidden>
+      <label for="accessCode">Access code</label>
+      <input class="in" id="accessCode" type="password" autocomplete="off">
+      <button class="btn ghost" id="codeSave" type="button">Save code</button>
+    </div>
+    <p class="chip idle" id="lookupStatus" aria-live="polite">Pulls the pitch and sloped area of every roof face from Google's aerial imagery. Each lookup is a paid Google request.</p>
+    <div class="lookup-result" id="lookupResult" hidden>
+      <div class="step-grid">
+        <div class="board-col">
+          <div class="board map" id="mapBoard"><canvas id="mapCanvas" role="img" aria-label="Satellite view with numbered roof faces"></canvas></div>
+          <p class="small" id="mapNote">Numbers mark each roof face Google found. Wrong building? Tap the right roof on the image.</p>
+          <p class="small attrib">Source: Includes solar data from Google.</p>
+        </div>
+        <aside class="panel" aria-label="Roof found by address">
+          <p class="lk-addr" id="lkAddress"></p>
+          <div class="kpis two">
+            <div class="kpi main"><span class="k-label">Sloped area</span><span class="k-val"><span id="lkArea">–</span><small>sq ft</small></span></div>
+            <div class="kpi"><span class="k-label">Main pitch</span><span class="k-val"><span id="lkPitch">–</span><small>/12</small></span></div>
+            <div class="kpi"><span class="k-label">Footprint</span><span class="k-val"><span id="lkFoot">–</span><small>sq ft</small></span></div>
+            <div class="kpi"><span class="k-label">Roof faces</span><span class="k-val" id="lkFaces">–</span></div>
+          </div>
+          <dl class="facts" id="lkOutline" hidden>
+            <dt>Outline footprint</dt><dd id="lkOutFoot">–</dd>
+            <dt>Roof edge, seen from above</dt><dd id="lkOutEdge">–</dd>
+          </dl>
+          <p class="chip" id="lkQuality"></p>
+          <p class="chip warn" id="lkCoverage" hidden></p>
+          <button class="btn" id="lkUse" type="button">Use these faces in step 3</button>
+          <p class="small">Step 3 groups faces by the nearest whole pitch, so its total can differ from Google's by a percent or two.</p>
+        </aside>
+      </div>
+      <div class="table-wrap">
+        <table class="secs">
+          <thead><tr><th>Face</th><th>Pitch</th><th>Angle</th><th>Faces</th><th class="num">Footprint (sq ft)</th><th class="num">Sloped (sq ft)</th></tr></thead>
+          <tbody id="faceBody"></tbody>
+        </table>
+      </div>
+      <p class="small attrib">Source: Includes solar data from Google.</p>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="s1Title">
+    <div class="step-head"><span class="step-no">Step 1</span><h2 id="s1Title">Pitch from a gable photo</h2></div>
+    <div class="step-grid">
+      <div class="board-col">
+        <div class="bar">
+          <label class="btn"><input type="file" accept="image/*" class="vh" id="gableFile">Upload gable photo</label>
+          <button class="btn ghost" id="pitchClear" type="button">Clear points</button>
+          <span class="spacer"></span>
+          <span class="tag" id="gableTag">Sample photo</span>
+        </div>
+        <div class="board" id="gableBoard"></div>
+        <p class="hint" id="gableHint" aria-live="polite"></p>
+      </div>
+      <aside class="panel" aria-label="Pitch reading">
+        <div>
+          <span class="k-label">Measured pitch</span>
+          <div class="pitch-big"><span id="pitchVal">–</span><span class="per">/12</span></div>
+        </div>
+        <dl class="facts">
+          <dt>Angle</dt><dd id="pAngle">–</dd>
+          <dt>Pitch factor</dt><dd id="pFactor">–</dd>
+          <dt>Left side</dt><dd id="pLeft">–</dd>
+          <dt>Right side</dt><dd id="pRight">–</dd>
+        </dl>
+        <p class="chip idle" id="pitchCheck">Place three points to read the pitch.</p>
+        <div class="tray">
+          <label for="applyTo">Use this pitch for</label>
+          <select id="applyTo"></select>
+          <div class="row">
+            <button class="btn" id="applyRound" type="button">Use</button>
+            <button class="btn ghost" id="applyExact" type="button">Use exact</button>
+          </div>
+        </div>
+        <div class="tray">
+          <label for="degIn">Have the pitch in degrees?</label>
+          <div class="row">
+            <div class="with-unit"><input class="in" id="degIn" type="number" inputmode="decimal" min="0" max="75" step="0.1" placeholder="26.6"><span>°</span></div>
+            <button class="btn ghost" id="degUse" type="button" disabled>Use</button>
+          </div>
+          <p class="small" id="degOut">From the Solar API or a level app on a rafter.</p>
+        </div>
+        <details class="tips">
+          <summary>How to shoot the gable</summary>
+          <ul>
+            <li>Stand straight in front of the gable end. Shooting from off to the side makes the pitch read steep.</li>
+            <li>Back up and zoom in. Distance cuts down lens distortion.</li>
+            <li>Tap the same edge at all three points, such as the top of the rake trim.</li>
+            <li>Hip roof with no gable? Use a garage or dormer gable with the same pitch, or enter degrees below the reading.</li>
+          </ul>
+        </details>
+      </aside>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="s2Title">
+    <div class="step-head"><span class="step-no">Step 2</span><h2 id="s2Title">Footprint from an overhead image</h2></div>
+    <div class="step-grid">
+      <div class="board-col">
+        <div class="bar">
+          <label class="btn"><input type="file" accept="image/*" class="vh" id="overFile">Upload overhead image</label>
+          <div class="seg" role="group" aria-label="What a tap does">
+            <button type="button" id="modeScale" aria-pressed="false">Set scale</button>
+            <button type="button" id="modeTrace" aria-pressed="true">Trace outline</button>
+          </div>
+          <button class="btn ghost" id="undoPt" type="button">Undo</button>
+          <button class="btn ghost" id="clearPts" type="button">Clear</button>
+          <span class="spacer"></span>
+          <span class="tag" id="overTag">Sample image</span>
+        </div>
+        <div class="board" id="overBoard"></div>
+        <p class="hint" id="overHint" aria-live="polite"></p>
+      </div>
+      <aside class="panel" aria-label="Footprint reading">
+        <div class="field">
+          <label for="scaleFt">Known length</label>
+          <div class="with-unit"><input class="in" id="scaleFt" type="number" inputmode="decimal" min="0" step="0.1"><span>ft</span></div>
+          <p class="small" id="scaleRead"></p>
+        </div>
+        <div class="field">
+          <label for="traceSec">Section you're tracing</label>
+          <select id="traceSec"></select>
+        </div>
+        <div class="stat"><span>Its footprint</span><strong id="secFoot">–</strong></div>
+        <details class="tips">
+          <summary>Getting a good overhead image</summary>
+          <ul>
+            <li>Google Maps or Google Earth in satellite view, looking straight down (not tilted). Screenshot with the scale bar showing, then paste it here with Ctrl+V.</li>
+            <li>For scale, tap both ends of the scale bar, or both ends of an edge you measured with a tape.</li>
+            <li>Trace the outer edge of the roof at the drip edge. Overhangs count.</li>
+            <li>Same pitch everywhere? Trace the whole roof as one section, whatever its shape. Add a section only where the pitch changes, and keep sections from overlapping.</li>
+          </ul>
+        </details>
+      </aside>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="s3Title">
+    <div class="step-head"><span class="step-no">Step 3</span><h2 id="s3Title">Sections and totals</h2></div>
+    <div class="table-wrap">
+      <table class="secs">
+        <thead><tr><th>Section</th><th>Pitch</th><th class="num">Footprint (sq ft)</th><th class="num">Factor</th><th class="num">Sloped (sq ft)</th><th><span class="vh">Remove</span></th></tr></thead>
+        <tbody id="secBody"></tbody>
+        <tfoot><tr><td>Total</td><td></td><td class="num" id="totFoot">–</td><td></td><td class="num" id="totSlope">–</td><td></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="bar"><button class="btn ghost" id="addSec" type="button">Add section</button></div>
+    <div class="waste">
+      <span class="lbl" id="wasteLbl">Waste</span>
+      <div class="chips" role="group" aria-labelledby="wasteLbl">
+        <button type="button" data-w="10">Gable 10%</button>
+        <button type="button" data-w="15">Hip 15%</button>
+        <button type="button" data-w="20">Cut-up 20%</button>
+      </div>
+      <div class="with-unit"><input class="in" id="wasteIn" type="number" inputmode="decimal" min="0" max="50" step="1" aria-label="Waste percent"><span>%</span></div>
+    </div>
+    <p class="small">A section's footprint comes from its traced outline. With no outline, type the footprint in. Ridge, hip, valley, rake and eave lengths aren't measured here.</p>
+  </section>
+
+  <section class="card ref" aria-labelledby="refTitle">
+    <h2 id="refTitle">Pitch factors</h2>
+    <p class="small">Factor = √(1 + (rise ÷ 12)²). Multiply a flat footprint by the factor to get the sloped area.</p>
+    <div class="ref-grid" id="refGrid"></div>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const PALETTE = ['#F26B1D','#22A6DD','#E04BA8','#E9C320','#3FC06E','#9C7BF5'];
+const MARK = '#F26B1D';
+const DISPLAY_FONT = '600 13px Barlow, "Segoe UI", sans-serif';
+
+/* ---------- math ---------- */
+const fmt0 = n => Math.round(n).toLocaleString('en-US');
+const fmt1 = n => (Math.round(n * 10) / 10).toFixed(1);
+const factor = p => (p == null || !isFinite(p) || p < 0) ? NaN : Math.sqrt(1 + (p / 12) ** 2);
+const degOf = p => Math.atan(p / 12) * 180 / Math.PI;
+const riseOf = d => 12 * Math.tan(d * Math.PI / 180);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+function polyArea(pts) {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a.x * b.y - b.x * a.y; }
+  return Math.abs(s) / 2;
+}
+function centroid(pts) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length], c = p.x * q.y - q.x * p.y;
+    a += c; cx += (p.x + q.x) * c; cy += (p.y + q.y) * c;
+  }
+  if (Math.abs(a) < 1e-6) return { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length };
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+/* Three taps: left eave corner, peak, right eave corner. The eave-to-eave line sets level,
+   so a tilted camera doesn't matter. Pitch = rise over half the span, times 12. */
+function pitchFrom(L, P, R) {
+  const bx = R.x - L.x, by = R.y - L.y, span = Math.hypot(bx, by);
+  if (span < 4) return { bad: true };
+  const ux = bx / span, uy = by / span, vx = P.x - L.x, vy = P.y - L.y;
+  const along = vx * ux + vy * uy;
+  const h = Math.abs(ux * vy - uy * vx);
+  const runL = along, runR = span - along;
+  if (h < 1 || runL <= 0 || runR <= 0) return { bad: true };
+  return { pitch: 24 * h / span, left: 12 * h / runL, right: 12 * h / runR, foot: { x: L.x + ux * along, y: L.y + uy * along } };
+}
+
+/* ---------- state ---------- */
+const state = {
+  pitchPts: [], measured: null, gableSample: true,
+  scalePts: [], scaleFt: 20, overSample: true, sectionsSample: true,
+  mode: 'trace', sections: [], activeId: null, waste: 15,
+};
+let nextId = 1;
+function newSection(name, pitch, pts) { const id = nextId++; return { id, name, pitch, pts: pts || [], manual: null, color: PALETTE[(id - 1) % PALETTE.length] }; }
+const active = () => state.sections.find(s => s.id === state.activeId) || state.sections[0];
+function ftPerPx() {
+  if (state.scalePts.length < 2 || !(state.scaleFt > 0)) return null;
+  const d = dist(state.scalePts[0], state.scalePts[1]);
+  return d > 2 ? state.scaleFt / d : null;
+}
+function footprint(s) {
+  if (s.pts.length >= 3) { const k = ftPerPx(); return { traced: true, area: k ? polyArea(s.pts) * k * k : null }; }
+  return { traced: false, area: (s.manual != null && s.manual >= 0) ? s.manual : null };
+}
+
+/* ---------- drawing helpers ---------- */
+function seg(g, pts, close) { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); if (close) g.closePath(); }
+function line(g, a, b, color, w, dash) {
+  g.save(); if (dash) g.setLineDash(dash); g.lineCap = 'round';
+  seg(g, [a, b]); g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = w + 3; g.stroke();
+  g.strokeStyle = color; g.lineWidth = w; g.stroke(); g.restore();
+}
+function handle(g, p, color, ring) {
+  g.save();
+  if (ring) {
+    g.beginPath(); g.arc(p.x, p.y, 10, 0, Math.PI * 2); g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke();
+    g.lineWidth = 2; g.strokeStyle = color; g.stroke();
+  } else {
+    g.beginPath(); g.arc(p.x, p.y, 7, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+    g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+    g.beginPath(); g.arc(p.x, p.y, 8.5, 0, Math.PI * 2); g.lineWidth = 1; g.strokeStyle = 'rgba(0,0,0,.45)'; g.stroke();
+  }
+  g.restore();
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); }
+function pill(g, text, x, y, color) {
+  g.save(); g.font = DISPLAY_FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = g.measureText(text).width + 14;
+  rr(g, x - w / 2, y - 11, w, 22, 6); g.fillStyle = 'rgba(12,17,22,.8)'; g.fill();
+  g.fillStyle = color || '#fff'; g.fillText(text, x, y + 0.5); g.restore();
+}
+
+/* ---------- a photo you can tap on ---------- */
+class Board {
+  constructor(el, cfg) {
+    this.el = el; this.cfg = cfg; this.img = null; this.s = 1; this.w = 0; this.h = 0; this.lastW = 0; this.drag = null;
+    this.cv = document.createElement('canvas'); this.cv.setAttribute('aria-label', cfg.label); this.cv.setAttribute('role', 'img');
+    el.appendChild(this.cv); this.g = this.cv.getContext('2d');
+    new ResizeObserver(() => this.layout()).observe(el);
+    this.cv.addEventListener('pointerdown', e => this.down(e));
+    this.cv.addEventListener('pointermove', e => this.move(e));
+    this.cv.addEventListener('pointerup', e => this.up(e));
+    this.cv.addEventListener('pointercancel', e => this.up(e));
+  }
+  setImage(img) { this.img = img; this.layout(true); }
+  layout(force) {
+    if (!this.img) return;
+    const availW = this.el.clientWidth;
+    if (!availW || (!force && availW === this.lastW)) return;
+    this.lastW = availW;
+    const maxH = Math.max(240, Math.min(window.innerHeight * 0.68, 760));
+    const s = Math.min(availW / this.img.width, maxH / this.img.height);
+    this.s = s; this.w = Math.round(this.img.width * s); this.h = Math.round(this.img.height * s);
+    const dpr = window.devicePixelRatio || 1;
+    this.cv.width = Math.round(this.w * dpr); this.cv.height = Math.round(this.h * dpr);
+    this.cv.style.width = this.w + 'px'; this.cv.style.height = this.h + 'px';
+    this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.draw();
+  }
+  toImg(e) { const r = this.cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / this.s, y: (e.clientY - r.top) / this.s }; }
+  clamp(p) { return { x: Math.max(0, Math.min(this.img.width, p.x)), y: Math.max(0, Math.min(this.img.height, p.y)) }; }
+  down(e) {
+    if (!this.img || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    this.cfg.focus();
+    const ip = this.toImg(e);
+    let hit = null, best = (e.pointerType === 'mouse' ? 12 : 26) / this.s;
+    for (const h of this.cfg.handles()) { const d = dist(h, ip); if (d < best) { best = d; hit = h; } }
+    let off = { x: 0, y: 0 };
+    if (hit) off = { x: hit.x - ip.x, y: hit.y - ip.y };
+    else hit = this.cfg.add(this.clamp(ip));
+    if (!hit) return;
+    e.preventDefault();
+    try { this.cv.setPointerCapture(e.pointerId); } catch (_) {}
+    this.drag = { pt: hit, id: e.pointerId, off };
+    this.draw(); this.cfg.change();
+  }
+  move(e) {
+    if (!this.drag || e.pointerId !== this.drag.id) return;
+    const ip = this.toImg(e);
+    const p = this.clamp({ x: ip.x + this.drag.off.x, y: ip.y + this.drag.off.y });
+    this.drag.pt.x = p.x; this.drag.pt.y = p.y;
+    this.draw(); this.cfg.change();
+  }
+  up(e) { if (!this.drag || e.pointerId !== this.drag.id) return; this.drag = null; this.draw(); this.cfg.change(); }
+  draw() {
+    if (!this.img || !this.w) return;
+    const g = this.g;
+    g.clearRect(0, 0, this.w, this.h);
+    g.drawImage(this.img, 0, 0, this.w, this.h);
+    this.cfg.overlay(g, p => ({ x: p.x * this.s, y: p.y * this.s }), false);
+    if (this.drag) this.loupe(this.drag.pt);
+  }
+  /* magnifier in the far top corner while a point is being dragged, since a finger hides the point */
+  loupe(pt) {
+    const g = this.g, R = Math.max(40, Math.min(66, this.w / 5)), Z = 4, S = this.s * Z;
+    const cx = pt.x * this.s < this.w / 2 ? this.w - R - 12 : R + 12, cy = R + 12;
+    g.save();
+    g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fillStyle = '#0B0F13'; g.fill(); g.clip();
+    const k = S, iw = this.img.width, ih = this.img.height;
+    let sx = pt.x - R / S, sy = pt.y - R / S, sw = 2 * R / S, sh = 2 * R / S, dx = cx - R, dy = cy - R, dw = 2 * R, dh = 2 * R;
+    if (sx < 0) { dx -= sx * k; dw += sx * k; sw += sx; sx = 0; }
+    if (sy < 0) { dy -= sy * k; dh += sy * k; sh += sy; sy = 0; }
+    if (sx + sw > iw) { const o = sx + sw - iw; sw -= o; dw -= o * k; }
+    if (sy + sh > ih) { const o = sy + sh - ih; sh -= o; dh -= o * k; }
+    if (sw > 0 && sh > 0) g.drawImage(this.img, sx, sy, sw, sh, dx, dy, dw, dh);
+    this.cfg.overlay(g, p => ({ x: cx + (p.x - pt.x) * S, y: cy + (p.y - pt.y) * S }), true);
+    g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = 1;
+    seg(g, [{ x: cx - R, y: cy }, { x: cx - 4, y: cy }]); g.stroke();
+    seg(g, [{ x: cx + 4, y: cy }, { x: cx + R, y: cy }]); g.stroke();
+    seg(g, [{ x: cx, y: cy - R }, { x: cx, y: cy - 4 }]); g.stroke();
+    seg(g, [{ x: cx, y: cy + 4 }, { x: cx, y: cy + R }]); g.stroke();
+    g.restore();
+    g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
+    g.beginPath(); g.arc(cx, cy, R + 2, 0, Math.PI * 2); g.lineWidth = 1; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke();
+  }
+}
+
+/* ---------- sample images, drawn so the tool opens in a working state ---------- */
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gableSample() {
+  const W = 1200, H = 800, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), rnd = mulberry(7);
+  let gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#6FA3D3'); gr.addColorStop(.8, '#D6E5F0');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#56774E';
+  for (let x = -40; x < W + 40; x += 44) { const r = 38 + rnd() * 40; g.beginPath(); g.arc(x, 660 - rnd() * 50, r, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#6E8C4C'; g.fillRect(0, 680, W, H - 680);
+  g.fillStyle = '#B9B4A8'; g.beginPath(); g.moveTo(566, 690); g.lineTo(634, 690); g.lineTo(700, H); g.lineTo(500, H); g.closePath(); g.fill();
+  const L = 310, R = 890, wallTop = 416, bot = 690, peak = { x: 600, y: wallTop - 145 };
+  g.save(); g.beginPath(); g.moveTo(L, bot); g.lineTo(L, wallTop); g.lineTo(peak.x, peak.y); g.lineTo(R, wallTop); g.lineTo(R, bot); g.closePath();
+  g.fillStyle = '#D5D8CE'; g.fill(); g.clip();
+  g.strokeStyle = 'rgba(90,96,88,.33)'; g.lineWidth = 1.5;
+  for (let y = peak.y; y < bot; y += 15) { g.beginPath(); g.moveTo(L, y); g.lineTo(R, y); g.stroke(); }
+  g.fillStyle = 'rgba(0,0,0,.13)'; g.beginPath(); g.moveTo(L - 20, 432); g.lineTo(600, 277); g.lineTo(R + 20, 432); g.lineTo(R + 20, 452); g.lineTo(600, 297); g.lineTo(L - 20, 452); g.closePath(); g.fill();
+  g.restore();
+  const A = { x: 290, y: 420 }, P = { x: 600, y: 265 }, B = { x: 910, y: 420 };
+  g.lineJoin = 'miter'; g.lineCap = 'butt';
+  g.strokeStyle = '#34383D'; g.lineWidth = 22; seg(g, [A, P, B]); g.stroke();
+  g.strokeStyle = '#F1F0EA'; g.lineWidth = 9; seg(g, [{ x: A.x + 4, y: A.y + 14 }, { x: P.x, y: P.y + 16 }, { x: B.x - 4, y: B.y + 14 }]); g.stroke();
+  g.fillStyle = '#F1F0EA'; g.fillRect(286, 424, 42, 11); g.fillRect(872, 424, 42, 11);
+  g.beginPath(); g.moveTo(600, 322); g.lineTo(642, 354); g.lineTo(558, 354); g.closePath(); g.fill();
+  g.strokeStyle = '#9EA39A'; g.lineWidth = 2;
+  for (let y = 334; y < 354; y += 6) { const half = (y - 322) * 42 / 32 - 6; g.beginPath(); g.moveTo(600 - half, y); g.lineTo(600 + half, y); g.stroke(); }
+  const win = (x, y, w, h) => {
+    g.fillStyle = '#F1F0EA'; g.fillRect(x - 7, y - 7, w + 14, h + 14);
+    const wg = g.createLinearGradient(x, y, x + w, y + h); wg.addColorStop(0, '#6D88A0'); wg.addColorStop(1, '#3F5468');
+    g.fillStyle = wg; g.fillRect(x, y, w, h);
+    g.strokeStyle = '#F1F0EA'; g.lineWidth = 5; g.beginPath(); g.moveTo(x + w / 2, y); g.lineTo(x + w / 2, y + h); g.moveTo(x, y + h / 2); g.lineTo(x + w, y + h / 2); g.stroke();
+  };
+  win(380, 482, 92, 112); win(728, 482, 92, 112);
+  g.fillStyle = '#F1F0EA'; g.fillRect(552, 520, 96, 170); g.fillStyle = '#7A3E2E'; g.fillRect(560, 528, 80, 162);
+  g.fillStyle = '#D9B45A'; g.beginPath(); g.arc(626, 612, 4, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#3F6236';
+  [[330, 680, 34], [372, 684, 30], [470, 684, 32], [730, 684, 32], [830, 682, 34], [872, 686, 28]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, Math.PI, 0); g.fill(); });
+  g.font = '700 22px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText('SAMPLE PHOTO', 24, H - 24);
+  return { canvas: c, pts: [{ ...A }, { ...P }, { ...B }] };
+}
+function overSample() {
+  const W = 1200, H = 900, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), rnd = mulberry(3);
+  g.fillStyle = '#6E8A55'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 6000; i++) { g.fillStyle = rnd() < .5 ? 'rgba(40,60,30,.18)' : 'rgba(170,190,120,.14)'; g.fillRect(rnd() * W, rnd() * H, 3 + rnd() * 4, 3 + rnd() * 4); }
+  g.fillStyle = '#C7C3B8'; g.fillRect(0, 792, W, 22);
+  g.fillStyle = '#5A5E62'; g.fillRect(0, 822, W, 78);
+  g.fillStyle = '#D8C25A'; for (let x = 10; x < W; x += 80) g.fillRect(x, 859, 44, 4);
+  g.fillStyle = '#BDB9AE'; g.fillRect(950, 380, 110, 412); g.fillRect(552, 712, 40, 80);
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.arc(146, 346, 74, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#3E5F33'; g.beginPath(); g.arc(130, 330, 74, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#4E7340'; for (let i = 0; i < 14; i++) { g.beginPath(); g.arc(130 + (rnd() - .5) * 90, 330 + (rnd() - .5) * 90, 18 + rnd() * 16, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(264, 196, 644, 420); g.fillRect(446, 616, 280, 112);
+  const x0 = 250, y0 = 180, x1 = 894, y1 = 600, ry = 390, rx0 = 460, rx1 = 684;
+  const facet = (poly, fill, horiz) => {
+    g.save(); seg(g, poly, true); g.fillStyle = fill; g.fill(); g.clip();
+    g.strokeStyle = 'rgba(0,0,0,.14)'; g.lineWidth = 1;
+    if (horiz) for (let y = y0; y < y1; y += 6) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+    else for (let x = x0; x < x1; x += 6) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); }
+    for (let i = 0; i < 900; i++) { g.fillStyle = rnd() < .5 ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)'; g.fillRect(x0 + rnd() * 644, y0 + rnd() * 420, 3, 2); }
+    g.restore();
+  };
+  facet([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: rx1, y: ry }, { x: rx0, y: ry }], '#6E737A', true);
+  facet([{ x: x0, y: y1 }, { x: x1, y: y1 }, { x: rx1, y: ry }, { x: rx0, y: ry }], '#4C5056', true);
+  facet([{ x: x0, y: y0 }, { x: rx0, y: ry }, { x: x0, y: y1 }], '#61666C', false);
+  facet([{ x: x1, y: y0 }, { x: rx1, y: ry }, { x: x1, y: y1 }], '#565A60', false);
+  g.lineCap = 'round';
+  [[{ x: x0, y: y0 }, { x: rx0, y: ry }, { x: x0, y: y1 }], [{ x: x1, y: y0 }, { x: rx1, y: ry }, { x: x1, y: y1 }], [{ x: rx0, y: ry }, { x: rx1, y: ry }]]
+    .forEach(p => { seg(g, p); g.strokeStyle = '#3A3E43'; g.lineWidth = 6; g.stroke(); g.strokeStyle = '#8B9097'; g.lineWidth = 2; g.stroke(); });
+  g.fillStyle = '#9A9EA3'; g.fillRect(432, 600, 280, 112);
+  for (let x = 440; x < 712; x += 14) { g.fillStyle = 'rgba(255,255,255,.28)'; g.fillRect(x, 600, 2, 112); g.fillStyle = 'rgba(0,0,0,.14)'; g.fillRect(x + 2, 600, 1, 112); }
+  g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(432, 600, 280, 4);
+  rr(g, 40, 724, 320, 52, 6); g.fillStyle = 'rgba(255,255,255,.9)'; g.fill();
+  g.strokeStyle = '#222'; g.lineWidth = 3; g.lineCap = 'butt';
+  seg(g, [{ x: 60, y: 751 }, { x: 60, y: 760 }, { x: 340, y: 760 }, { x: 340, y: 751 }]); g.stroke();
+  g.font = '600 16px sans-serif'; g.fillStyle = '#222'; g.fillText('20 ft', 66, 748);
+  g.font = '700 22px sans-serif'; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillText('SAMPLE IMAGE', 24, 40);
+  return {
+    canvas: c,
+    scale: [{ x: 60, y: 760 }, { x: 340, y: 760 }],
+    main: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }],
+    porch: [{ x: 432, y: 600 }, { x: 712, y: 600 }, { x: 712, y: 712 }, { x: 432, y: 712 }],
+  };
+}
+
+/* ---------- boards ---------- */
+let lastBoard = 'over';
+const gable = new Board($('#gableBoard'), {
+  label: 'Gable photo with pitch points',
+  focus: () => { lastBoard = 'gable'; },
+  handles: () => state.pitchPts,
+  add: p => { if (state.pitchPts.length >= 3) return null; state.pitchPts.push(p); return p; },
+  change: () => updatePitch(),
+  overlay: (g, T, loupe) => {
+    const P = state.pitchPts.map(T);
+    if (P.length >= 2) line(g, P[0], P[1], MARK, 2.5);
+    if (P.length === 3) {
+      line(g, P[1], P[2], MARK, 2.5);
+      line(g, P[0], P[2], '#fff', 1.5, [6, 5]);
+      const r = pitchFrom(...state.pitchPts);
+      if (!r.bad) {
+        line(g, P[1], T(r.foot), '#fff', 1.5, [6, 5]);
+        if (!loupe) {
+          pill(g, fmt1(r.left) + '/12', (P[0].x + P[1].x) / 2, (P[0].y + P[1].y) / 2 - 22);
+          pill(g, fmt1(r.right) + '/12', (P[1].x + P[2].x) / 2, (P[1].y + P[2].y) / 2 - 22);
+        }
+      }
+    }
+    P.forEach(p => handle(g, p, MARK, loupe));
+  },
+});
+const over = new Board($('#overBoard'), {
+  label: 'Overhead image with traced roof outline',
+  focus: () => { lastBoard = 'over'; },
+  handles: () => state.mode === 'scale' ? state.scalePts : active().pts,
+  add: p => {
+    if (state.mode === 'scale') { if (state.scalePts.length >= 2) return null; state.scalePts.push(p); return p; }
+    active().pts.push(p); return p;
+  },
+  change: () => { updateNumbers(); updateOverSide(); },
+  overlay: (g, T, loupe) => {
+    const k = ftPerPx();
+    for (const s of state.sections) {
+      if (!s.pts.length) continue;
+      const P = s.pts.map(T), isActive = s.id === state.activeId && state.mode === 'trace';
+      g.save(); g.lineJoin = 'round';
+      seg(g, P, P.length >= 3);
+      if (P.length >= 3) { g.fillStyle = rgba(s.color, isActive ? .3 : .18); g.fill(); }
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 5; g.stroke();
+      g.strokeStyle = s.color; g.lineWidth = 2.5; g.stroke(); g.restore();
+      if (!loupe && k && isActive) {
+        const n = P.length, edges = n >= 3 ? n : n - 1;
+        for (let i = 0; i < edges; i++) {
+          const a = P[i], b = P[(i + 1) % n];
+          if (dist(a, b) < 54) continue;
+          pill(g, fmt1(dist(s.pts[i], s.pts[(i + 1) % n]) * k) + ' ft', (a.x + b.x) / 2, (a.y + b.y) / 2);
+        }
+      }
+      if (!loupe && k && P.length >= 3) {
+        const c = T(centroid(s.pts)), nm = s.name.length > 20 ? s.name.slice(0, 19) + '…' : (s.name || 'Section');
+        pill(g, `${nm}: ${fmt0(polyArea(s.pts) * k * k)} sq ft`, c.x, c.y, '#fff');
+      }
+      if (isActive) P.forEach(p => handle(g, p, s.color, loupe));
+    }
+    if (state.scalePts.length) {
+      const S = state.scalePts.map(T);
+      if (S.length === 2) {
+        line(g, S[0], S[1], '#fff', 2, [8, 6]);
+        if (!loupe && state.scaleFt > 0) pill(g, `${state.scaleFt} ft scale`, (S[0].x + S[1].x) / 2, (S[0].y + S[1].y) / 2 - 22, '#9CD2FF');
+      }
+      if (state.mode === 'scale' || loupe) S.forEach(p => handle(g, p, '#22A6DD', loupe));
+    }
+  },
+});
+
+/* ---------- step 1 readout ---------- */
+function updatePitch() {
+  const n = state.pitchPts.length;
+  const r = n === 3 ? pitchFrom(...state.pitchPts) : null;
+  const ok = r && !r.bad;
+  state.measured = ok ? r.pitch : null;
+  $('#pitchVal').textContent = ok ? fmt1(r.pitch) : '–';
+  $('#pAngle').textContent = ok ? fmt1(degOf(r.pitch)) + '°' : '–';
+  $('#pFactor').textContent = ok ? factor(r.pitch).toFixed(3) : '–';
+  $('#pLeft').textContent = ok ? fmt1(r.left) + '/12' : '–';
+  $('#pRight').textContent = ok ? fmt1(r.right) + '/12' : '–';
+  const chip = $('#pitchCheck');
+  if (!r) { chip.className = 'chip idle'; chip.textContent = 'Place three points to read the pitch.'; }
+  else if (r.bad) { chip.className = 'chip warn'; chip.textContent = "Those points don't make a roof triangle. The peak has to sit above and between the two corners."; }
+  else if (Math.abs(r.left - r.right) < 0.75) { chip.className = 'chip ok'; chip.textContent = 'Both sides agree.'; }
+  else { chip.className = 'chip warn'; chip.textContent = `Sides read ${fmt1(r.left)} and ${fmt1(r.right)}. Retake from straight in front, unless this gable really has unequal sides.`; }
+  const round = ok ? Math.round(r.pitch) : null;
+  const bR = $('#applyRound'), bE = $('#applyExact');
+  bR.disabled = !ok; bR.textContent = ok ? `Use ${round}/12` : 'Use';
+  bE.hidden = !ok || fmt1(r.pitch) === round.toFixed(1);
+  bE.textContent = ok ? `Use ${fmt1(r.pitch)}/12 as measured` : 'Use exact';
+  $('#pitchClear').disabled = n === 0;
+  $('#gableHint').textContent = [
+    'Tap the bottom-left corner of the roof triangle, where the rake meets the eave.',
+    'Now tap the peak.',
+    'Now tap the bottom-right corner.',
+    'Drag any point to fine-tune it. A magnifier shows while you drag.',
+  ][n];
+  $('#gableTag').hidden = !state.gableSample;
+}
+
+/* ---------- step 2 readout ---------- */
+function overHint() {
+  if (state.mode === 'scale') {
+    const n = state.scalePts.length;
+    if (n === 0) return 'Tap one end of the scale bar, or one end of an edge you measured.';
+    if (n === 1) return 'Now tap the other end.';
+    if (!(state.scaleFt > 0)) return 'Enter that length in feet beside the image.';
+    return 'Scale set. Drag either end to fine-tune, then switch to Trace outline.';
+  }
+  const s = active(), n = s.pts.length;
+  if (!ftPerPx()) return 'Set the scale first so the outline can be measured.';
+  if (n === 0) return `Tap each corner of ${s.name || 'this section'} at the drip edge, going around in order.`;
+  if (n < 3) return 'Keep tapping corners. The outline closes on its own.';
+  return 'Drag a corner to adjust it. Undo removes the last corner.';
+}
+function updateOverSide() {
+  const k = ftPerPx();
+  $('#scaleRead').textContent = k ? `Scale: ${fmt1(1 / k)} pixels per foot` : 'Tap two points in Set scale mode, then enter the length between them.';
+  const f = footprint(active());
+  $('#secFoot').textContent = f.area != null ? fmt0(f.area) + ' sq ft' : '–';
+  const pts = state.mode === 'scale' ? state.scalePts : active().pts;
+  $('#undoPt').disabled = !pts.length; $('#clearPts').disabled = !pts.length;
+  $('#overHint').textContent = overHint();
+  $('#overTag').hidden = !state.overSample;
+}
+function setMode(m) {
+  state.mode = m;
+  $('#modeScale').setAttribute('aria-pressed', m === 'scale');
+  $('#modeTrace').setAttribute('aria-pressed', m === 'trace');
+  updateOverSide(); over.draw();
+}
+
+/* ---------- step 3 table and totals ---------- */
+function renderSelects() {
+  for (const sel of [$('#applyTo'), $('#traceSec')]) {
+    const want = sel.id === 'traceSec' ? state.activeId : Number(sel.value);
+    sel.innerHTML = '';
+    for (const s of state.sections) { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name || 'Untitled section'; sel.appendChild(o); }
+    sel.value = String(state.sections.some(s => s.id === want) ? want : state.sections[0].id);
+  }
+}
+function renderSections() {
+  const tb = $('#secBody'); tb.innerHTML = '';
+  for (const s of state.sections) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="c-name"><span class="swatch"></span><input class="in" id="name-${s.id}" aria-label="Section name"></td>
+      <td><div class="pitch-in"><input class="in" id="pitch-${s.id}" type="number" inputmode="decimal" min="0" max="24" step="0.5" aria-label="Pitch, inches of rise per 12"><span>/12</span></div></td>
+      <td class="c-foot num"><span class="traced" id="ft-${s.id}"></span><input class="in" id="man-${s.id}" type="number" inputmode="decimal" min="0" step="1" placeholder="sq ft" aria-label="Footprint in square feet"></td>
+      <td class="num" id="fac-${s.id}"></td>
+      <td class="num strong" id="slope-${s.id}"></td>
+      <td><button class="icon-btn" type="button" aria-label="Remove section">×</button></td>`;
+    tr.querySelector('.swatch').style.background = s.color;
+    const nm = tr.querySelector(`#name-${s.id}`), pi = tr.querySelector(`#pitch-${s.id}`), mi = tr.querySelector(`#man-${s.id}`);
+    nm.value = s.name; pi.value = s.pitch ?? ''; mi.value = s.manual ?? '';
+    nm.addEventListener('input', () => { s.name = nm.value; renderSelects(); updateOverSide(); over.draw(); });
+    pi.addEventListener('input', () => { const v = parseFloat(pi.value); s.pitch = isFinite(v) ? v : null; updateNumbers(); });
+    mi.addEventListener('input', () => { const v = parseFloat(mi.value); s.manual = isFinite(v) ? v : null; updateNumbers(); updateOverSide(); });
+    const del = tr.querySelector('.icon-btn');
+    del.disabled = state.sections.length === 1;
+    del.addEventListener('click', () => {
+      state.sections = state.sections.filter(x => x !== s);
+      if (state.activeId === s.id) state.activeId = state.sections[0].id;
+      renderSections(); updateOverSide(); over.draw(); toast(`Removed ${s.name || 'section'}.`);
+    });
+    tb.appendChild(tr);
+  }
+  renderSelects(); updateNumbers();
+}
+function updateNumbers() {
+  let foot = 0, slope = 0, counted = 0;
+  for (const s of state.sections) {
+    const f = footprint(s), fac = factor(s.pitch);
+    const span = $(`#ft-${s.id}`), inp = $(`#man-${s.id}`);
+    if (!span) continue;
+    span.hidden = !f.traced; inp.hidden = f.traced;
+    if (f.traced) span.innerHTML = f.area != null ? `${fmt0(f.area)}<small>traced</small>` : '<small>set the scale</small>';
+    $(`#fac-${s.id}`).textContent = isFinite(fac) ? fac.toFixed(3) : '–';
+    const sl = (f.area != null && isFinite(fac)) ? f.area * fac : null;
+    $(`#slope-${s.id}`).textContent = sl != null ? fmt0(sl) : '–';
+    if (sl != null) { foot += f.area; slope += sl; counted++; }
+  }
+  const has = counted > 0, w = state.waste;
+  $('#totFoot').textContent = has ? fmt0(foot) : '–';
+  $('#totSlope').textContent = has ? fmt0(slope) : '–';
+  $('#kArea').textContent = has ? fmt0(slope) : '–';
+  $('#kFoot').textContent = has ? fmt0(foot) : '–';
+  $('#kSq').textContent = has ? fmt1(slope / 100) : '–';
+  $('#kSecs').textContent = `${counted} of ${state.sections.length} section${state.sections.length === 1 ? '' : 's'} measured`;
+  $('#kOrderLbl').textContent = `Order with ${w}% waste`;
+  if (has) {
+    const bundles = Math.ceil(slope / 100 * (1 + w / 100) * 3 - 1e-9);
+    $('#kOrder').textContent = `${Math.floor(bundles / 3)}${['', '⅓', '⅔'][bundles % 3]}`;
+    $('#kBundles').textContent = `${bundles} bundles at 3 per square`;
+  } else { $('#kOrder').textContent = '–'; $('#kBundles').textContent = ''; }
+}
+function setWaste(w, fromInput) {
+  state.waste = Math.max(0, Math.min(50, w));
+  document.querySelectorAll('.chips button').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.w) === state.waste));
+  if (!fromInput) $('#wasteIn').value = state.waste;
+  updateNumbers();
+}
+function applyPitch(v) {
+  const id = Number($('#applyTo').value), s = state.sections.find(x => x.id === id);
+  if (!s) return;
+  s.pitch = v; const inp = $(`#pitch-${s.id}`); if (inp) inp.value = v;
+  updateNumbers(); toast(`${s.name || 'Section'} set to ${v}/12.`);
+}
+
+/* ---------- loading photos ---------- */
+async function fileToCanvas(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url;
+    await (img.decode ? img.decode() : new Promise((res, rej) => { img.onload = res; img.onerror = rej; }));
+    const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function loadInto(which, file) {
+  if (!file || !/^image\//.test(file.type)) { toast("That file isn't an image. Use a JPG, PNG or phone photo."); return; }
+  let c;
+  try { c = await fileToCanvas(file); } catch (_) { toast("Couldn't open that image. Try a JPG or PNG."); return; }
+  if (which === 'gable') {
+    state.gableSample = false; state.pitchPts = []; gable.setImage(c); updatePitch();
+    toast('Gable photo loaded.');
+  } else {
+    const keepPitch = state.measured != null && !state.gableSample ? Math.round(state.measured) : (state.sections[0]?.pitch ?? 6);
+    state.overSample = false; state.sectionsSample = false; state.scalePts = []; nextId = 1;
+    const s = newSection('Main roof', keepPitch); state.sections = [s]; state.activeId = s.id;
+    over.setImage(c); renderSections(); setMode('scale');
+    toast('Overhead image loaded. Set the scale first.');
+  }
+  updateSampleNote();
+}
+function updateSampleNote() { $('#sampleNote').hidden = !state.sectionsSample; $('#sumSample').hidden = !state.sectionsSample; }
+
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+
+/* ---------- wiring ---------- */
+$('#gableFile').addEventListener('change', e => { lastBoard = 'gable'; loadInto('gable', e.target.files[0]); e.target.value = ''; });
+$('#overFile').addEventListener('change', e => { lastBoard = 'over'; loadInto('over', e.target.files[0]); e.target.value = ''; });
+for (const [id, which] of [['#gableBoard', 'gable'], ['#overBoard', 'over']]) {
+  const el = $(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drop'); });
+  el.addEventListener('dragleave', () => el.classList.remove('drop'));
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drop'); lastBoard = which; loadInto(which, e.dataTransfer.files[0]); });
+}
+document.addEventListener('paste', e => {
+  const items = e.clipboardData ? [...e.clipboardData.items] : [];
+  const it = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
+  if (!it) return;
+  e.preventDefault(); loadInto(lastBoard, it.getAsFile());
+});
+$('#pitchClear').addEventListener('click', () => { state.pitchPts = []; gable.draw(); updatePitch(); });
+$('#applyRound').addEventListener('click', () => { if (state.measured != null) applyPitch(Math.round(state.measured)); });
+$('#applyExact').addEventListener('click', () => { if (state.measured != null) applyPitch(Number(fmt1(state.measured))); });
+$('#degIn').addEventListener('input', () => {
+  const d = parseFloat($('#degIn').value), ok = isFinite(d) && d > 0 && d < 75;
+  $('#degUse').disabled = !ok;
+  $('#degOut').textContent = ok ? `${fmt1(d)}° is ${fmt1(riseOf(d))}/12, pitch factor ${factor(riseOf(d)).toFixed(3)}.` : 'From the Solar API or a level app on a rafter.';
+  $('#degUse').textContent = ok ? `Use ${Math.round(riseOf(d))}/12` : 'Use';
+});
+$('#degUse').addEventListener('click', () => { const d = parseFloat($('#degIn').value); if (isFinite(d)) applyPitch(Math.round(riseOf(d))); });
+$('#modeScale').addEventListener('click', () => setMode('scale'));
+$('#modeTrace').addEventListener('click', () => setMode('trace'));
+$('#undoPt').addEventListener('click', () => { (state.mode === 'scale' ? state.scalePts : active().pts).pop(); over.draw(); updateNumbers(); updateOverSide(); });
+$('#clearPts').addEventListener('click', () => {
+  if (state.mode === 'scale') state.scalePts = []; else active().pts = [];
+  over.draw(); updateNumbers(); updateOverSide();
+});
+$('#scaleFt').addEventListener('input', () => { const v = parseFloat($('#scaleFt').value); state.scaleFt = isFinite(v) ? v : 0; over.draw(); updateNumbers(); updateOverSide(); });
+$('#traceSec').addEventListener('change', () => { state.activeId = Number($('#traceSec').value); setMode('trace'); });
+$('#addSec').addEventListener('click', () => {
+  const p = state.measured != null && !state.gableSample ? Math.round(state.measured) : (active()?.pitch ?? 6);
+  const s = newSection(`Section ${state.sections.length + 1}`, p);
+  state.sections.push(s); state.activeId = s.id;
+  renderSections(); setMode('trace');
+  toast(`Added ${s.name}. Trace it in step 2 or type its footprint.`);
+});
+document.querySelectorAll('.chips button').forEach(b => b.addEventListener('click', () => setWaste(Number(b.dataset.w))));
+$('#wasteIn').addEventListener('input', () => { const v = parseFloat($('#wasteIn').value); if (isFinite(v)) setWaste(v, true); });
+
+/* reference strip */
+$('#refGrid').innerHTML = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12].map(p =>
+  `<div class="ref-cell"><b>${p}/12</b><span>× ${factor(p).toFixed(3)}</span><span>${fmt1(degOf(p))}°</span></div>`).join('');
+
+/* ---------- address lookup: Google Solar API through this site's own server ---------- */
+const FT2 = 10.7639;
+const DIRS = ['North', 'Northeast', 'East', 'Southeast', 'South', 'Southwest', 'West', 'Northwest'];
+const dirOf = az => DIRS[Math.round((((az % 360) + 360) % 360) / 45) % 8];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CODE_KEY = 'roofTakeoff.accessCode';
+const getCode = () => { try { return localStorage.getItem(CODE_KEY) || ''; } catch (_) { return ''; } };
+const saveCode = v => { try { localStorage.setItem(CODE_KEY, v); } catch (_) {} };
+let look = null, mapView = null, busy = false, lastParams = null, mapW = 0;
+
+function project(lat, lng, z) {
+  const s = 256 * 2 ** z, sin = Math.sin(lat * Math.PI / 180);
+  return { x: (lng + 180) / 360 * s, y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * s };
+}
+function unproject(x, y, z) {
+  const s = 256 * 2 ** z, n = Math.PI - 2 * Math.PI * y / s;
+  return { lat: 180 / Math.PI * Math.atan(Math.sinh(n)), lng: x / s * 360 - 180 };
+}
+function setStatus(text, kind) { const el = $('#lookupStatus'); el.className = 'chip ' + kind; el.textContent = text; }
+async function api(path) {
+  const code = getCode();
+  let r;
+  try { r = await fetch(path, { headers: code ? { 'x-access-code': code } : {} }); }
+  catch (_) { throw new Error("Couldn't reach the lookup server. Check your connection and try again."); }
+  if (r.status === 401) { $('#codeRow').hidden = false; $('#accessCode').focus(); throw new Error('Enter the access code your office set up, then look up again.'); }
+  return r;
+}
+function groupFaces(segs) {
+  const m = new Map();
+  for (const s of segs) {
+    const p = Math.max(0, Math.round(riseOf(s.pitchDeg)));
+    const g = m.get(p) || { p, n: 0, ground: 0 };
+    g.n++; g.ground += s.groundM2 * FT2; m.set(p, g);
+  }
+  return [...m.values()].sort((a, b) => b.ground - a.ground);
+}
+async function runLookup(params) {
+  if (busy) return;
+  busy = true; lastParams = params; $('#lookupBtn').disabled = true;
+  setStatus('Looking up the roof…', 'idle');
+  try {
+    const r = await api('/api/lookup?' + new URLSearchParams(params));
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `Lookup failed (HTTP ${r.status}).`);
+    look = j; renderLookup();
+    const n = j.segments.length;
+    setStatus(n ? `Found ${n} roof face${n === 1 ? '' : 's'}. Check the image to make sure it's the right building.` : 'Google found the building but no roof faces on it. Measure this one from photos.', n ? 'ok' : 'warn');
+    $('#lkOutline').hidden = true;
+    try { await loadOrtho(); setMapNote('photo'); }
+    catch (e1) {
+      console.warn('Measuring photo unavailable:', e1);
+      try { await loadMap(); setMapNote('satellite'); }
+      catch (e2) { drawMapMessage(e2.message || 'The satellite image did not load.'); setMapNote('none'); }
+    }
+  } catch (e) {
+    setStatus(e.message || 'Lookup failed.', 'warn');
+  } finally {
+    busy = false; $('#lookupBtn').disabled = false;
+  }
+}
+function renderLookup() {
+  const d = look, segs = d.segments, b = d.building;
+  $('#lookupResult').hidden = false;
+  $('#lkAddress').textContent = d.place.address || `Pin at ${d.place.lat.toFixed(5)}, ${d.place.lng.toFixed(5)}`;
+  const sloped = segs.reduce((s, x) => s + x.areaM2, 0) * FT2, ground = segs.reduce((s, x) => s + x.groundM2, 0) * FT2;
+  const groups = groupFaces(segs);
+  $('#lkArea').textContent = segs.length ? fmt0(sloped) : '–';
+  $('#lkFoot').textContent = segs.length ? fmt0(ground) : '–';
+  $('#lkFaces').textContent = segs.length;
+  $('#lkPitch').textContent = groups.length ? groups[0].p : '–';
+  const q = b.quality, dt = b.imageryDate;
+  const when = dt && dt.year ? ` Imagery from ${dt.month ? MONTHS[dt.month - 1] + ' ' : ''}${dt.year}.` : '';
+  const qc = $('#lkQuality');
+  if (q === 'HIGH' || q === 'MEDIUM') { qc.className = 'chip ok'; qc.textContent = `${q === 'HIGH' ? 'High' : 'Medium'}-detail aerial imagery.${when}`; }
+  else { qc.className = 'chip warn'; qc.textContent = `Lower-detail imagery. Check the pitch with a gable photo.${when}`; }
+  const cov = $('#lkCoverage');
+  if (b.whole && b.whole.groundM2 > 0 && b.faces) {
+    const ratio = b.faces.groundM2 / b.whole.groundM2;
+    cov.hidden = ratio >= 0.9;
+    cov.textContent = `The faces cover ${Math.round(ratio * 100)}% of the building's ${fmt0(b.whole.groundM2 * FT2)} sq ft footprint. The rest has no pitch data (often small or flat parts), so measure it from photos.`;
+  } else cov.hidden = true;
+  $('#lkUse').disabled = !segs.length;
+  $('#faceBody').innerHTML = segs.map(s => `<tr><td>${s.n}</td><td>${fmt1(riseOf(s.pitchDeg))}/12</td><td>${fmt1(s.pitchDeg)}°</td><td>${dirOf(s.azimuthDeg)}</td><td class="num">${fmt0(s.groundM2 * FT2)}</td><td class="num strong">${fmt0(s.areaM2 * FT2)}</td></tr>`).join('');
+}
+function mapCanvas() {
+  const cv = $('#mapCanvas'), W = Math.max(200, Math.round($('#mapBoard').clientWidth)), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(W * dpr);
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  mapW = W;
+  return { g, W };
+}
+function drawMapMessage(msg) {
+  const { g, W } = mapCanvas();
+  g.fillStyle = '#1B232C'; g.fillRect(0, 0, W, W);
+  g.fillStyle = '#C9D3DD'; g.font = '600 15px Barlow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const lines = []; let cur = '';
+  for (const word of msg.split(' ')) { const t = cur ? cur + ' ' + word : word; if (g.measureText(t).width > W - 40 && cur) { lines.push(cur); cur = word; } else cur = t; }
+  lines.push(cur);
+  lines.slice(0, 6).forEach((l, i) => g.fillText(l, W / 2, W / 2 + (i - (Math.min(lines.length, 6) - 1) / 2) * 21));
+  if (mapView) mapView.k = null;
+}
+async function loadMap() {
+  const b = look.building, c = b.center || { lat: look.place.lat, lng: look.place.lng };
+  // Zoom in until the building fills about half the view. The image is shown whole, never
+  // cropped, because Google's logo and attribution in its corners must stay visible.
+  let z = 20;
+  if (b.box) {
+    const a = project(b.box.sw.lat, b.box.sw.lng, 0), q = project(b.box.ne.lat, b.box.ne.lng, 0);
+    const span = Math.max(Math.abs(q.x - a.x), Math.abs(q.y - a.y));
+    if (span > 0) z = Math.floor(Math.log2(640 * 0.55 / span));
+  }
+  z = Math.max(16, Math.min(20, z));
+  mapView = null;
+  drawMapMessage('Loading satellite view…');
+  const r = await api('/api/satellite?' + new URLSearchParams({ lat: c.lat, lng: c.lng, zoom: z }));
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'The satellite image did not load.'); }
+  const url = URL.createObjectURL(await r.blob());
+  const img = new Image(); img.src = url;
+  await (img.decode ? img.decode() : new Promise((res, rej) => { img.onload = res; img.onerror = rej; }));
+  const ctr = project(c.lat, c.lng, z);
+  // Every view maps lat/lng to image pixels and back, so drawing and tapping work the same for both photos.
+  mapView = {
+    kind: 'satellite', img, imgW: 640, imgH: 640, k: null,
+    toPx: (lat, lng) => { const p = project(lat, lng, z); return { x: p.x - ctr.x + 320, y: p.y - ctr.y + 320 }; },
+    toLatLng: (x, y) => unproject(ctr.x + x - 320, ctr.y + y - 320, z),
+  };
+  drawMap();
+}
+
+/* ---------- Google's measuring photo: the Solar API's own aerial image and rooftop mask ---------- */
+const PIXEL_IN = { 0.1: 'about 4 inches', 0.25: 'about 10 inches', 0.5: 'about 20 inches', 1: 'about 39 inches' };
+function utmZoneOf(keys) {
+  const c = keys && keys.ProjectedCSTypeGeoKey;
+  if (c >= 32601 && c <= 32660) return { zone: c - 32600, south: false };
+  if (c >= 32701 && c <= 32760) return { zone: c - 32700, south: true };
+  if (c >= 26901 && c <= 26923) return { zone: c - 26900, south: false };
+  return null;
+}
+function utm(lat, lng, z) {
+  const a = 6378137, f = 1 / 298.257223563, k0 = 0.9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+  const phi = lat * Math.PI / 180, lam = lng * Math.PI / 180, lam0 = ((z.zone - 1) * 6 - 180 + 3) * Math.PI / 180;
+  const s = Math.sin(phi), c = Math.cos(phi), t = Math.tan(phi);
+  const N = a / Math.sqrt(1 - e2 * s * s), T = t * t, C = ep2 * c * c, A = c * (lam - lam0);
+  const M = a * ((1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * phi - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * phi)
+    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * phi) - (35 * e2 ** 3 / 3072) * Math.sin(6 * phi));
+  return {
+    x: k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120) + 500000,
+    y: k0 * (M + N * t * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720)) + (z.south ? 1e7 : 0),
+  };
+}
+// Pixel <-> lat/lng for one GeoTIFF. Going back to lat/lng uses a local linear fit, exact to well under an inch at house scale.
+function geoFrame(t, z, lat0, lng0) {
+  const res = (t.box.maxX - t.box.minX) / t.w, resY = (t.box.maxY - t.box.minY) / t.h;
+  const o = utm(lat0, lng0, z), d = 1e-4, a = utm(lat0 + d, lng0, z), b = utm(lat0, lng0 + d, z);
+  const j11 = (a.x - o.x) / d, j12 = (b.x - o.x) / d, j21 = (a.y - o.y) / d, j22 = (b.y - o.y) / d, det = j11 * j22 - j12 * j21;
+  return {
+    res, resY,
+    toPx: (lat, lng) => { const p = utm(lat, lng, z); return { x: (p.x - t.box.minX) / res, y: (t.box.maxY - p.y) / resY }; },
+    toLatLng: (x, y) => {
+      const e = t.box.minX + x * res - o.x, n = t.box.maxY - y * resY - o.y;
+      return { lat: lat0 + (j22 * e - j12 * n) / det, lng: lng0 + (j11 * n - j21 * e) / det };
+    },
+  };
+}
+async function readTiff(id) {
+  const r = await api('/api/geotiff?id=' + encodeURIComponent(id));
+  if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'The photo file did not download.'); }
+  const tiff = await GeoTIFF.fromArrayBuffer(await r.arrayBuffer());
+  const img = await tiff.getImage();
+  const [minX, minY, maxX, maxY] = img.getBoundingBox();
+  return { img, w: img.getWidth(), h: img.getHeight(), box: { minX, minY, maxX, maxY }, keys: img.getGeoKeys() };
+}
+// Walk the edge of one blob of roof pixels (Moore neighbor tracing), starting at its top-left pixel.
+const DX8 = [-1, -1, 0, 1, 1, 1, 0, -1], DY8 = [0, -1, -1, -1, 0, 1, 1, 1];
+function traceEdge(inC, sx, sy, limit) {
+  const pts = [[sx, sy]];
+  let cx = sx, cy = sy, b = 0;
+  for (let step = 0; step < limit; step++) {
+    let moved = false;
+    for (let k = 1; k <= 8; k++) {
+      const d = (b + k) % 8, nx = cx + DX8[d], ny = cy + DY8[d];
+      if (!inC(nx, ny)) continue;
+      const pd = (b + k + 7) % 8, ddx = cx + DX8[pd] - nx, ddy = cy + DY8[pd] - ny;
+      b = DX8.findIndex((v, i) => v === ddx && DY8[i] === ddy);
+      cx = nx; cy = ny; moved = true; break;
+    }
+    if (!moved || (cx === sx && cy === sy)) break;
+    pts.push([cx, cy]);
+  }
+  return pts;
+}
+function dpOpen(pts, tol) {
+  const n = pts.length;
+  if (n < 3) return pts;
+  const keep = new Uint8Array(n); keep[0] = keep[n - 1] = 1;
+  const st = [[0, n - 1]];
+  while (st.length) {
+    const [s, e] = st.pop(), [x1, y1] = pts[s], [x2, y2] = pts[e], L = Math.hypot(x2 - x1, y2 - y1) || 1e-9;
+    let md = -1, mi = -1;
+    for (let i = s + 1; i < e; i++) {
+      const dd = Math.abs((x2 - x1) * (y1 - pts[i][1]) - (x1 - pts[i][0]) * (y2 - y1)) / L;
+      if (dd > md) { md = dd; mi = i; }
+    }
+    if (md > tol) { keep[mi] = 1; st.push([s, mi], [mi, e]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+function simplifyClosed(pts, tol) {
+  if (pts.length < 8) return pts;
+  let far = 0, best = -1;
+  for (let i = 1; i < pts.length; i++) { const d = (pts[i][0] - pts[0][0]) ** 2 + (pts[i][1] - pts[0][1]) ** 2; if (d > best) { best = d; far = i; } }
+  const a = dpOpen(pts.slice(0, far + 1), tol), b = dpOpen(pts.slice(far).concat([pts[0]]), tol);
+  return a.slice(0, -1).concat(b.slice(0, -1));
+}
+// The traced line runs through pixel centers; push it out half a pixel so edges measure to the true roof edge.
+function offsetPoly(p, dist0) {
+  const n = p.length;
+  let A = 0;
+  for (let i = 0; i < n; i++) { const a = p[i], b = p[(i + 1) % n]; A += a[0] * b[1] - b[0] * a[1]; }
+  const sgn = A > 0 ? 1 : -1;
+  const nrm = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [sgn * dy / L, -sgn * dx / L]; };
+  return p.map((v, i) => {
+    const n1 = nrm(p[(i - 1 + n) % n], v), n2 = nrm(v, p[(i + 1) % n]);
+    const bx = n1[0] + n2[0], by = n1[1] + n2[1], bl = Math.hypot(bx, by);
+    if (bl < 1e-6) return [v[0] + n1[0] * dist0, v[1] + n1[1] * dist0];
+    const m = dist0 / Math.max((n1[0] * bx + n1[1] * by) / bl, 0.25);
+    return [v[0] + bx / bl * m, v[1] + by / bl * m];
+  });
+}
+// Pick the blobs of Google's rooftop mask that hold this building's faces and outline each one.
+function roofOutline(mask, w, h, seeds, center, nearPx, tol) {
+  const lab = new Int32Array(w * h), comps = [], on = i => mask[i] > 0;
+  const fill = start => {
+    const c = { id: comps.length + 1, n: 0, top: start, hits: 0 }; comps.push(c);
+    const st = [start]; lab[start] = c.id;
+    while (st.length) {
+      const i = st.pop(), x = i % w, y = (i - x) / w;
+      c.n++; if (i < c.top) c.top = i;
+      for (let d = 0; d < 8; d++) {
+        const nx = x + DX8[d], ny = y + DY8[d];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const k = ny * w + nx;
+        if (!lab[k] && on(k)) { lab[k] = c.id; st.push(k); }
+      }
+    }
+    return c;
+  };
+  const compAt = i => (lab[i] ? comps[lab[i] - 1] : fill(i));
+  for (const s of seeds) {
+    const x = Math.floor(s.x), y = Math.floor(s.y);
+    if (x >= 0 && y >= 0 && x < w && y < h && on(y * w + x)) compAt(y * w + x).hits++;
+  }
+  let chosen = comps.filter(c => c.hits);
+  if (!chosen.length) {
+    let best = -1, bd = Infinity;
+    const cx = Math.floor(center.x), cy = Math.floor(center.y);
+    for (let y = Math.max(0, cy - nearPx); y <= Math.min(h - 1, cy + nearPx); y++) {
+      for (let x = Math.max(0, cx - nearPx); x <= Math.min(w - 1, cx + nearPx); x++) {
+        const i = y * w + x;
+        if (on(i)) { const d = (x - cx) ** 2 + (y - cy) ** 2; if (d < bd) { bd = d; best = i; } }
+      }
+    }
+    if (best >= 0) chosen = [compAt(best)];
+  }
+  const polys = chosen.map(c => {
+    const inC = (x, y) => x >= 0 && y >= 0 && x < w && y < h && lab[y * w + x] === c.id;
+    const tx = c.top % w, ring = traceEdge(inC, tx, (c.top - tx) / w, w * h).map(([x, y]) => [x + 0.5, y + 0.5]);
+    return offsetPoly(simplifyClosed(ring, tol), 0.5);
+  }).filter(p => p.length >= 3);
+  return { polys, count: chosen.reduce((s, c) => s + c.n, 0) };
+}
+async function loadOrtho() {
+  if (!window.GeoTIFF) throw new Error('The photo reader did not load.');
+  const b = look.building, c = b.center || { lat: look.place.lat, lng: look.place.lng };
+  let half = 12;
+  if (b.box) {
+    const wM = Math.abs(b.box.ne.lng - b.box.sw.lng) * 111320 * Math.cos(c.lat * Math.PI / 180), hM = Math.abs(b.box.ne.lat - b.box.sw.lat) * 111320;
+    half = Math.max(wM, hM) / 2;
+  }
+  const radius = Math.round(Math.max(12, Math.min(60, half * 1.3 + 3)));
+  const pixel = b.quality === 'HIGH' && radius <= 40 ? 0.1 : (b.quality === 'HIGH' || b.quality === 'MEDIUM') ? 0.25 : 0.5;
+  mapView = null;
+  drawMapMessage("Loading Google's measuring photo…");
+  const r = await api('/api/layers?' + new URLSearchParams({ lat: c.lat, lng: c.lng, radius, pixel }));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "Google's measuring photo isn't available here.");
+  const [rgbT, maskT] = await Promise.all([readTiff(j.rgb), readTiff(j.mask)]);
+  const z = utmZoneOf(rgbT.keys);
+  if (!z) throw new Error('The photo uses an unexpected map projection.');
+  const rgbF = geoFrame(rgbT, z, c.lat, c.lng), maskF = geoFrame(maskT, z, c.lat, c.lng);
+  const spp = rgbT.img.getSamplesPerPixel(), raw = await rgbT.img.readRasters({ interleave: true });
+  const cv = document.createElement('canvas'); cv.width = rgbT.w; cv.height = rgbT.h;
+  const g2 = cv.getContext('2d'), px = g2.createImageData(rgbT.w, rgbT.h);
+  for (let i = 0, n = rgbT.w * rgbT.h; i < n; i++) {
+    const s = i * spp;
+    px.data[i * 4] = raw[s]; px.data[i * 4 + 1] = raw[s + (spp > 1 ? 1 : 0)]; px.data[i * 4 + 2] = raw[s + (spp > 2 ? 2 : 0)]; px.data[i * 4 + 3] = 255;
+  }
+  g2.putImageData(px, 0, 0);
+  const mask = (await maskT.img.readRasters())[0];
+  const seeds = look.segments.filter(s => s.center).map(s => maskF.toPx(s.center.lat, s.center.lng));
+  const out = roofOutline(mask, maskT.w, maskT.h, seeds, maskF.toPx(c.lat, c.lng), Math.round(4 / maskF.res), Math.max(1.2, 0.3 / maskF.res));
+  const toRgb = ([u, v]) => ({ x: (maskT.box.minX + u * maskF.res - rgbT.box.minX) / rgbF.res, y: (rgbT.box.maxY - (maskT.box.maxY - v * maskF.resY)) / rgbF.resY });
+  mapView = {
+    kind: 'photo', img: cv, imgW: rgbT.w, imgH: rgbT.h, k: null, toPx: rgbF.toPx, toLatLng: rgbF.toLatLng,
+    polys: out.polys.map(p => p.map(toRgb)),
+    edges: out.polys.map(p => p.map((q, i) => { const nx = p[(i + 1) % p.length]; return Math.hypot((nx[0] - q[0]) * maskF.res, (nx[1] - q[1]) * maskF.resY); })),
+    areaM2: out.count * maskF.res * maskF.resY, date: j.imageryDate, pixel: j.pixel,
+  };
+  drawMap();
+}
+function setMapNote(kind) {
+  const el = $('#mapNote'), tail = ' Numbers mark each roof face. Wrong building? Tap the right roof.';
+  $('#lkOutline').hidden = true;
+  if (kind === 'photo') {
+    const d = mapView.date, when = d && d.year ? `${d.month ? MONTHS[d.month - 1] + ' ' : ''}${d.year}` : 'an unknown date';
+    const found = mapView.polys.length > 0;
+    el.textContent = `Google's measuring photo from ${when}, ${PIXEL_IN[mapView.pixel] || 'unknown detail'} per pixel. `
+      + (found ? "White line: Google's roof outline, with each edge's length." : "Google's roof outline wasn't found on this photo.") + tail;
+    if (found) {
+      $('#lkOutline').hidden = false;
+      $('#lkOutFoot').textContent = fmt0(mapView.areaM2 * FT2) + ' sq ft';
+      $('#lkOutEdge').textContent = fmt0(mapView.edges.flat().reduce((s, x) => s + x, 0) * 3.28084) + ' ft';
+    }
+  } else if (kind === 'satellite') {
+    el.textContent = "Regular satellite photo, because Google's measuring photo isn't available for this spot." + tail;
+  } else {
+    el.textContent = 'No photo is available for this spot.' + tail;
+  }
+}
+
+function drawMap() {
+  if (!mapView || !mapView.img || !look) return;
+  const { g, W } = mapCanvas(), k = W / mapView.imgW;
+  g.drawImage(mapView.img, 0, 0, W, mapView.imgH * k);
+  const P = (lat, lng) => { const p = mapView.toPx(lat, lng); return { x: p.x * k, y: p.y * k }; };
+  const b = look.building;
+  if (mapView.polys) {
+    mapView.polys.forEach((poly, pi) => {
+      const pts = poly.map(p => ({ x: p.x * k, y: p.y * k }));
+      g.save(); g.lineJoin = 'round';
+      seg(g, pts, true); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 5; g.stroke();
+      g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.stroke(); g.restore();
+      pts.forEach((a, i) => {
+        const q = pts[(i + 1) % pts.length];
+        if (dist(a, q) >= 48) pill(g, fmt1(mapView.edges[pi][i] * 3.28084) + ' ft', (a.x + q.x) / 2, (a.y + q.y) / 2);
+      });
+    });
+  } else if (b.box) {
+    const a = P(b.box.sw.lat, b.box.sw.lng), q = P(b.box.ne.lat, b.box.ne.lng);
+    const x = Math.min(a.x, q.x), y = Math.min(a.y, q.y), w = Math.abs(q.x - a.x), h = Math.abs(q.y - a.y);
+    g.save(); g.setLineDash([7, 5]);
+    g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.5)'; g.strokeRect(x, y, w, h);
+    g.lineWidth = 2; g.strokeStyle = '#fff'; g.strokeRect(x, y, w, h); g.restore();
+  }
+  if (look.place.precision === 'PIN') {
+    const p = P(look.place.lat, look.place.lng);
+    g.beginPath(); g.arc(p.x, p.y, 6, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
+  }
+  g.font = '700 12px Barlow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const s of look.segments) {
+    if (!s.center) continue;
+    const p = P(s.center.lat, s.center.lng);
+    g.beginPath(); g.arc(p.x, p.y, 11, 0, Math.PI * 2); g.fillStyle = MARK; g.fill();
+    g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = '#fff'; g.fillText(String(s.n), p.x, p.y + 0.5);
+  }
+  mapView.k = k;
+}
+$('#mapCanvas').addEventListener('click', e => {
+  if (!mapView || !mapView.k || busy) return;
+  // Work in the image's own pixel frame so the tap lands right at any on-screen size.
+  const r = e.currentTarget.getBoundingClientRect();
+  const p = mapView.toLatLng((e.clientX - r.left) / r.width * mapView.imgW, (e.clientY - r.top) / r.height * mapView.imgH);
+  runLookup({ lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) });
+});
+new ResizeObserver(() => { const w = Math.round($('#mapBoard').clientWidth); if (w && w !== mapW) drawMap(); }).observe($('#mapBoard'));
+$('#lookupForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const a = $('#addr').value.trim();
+  if (!a) { setStatus('Type an address first.', 'warn'); $('#addr').focus(); return; }
+  runLookup({ address: a });
+});
+$('#codeSave').addEventListener('click', () => {
+  saveCode($('#accessCode').value.trim()); $('#codeRow').hidden = true;
+  toast('Access code saved on this device.');
+  if (lastParams) runLookup(lastParams);
+});
+$('#lkUse').addEventListener('click', () => {
+  if (!look || !look.segments.length) return;
+  nextId = 1;
+  state.sections = groupFaces(look.segments).map(g => {
+    const s = newSection(g.p === 0 ? `Flat faces (${g.n})` : `${g.p}/12 faces (${g.n})`, g.p);
+    s.manual = Math.round(g.ground);
+    return s;
+  });
+  state.activeId = state.sections[0].id; state.sectionsSample = false;
+  renderSections(); updateOverSide(); over.draw(); updateSampleNote();
+  toast('Step 3 now uses the faces Google found.');
+  $('#s3Title').scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});
+
+/* ---------- start on the sample house ---------- */
+const gs = gableSample(), os = overSample();
+state.pitchPts = gs.pts; state.scalePts = os.scale; state.scaleFt = 20;
+const main = newSection('Main roof', 6, os.main), porch = newSection('Front porch', 3, os.porch);
+state.sections = [main, porch]; state.activeId = main.id;
+$('#scaleFt').value = 20;
+gable.setImage(gs.canvas); over.setImage(os.canvas);
+renderSections(); updatePitch(); setMode('trace'); setWaste(15); updateSampleNote();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { gable.draw(); over.draw(); });
+})();
+</script>
+
+</body>
+</html>
