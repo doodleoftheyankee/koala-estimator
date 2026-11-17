@@ -8,9 +8,9 @@ A one-page tool for roof and attic takeoffs. Live at https://roof-takeoff-ten.ve
   (for spray foam under the deck), every roof face and the roof edges (ridge, hip, valley, eave, rake, step,
   headwall, break) drawn on Google's aerial photo.
 - **`GET /api/takeoff`:** one call that returns the roof outline, each face's plan shape, the roof edges and
-  the attic floor (roof outline minus the overhang, without porch and flat-addition roofs, with the wall run
+  the attic floor (the building's footprint minus the overhang, without porch and flat-addition roofs, with the wall run
   and the roof deck). The Koala field app calls it server to server.
-  **[CONTRACT.md](CONTRACT.md) (v1.1) is the agreed API contract.** Read it before changing anything it describes.
+  **[CONTRACT.md](CONTRACT.md) (v1.2) is the agreed API contract.** Read it before changing anything it describes.
 
 Plain Node (ES modules), no framework, no build step. `index.html` is the whole page. `api/*.js` are Vercel
 serverless functions. `lib/google.js` makes every call to Google on the server, so the API key never
@@ -72,23 +72,31 @@ link, reload or photo tap calls `/api/takeoff` on its own) and saves screenshots
 | `5 Twin Ave` | One half of a twin. The other half's roof touches it in Google's mask but isn't Google's building: the outline is cut at the party wall (`sharedWallM`), with a warning. |
 | `6 Flat Roof Plaza` | Commercial building, every face at 1/4 in per ft, with a lower loading bay: nothing is left out of the attic by default, with a "mostly flat" warning. |
 | `7 Cape Dormer Way` | 12/12 Cape with a 1.5/12 shed dormer (stays in the attic), an attached 3/12 garage (marked lower, stays in) and a 1/12 porch (left out). Steps at the dormer cheeks and the garage, headwalls under the dormer front and the porch. |
+| `8 Main Row` | Middle building of an attached commercial row whose Google box reaches 4 ft into each neighbour: the outline is 1.28 × the building, so the attic floor uses Google's building area with the edge length scaled, and warns. |
 | anything with `404` | Google can't find the address. |
 | anything with `no roof` | The address lands on an empty field: no roof data. |
 | any other address | Finds `3 Cross Gable Ct`. |
 
 The analytic truth for each mock house (areas, edge lengths, attic floor) is in comments at the top of
 `dev/houses.js`. The mock serves real GeoTIFFs (color photo, rooftop mask, surface heights, UTM zone 18N)
-and a generated satellite picture, so the page and `/api/takeoff` run the same code as with Google.
+and a generated satellite picture, so the page and `/api/takeoff` run the same code as with Google. Its surface
+heights round off ridges, hips and valleys the way Google's do on real roofs (a band along each steep ridge fits
+neither face; eaves and walls stay sharp); `renderLayers({ smooth: false })` gives ideal planes for tests.
 
 ## How the takeoff is measured (`lib/takeoff.js`)
 
 - **Outline:** the blob of Google's rooftop mask under the building's faces, cut 0.5 m past Google's building
   box so a twin or rowhouse doesn't take in the neighbour's roof. The cut is `attic.sharedWallM` (no overhang,
-  no edges along it). If the outline is still over 1.3 x Google's building, the attic floor uses Google's
-  building size instead. Courtyards are outlined too and count in the perimeter.
+  no edges along it). Courtyards are outlined too and count in the perimeter.
+- **Attic floor area:** Google's building area (exactly this building's own roof pixels), with the outline's
+  edge length and shared wall. If the outline is more than 10% off Google's area (a loose box on a row), those
+  lengths are scaled by √(Google's area / outline area) and a warning says so. The outline is drawn as traced.
 - **Faces:** each Solar face is a plane; its height is the densest band of the surface heights over the face's
-  whole Solar box, so a tree or dormer at Google's center doesn't lose it. Each roof pixel goes to the plane
-  that fits it best.
+  whole Solar box, so a tree or dormer at Google's center doesn't lose it. A roof pixel goes to the plane that
+  fits its height best, if the surface there also has that plane's slope. Google's heights round off every
+  ridge, hip and valley, so a band along each fits no face: the faces grow across it (nearest face, up to 1.5 m)
+  and meet in the middle, so a ridge is measured once. They don't grow up walls or into a roof part with no
+  face of its own, which keeps its own edges.
 - **Edges:** where two faces meet with no height jump: ridge, hip, valley or pitch break. Where a lower roof
   meets a higher one, the lower face gets step (sloped side) or headwall (level top) and the higher face keeps
   its eave or rake. Outer sides check the outside roof height first (a wall with no face is step/headwall).
