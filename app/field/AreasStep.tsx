@@ -12,6 +12,8 @@ import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
 import { removeAreaPhotos } from '@/lib/offline/photos';
 import { PhotoRead } from './measure/PhotoRead';
 import { EXISTING_MATERIALS, type StoredPhotoRead, type Suggestion } from '@/lib/ai/photoRead';
+import { lookupAddress, mergeNotes, ROOF_LOOKUP_JOBS } from '@/lib/roof/lookup';
+import { RoofLookupButton, RoofLookupSheet, type RoofApply } from './measure/RoofLookup';
 
 const EXISTING = EXISTING_MATERIALS;
 const CAVITY_DEPTHS = [
@@ -26,6 +28,9 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
   const remotePhotos = useRemotePhotos(draft.id);
   const [open, setOpen] = useState<string | null>(draft.areas.at(-1)?.id ?? null);
   const [measuring, setMeasuring] = useState<string | null>(null);
+  const [lookingUp, setLookingUp] = useState<string | null>(null);
+  const [roofDone, setRoofDone] = useState<{ areaId: string; text: string } | null>(null);
+  const address = lookupAddress(draft.property);
 
   const add = (jobType: AreaDraft['jobType']) => {
     const a = newArea(jobType);
@@ -68,6 +73,33 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
     if (s.patch) set(id, s.patch);
     if (s.measurement) setMeasurement(id, s.measurement);
   };
+  /** Uses a satellite lookup: the area's square feet, or the wall run in its measurement; plus a prep-note line. */
+  const applyRoof = (id: string, a: RoofApply) => {
+    const wallsWith = (m: Measurement | undefined, runFt: number): Measurement => ({ ...(m ?? newMeasurement('walls')), mode: 'walls', perimeter: String(runFt) });
+    update((d) => {
+      const area = d.areas.find((x) => x.id === id);
+      if (!area) return d;
+      const prepNotes = mergeNotes(area.prepNotes, a.note);
+      if (a.use !== 'walls') return { ...d, areas: d.areas.map((x) => (x.id === id ? { ...x, sqft: a.sqft, prepNotes } : x)) };
+      const m = wallsWith(d.measurements[id], a.wallRunFt);
+      const sqft = measuredSqft(m);
+      return {
+        ...d,
+        measurements: { ...d.measurements, [id]: m },
+        areas: d.areas.map((x) => (x.id === id ? { ...x, prepNotes, ...(sqft === null ? {} : { sqft }) } : x)),
+      };
+    });
+    const wallSqft = a.use === 'walls' ? measuredSqft(wallsWith(draft.measurements[id], a.wallRunFt)) : null;
+    const text =
+      a.use !== 'walls'
+        ? `Square feet set to ${num(a.sqft)} from the satellite lookup, with a line in the prep notes.`
+        : wallSqft === null
+          ? `Wall run set to ${num(a.wallRunFt)} ft. Add the wall height in Measure to get the square feet.`
+          : `Wall run set to ${num(a.wallRunFt)} ft: ${num(wallSqft)} sq ft of wall.`;
+    setLookingUp(null);
+    setRoofDone({ areaId: id, text });
+  };
+  const lookingUpArea = lookingUp ? draft.areas.find((a) => a.id === lookingUp) : undefined;
   const codeFor = (jobType: AreaDraft['jobType']) => (bundle ? codeMinimumR(bundle.snapshot, jobType) : null);
 
   return (
@@ -101,10 +133,27 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                   sqft={a.sqft}
                   onOpen={() => {
                     if (!draft.measurements[a.id]) setMeasurement(a.id, newMeasurement(a.jobType));
+                    setRoofDone(null);
                     setMeasuring(a.id);
                   }}
                   onUseMeasured={(sqft) => set(a.id, { sqft })}
                 />
+                {ROOF_LOOKUP_JOBS.has(a.jobType) ? (
+                  <RoofLookupButton
+                    areaId={a.id}
+                    address={address}
+                    street={draft.property.street}
+                    onOpen={() => {
+                      setRoofDone(null);
+                      setLookingUp(a.id);
+                    }}
+                  />
+                ) : null}
+                {roofDone?.areaId === a.id ? (
+                  <div role="status">
+                    <Alert tone="green">✓ {roofDone.text}</Alert>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Square feet">
                     <NumberInput value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
@@ -206,6 +255,17 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
             setMeasuring(null);
           }}
           onClose={() => setMeasuring(null)}
+        />
+      ) : null}
+
+      {lookingUpArea && address ? (
+        <RoofLookupSheet
+          area={lookingUpArea}
+          measurement={draft.measurements[lookingUpArea.id]}
+          estimateId={draft.id}
+          address={address}
+          onApply={(r) => applyRoof(lookingUpArea.id, r)}
+          onClose={() => setLookingUp(null)}
         />
       ) : null}
 
