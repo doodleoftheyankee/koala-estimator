@@ -58,6 +58,9 @@ input[type='number']::-webkit-outer-spin-button {
   body:has(> .roof-report) {
     background: #fff !important;
     color: #0f172a;
+    /* The area sheet stops the page behind it from scrolling; paper must not be cut off by that. */
+    overflow: visible !important;
+    height: auto !important;
   }
   .roof-report {
     display: block;

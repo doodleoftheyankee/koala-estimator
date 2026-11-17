@@ -40,7 +40,8 @@ export type RoofApply = { use: 'floor' | 'deck'; sqft: number; what: string; not
 export function useRoofConfigured(ask: boolean): boolean {
   const [configured, setConfigured] = useState(true);
   useEffect(() => {
-    if (!ask) return;
+    // navigator.onLine too: the first render after a page opens offline still says online.
+    if (!ask || !navigator.onLine) return;
     let live = true;
     void roofLookupService().then((r) => live && setConfigured(r.configured));
     return () => {

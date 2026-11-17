@@ -138,7 +138,7 @@ function Headline({ t }: { t: Takeoff }) {
       <div className="text-xs font-bold uppercase tracking-wide">{label}</div>
       <div className="whitespace-nowrap text-3xl font-extrabold tabular-nums">
         {value === null ? '—' : comma(roundSqft(value))}
-        {value === null ? null : <span className="ml-1 text-sm font-semibold">sq ft</span>}
+        {value === null ? null : <span className="text-sm font-semibold"> sq ft</span>}
       </div>
     </div>
   );
@@ -214,7 +214,8 @@ function RecentCard({ online, owner, refreshKey, onOpen }: { online: boolean; ow
   const [list, setList] = useState<{ items: RecentLookup[]; error: string | null } | null>(null);
   const [opening, setOpening] = useState<{ id: string; error: string | null } | null>(null);
   useEffect(() => {
-    if (!online) return;
+    // navigator.onLine too: the first render after the page opens offline still says online.
+    if (!online || !navigator.onLine) return;
     let live = true;
     fetchRecentLookups().then(
       (items) => live && setList({ items, error: null }),

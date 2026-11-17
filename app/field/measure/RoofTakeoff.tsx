@@ -442,7 +442,7 @@ function Section({ title, summary, startOpen, children }: { title: string; summa
             <span className="block font-semibold">{title}</span>
             {open ? null : <span className="block truncate text-sm font-normal text-slate-600">{summary}</span>}
           </span>
-          <span aria-hidden className={cx('shrink-0 text-lg text-slate-500 transition-transform', open && 'rotate-180')}>
+          <span aria-hidden className={cx('shrink-0 text-lg text-slate-500', open && 'rotate-180')}>
             ▾
           </span>
         </button>
@@ -462,7 +462,7 @@ function Tile({ label, value, unit, sub }: { label: string; value: string; unit?
       <div className="text-xs font-semibold text-slate-600">{label}</div>
       <div className="whitespace-nowrap text-2xl font-extrabold tabular-nums text-slate-900">
         {value}
-        {unit ? <span className="ml-1 text-sm font-semibold">{unit}</span> : null}
+        {unit ? <span className="text-sm font-semibold"> {unit}</span> : null}
       </div>
       {sub ? <div className="text-xs text-slate-500">{sub}</div> : null}
     </div>
@@ -604,7 +604,7 @@ function ShareButtons({ data }: { data: TakeoffData }) {
           📋 Copy summary
         </Button>
       </div>
-      <p role="status" className="min-h-4 text-center text-xs text-slate-600">
+      <p aria-live="polite" className="min-h-4 text-center text-xs text-slate-600">
         {message}
       </p>
     </div>
@@ -668,7 +668,7 @@ function SatelliteMap({ result, excluded, showEdges, picking, onTap }: { result:
   const k = picking === 'off' ? shapes.magnify : 1;
   return (
     <div className={cx('relative z-[1] aspect-square w-full overflow-hidden rounded-2xl bg-slate-800 shadow-sm ring-1', picking === 'tap' ? 'ring-4 ring-brand-500' : 'ring-slate-200')}>
-      <div className="absolute inset-0 transition-transform duration-300" style={{ transform: `scale(${k})` }}>
+      <div className="absolute inset-0" style={{ transform: `scale(${k})` }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- a private, signed-in proxy image */}
         <img src={satelliteUrl(result)} alt={`Aerial photo of ${result.address ?? 'the house'} with the roof outline${showEdges ? ', the roof edges' : ''} and the numbered roof faces`} width={640} height={640} className="absolute inset-0 h-full w-full" onLoad={() => setState('ok')} onError={() => setState('failed')} />
         <svg viewBox="0 0 640 640" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
