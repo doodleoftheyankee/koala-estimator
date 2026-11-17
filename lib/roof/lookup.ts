@@ -23,6 +23,8 @@ export const MAP_SIZE = 640;
 export const MIN_ZOOM = 16;
 export const MAX_ZOOM = 20;
 
+export const NOT_CONFIGURED_MESSAGE = "Satellite lookup isn't set up yet. The owner adds the Roof Takeoff key in Vercel (ROOF_TAKEOFF_KEY).";
+
 /** Job types the lookup gives a number for: floor area (attic floor or roof surface) or wall run. */
 export const ROOF_LOOKUP_JOBS: ReadonlySet<JobType> = new Set<JobType>(['attic', 'crawlspace', 'garage', 'commercial', 'walls']);
 
@@ -70,6 +72,7 @@ export const takeoffSchema = z.object({
         groundM2: nonNegative,
         rise: nonNegative.nullish(),
         lowSlope: z.boolean().nullish(),
+        center: extra(latLngSchema),
       }),
     )
     .max(200),
@@ -107,6 +110,8 @@ export interface RoofSegment {
   groundM2: number;
   /** Under 2/12: a porch or a flat addition, usually with no attic under it. */
   lowSlope: boolean;
+  /** Middle of the face, for its number on the map when there is no face shape. */
+  center: LatLng | null;
 }
 
 /** What the app keeps from a lookup (returned to the phone and logged in roof_lookups.result). */
@@ -158,7 +163,7 @@ export const riseFromDegrees = (deg: number) => 12 * Math.tan((deg * Math.PI) / 
 export function compactTakeoff(t: Takeoff): RoofResult {
   const segments: RoofSegment[] = t.segments.map((s) => {
     const rise = s.rise ?? round(riseFromDegrees(s.pitchDeg), 1);
-    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope: s.lowSlope ?? rise < 2 };
+    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope: s.lowSlope ?? rise < 2, center: s.center ? point(s.center) : null };
   });
   const known = new Set(segments.map((s) => s.n));
   const roofM2 = segments.length ? segments.reduce((sum, s) => sum + s.areaM2, 0) : (t.building.faces?.areaM2 ?? t.building.whole?.areaM2 ?? 0);
@@ -312,7 +317,8 @@ export function lookupAddress(p: { street: string; city: string; state: string; 
 export const NOTES_HEADER = 'From satellite lookup:';
 const LINE_START = '• Satellite (';
 
-const overhangWords = (inches: number) => (inches > 0 ? `with a ${inches}-inch overhang` : 'with no overhang');
+/** "with a 12-inch overhang", "with an 18-inch overhang", "with no overhang". */
+const overhangWords = (inches: number) => (inches > 0 ? `with ${/^(8\d?|11|18)$/.test(String(inches)) ? 'an' : 'a'} ${inches}-inch overhang` : 'with no overhang');
 
 /** The prep-note line for what was applied, e.g. "• Satellite (Google, Jun 2023): attic floor about …". */
 export function noteLine(r: RoofResult, f: RoofFigures, use: RoofUse): string {

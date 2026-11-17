@@ -2,7 +2,7 @@
 // key; this app sends only its partner key (x-partner-key), which never reaches the phone. Errors
 // become RoofLookupError with a message the estimator can act on. No env access here: the routes
 // pass the base URL and key in, so this can be tested with a stand-in fetch.
-import { compactTakeoff, LOOKUP_TIMEOUT_MS, takeoffSchema, type RoofResult } from './lookup';
+import { compactTakeoff, LOOKUP_TIMEOUT_MS, NOT_CONFIGURED_MESSAGE, takeoffSchema, type RoofResult } from './lookup';
 
 export type RoofErrorCode = 'not_configured' | 'refused' | 'not_found' | 'invalid' | 'busy' | 'timeout' | 'unreachable' | 'bad_response' | 'aborted' | 'failed';
 
@@ -25,7 +25,7 @@ export interface RoofService {
   fetch?: typeof fetch;
 }
 
-export const NOT_CONFIGURED = "Satellite lookup isn't set up yet. The owner adds the Roof Takeoff key in Vercel (ROOF_TAKEOFF_KEY).";
+export const NOT_CONFIGURED = NOT_CONFIGURED_MESSAGE;
 const REFUSED = 'The lookup service turned us away. Ask the office to check the Roof Takeoff key.';
 
 /** Roof Takeoff's own message, made safe to show: one line, no markup, not too long. */

@@ -32,7 +32,7 @@ import {
 
 const clone = <T>(v: T): T => structuredClone(v);
 const result = (): RoofResult => compactTakeoff(takeoffSchema.parse(clone(fixture)));
-const seg = (n: number, rise: number, groundM2: number): RoofSegment => ({ n, rise, azimuthDeg: 180, areaM2: groundM2 * 1.1, groundM2, lowSlope: rise < 2 });
+const seg = (n: number, rise: number, groundM2: number): RoofSegment => ({ n, rise, azimuthDeg: 180, areaM2: groundM2 * 1.1, groundM2, lowSlope: rise < 2, center: null });
 
 describe('units', () => {
   it('converts meters to feet and square meters to square feet', () => {
@@ -144,6 +144,7 @@ describe('compactTakeoff', () => {
     expect(r.outline).toHaveLength(1);
     expect(r.outline[0]).toHaveLength(10);
     expect(r.faces.map((f) => f.n)).toEqual([1, 2, 3, 4, 5]);
+    expect(r.segments[0]!.center).toEqual(fixture.segments[0]!.center);
     expect(r.warnings).toEqual(['Lower-detail imagery. Check the pitch on site.']);
     expect(r.takeoff).toEqual({ overhangM: 0.3048, floorM2: 182.7, wallRunM: 67.1 });
   });
@@ -254,6 +255,8 @@ describe('applying', () => {
     expect(noteLine(r, f, 'floor')).toBe('• Satellite (Google, Jun 2023): attic floor about 1,970 sq ft with a 12-inch overhang; roof surface about 2,560 sq ft at 6/12.');
     expect(noteLine(r, f, 'roof')).toBe('• Satellite (Google, Jun 2023): roof surface about 2,560 sq ft at 6/12; attic floor about 1,970 sq ft with a 12-inch overhang.');
     expect(noteLine(r, f, 'walls')).toBe('• Satellite (Google, Jun 2023): wall run about 220 ft with a 12-inch overhang; footprint about 2,340 sq ft.');
+    expect(noteLine(r, roofFigures(r, { overhangIn: 18, excluded: [3, 4, 5] }), 'floor')).toBe('• Satellite (Google, Jun 2023): attic floor about 1,370 sq ft with an 18-inch overhang; roof surface about 2,560 sq ft at 6/12.');
+    expect(noteLine(r, roofFigures(r, { overhangIn: 6, excluded: [5] }), 'walls')).toMatch(/wall run about 224 ft with a 6-inch overhang/);
     const none = roofFigures({ ...r, imagery: null }, { overhangIn: 0, excluded: [] });
     expect(noteLine({ ...r, imagery: null }, none, 'floor')).toBe('• Satellite (Google): attic floor about 2,340 sq ft with no overhang; roof surface about 2,560 sq ft at 6/12.');
   });
