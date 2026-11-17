@@ -145,7 +145,8 @@ export function RoofLookupSheet({
       }
     } else {
       const sqft = roundSqft(use === 'roof' ? f.roofSqft : f.atticFloorSqft);
-      if (sqft > 0) {
+      if (sqft > 0 && sqft <= 200_000) {
+        // (the area form's limit)
         apply = { use, sqft, note: noteLine(result, f, use) };
         applyLabel = `Use ${comma(sqft)} sq ft`;
       }
