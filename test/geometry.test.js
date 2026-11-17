@@ -1,16 +1,17 @@
 // Geometry of lib/takeoff.js on in-memory synthetic rasters (dev/houses.js holds the analytic truth).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HOUSES, makeHouse, insightsFor, renderLayers, FT, GROUND_ELEV } from '../dev/houses.js';
+import { HOUSES, HOUSE_SPECS, makeHouse, insightsFor, renderLayers, FT, GROUND_ELEV } from '../dev/houses.js';
 import { encodeGeoTiff } from '../dev/tiff.js';
 import { trimInsights } from '../lib/google.js';
 import { readGeoTiff } from '../lib/raster.js';
 import {
-  measureRoof, atticFloor, layerSize, riseOf, utm, utmInverse, zoneOfLatLng, latLngFrame, offsetPoly, EDGE_TYPES,
+  measureRoof, atticFloor, faceDefaults, planeHeightOf, layerSize, riseOf, utm, utmInverse, zoneOfLatLng, latLngFrame,
+  offsetPoly, roofOutline, untracedFaces, EDGE_TYPES,
 } from '../lib/takeoff.js';
 
 const F2 = FT * FT;
-const [GABLE, HIP, CROSS] = HOUSES;
+const [GABLE, HIP, CROSS, , TWIN, FLAT, CAPE] = HOUSES;
 
 function setup(house, opts = {}) {
   const t = trimInsights(insightsFor(house));
@@ -19,12 +20,28 @@ function setup(house, opts = {}) {
   return { building: t.building, segments, ...rasters };
 }
 
+// The server's whole path (api/takeoff.js minus the I/O): cut at Google's box, default face choices, attic floor.
 function measure(house, opts) {
   const s = setup(house, opts);
-  const m = measureRoof({ segments: s.segments, center: s.building.center, mask: s.mask, dsm: s.dsm });
-  const attic = atticFloor({ building: s.building, segments: s.segments, outline: m.outline, overhangM: FT });
-  return { ...s, ...m, attic };
+  const m = measureRoof({ segments: s.segments, center: s.building.center, box: s.building.box, mask: s.mask, dsm: s.dsm });
+  const choice = faceDefaults(s.segments, planeHeightOf(s.segments, m.planeHeights));
+  const attic = atticFloor({
+    building: s.building, segments: s.segments, outline: m.outline, overhangM: FT,
+    sharedWallM: m.sharedWallM, excluded: choice.excluded, perimeterByFaceM: m.perimeterByFaceM,
+  });
+  return { ...s, ...m, attic, choice };
 }
+
+// The house's own name for a Solar face (matched by ground area, pitch and direction).
+function nameOf(house, seg) {
+  const f = house.faces.filter(x => x.solar).find(x => {
+    const g = Math.abs(x.poly.reduce((t, a, i) => { const b = x.poly[(i + 1) % x.poly.length]; return t + a[0] * b[1] - b[0] * a[1]; }, 0)) / 2;
+    const da = Math.abs(((x.azDeg - seg.azimuthDeg) % 360 + 540) % 360 - 180);
+    return Math.abs(g - seg.groundM2) < 0.5 && Math.abs(x.rise - riseOf(seg.pitchDeg)) < 0.2 && da < 5;
+  });
+  return f ? f.name : null;
+}
+const byName = (house, m) => Object.fromEntries(m.segments.map(s => [nameOf(house, s), s]));
 
 function near(got, want, frac, label) {
   assert.ok(Math.abs(got - want) <= frac * Math.abs(want), `${label}: got ${got.toFixed(3)}, want ${want.toFixed(3)} (within ${frac * 100}%)`);
@@ -68,6 +85,9 @@ test('attic floor formula is exact on a 40 x 30 ft rectangle with a 1 ft overhan
   near(a.floorM2, 38 * 28 * F2, 1e-4, 'floor');
   assert.equal(a.perimeterSource, 'outline');
   near(a.wallRunM, (140 - 8) * FT, 1e-4, 'wall run');
+  assert.deepEqual(Object.keys(a), ['overhangM', 'footprintM2', 'perimeterM', 'perimeterSource', 'sharedWallM', 'unmatchedM2',
+    'perimeterByFaceM', 'excluded', 'excludedM2', 'floorM2', 'wallRunM', 'deckM2']);
+  assert.equal(a.deckM2, null, 'no faces: no roof deck');
   // Low-slope faces come out by their ground area.
   const segs = [{ n: 1, groundM2: 1000 * F2, lowSlope: false }, { n: 2, groundM2: 200 * F2, lowSlope: true }];
   const b = atticFloor({ building: {}, segments: segs, outline, overhangM: FT });
@@ -121,7 +141,7 @@ test('hip: ridge, four hips and eaves match the drawing (house turned 25 degrees
   near(m.attic.floorM2 / F2, 1344, 0.02, 'attic floor');
 });
 
-test('cross gable: valleys, porch wall step, porch left out of the attic, chimney ignored', () => {
+test('cross gable: valleys, porch wall headwall, porch left out of the attic, chimney ignored', () => {
   const m = measure(CROSS);
   near(m.outline.areaM2 / F2, 1928, 0.02, 'outline area');
   near(m.outline.perimeterM / FT, 212, 0.02, 'outline perimeter');
@@ -130,22 +150,218 @@ test('cross gable: valleys, porch wall step, porch left out of the attic, chimne
   assert.equal(m.edges.filter(e => e.type === 'valley').length, 2);
   near(t.ridge, truth.ridge, 0.05, 'ridges');
   near(t.rake, truth.rake, 0.05, 'rakes');
-  near(t.eave, truth.eave, 0.05, 'eaves');
-  assert.ok(t.hip < 1.5 && t.break < 1.5, `no hips or breaks: ${t.hip}, ${t.break}`);
-  const porch = m.segments.find(s => s.lowSlope);
+  near(t.eave, truth.eave, 0.05, 'eaves, the main eave over the porch included');
+  assert.ok(t.hip < 1.5 && t.break < 1.5 && t.step < 1.5, `no hips, breaks or steps: ${t.hip}, ${t.break}, ${t.step}`);
+  const porch = m.segments.find(s => s.lowSlope), front = byName(CROSS, m).front;
   assert.ok(porch, 'the porch is low slope');
   assert.equal(porch.rise, 1);
-  // The porch's top edge meets the house wall: a step, the length of the porch.
-  const steps = m.edges.filter(e => e.type === 'step');
-  assert.equal(steps.length, 1);
-  assert.ok(steps[0].faces.includes(porch.n));
-  near(steps[0].planM / FT, 16, 0.08, 'porch wall');
+  // The porch's level top edge meets the house wall: a headwall (apron flashing), the length of the porch.
+  const heads = m.edges.filter(e => e.type === 'headwall');
+  assert.equal(heads.length, 1);
+  assert.deepEqual(heads[0].faces, [front.n, porch.n].sort((a, b) => a - b));
+  near(heads[0].planM / FT, 16, 0.05, 'porch wall');
+  near(heads[0].lengthM / heads[0].planM, 1, 0.01, 'a headwall is level');
+  // The higher face keeps its eave along the porch: the front face's eave is its whole 27 + 3 ft.
+  const frontEave = m.edges.filter(e => e.type === 'eave' && e.faces.length === 1 && e.faces[0] === front.n).reduce((a, e) => a + e.planM, 0);
+  near(frontEave / FT, 30, 0.05, 'front eave over the porch still counts');
+  assert.equal(m.segments.find(s => s.n === porch.n) && m.choice.lower.has(porch.n), true, 'the porch is a lower roof');
   // The chimney sits on the back face: the face still comes out whole and adds no edges.
   const back = m.faces.find(f => f.n === m.segments.find(s => s.groundM2 > 60 && s.azimuthDeg > 300).n);
   near(back.planM2 / F2, 700 - 6, 0.03, 'back face minus the chimney');
   assert.deepEqual(m.attic.excluded, [porch.n]);
   near(m.attic.excludedM2 / F2, 128, 0.01, 'excluded area');
   near(m.attic.floorM2 / F2, CROSS.truth.attic12Ft2, 0.02, 'attic floor');
+});
+
+test('twin: the outline is cut 0.5 m past Google\'s box, the cut is the shared wall, no edges along it', () => {
+  const m = measure(TWIN), tr = TWIN.truth;
+  assert.equal(m.outline.polys.length, 1);
+  near(m.outline.areaM2 / F2, tr.cutOutlineFt2, 0.02, 'outline: this half plus the 0.5 m allowance');
+  assert.ok(m.outline.areaM2 / F2 < 1.1 * tr.outlineFt2, 'nowhere near the whole twin (1584 sq ft)');
+  near(m.sharedWallM / FT, tr.sharedWallFt, 0.03, 'shared wall');
+  near(m.outline.perimeterM / FT, 2 * (22 + 0.5 / FT) + 36 + 36, 0.02, 'perimeter, the cut included');
+  // Without the box it would take the whole twin.
+  const s = setup(TWIN), whole = measureRoof({ segments: s.segments, center: s.building.center, mask: s.mask, dsm: null });
+  near(whole.outline.areaM2 / F2, 2 * 792, 0.02, 'uncut: both halves');
+  assert.equal(whole.sharedWallM, 0);
+  // Edges: rakes only at the free west end; nothing along the party wall; eaves and ridge stop at the cut.
+  const t = totalsFt(m);
+  near(t.rake, tr.ft.rake, 0.04, 'rakes (west gable only)');
+  near(t.eave, 2 * (22 + 0.5 / FT), 0.04, 'eaves to the cut');
+  near(t.ridge, 22 + 0.5 / FT, 0.05, 'ridge to the cut');
+  for (const k of ['hip', 'valley', 'step', 'headwall', 'break']) assert.ok(t[k] < 1, `${k}: ${t[k]}`);
+  assert.equal(m.edges.filter(e => e.type === 'rake').length, 2);
+  // The cut doesn't count as each face's outline length either (eave + west rake only).
+  for (const n of [1, 2]) near(m.perimeterByFaceM[n] / FT, 18 + 22 + 0.5 / FT, 0.04, `face ${n} outline length`);
+  // Attic: the CONTRACT formula with S, no overhang taken off along the party wall.
+  const A = m.outline.areaM2, P = m.outline.perimeterM, S = m.sharedWallM, d = FT;
+  near(m.attic.floorM2, A - (P - S) * d + 4 * d * d, 1e-4, 'floor formula with the shared wall');
+  near(m.attic.floorM2 / F2, tr.cutAttic12Ft2, 0.02, 'attic floor');
+  near(m.attic.wallRunM, P - S - 8 * d, 1e-4, 'wall run leaves out the party wall');
+  assert.equal(m.attic.sharedWallM, Math.round(S * 1000) / 1000);
+});
+
+test('roofOutline: a cut at the box, scraps of the neighbour dropped, small holes filled, courtyards outlined', () => {
+  // 20 x 10 px roof joined to a neighbour (x 20..39) by a full-height seam, with a 1 px speck hole.
+  const w = 50, h = 20, m = new Uint8Array(w * h);
+  for (let y = 5; y < 15; y++) for (let x = 0; x < 40; x++) m[y * w + x] = 1;
+  m[8 * w + 5] = 0;
+  const o = roofOutline(m, w, h, [{ x: 5, y: 10 }], { x: 5, y: 10 }, 10, 1.2, { clip: { u0: 0, u1: 19, v0: 0, v1: 19 }, minHole: 4 });
+  assert.equal(o.count, 200, 'the speck hole is filled');
+  assert.equal(o.cutX, 10, 'ten pixel sides along the cut');
+  assert.equal(o.cutY, 0);
+  assert.ok(o.isCut(10 * w + 25) && !o.isSel(10 * w + 25) && o.isSel(10 * w + 19));
+  assert.equal(o.polys.length, 1);
+  // A ring with a 6 x 6 px courtyard: the courtyard is a second ring and stays out of the area.
+  const r = new Uint8Array(w * h);
+  for (let y = 2; y < 18; y++) for (let x = 2; x < 18; x++) r[y * w + x] = (x >= 7 && x < 13 && y >= 7 && y < 13) ? 0 : 1;
+  const o2 = roofOutline(r, w, h, [{ x: 3, y: 3 }], { x: 3, y: 3 }, 10, 1.2, { minHole: 4 });
+  assert.equal(o2.count, 16 * 16 - 36);
+  assert.equal(o2.polys.length, 2);
+  assert.equal(o2.holes, 1);
+  const len = p => p.reduce((t, a, i) => { const b = p[(i + 1) % p.length]; return t + Math.hypot(b[0] - a[0], b[1] - a[1]); }, 0);
+  near(len(o2.polys[0]), 64, 0.02, 'outer ring');
+  near(len(o2.polys[1]), 24, 0.02, 'courtyard ring');
+  // A box that misses the roof altogether doesn't lose the roof.
+  const o3 = roofOutline(m, w, h, [{ x: 5, y: 10 }], { x: 5, y: 10 }, 10, 1.2, { clip: { u0: 45, u1: 49, v0: 0, v1: 3 } });
+  assert.equal(o3.count, 399);
+  assert.equal(o3.cutX + o3.cutY, 0);
+});
+
+test('courtyard building: the courtyard edge counts in the perimeter and the attic floor', () => {
+  // 60 x 60 ft around a 24 x 24 ft courtyard, four 6/12 faces draining outward.
+  const court = makeHouse({
+    id: 'court', lat: 39.69, lng: -75.77, rotDeg: 0, quality: 'HIGH', faces: [
+      { name: 's', poly: [[-30, -30], [30, -30], [12, -12], [-12, -12]], rise: 6, az: 180, ref: [0, -30], zRef: 3 },
+      { name: 'n', poly: [[-30, 30], [-12, 12], [12, 12], [30, 30]], rise: 6, az: 0, ref: [0, 30], zRef: 3 },
+      { name: 'e', poly: [[30, -30], [30, 30], [12, 12], [12, -12]], rise: 6, az: 90, ref: [30, 0], zRef: 3 },
+      { name: 'w', poly: [[-30, -30], [-12, -12], [-12, 12], [-30, 30]], rise: 6, az: 270, ref: [-30, 0], zRef: 3 },
+    ],
+  });
+  const m = measure(court);
+  assert.equal(m.outline.polys.length, 2, 'outer ring and courtyard ring');
+  near(m.outline.areaM2 / F2, 3600 - 576, 0.02, 'area without the courtyard');
+  near(m.outline.perimeterM / FT, 240 + 96, 0.02, 'perimeter with the courtyard');
+  near(m.attic.floorM2 / F2, 3024 - 336 + 4, 0.02, 'attic floor (CONTRACT formula)');
+  near(m.attic.floorM2 / F2, 58 * 58 - 26 * 26, 0.02, 'attic floor (true)');
+  near(m.attic.wallRunM / FT, 336 - 8, 0.02, 'wall run includes the courtyard walls');
+});
+
+test('Cape: dormer stays in, porch out, garage marked lower but in; step, headwall and eaves at each junction', () => {
+  const m = measure(CAPE), tr = CAPE.truth, f = byName(CAPE, m);
+  // Default face choices (CONTRACT.md "Default face choices (v1.1)").
+  assert.equal(m.choice.mostlyFlat, false);
+  assert.deepEqual(m.attic.excluded, [f.porch.n], 'only the porch is left out');
+  assert.ok(f.dormer.lowSlope && !m.attic.excluded.includes(f.dormer.n), 'the shed dormer (1.5/12) sits over the attic');
+  assert.deepEqual([...m.choice.lower].sort(), [f['garage south'].n, f['garage north'].n, f.porch.n].sort(), 'lower roofs');
+  assert.ok(!m.attic.excluded.includes(f['garage south'].n), 'the garage stays in');
+  // Heights came from the surface heights, for every face.
+  assert.equal(Object.keys(m.planeHeights).length, 6);
+  // Outline, attic floor, outline length per face, wall run, roof deck.
+  near(m.outline.areaM2 / F2, tr.outlineFt2, 0.01, 'outline');
+  near(m.outline.perimeterM / FT, tr.perimeterFt, 0.015, 'perimeter');
+  assert.equal(m.sharedWallM, 0, 'nothing is cut from a house on its own, even turned 12 degrees in its box');
+  near(m.attic.floorM2 / F2, tr.attic12Ft2, 0.01, 'attic floor');
+  near(m.attic.floorM2 / F2, 1280, 0.01, 'attic floor against the true main house plus garage');
+  for (const [name, ft] of Object.entries(tr.perimeterByFaceFt)) {
+    const got = (m.perimeterByFaceM[f[name].n] || 0) / FT;
+    assert.ok(Math.abs(got - ft) <= Math.max(0.5, 0.03 * ft), `${name} outline length: got ${got.toFixed(1)}, want ${ft}`);
+  }
+  near(m.attic.wallRunM / FT, tr.wallRun12Ft, 0.02, 'wall run without the porch');
+  const A = m.attic.footprintM2, P = m.attic.perimeterM, d = FT;
+  near(m.attic.wallRunM, P - m.perimeterByFaceM[f.porch.n] - 8 * d, 1e-3, 'wall run formula');
+  const kept = m.segments.filter(s => s.n !== f.porch.n);
+  near(m.attic.deckM2, m.attic.floorM2 * kept.reduce((t, s) => t + s.areaM2, 0) / kept.reduce((t, s) => t + s.groundM2, 0), 1e-3, 'roof deck formula');
+  near(m.attic.floorM2, (A - P * d + 4 * d * d) * (1 - f.porch.groundM2 / A), 1e-3, 'floor formula');
+  assert.ok(m.attic.unmatchedM2 < 0.01 * A, `no parts without roof data: ${m.attic.unmatchedM2}`);
+  // Edges.
+  const t = totalsFt(m);
+  for (const k of EDGE_TYPES) {
+    if (tr.ft[k]) near(t[k], tr.ft[k], 0.04, k);
+    else assert.ok(t[k] < 1, `${k}: ${t[k]}`);
+  }
+  const edgesOf = (type, faces) => m.edges.filter(e => e.type === type && String(e.faces) === String(faces.map(x => x.n).sort((a, b) => a - b)));
+  const sum = es => es.reduce((a, e) => a + e.planM, 0) / FT;
+  // Dormer cheeks: the back roof's sloped sides against the dormer walls are step flashing, full length.
+  near(sum(edgesOf('step', [f.back, f.dormer])), 24, 0.04, 'cheek steps (plan)');
+  for (const e of edgesOf('step', [f.back, f.dormer])) near(e.lengthM / e.planM, Math.SQRT2, 0.01, 'step along the 12/12 slope');
+  // The back roof's level top under the dormer front is a headwall; the dormer keeps its eave and rakes.
+  near(sum(edgesOf('headwall', [f.back, f.dormer])), 24, 0.04, 'dormer front headwall');
+  near(sum(edgesOf('eave', [f.dormer])), 24, 0.04, 'dormer eave over the back roof');
+  near(sum(edgesOf('rake', [f.dormer])), 24, 0.04, 'dormer rakes');
+  // Garage against the house's gable wall: step for the garage, and the house keeps its rakes above it.
+  near(sum([...edgesOf('step', [f['garage south'], f.front]), ...edgesOf('step', [f['garage north'], f.back])]), 20, 0.05, 'garage steps');
+  near(sum(edgesOf('rake', [f.front])), 28, 0.04, 'front rakes, both gables, above the garage too');
+  // Porch: headwall, and the front keeps its whole eave.
+  near(sum(edgesOf('headwall', [f.front, f.porch])), 16, 0.04, 'porch headwall');
+  near(sum(edgesOf('eave', [f.front])), 36, 0.03, 'front eave, over the porch too');
+  // The main ridge is two pieces either side of the dormer; the dormer meets the front at the ridge.
+  assert.equal(edgesOf('ridge', [f.front, f.back]).length, 2);
+  near(sum(edgesOf('ridge', [f.front, f.back])), 12, 0.06, 'main ridge pieces');
+  near(sum(edgesOf('ridge', [f.front, f.dormer])), 24, 0.04, 'dormer at the ridge');
+});
+
+test('flat building: nothing left out by default, mostly-flat flag, bay headwall', () => {
+  const m = measure(FLAT), tr = FLAT.truth;
+  assert.ok(m.segments.every(s => s.lowSlope));
+  assert.equal(m.choice.mostlyFlat, true);
+  assert.deepEqual(m.attic.excluded, []);
+  assert.equal(m.choice.lower.size, 0, 'no steep faces: no main height to be lower than');
+  near(m.outline.areaM2 / F2, tr.outlineFt2, 0.01, 'outline');
+  near(m.attic.floorM2 / F2, tr.attic12Ft2, 0.01, 'attic floor: the whole building');
+  const t = totalsFt(m);
+  near(t.headwall, 30, 0.04, 'loading bay against the main wall');
+  near(t.ridge, 80, 0.04, 'crown');
+  near(t.eave + t.rake, 300 + 30, 0.03, 'drip edge all round, plus the main roof above the bay');
+  // Default rule on the same faces with one steep face holding most of the ground: low faces under it go.
+  const segs = [{ n: 1, groundM2: 100, lowSlope: false }, { n: 2, groundM2: 30, lowSlope: true }, { n: 3, groundM2: 20, lowSlope: true }];
+  const h = { 1: 10, 2: 8.3, 3: 9.6 };
+  const c = faceDefaults(segs, n => h[n]);
+  assert.deepEqual(c.excluded, [2], 'more than 1 m under the main roof: out; within 1 m (a dormer): in');
+  assert.deepEqual([...c.lower], [2]);
+  assert.deepEqual(faceDefaults(segs, () => NaN).excluded, [2, 3], 'no heights: every low-slope face out, as in v1');
+  assert.deepEqual(faceDefaults([{ n: 1, groundM2: 40, lowSlope: false }, { n: 2, groundM2: 60, lowSlope: true }], n => h[n]).excluded, []);
+});
+
+test('plane heights: a tree over a face center or a dormer on it no longer loses the face', () => {
+  const hip = HOUSE_SPECS.find(h => h.id === 'hip');
+  const treeAt = (over, inMask) => makeHouse({ ...hip, id: 'hip-tree', trees: [{ at: [0, -8.3], r: 4, h: 9, over, inMask }] });
+  for (const inMask of [true, false]) {
+    const m = measure(treeAt(true, inMask)), t = totalsFt(m);
+    near(t.ridge, 20, 0.06, `ridge, tree ${inMask ? 'in' : 'not in'} the mask`);
+    near(t.hip, 90, 0.05, 'hips');
+    near(t.eave, 160, 0.05, 'eaves');
+    const south = m.segments.find(s => s.groundM2 > 40 && Math.abs(s.azimuthDeg - 205) < 5);
+    const face = m.faces.find(x => x.n === south.n);
+    assert.ok(face.planM2 > 0.8 * south.groundM2, `south face found: ${(face.planM2 / F2).toFixed(0)} of ${(south.groundM2 / F2).toFixed(0)} sq ft`);
+    assert.deepEqual(untracedFaces(m.segments, m.faces), []);
+  }
+  // A big tree over most of a small face: that face is reported as not traced (the server then warns).
+  const big = measure(makeHouse({ ...hip, id: 'hip-bigtree', trees: [{ at: [20, 0], r: 10, h: 10, over: true }] }));
+  const east = big.segments.find(s => Math.abs(s.azimuthDeg - 115) < 5);
+  assert.deepEqual(untracedFaces(big.segments, big.faces), [east.n]);
+});
+
+test('outer sides check the outside height first: a gable end against a taller block with no face is a step', () => {
+  const g = (extra) => makeHouse({
+    id: 'wing', lat: 39.69, lng: -75.765, rotDeg: 8, quality: 'HIGH',
+    faces: [
+      { name: 'south', poly: [[-20, -15], [20, -15], [20, 0], [-20, 0]], rise: 6, az: 180, ref: [0, -15], zRef: 2.8 },
+      { name: 'north', poly: [[-20, 0], [20, 0], [20, 15], [-20, 15]], rise: 6, az: 0, ref: [0, 15], zRef: 2.8 },
+    ],
+    ...extra,
+  });
+  // Two-story flat block against the west gable end, no Solar face; a tree beside the east rake.
+  const m = measure(g({ flats: [{ poly: [[-40, -18], [-20, -18], [-20, 18], [-40, 18]], z: 7 }], trees: [{ at: [26, 4], r: 7, h: 9 }] }));
+  const t = totalsFt(m);
+  near(t.rake, 2 * 15 * Math.sqrt(1.25), 0.05, 'rakes: the free east end only');
+  near(t.step, 2 * 15 * Math.sqrt(1.25), 0.05, 'step flashing along the tall wall');
+  near(t.eave, 80, 0.05, 'eaves');
+  near(t.ridge, 40, 0.05, 'ridge');
+  // The block has no roof data: it is the unmatched part of the outline.
+  near(m.attic.unmatchedM2 / F2, 20 * 36, 0.05, 'unmatched (the block)');
+  // Its sides along the block are not on the outline.
+  for (const s of m.segments) near(m.perimeterByFaceM[s.n] / FT, 40 + 15, 0.04, `face ${s.n} outline length`);
 });
 
 test("surface heights and Solar plane heights don't share a datum, and that's fine", () => {

@@ -14,7 +14,23 @@ import { EDGE_TYPES } from '../lib/takeoff.js';
 
 const KEY = 'TEST-KEY-must-never-leak-3f9a';
 const F2 = FT * FT;
-const [GABLE, HIP, CROSS] = HOUSES;
+const [GABLE, HIP, CROSS, , TWIN, FLAT, CAPE] = HOUSES;
+const ATTIC_KEYS = ['overhangM', 'footprintM2', 'perimeterM', 'perimeterSource', 'sharedWallM', 'unmatchedM2', 'perimeterByFaceM',
+  'excluded', 'excludedM2', 'floorM2', 'wallRunM', 'deckM2'];
+const SEGMENT_KEYS = ['n', 'pitchDeg', 'azimuthDeg', 'areaM2', 'groundM2', 'center', 'box', 'heightM', 'rise', 'lowSlope', 'lower'];
+
+// CONTRACT.md "Attic floor" from the numbers on the wire, with the server's default face choices.
+function contractAttic(j) {
+  const a = j.attic, A = a.footprintM2, P = a.perimeterM, S = a.sharedWallM, d = a.overhangM;
+  const out = j.segments.filter(s => a.excluded.includes(s.n)), kept = j.segments.filter(s => !a.excluded.includes(s.n));
+  const ex = out.reduce((t, s) => t + s.groundM2, 0), exPerim = out.reduce((t, s) => t + (a.perimeterByFaceM[s.n] || 0), 0);
+  const floor = Math.max(0, A - (P - S) * d + 4 * d * d) * Math.max(0, 1 - ex / A);
+  const g = kept.reduce((t, s) => t + s.groundM2, 0), ar = kept.reduce((t, s) => t + s.areaM2, 0);
+  return {
+    floor, wallRun: Math.max(0, P - S - exPerim - 8 * d), deck: kept.length ? floor * ar / g : null, excludedM2: ex,
+    unmatched: Math.max(0, A - j.segments.reduce((t, s) => t + s.groundM2, 0)),
+  };
+}
 let logs = [], bodies = [], origError, origWarn, mock;
 
 function useMock(opts) {
@@ -81,8 +97,10 @@ test('takeoff by address: gable, every number where the contract says', async ()
   assert.equal(j.building.quality, 'HIGH');
   assert.equal(j.segments.length, 2);
   for (const s of j.segments) {
+    assert.deepEqual(Object.keys(s), SEGMENT_KEYS);
     assert.equal(s.rise, 6);
     assert.equal(s.lowSlope, false);
+    assert.equal(s.lower, false);
     assert.ok(s.center && s.box && Number.isFinite(s.heightM));
   }
   assert.equal(typeof j.photo.rgb, 'string');
@@ -102,9 +120,14 @@ test('takeoff by address: gable, every number where the contract says', async ()
     assert.ok(decimals(e.lengthM) <= 3);
   }
   assert.equal(j.attic.overhangM, 0.3048);
+  assert.deepEqual(Object.keys(j.attic), ATTIC_KEYS);
   assert.equal(j.attic.perimeterSource, 'outline');
   assert.deepEqual(j.attic.excluded, []);
+  assert.equal(j.attic.sharedWallM, 0);
+  assert.ok(j.attic.unmatchedM2 < 1);
   near(j.attic.floorM2 / F2, 1064, 0.02, 'attic floor');
+  near(j.attic.deckM2 / F2, 1064 * Math.sqrt(1.25), 0.02, 'roof deck over the attic floor');
+  for (const s of j.segments) near(j.attic.perimeterByFaceM[s.n] / FT, 70, 0.02, `face ${s.n} outline length`);
   assert.deepEqual(j.warnings, []);
 });
 
@@ -117,13 +140,103 @@ test('takeoff by map pin: cross gable with a 6 in overhang; clients can redo the
   assert.deepEqual(j.attic.excluded, [porch.n]);
   assert.equal(j.attic.excludedM2, porch.groundM2);
   assert.equal(j.attic.overhangM, 0.1524);
-  // The CONTRACT formula from the numbers on the wire gives the same floor.
-  const { footprintM2: A, perimeterM: P, overhangM: d, excludedM2 } = j.attic;
-  assert.ok(Math.abs(Math.max(0, A - P * d + 4 * d * d) * (1 - excludedM2 / A) - j.attic.floorM2) < 0.01);
-  assert.ok(Math.abs(j.attic.wallRunM - (P - 8 * d)) <= 0.0005, 'wall run');
+  assert.equal(porch.lower, true, 'the porch is a lower roof');
+  // The CONTRACT formula from the numbers on the wire gives the same floor, wall run and roof deck.
+  const c = contractAttic(j);
+  assert.ok(Math.abs(c.floor - j.attic.floorM2) < 0.01);
+  assert.ok(Math.abs(c.wallRun - j.attic.wallRunM) <= 0.002, 'wall run');
+  assert.ok(Math.abs(c.deck - j.attic.deckM2) < 0.02, 'roof deck');
+  near(j.attic.wallRunM / FT, 212 - 32 - 8 * 0.5, 0.02, 'wall run without the porch\'s 32 ft of outline');
   near(j.edgeTotalsM.valley / FT, CROSS.truth.ft.valley, 0.05, 'valleys');
-  near(j.edgeTotalsM.step / FT, 16, 0.08, 'porch wall');
-  assert.ok(j.edges.some(e => e.type === 'step' && e.faces.includes(porch.n)));
+  near(j.edgeTotalsM.headwall / FT, 16, 0.05, 'porch wall');
+  assert.ok(j.edgeTotalsM.step < 0.3);
+  assert.ok(j.edges.some(e => e.type === 'headwall' && e.faces.includes(porch.n)));
+});
+
+test('every mock house: v1.1 fields, the CONTRACT formulas, and accuracy against the drawings', async () => {
+  for (const h of HOUSES) {
+    const j = (await get(q({ address: h.address.split(',')[0] }))).json();
+    assert.equal(j.version, 1, h.id);
+    assert.deepEqual(Object.keys(j.attic), ATTIC_KEYS, h.id);
+    assert.deepEqual(Object.keys(j.edgeTotalsM), EDGE_TYPES, h.id);
+    for (const s of j.segments) assert.deepEqual(Object.keys(s), SEGMENT_KEYS, h.id);
+    const c = contractAttic(j);
+    assert.ok(Math.abs(c.floor - j.attic.floorM2) < 0.01, `${h.id} floor`);
+    assert.ok(Math.abs(c.wallRun - j.attic.wallRunM) <= 0.002, `${h.id} wall run`);
+    assert.ok(c.deck == null ? j.attic.deckM2 == null : Math.abs(c.deck - j.attic.deckM2) < 0.02, `${h.id} deck`);
+    assert.ok(Math.abs(c.excludedM2 - j.attic.excludedM2) < 0.01, `${h.id} excluded area`);
+    assert.ok(Math.abs(c.unmatched - j.attic.unmatchedM2) < 0.01, `${h.id} unmatched`);
+    if (h.truth.outlineFt2 && h.id !== 'twin') near(j.outline.areaM2 / F2, h.truth.outlineFt2, 0.02, `${h.id} outline`);
+    const atticTruth = h.id === 'twin' ? h.truth.cutAttic12Ft2 : h.truth.attic12Ft2;
+    if (atticTruth) near(j.attic.floorM2 / F2, atticTruth, 0.02, `${h.id} attic floor`);
+    for (const [k, ft] of Object.entries(h.truth.ft || {})) {
+      if (h.id === 'twin' && (k === 'ridge' || k === 'eave')) continue; // these run 0.5 m into the neighbour (see houses.js)
+      if (ft > 0) near(j.edgeTotalsM[k] / FT, ft, 0.05, `${h.id} ${k}`);
+    }
+  }
+});
+
+test('twin: the neighbour\'s roof is cut off at the box, with a warning; a box that still takes in too much falls back', async () => {
+  let j = (await get(q({ address: '5 Twin Ave' }))).json();
+  near(j.attic.sharedWallM / FT, 36, 0.03, 'shared wall');
+  assert.equal(j.attic.perimeterSource, 'outline');
+  near(j.outline.areaM2 / F2, TWIN.truth.cutOutlineFt2, 0.02, 'outline: this half and the 0.5 m allowance');
+  assert.deepEqual(j.warnings, ["This roof joins a neighbour's. Only this building is measured; check the shared wall on site."]);
+  assert.ok(!j.edges.some(e => e.type === 'rake' && e.planM > 8 && Math.abs(e.path[0].lng - e.path[1].lng) < 2e-6 && e.path[0].lng > j.building.center.lng), 'no rake along the party wall');
+  // Google's box takes in both halves: the outline is 2x Google's building, so the attic uses the building size.
+  useMock({
+    tweakInsights: ins => {
+      const b = ins.boundingBox, w = b.ne.longitude - b.sw.longitude;
+      return { ...ins, boundingBox: { sw: b.sw, ne: { ...b.ne, longitude: b.ne.longitude + w } } };
+    },
+  });
+  j = (await get(q({ address: '5 Twin Ave' }))).json();
+  near(j.outline.areaM2 / F2, 2 * 792, 0.03, 'the outline (still drawn) is both halves');
+  assert.equal(j.attic.perimeterSource, 'box');
+  assert.equal(j.attic.footprintM2, j.building.whole.groundM2);
+  assert.equal(j.attic.sharedWallM, 0);
+  assert.deepEqual(j.attic.perimeterByFaceM, {});
+  assert.deepEqual(j.warnings, ["The roof outline runs into a neighbouring roof, so the attic floor uses Google's building size. Check it on site."]);
+});
+
+test('defaults: flat building keeps every face, Cape keeps its dormer and garage, porch out; lower faces marked', async () => {
+  let j = (await get(q({ address: '6 Flat Roof Plaza' }))).json();
+  assert.deepEqual(j.attic.excluded, []);
+  assert.ok(j.segments.every(s => s.lowSlope && !s.lower));
+  assert.deepEqual(j.warnings, ['Mostly flat or low-slope roof. Check whether there is an attic at all.']);
+  near(j.attic.floorM2 / F2, FLAT.truth.attic12Ft2, 0.01, 'flat attic floor');
+  j = (await get(q({ address: '7 Cape Dormer Way' }))).json();
+  const by = r => j.segments.filter(s => Math.abs(s.rise - r) < 0.05);
+  const [porch] = by(1), [dormer] = by(1.5), garage = by(3);
+  assert.deepEqual(j.attic.excluded, [porch.n]);
+  assert.equal(dormer.lowSlope, true);
+  assert.equal(dormer.lower, false);
+  assert.deepEqual(garage.map(s => s.lower), [true, true]);
+  assert.equal(porch.lower, true);
+  assert.deepEqual(j.segments.filter(s => s.lower).map(s => s.n).sort(), [porch.n, ...garage.map(s => s.n)].sort());
+  assert.deepEqual(j.warnings, []);
+  near(j.attic.floorM2 / F2, CAPE.truth.attic12Ft2, 0.01, 'Cape attic floor');
+  near(j.attic.wallRunM / FT, CAPE.truth.wallRun12Ft, 0.02, 'Cape wall run');
+  // Without surface heights the rule falls back to Google's own plane heights, with the same answer.
+  useMock({ fail: { dsm: 404 } });
+  j = (await get(q({ address: '7 Cape Dormer Way' }))).json();
+  assert.deepEqual(j.attic.excluded, [porch.n]);
+  assert.deepEqual(j.segments.filter(s => s.lower).map(s => s.n).sort(), [porch.n, ...garage.map(s => s.n)].sort());
+  assert.deepEqual(j.attic.perimeterByFaceM, {});
+  near(j.attic.wallRunM / FT, CAPE.truth.perimeterFt - 8, 0.02, 'no breakdown: wall run is the whole outline');
+});
+
+test('a Solar face that matches nothing in the surface heights gives a warning about short edges', async () => {
+  useMock({
+    tweakInsights: ins => {
+      const s = ins.solarPotential.roofSegmentStats[0];
+      const ghost = { ...s, pitchDegrees: 40, azimuthDegrees: 90, planeHeightAtCenterMeters: 20, stats: { ...s.stats, areaMeters2: 30, groundAreaMeters2: 23 } };
+      return { ...ins, solarPotential: { ...ins.solarPotential, roofSegmentStats: [...ins.solarPotential.roofSegmentStats, ghost] } };
+    },
+  });
+  const j = (await get(q({ address: '1 Gable Ln' }))).json();
+  assert.equal(j.faces.length, 2);
+  assert.deepEqual(j.warnings, ['Some roof faces could not be traced (trees or dormers). Edge lengths may be short.']);
 });
 
 test('the mask and surface heights download in parallel', async () => {
@@ -210,6 +323,8 @@ test('degraded: low-detail imagery with no surface heights still gives the outli
   assert.match(j.warnings[0], /Lower-detail imagery/);
   assert.match(j.warnings[1], /cover 83% of the building/);
   assert.match(j.warnings[2], /surface heights didn't load/);
+  near(j.attic.unmatchedM2 / F2, 192, 0.05, 'the carport has no roof data');
+  assert.deepEqual(j.attic.perimeterByFaceM, {});
 });
 
 test('degraded: no measuring photo (data layers 404 or 500)', async () => {

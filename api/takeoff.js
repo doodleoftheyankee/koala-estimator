@@ -5,7 +5,7 @@ import {
   HttpError, query, apiKey, requireAccess, sendJson, sendError, readLatLng, redact,
   geocode, buildingInsights, trimInsights, dataLayers, geoTiff,
 } from '../lib/google.js';
-import { measureRoof, atticFloor, layerSize, riseOf } from '../lib/takeoff.js';
+import { measureRoof, atticFloor, faceDefaults, planeHeightOf, untracedFaces, layerSize, riseOf } from '../lib/takeoff.js';
 import { readGeoTiff } from '../lib/raster.js';
 
 const INCH = 0.0254;
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       return {
         n: s.n, pitchDeg: r2(s.pitchDeg), azimuthDeg: r2(s.azimuthDeg), areaM2: r2(s.areaM2), groundM2: r2(s.groundM2),
         center: ll(s.center), box: box(s.box), heightM: s.heightM == null ? null : r3(s.heightM),
-        rise, lowSlope: rise < 2,
+        rise, lowSlope: rise < 2, lower: false,
       };
     });
     const warnings = [];
@@ -96,16 +96,39 @@ export default async function handler(req, res) {
       else if (d.status === 'fulfilled') oddLayout = true;
       else {
         console.error(`[takeoff] surface heights unavailable: ${why(d.reason)}`);
-        warnings.push("Google's surface heights didn't load, so the roof faces and edges (ridges, valleys, eaves) aren't measured.");
+        warnings.push("Google's surface heights didn't load, so the face shapes and roof edges (ridges, valleys, eaves) aren't measured.");
       }
       if (oddLayout) warnings.push("Google's files for this spot use a map layout this tool can't read, so some measurements are missing.");
     }
 
-    const measured = measureRoof({ segments, center, mask, dsm });
+    const measured = measureRoof({ segments, center, box: building.box, mask, dsm });
     if (mask && !measured.outline) warnings.push("Couldn't find this roof's outline on Google's photo. The attic floor uses Google's building size.");
     if (measured.outline && dsm && segments.length && !measured.faces.length) warnings.push("Couldn't match Google's roof faces to the surface heights, so the edges aren't measured.");
 
-    const attic = atticFloor({ building, segments, outline: measured.outline, overhangM: Math.round(input.overhangIn * INCH * 1e6) / 1e6 });
+    // Twins and rowhouses (CONTRACT.md): the outline was cut at Google's building box. If it is still far bigger
+    // than Google's building, it isn't this building alone: the attic floor falls back to Google's size.
+    let atticOutline = measured.outline, sharedWallM = measured.sharedWallM;
+    const whole = b.whole && b.whole.groundM2;
+    if (atticOutline && whole > 0 && atticOutline.areaM2 > 1.3 * whole) {
+      atticOutline = null; sharedWallM = 0;
+      warnings.push("The roof outline runs into a neighbouring roof, so the attic floor uses Google's building size. Check it on site.");
+    } else if (sharedWallM >= 1) {
+      warnings.push("This roof joins a neighbour's. Only this building is measured; check the shared wall on site.");
+    }
+
+    // Default face choices (CONTRACT.md): porches and flat additions out, shed dormers in, lower roofs marked.
+    const choice = faceDefaults(segments, planeHeightOf(segments, measured.planeHeights));
+    for (const s of segments) s.lower = choice.lower.has(s.n);
+    if (choice.mostlyFlat) warnings.push('Mostly flat or low-slope roof. Check whether there is an attic at all.');
+
+    if (measured.faces.length && untracedFaces(segments, measured.faces).length) {
+      warnings.push('Some roof faces could not be traced (trees or dormers). Edge lengths may be short.');
+    }
+
+    const attic = atticFloor({
+      building, segments, outline: atticOutline, overhangM: Math.round(input.overhangIn * INCH * 1e6) / 1e6,
+      sharedWallM, excluded: choice.excluded, perimeterByFaceM: measured.perimeterByFaceM,
+    });
 
     sendJson(res, 200, {
       version: 1,
