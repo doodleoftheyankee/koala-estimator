@@ -37,9 +37,9 @@ reaches the browser.
 |---|---|---|
 | `GOOGLE_MAPS_API_KEY` | yes | Server-side Google key. Turn on **Geocoding API**, **Solar API** and **Maps Static API** for it. |
 | `ACCESS_CODE` | no | When set, every `/api/*` call needs the `x-access-code` header (the page asks for the code once per device). Each lookup costs money, so set this for a crew-only tool. |
-| `PARTNER_KEY` | no | Lets the Koala server through with the `x-partner-key` header when `ACCESS_CODE` is set. On its own it locks nothing. |
+| `PARTNER_KEY` | no | Lets the Koala server through with the `x-partner-key` header when `ACCESS_CODE` is set. On its own it locks nothing, but a call that sends a partner key that doesn't match is refused (401 "The partner key doesn't match."), so a wrong Koala key shows up at once. |
 
-Set them in the Vercel project settings, then redeploy. For local work put them in a `.env` file
+Values are trimmed, so a key saved with a trailing newline still works. Set them in the Vercel project settings, then redeploy. For local work put them in a `.env` file
 (`KEY=value` lines; it is git-ignored and never deployed).
 
 ## Run it locally

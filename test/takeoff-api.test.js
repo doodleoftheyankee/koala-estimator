@@ -280,6 +280,40 @@ for (const [name, handler, url] of [['takeoff', takeoff, q({ address: '1 Gable L
     const r = await call(handler, url);
     assert.match(r.json().error, /access code/);
   });
+
+  test(`auth on /api/${name}: a wrong partner key is refused even while the tool is open; keys are trimmed`, async () => {
+    process.env.PARTNER_KEY = 'partner-secret-123';
+    // No ACCESS_CODE: the tool is open, but a partner key that doesn't match says so at once.
+    assert.equal((await call(handler, url)).status, 200, 'the page sends no partner key');
+    for (const wrong of ['wrong-typo', 'partner-secret-12', 'partner-secret-1234', 'x']) {
+      const r = await call(handler, url, { 'x-partner-key': wrong });
+      assert.equal(r.status, 401, wrong);
+      assert.equal(r.json().error, "The partner key doesn't match.");
+    }
+    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
+    // A key saved with a trailing newline (echo key | vercel env add) and a padded header both match.
+    process.env.PARTNER_KEY = 'partner-secret-123\n';
+    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
+    assert.equal((await call(handler, url, { 'x-partner-key': '  partner-secret-123 ' })).status, 200);
+    process.env.ACCESS_CODE = ' crew-code\n';
+    assert.equal((await call(handler, url, { 'x-access-code': 'crew-code' })).status, 200);
+    assert.equal((await call(handler, url, { 'x-partner-key': 'partner-secret-123' })).status, 200);
+    let r = await call(handler, url, { 'x-partner-key': 'wrong-typo' });
+    assert.equal(r.status, 401);
+    assert.equal(r.json().error, "The partner key doesn't match.");
+    // No PARTNER_KEY on the server at all: any partner key is a mismatch.
+    delete process.env.PARTNER_KEY; delete process.env.ACCESS_CODE;
+    r = await call(handler, url, { 'x-partner-key': 'partner-secret-123' });
+    assert.equal(r.status, 401);
+    assert.equal(r.json().error, "The partner key doesn't match.");
+    // A refused call never reaches Google.
+    const before = mock.calls.length;
+    await call(handler, url, { 'x-partner-key': 'nope' });
+    assert.equal(mock.calls.length, before);
+    // Blank settings count as unset.
+    process.env.ACCESS_CODE = '   ';
+    assert.equal((await call(handler, url)).status, 200);
+  });
 }
 
 test('the older endpoints still work through the mock', async () => {
