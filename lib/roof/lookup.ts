@@ -706,6 +706,18 @@ export const roofRequestSchema = z.union([
 ]);
 export type RoofRequest = z.infer<typeof roofRequestSchema>;
 
+/**
+ * A spot typed or linked as "39.6834,-75.7504" (an old Roof Takeoff map-pin link comes over as
+ * ?address=lat,lng), or null for anything else.
+ */
+export function parseLatLng(text: string): LatLng | null {
+  const m = /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(text);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+
 const coordinate = (limit: number) =>
   z.string().trim().min(1).max(24).regex(/^-?\d+(\.\d+)?$/).transform(Number).pipe(z.number().finite().min(-limit).max(limit));
 

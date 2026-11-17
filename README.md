@@ -147,6 +147,9 @@ each item is filled in:
 ### 5. Deploy
 Import the repository in Vercel (framework: Next.js) and set the environment variables.
 `vercel.json` schedules the nightly learning run; the Hobby plan allows one run a day.
+Vercel deploys `main` as soon as it changes, but migrations are applied by hand: apply any new
+migration in Supabase **before** merging the code that uses it (each one is safe for the code
+already running). The roof takeoff on the Roof lookup page needs `20261118000001_roof_lookups_matched.sql`.
 Then on your phone, open `/field` (estimators) or `/crew` (crews) once with signal and use
 **Add to Home Screen**.
 
@@ -206,6 +209,8 @@ POSTGREST_BIN=/path/to/postgrest NODE_PATH=$(npm root -g) \
   have no rate limiting yet. Add Vercel Firewall rate-limit rules for
   `/api/public/*` before launch.
 - The app icons are a placeholder "K". Swap in Koala's logo in `public/icons/`.
+- A satellite lookup another person paid for that day is used again for free, but it shows only
+  in their Recent lookups (row-level security), not in the list of the estimator it was reused for.
 - Rebates, lead scoring, follow-ups and scheduling suggestions are not built yet (Phase 4).
 - The learning loop needs verified jobs before it changes anything: a coefficient moves only
   with the equivalent of at least 3 recent jobs behind it (older jobs count for less), and

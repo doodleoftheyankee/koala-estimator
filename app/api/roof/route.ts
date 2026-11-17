@@ -4,8 +4,8 @@ import { authorize } from '@/lib/server/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { serverEnv } from '@/lib/env';
-import { addressKey, isRoofResult, LOOKUPS_PER_HOUR, pickSaved, pinBox, RESULT_FORMAT, REUSE_HOURS, roofRequestSchema, type LatLng, type SavedLookup } from '@/lib/roof/lookup';
-import { matchedKey } from '@/lib/roof/address';
+import { addressKey, isRoofResult, LOOKUPS_PER_HOUR, parseLatLng, RESULT_FORMAT, roofRequestSchema } from '@/lib/roof/lookup';
+import { finishLookup, savedLookup } from '@/lib/roof/log';
 import { recentLookups, RECENT_LIMIT, type RecentRow } from '@/lib/roof/recent';
 import { fetchTakeoff, NOT_CONFIGURED, RoofLookupError } from '@/lib/roof/takeoff';
 
@@ -14,9 +14,9 @@ import { fetchTakeoff, NOT_CONFIGURED, RoofLookupError } from '@/lib/roof/takeof
 // roof faces, outline and roof edges. It is for an area of an estimate, or for the Roof lookup page
 // (no estimate or area). A finished lookup of the same house from the last day, by anyone, is sent
 // back instead of paying Google again, unless the estimator asked to look it up again (fresh): the
-// same address as typed, the address Google matched for it (an estimate started from a lookup), or a
-// pin within about 2 m. Every paid lookup is logged in roof_lookups, written with the service role
-// only, after the checks here.
+// same address as typed (or written the way an estimate sends it), the address Google matched for it
+// (an estimate started from a lookup), or a pin within about 2 m (lib/roof/log). Every paid lookup
+// is logged in roof_lookups, written with the service role only, after the checks here.
 // GET: whether the lookup is switched on; ?recent=1 the caller's recent finished lookups (the
 // owner's: everyone's); ?id= one of them as it was looked up. Both read through the person's own
 // client, so row-level security decides what they see.
@@ -28,35 +28,6 @@ const ROLES = ['owner', 'office', 'estimator'] as const;
 
 function fail(error: string, status: number, code = 'invalid') {
   return NextResponse.json({ error, code }, { status });
-}
-
-type Admin = ReturnType<typeof createAdminClient>;
-
-/**
- * The newest finished lookup of this address or pin from the last day, or null (also when the check
- * fails). An address is matched as typed first, then against the address Google matched.
- */
-async function savedLookup(admin: Admin, address: string | null, pin: LatLng | null) {
-  const since = new Date(Date.now() - REUSE_HOURS * 60 * 60 * 1000).toISOString();
-  const recent = () => admin.from('roof_lookups').select('id, created_at, result, pin_lat, pin_lng').eq('status', 'done').gte('created_at', since);
-  const queries = [];
-  if (address !== null) {
-    const key = addressKey(address);
-    queries.push(recent().eq('address_key', key), recent().eq('matched_key', key));
-  } else if (pin) {
-    const { dLat, dLng } = pinBox(pin);
-    queries.push(recent().gte('pin_lat', pin.lat - dLat).lte('pin_lat', pin.lat + dLat).gte('pin_lng', pin.lng - dLng).lte('pin_lng', pin.lng + dLng));
-  }
-  for (const q of queries) {
-    const { data, error } = await q.order('created_at', { ascending: false }).limit(5);
-    if (error) {
-      console.error('[roof] could not check for a saved lookup', error.message);
-      return null;
-    }
-    const saved = pickSaved((data ?? []) as SavedLookup[], pin);
-    if (saved) return saved;
-  }
-  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -74,8 +45,10 @@ export async function POST(request: NextRequest) {
     return fail(NOT_CONFIGURED, 501, 'not_configured');
   }
   const { estimateId, areaId, fresh } = body.data;
-  const address = 'address' in body.data ? body.data.address : null;
-  const pin = 'lat' in body.data ? { lat: body.data.lat, lng: body.data.lng } : null;
+  // An address that is only "lat,lng" (an old Roof Takeoff map-pin link) is looked up as that spot.
+  const typedPin = 'address' in body.data ? parseLatLng(body.data.address) : null;
+  const address = 'address' in body.data && !typedPin ? body.data.address : null;
+  const pin = 'lat' in body.data ? { lat: body.data.lat, lng: body.data.lng } : typedPin;
   const admin = createAdminClient();
 
   // The same house looked up in the last day: use it again (no Google calls, no new row, not
@@ -127,8 +100,7 @@ export async function POST(request: NextRequest) {
     return fail(err.message, err.status, err.code);
   }
 
-  const { error: logError } = await admin.from('roof_lookups').update({ status: 'done', result, matched_key: matchedKey(result) }).eq('id', lookupId);
-  if (logError) console.error('[roof] could not log the lookup', logError.message);
+  await finishLookup(admin, lookupId, result);
   return NextResponse.json({ lookupId, result, reused: false, lookedUpAt: reserved.created_at as string });
 }
 

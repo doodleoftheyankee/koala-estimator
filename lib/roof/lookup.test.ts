@@ -33,6 +33,7 @@ import {
   RESULT_FORMAT,
   roofFigures,
   roofJob,
+  parseLatLng,
   roofRequestSchema,
   roundFt,
   roundSqft,
@@ -717,6 +718,15 @@ describe('requests', () => {
     expect(roofRequestSchema.safeParse({ estimateId: null, address: '3 Cross Gable Ct' }).success).toBe(false);
     expect(roofRequestSchema.safeParse({ address: '3 Cross Gable Ct', extra: 1 }).success).toBe(false);
     expect(roofRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('reads a spot sent as text ("lat,lng", from an old Roof Takeoff map-pin link)', () => {
+    expect(parseLatLng('39.6834,-75.7504')).toEqual({ lat: 39.6834, lng: -75.7504 });
+    expect(parseLatLng(' 39.68347 , -75.75039 ')).toEqual({ lat: 39.68347, lng: -75.75039 });
+    expect(parseLatLng('-33.8,151')).toEqual({ lat: -33.8, lng: 151 });
+    for (const odd of ['12 Elkton Rd, Newark, DE 19711', '91.2,-75.75', '39.68,-181', '39.68', '39.68,-75.75,3', 'Newark, 19711', '39.68 -75.75', '']) {
+      expect(parseLatLng(odd), odd).toBeNull();
+    }
   });
 
   it('checks a lookup of a spot on the map: finite, latitude within 90 and longitude within 180', () => {
