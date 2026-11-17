@@ -68,6 +68,13 @@ export function EstimateList({
             </Button>
           </div>
         </div>
+        <a
+          href="/field/roof"
+          className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-900 ring-1 ring-slate-300 hover:bg-slate-50 active:bg-slate-50"
+        >
+          🛰️ Roof lookup
+          <span className="font-normal text-slate-500">any address, no estimate needed</span>
+        </a>
         {!bundle ? (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-900">
             Pricing not downloaded yet. Open this screen once with signal so estimates can be priced offline.
