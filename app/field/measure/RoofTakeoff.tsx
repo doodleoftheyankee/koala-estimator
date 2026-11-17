@@ -431,7 +431,7 @@ export function Fact({ label, value }: { label: string; value: string }) {
 }
 
 /** A card that opens and closes; the line under the title says what is inside while it is closed. */
-function Section({ title, summary, startOpen, children }: { title: string; summary: string; startOpen: boolean; children: ReactNode }) {
+export function Section({ title, summary, startOpen, children }: { title: string; summary: string; startOpen: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(startOpen);
   const id = useId();
   return (
@@ -456,7 +456,7 @@ function Section({ title, summary, startOpen, children }: { title: string; summa
   );
 }
 
-function Tile({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string }) {
+export function Tile({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string }) {
   return (
     <div className="min-w-0 rounded-xl bg-slate-50 px-3 py-2">
       <div className="text-xs font-semibold text-slate-600">{label}</div>

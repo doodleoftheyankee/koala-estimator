@@ -1,18 +1,40 @@
 'use client';
 // Full-screen measuring for one estimate area (the AtticScan tools). Every change is saved to the
 // draft as it happens; when the measurement is complete its net becomes the area's square feet.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { AreaDraft } from '@/lib/sync/draft';
 import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type Measurement } from '@/lib/measure/measure';
 import { parsePitch } from '@/lib/measure/units';
 import { Alert, Button, Card, Chips, Field, Input, Toggle } from '@/components/ui';
 import { LengthInput, ShapeEditor } from './ShapeEditor';
+import { PitchPhotoSheet } from './PitchPhoto';
 
 const sq = (n: number) => Math.round(n).toLocaleString('en-US');
 
 function factorText(pitch: string): string {
   const p = parsePitch(pitch);
   return p === null ? '' : `×${pitchFactor(p).toFixed(3)}`;
+}
+
+/** The two pitch fields, by the words the photo sheet uses for them. */
+const PITCH_FIELDS = { pitch: 'roof pitch', pitch2: 'second pitch' } as const;
+type PitchField = keyof typeof PITCH_FIELDS;
+
+/** A pitch field with its factor, and "Pitch from a photo" under it. */
+function PitchInput({ label, value, placeholder, field, onChange, onPhoto }: { label: string; value: string; placeholder: string; field: PitchField; onChange: (v: string) => void; onPhoto: () => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end gap-3">
+        <Field label={label} className="flex-1">
+          <Input inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        </Field>
+        <span className="mb-3 w-20 font-bold text-brand-800">{factorText(value)}</span>
+      </div>
+      <Button variant="secondary" className="w-full" onClick={onPhoto} aria-label={`Pitch from a photo, for the ${PITCH_FIELDS[field]}`}>
+        📷 Pitch from a photo
+      </Button>
+    </div>
+  );
 }
 
 export function MeasureSheet({
@@ -31,6 +53,8 @@ export function MeasureSheet({
   const r = computeMeasurement(m);
   const set = (patch: Partial<Measurement>) => onChange({ ...m, ...patch });
   const isWalls = m.mode === 'walls';
+  /** The pitch field "Pitch from a photo" is open for. */
+  const [photoFor, setPhotoFor] = useState<PitchField | null>(null);
 
   // Behind the sheet the page shouldn't scroll; Escape closes it on a keyboard.
   useEffect(() => {
@@ -90,21 +114,11 @@ export function MeasureSheet({
         {m.mode === 'roofline' ? (
           <Card className="space-y-3">
             <h3 className="font-semibold">Pitch</h3>
-            <div className="flex items-end gap-3">
-              <Field label="Roof pitch (rise / 12)" className="flex-1">
-                <Input inputMode="decimal" value={m.pitch} placeholder="e.g. 6/12" onChange={(e) => set({ pitch: e.target.value })} />
-              </Field>
-              <span className="mb-3 w-20 font-bold text-brand-800">{factorText(m.pitch)}</span>
-            </div>
+            <PitchInput label="Roof pitch (rise / 12)" value={m.pitch} placeholder="e.g. 6/12" field="pitch" onChange={(pitch) => set({ pitch })} onPhoto={() => setPhotoFor('pitch')} />
             <Toggle checked={m.twoSlope} onChange={(twoSlope) => set({ twoSlope })} label="Two different slopes" />
             {m.twoSlope ? (
               <>
-                <div className="flex items-end gap-3">
-                  <Field label="Second pitch (rise / 12)" className="flex-1">
-                    <Input inputMode="decimal" value={m.pitch2} placeholder="e.g. 12/12" onChange={(e) => set({ pitch2: e.target.value })} />
-                  </Field>
-                  <span className="mb-3 w-20 font-bold text-brand-800">{factorText(m.pitch2)}</span>
-                </div>
+                <PitchInput label="Second pitch (rise / 12)" value={m.pitch2} placeholder="e.g. 12/12" field="pitch2" onChange={(pitch2) => set({ pitch2 })} onPhoto={() => setPhotoFor('pitch2')} />
                 <Field label="% of footprint at the first pitch">
                   <Input inputMode="decimal" value={m.splitPct} onChange={(e) => set({ splitPct: e.target.value })} />
                 </Field>
@@ -172,6 +186,17 @@ export function MeasureSheet({
           Remove this measurement
         </Button>
       </div>
+
+      {photoFor ? (
+        <PitchPhotoSheet
+          field={PITCH_FIELDS[photoFor]}
+          onUse={(pitch) => {
+            set({ [photoFor]: pitch });
+            setPhotoFor(null);
+          }}
+          onClose={() => setPhotoFor(null)}
+        />
+      ) : null}
     </div>
   );
 }
