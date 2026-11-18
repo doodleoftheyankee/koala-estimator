@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 }
 
 /** The parts of a stored result the recent list needs (not the outline, faces or edges). */
-const RECENT_COLUMNS = 'id, created_at, created_by, address, pin_lat, pin_lng, matched:result->address, roof:result->roofM2, floor:result->takeoff->floorM2, segments:result->segments';
+const RECENT_COLUMNS = 'id, created_at, created_by, address, pin_lat, pin_lng, matched:result->address, point:result->point, roof:result->roofM2, floor:result->takeoff->floorM2, segments:result->segments';
 
 /**
  * GET → whether the lookup is switched on, so the app can say so before anyone waits.
