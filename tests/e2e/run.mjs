@@ -282,6 +282,22 @@ check(photoList.photos?.length === 1 && photoList.photos[0].url.includes('/objec
 await page.screenshot({ path: SHOTS + '05-sent.png', fullPage: true });
 console.log('  link', link);
 
+step('back on the list, the sent quote stays Sent, and the waiting total is the sum of its rows');
+await page.getByRole('button', { name: 'Back to estimates' }).click();
+const sentRow = page.locator('button[data-status=sent]', { hasText: 'Pat Lee' });
+await sentRow.getByText('Sent', { exact: true }).waitFor();
+check((await sentRow.count()) === 1, 'the list shows the quote it just sent as Sent');
+await page.getByRole('button', { name: 'Sync now' }).click();
+await page.waitForTimeout(4000); // a full sync: push, then pull
+check(psql(`select status from estimates where id = '${estId}'`) === 'sent', 'opening and leaving a sent quote without changes keeps it Sent on the server');
+{
+  const money = (t) => Number(t.replace(/[^0-9.]/g, ''));
+  const waitingPrices = await page.locator('button[data-status=sent], button[data-status=viewed]').locator('[data-testid=row-price]').allInnerTexts();
+  const total = await page.getByTestId('waiting-total').innerText();
+  check(waitingPrices.length > 0 && money(total) === waitingPrices.reduce((s, p) => s + money(p), 0), `"Waiting to sign" ${total} is the sum of the sent rows' prices (${waitingPrices.join(' + ')})`);
+}
+await page.screenshot({ path: SHOTS + '05b-list-sent.png' });
+
 step('customer signs');
 const cust = await browser.newContext(phone);
 const cp = await cust.newPage();
