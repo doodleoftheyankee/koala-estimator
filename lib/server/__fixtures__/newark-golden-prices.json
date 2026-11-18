@@ -1,0 +1,3785 @@
+{
+ "hash": "48724e6939fc1294",
+ "prices": {
+  "attic/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 336.55
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 440.8
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 440.8
+   }
+  },
+  "attic/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 400.72
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 504.97
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 504.97
+   }
+  },
+  "attic/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 529.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 633.3
+   }
+  },
+  "attic/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 593.22
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 697.47
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 697.47
+   }
+  },
+  "attic/150/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 245.9
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 363.8
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 633.3
+   }
+  },
+  "attic/150/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 310.07
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 427.97
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 697.47
+   }
+  },
+  "attic/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 529.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 633.3
+   }
+  },
+  "attic/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 593.22
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 697.47
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 697.47
+   }
+  },
+  "attic/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 355.45
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 474.75
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 474.75
+   }
+  },
+  "attic/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 419.62
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 538.92
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 538.92
+   }
+  },
+  "attic/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 584.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 704
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 704
+   }
+  },
+  "attic/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 648.87
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 768.17
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 768.17
+   }
+  },
+  "attic/150/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 257.45
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 390.75
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 704
+   }
+  },
+  "attic/150/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 321.62
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 454.92
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 768.17
+   }
+  },
+  "attic/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 584.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 704
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 704
+   }
+  },
+  "attic/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 648.87
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 768.17
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 768.17
+   }
+  },
+  "attic/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 2895,
+    "directCost": 1508.35
+   },
+   "better": {
+    "price": 4195,
+    "directCost": 2185
+   },
+   "best": {
+    "price": 4195,
+    "directCost": 2185
+   }
+  },
+  "attic/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 3020,
+    "directCost": 1572.52
+   },
+   "better": {
+    "price": 4440,
+    "directCost": 2313.33
+   },
+   "best": {
+    "price": 4440,
+    "directCost": 2313.33
+   }
+  },
+  "attic/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 5150,
+    "directCost": 2683.35
+   },
+   "better": {
+    "price": 6360,
+    "directCost": 3315
+   },
+   "best": {
+    "price": 6360,
+    "directCost": 3315
+   }
+  },
+  "attic/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 5515,
+    "directCost": 2875.85
+   },
+   "better": {
+    "price": 6730,
+    "directCost": 3507.5
+   },
+   "best": {
+    "price": 6730,
+    "directCost": 3507.5
+   }
+  },
+  "attic/1000/easy/R19/keep/blank": {
+   "good": {
+    "price": 1850,
+    "directCost": 963.75
+   },
+   "better": {
+    "price": 3175,
+    "directCost": 1654.4
+   },
+   "best": {
+    "price": 6360,
+    "directCost": 3315
+   }
+  },
+  "attic/1000/easy/R19/keep/25": {
+   "good": {
+    "price": 1975,
+    "directCost": 1027.92
+   },
+   "better": {
+    "price": 3420,
+    "directCost": 1782.73
+   },
+   "best": {
+    "price": 6730,
+    "directCost": 3507.5
+   }
+  },
+  "attic/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 5150,
+    "directCost": 2683.35
+   },
+   "better": {
+    "price": 6360,
+    "directCost": 3315
+   },
+   "best": {
+    "price": 6360,
+    "directCost": 3315
+   }
+  },
+  "attic/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 5515,
+    "directCost": 2875.85
+   },
+   "better": {
+    "price": 6730,
+    "directCost": 3507.5
+   },
+   "best": {
+    "price": 6730,
+    "directCost": 3507.5
+   }
+  },
+  "attic/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 3220,
+    "directCost": 1678.3
+   },
+   "better": {
+    "price": 4625,
+    "directCost": 2411.8
+   },
+   "best": {
+    "price": 4625,
+    "directCost": 2411.8
+   }
+  },
+  "attic/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 3465,
+    "directCost": 1806.63
+   },
+   "better": {
+    "price": 4875,
+    "directCost": 2540.13
+   },
+   "best": {
+    "price": 4875,
+    "directCost": 2540.13
+   }
+  },
+  "attic/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 5945,
+    "directCost": 3098.3
+   },
+   "better": {
+    "price": 7350,
+    "directCost": 3831.8
+   },
+   "best": {
+    "price": 7350,
+    "directCost": 3831.8
+   }
+  },
+  "attic/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 6435,
+    "directCost": 3354.97
+   },
+   "better": {
+    "price": 7845,
+    "directCost": 4088.47
+   },
+   "best": {
+    "price": 7845,
+    "directCost": 4088.47
+   }
+  },
+  "attic/1000/difficult/R19/keep/blank": {
+   "good": {
+    "price": 2000,
+    "directCost": 1040.4
+   },
+   "better": {
+    "price": 3515,
+    "directCost": 1832.55
+   },
+   "best": {
+    "price": 7350,
+    "directCost": 3831.8
+   }
+  },
+  "attic/1000/difficult/R19/keep/25": {
+   "good": {
+    "price": 2120,
+    "directCost": 1104.57
+   },
+   "better": {
+    "price": 3765,
+    "directCost": 1960.88
+   },
+   "best": {
+    "price": 7845,
+    "directCost": 4088.47
+   }
+  },
+  "attic/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 5945,
+    "directCost": 3098.3
+   },
+   "better": {
+    "price": 7350,
+    "directCost": 3831.8
+   },
+   "best": {
+    "price": 7350,
+    "directCost": 3831.8
+   }
+  },
+  "attic/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 6435,
+    "directCost": 3354.97
+   },
+   "better": {
+    "price": 7845,
+    "directCost": 4088.47
+   },
+   "best": {
+    "price": 7845,
+    "directCost": 4088.47
+   }
+  },
+  "attic/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 6705,
+    "directCost": 3495.5
+   },
+   "better": {
+    "price": 9755,
+    "directCost": 5085.5
+   },
+   "best": {
+    "price": 9755,
+    "directCost": 5085.5
+   }
+  },
+  "attic/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 6950,
+    "directCost": 3623.83
+   },
+   "better": {
+    "price": 10245,
+    "directCost": 5342.17
+   },
+   "best": {
+    "price": 10245,
+    "directCost": 5342.17
+   }
+  },
+  "attic/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 11950,
+    "directCost": 6230.5
+   },
+   "better": {
+    "price": 14915,
+    "directCost": 7775.5
+   },
+   "best": {
+    "price": 14915,
+    "directCost": 7775.5
+   }
+  },
+  "attic/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 12690,
+    "directCost": 6615.5
+   },
+   "better": {
+    "price": 15775,
+    "directCost": 8224.67
+   },
+   "best": {
+    "price": 15775,
+    "directCost": 8224.67
+   }
+  },
+  "attic/2400/easy/R19/keep/blank": {
+   "good": {
+    "price": 4215,
+    "directCost": 2197
+   },
+   "better": {
+    "price": 7205,
+    "directCost": 3756
+   },
+   "best": {
+    "price": 14915,
+    "directCost": 7775.5
+   }
+  },
+  "attic/2400/easy/R19/keep/25": {
+   "good": {
+    "price": 4460,
+    "directCost": 2325.33
+   },
+   "better": {
+    "price": 7575,
+    "directCost": 3948.5
+   },
+   "best": {
+    "price": 15775,
+    "directCost": 8224.67
+   }
+  },
+  "attic/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 11950,
+    "directCost": 6230.5
+   },
+   "better": {
+    "price": 14915,
+    "directCost": 7775.5
+   },
+   "best": {
+    "price": 14915,
+    "directCost": 7775.5
+   }
+  },
+  "attic/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 12690,
+    "directCost": 6615.5
+   },
+   "better": {
+    "price": 15775,
+    "directCost": 8224.67
+   },
+   "best": {
+    "price": 15775,
+    "directCost": 8224.67
+   }
+  },
+  "attic/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 7365,
+    "directCost": 3840.45
+   },
+   "better": {
+    "price": 10885,
+    "directCost": 5674.4
+   },
+   "best": {
+    "price": 10885,
+    "directCost": 5674.4
+   }
+  },
+  "attic/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 7735,
+    "directCost": 4032.95
+   },
+   "better": {
+    "price": 11500,
+    "directCost": 5995.23
+   },
+   "best": {
+    "price": 11500,
+    "directCost": 5995.23
+   }
+  },
+  "attic/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 13825,
+    "directCost": 7208.45
+   },
+   "better": {
+    "price": 17345,
+    "directCost": 9042.4
+   },
+   "best": {
+    "price": 17345,
+    "directCost": 9042.4
+   }
+  },
+  "attic/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 14810,
+    "directCost": 7721.78
+   },
+   "better": {
+    "price": 18575,
+    "directCost": 9684.07
+   },
+   "best": {
+    "price": 18575,
+    "directCost": 9684.07
+   }
+  },
+  "attic/2400/difficult/R19/keep/blank": {
+   "good": {
+    "price": 4570,
+    "directCost": 2380.75
+   },
+   "better": {
+    "price": 8110,
+    "directCost": 4228.7
+   },
+   "best": {
+    "price": 17345,
+    "directCost": 9042.4
+   }
+  },
+  "attic/2400/difficult/R19/keep/25": {
+   "good": {
+    "price": 4815,
+    "directCost": 2509.08
+   },
+   "better": {
+    "price": 8605,
+    "directCost": 4485.37
+   },
+   "best": {
+    "price": 18575,
+    "directCost": 9684.07
+   }
+  },
+  "attic/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 13825,
+    "directCost": 7208.45
+   },
+   "better": {
+    "price": 17345,
+    "directCost": 9042.4
+   },
+   "best": {
+    "price": 17345,
+    "directCost": 9042.4
+   }
+  },
+  "attic/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 14810,
+    "directCost": 7721.78
+   },
+   "better": {
+    "price": 18575,
+    "directCost": 9684.07
+   },
+   "best": {
+    "price": 18575,
+    "directCost": 9684.07
+   }
+  },
+  "walls/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 170.65
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 302.26
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 518.09
+   }
+  },
+  "walls/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 234.82
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 366.43
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 582.26
+   }
+  },
+  "walls/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 389.4
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 521.01
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 736.84
+   }
+  },
+  "walls/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 453.57
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 585.18
+   },
+   "best": {
+    "price": 1540,
+    "directCost": 801.01
+   }
+  },
+  "walls/150/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 130.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 161.68
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 168.44
+   }
+  },
+  "walls/150/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 194.22
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 225.85
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 232.61
+   }
+  },
+  "walls/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 389.4
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 521.01
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 736.84
+   }
+  },
+  "walls/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 453.57
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 585.18
+   },
+   "best": {
+    "price": 1540,
+    "directCost": 801.01
+   }
+  },
+  "walls/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 175.55
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 328.16
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 552.04
+   }
+  },
+  "walls/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 239.72
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 392.33
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 616.21
+   }
+  },
+  "walls/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 440.15
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 592.76
+   },
+   "best": {
+    "price": 1570,
+    "directCost": 816.64
+   }
+  },
+  "walls/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 504.32
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 656.93
+   },
+   "best": {
+    "price": 1690,
+    "directCost": 880.81
+   }
+  },
+  "walls/150/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 130.4
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 163.78
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 170.19
+   }
+  },
+  "walls/150/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 194.57
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 227.95
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 234.36
+   }
+  },
+  "walls/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 440.15
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 592.76
+   },
+   "best": {
+    "price": 1570,
+    "directCost": 816.64
+   }
+  },
+  "walls/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 504.32
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 656.93
+   },
+   "best": {
+    "price": 1690,
+    "directCost": 880.81
+   }
+  },
+  "walls/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 473.05
+   },
+   "better": {
+    "price": 2325,
+    "directCost": 1210
+   },
+   "best": {
+    "price": 5080,
+    "directCost": 2648.81
+   }
+  },
+  "walls/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 537.22
+   },
+   "better": {
+    "price": 2570,
+    "directCost": 1338.33
+   },
+   "best": {
+    "price": 5330,
+    "directCost": 2777.14
+   }
+  },
+  "walls/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 3500,
+    "directCost": 1823.05
+   },
+   "better": {
+    "price": 4910,
+    "directCost": 2560
+   },
+   "best": {
+    "price": 7670,
+    "directCost": 3998.81
+   }
+  },
+  "walls/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 3870,
+    "directCost": 2015.55
+   },
+   "better": {
+    "price": 5405,
+    "directCost": 2816.67
+   },
+   "best": {
+    "price": 8165,
+    "directCost": 4255.48
+   }
+  },
+  "walls/1000/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 150.35
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 228.34
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 272.58
+   }
+  },
+  "walls/1000/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 214.52
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 292.51
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 336.75
+   }
+  },
+  "walls/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 3500,
+    "directCost": 1823.05
+   },
+   "better": {
+    "price": 4910,
+    "directCost": 2560
+   },
+   "best": {
+    "price": 7670,
+    "directCost": 3998.81
+   }
+  },
+  "walls/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 3870,
+    "directCost": 2015.55
+   },
+   "better": {
+    "price": 5405,
+    "directCost": 2816.67
+   },
+   "best": {
+    "price": 8165,
+    "directCost": 4255.48
+   }
+  },
+  "walls/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 504.9
+   },
+   "better": {
+    "price": 2650,
+    "directCost": 1381.5
+   },
+   "best": {
+    "price": 5515,
+    "directCost": 2874.91
+   }
+  },
+  "walls/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 569.07
+   },
+   "better": {
+    "price": 2900,
+    "directCost": 1509.83
+   },
+   "best": {
+    "price": 5760,
+    "directCost": 3003.24
+   }
+  },
+  "walls/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 4145,
+    "directCost": 2161.15
+   },
+   "better": {
+    "price": 5915,
+    "directCost": 3082.75
+   },
+   "best": {
+    "price": 8780,
+    "directCost": 4576.16
+   }
+  },
+  "walls/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 4515,
+    "directCost": 2353.65
+   },
+   "better": {
+    "price": 6530,
+    "directCost": 3403.58
+   },
+   "best": {
+    "price": 9395,
+    "directCost": 4896.99
+   }
+  },
+  "walls/1000/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 152.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 241.64
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 284.13
+   }
+  },
+  "walls/1000/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 216.97
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 305.81
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 348.3
+   }
+  },
+  "walls/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 4145,
+    "directCost": 2161.15
+   },
+   "better": {
+    "price": 5915,
+    "directCost": 3082.75
+   },
+   "best": {
+    "price": 8780,
+    "directCost": 4576.16
+   }
+  },
+  "walls/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 4515,
+    "directCost": 2353.65
+   },
+   "better": {
+    "price": 6530,
+    "directCost": 3403.58
+   },
+   "best": {
+    "price": 9395,
+    "directCost": 4896.99
+   }
+  },
+  "walls/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 1880,
+    "directCost": 979.5
+   },
+   "better": {
+    "price": 5135,
+    "directCost": 2676
+   },
+   "best": {
+    "price": 11845,
+    "directCost": 6174.33
+   }
+  },
+  "walls/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 2005,
+    "directCost": 1043.67
+   },
+   "better": {
+    "price": 5505,
+    "directCost": 2868.5
+   },
+   "best": {
+    "price": 12335,
+    "directCost": 6431
+   }
+  },
+  "walls/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 7930,
+    "directCost": 4134.5
+   },
+   "better": {
+    "price": 11185,
+    "directCost": 5831
+   },
+   "best": {
+    "price": 17895,
+    "directCost": 9329.33
+   }
+  },
+  "walls/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 8545,
+    "directCost": 4455.33
+   },
+   "better": {
+    "price": 12045,
+    "directCost": 6280.17
+   },
+   "best": {
+    "price": 18875,
+    "directCost": 9842.66
+   }
+  },
+  "walls/2400/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 188.5
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 337.95
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 444.61
+   }
+  },
+  "walls/2400/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 252.67
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 402.12
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 508.78
+   }
+  },
+  "walls/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 7930,
+    "directCost": 4134.5
+   },
+   "better": {
+    "price": 11185,
+    "directCost": 5831
+   },
+   "best": {
+    "price": 17895,
+    "directCost": 9329.33
+   }
+  },
+  "walls/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 8545,
+    "directCost": 4455.33
+   },
+   "better": {
+    "price": 12045,
+    "directCost": 6280.17
+   },
+   "best": {
+    "price": 18875,
+    "directCost": 9842.66
+   }
+  },
+  "walls/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 2030,
+    "directCost": 1056.85
+   },
+   "better": {
+    "price": 6010,
+    "directCost": 3132.6
+   },
+   "best": {
+    "price": 12970,
+    "directCost": 6762.18
+   }
+  },
+  "walls/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 2150,
+    "directCost": 1121.02
+   },
+   "better": {
+    "price": 6500,
+    "directCost": 3389.27
+   },
+   "best": {
+    "price": 13585,
+    "directCost": 7083.01
+   }
+  },
+  "walls/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 9660,
+    "directCost": 5036.85
+   },
+   "better": {
+    "price": 13640,
+    "directCost": 7112.6
+   },
+   "best": {
+    "price": 20600,
+    "directCost": 10742.18
+   }
+  },
+  "walls/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 10525,
+    "directCost": 5486.02
+   },
+   "better": {
+    "price": 14870,
+    "directCost": 7754.27
+   },
+   "best": {
+    "price": 21955,
+    "directCost": 11448.01
+   }
+  },
+  "walls/2400/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 194.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 369.8
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 471.56
+   }
+  },
+  "walls/2400/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 258.97
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 433.97
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 535.73
+   }
+  },
+  "walls/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 9660,
+    "directCost": 5036.85
+   },
+   "better": {
+    "price": 13640,
+    "directCost": 7112.6
+   },
+   "best": {
+    "price": 20600,
+    "directCost": 10742.18
+   }
+  },
+  "walls/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 10525,
+    "directCost": 5486.02
+   },
+   "better": {
+    "price": 14870,
+    "directCost": 7754.27
+   },
+   "best": {
+    "price": 21955,
+    "directCost": 11448.01
+   }
+  },
+  "crawlspace/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 276.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 499.66
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 563.66
+   }
+  },
+  "crawlspace/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 341.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 563.83
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 627.83
+   }
+  },
+  "crawlspace/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 521.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 744.66
+   },
+   "best": {
+    "price": 1555,
+    "directCost": 808.66
+   }
+  },
+  "crawlspace/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 586.05
+   },
+   "better": {
+    "price": 1555,
+    "directCost": 808.83
+   },
+   "best": {
+    "price": 1675,
+    "directCost": 872.83
+   }
+  },
+  "crawlspace/150/easy/R19/keep/blank": {
+   "best": {
+    "price": 1500,
+    "directCost": 109
+   }
+  },
+  "crawlspace/150/easy/R19/keep/25": {
+   "best": {
+    "price": 1500,
+    "directCost": 173.17
+   }
+  },
+  "crawlspace/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 521.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 744.66
+   },
+   "best": {
+    "price": 1555,
+    "directCost": 808.66
+   }
+  },
+  "crawlspace/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 586.05
+   },
+   "better": {
+    "price": 1555,
+    "directCost": 808.83
+   },
+   "best": {
+    "price": 1675,
+    "directCost": 872.83
+   }
+  },
+  "crawlspace/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 304.53
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 531.86
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 607.06
+   }
+  },
+  "crawlspace/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 368.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 596.03
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 671.23
+   }
+  },
+  "crawlspace/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 604.83
+   },
+   "better": {
+    "price": 1600,
+    "directCost": 832.16
+   },
+   "best": {
+    "price": 1830,
+    "directCost": 952.36
+   }
+  },
+  "crawlspace/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 669
+   },
+   "better": {
+    "price": 1720,
+    "directCost": 896.33
+   },
+   "best": {
+    "price": 2075,
+    "directCost": 1080.69
+   }
+  },
+  "crawlspace/150/difficult/R19/keep/blank": {
+   "best": {
+    "price": 1500,
+    "directCost": 120.2
+   }
+  },
+  "crawlspace/150/difficult/R19/keep/25": {
+   "best": {
+    "price": 1500,
+    "directCost": 184.37
+   }
+  },
+  "crawlspace/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 604.83
+   },
+   "better": {
+    "price": 1600,
+    "directCost": 832.16
+   },
+   "best": {
+    "price": 1830,
+    "directCost": 952.36
+   }
+  },
+  "crawlspace/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 669
+   },
+   "better": {
+    "price": 1720,
+    "directCost": 896.33
+   },
+   "best": {
+    "price": 2075,
+    "directCost": 1080.69
+   }
+  },
+  "crawlspace/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 2760,
+    "directCost": 1437.5
+   },
+   "better": {
+    "price": 4845,
+    "directCost": 2526.19
+   },
+   "best": {
+    "price": 5475,
+    "directCost": 2853.69
+   }
+  },
+  "crawlspace/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 3005,
+    "directCost": 1565.83
+   },
+   "better": {
+    "price": 5095,
+    "directCost": 2654.52
+   },
+   "best": {
+    "price": 5720,
+    "directCost": 2982.02
+   }
+  },
+  "crawlspace/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 5685,
+    "directCost": 2962.5
+   },
+   "better": {
+    "price": 7770,
+    "directCost": 4051.19
+   },
+   "best": {
+    "price": 8485,
+    "directCost": 4423.69
+   }
+  },
+  "crawlspace/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 6175,
+    "directCost": 3219.17
+   },
+   "better": {
+    "price": 8265,
+    "directCost": 4307.86
+   },
+   "best": {
+    "price": 9100,
+    "directCost": 4744.52
+   }
+  },
+  "crawlspace/1000/easy/R19/keep/blank": {
+   "best": {
+    "price": 1500,
+    "directCost": 372.5
+   }
+  },
+  "crawlspace/1000/easy/R19/keep/25": {
+   "best": {
+    "price": 1500,
+    "directCost": 436.67
+   }
+  },
+  "crawlspace/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 5685,
+    "directCost": 2962.5
+   },
+   "better": {
+    "price": 7770,
+    "directCost": 4051.19
+   },
+   "best": {
+    "price": 8485,
+    "directCost": 4423.69
+   }
+  },
+  "crawlspace/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 6175,
+    "directCost": 3219.17
+   },
+   "better": {
+    "price": 8265,
+    "directCost": 4307.86
+   },
+   "best": {
+    "price": 9100,
+    "directCost": 4744.52
+   }
+  },
+  "crawlspace/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 3110,
+    "directCost": 1621.25
+   },
+   "better": {
+    "price": 5260,
+    "directCost": 2741.09
+   },
+   "best": {
+    "price": 6115,
+    "directCost": 3187.09
+   }
+  },
+  "crawlspace/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 3360,
+    "directCost": 1749.58
+   },
+   "better": {
+    "price": 5505,
+    "directCost": 2869.42
+   },
+   "best": {
+    "price": 6485,
+    "directCost": 3379.59
+   }
+  },
+  "crawlspace/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 6825,
+    "directCost": 3558.75
+   },
+   "better": {
+    "price": 8975,
+    "directCost": 4678.59
+   },
+   "best": {
+    "price": 9830,
+    "directCost": 5124.59
+   }
+  },
+  "crawlspace/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 7440,
+    "directCost": 3879.58
+   },
+   "better": {
+    "price": 9590,
+    "directCost": 4999.42
+   },
+   "best": {
+    "price": 10570,
+    "directCost": 5509.59
+   }
+  },
+  "crawlspace/1000/difficult/R19/keep/blank": {
+   "best": {
+    "price": 1500,
+    "directCost": 446
+   }
+  },
+  "crawlspace/1000/difficult/R19/keep/25": {
+   "best": {
+    "price": 1500,
+    "directCost": 510.17
+   }
+  },
+  "crawlspace/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 6825,
+    "directCost": 3558.75
+   },
+   "better": {
+    "price": 8975,
+    "directCost": 4678.59
+   },
+   "best": {
+    "price": 9830,
+    "directCost": 5124.59
+   }
+  },
+  "crawlspace/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 7440,
+    "directCost": 3879.58
+   },
+   "better": {
+    "price": 9590,
+    "directCost": 4999.42
+   },
+   "best": {
+    "price": 10570,
+    "directCost": 5509.59
+   }
+  },
+  "crawlspace/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 6370,
+    "directCost": 3320
+   },
+   "better": {
+    "price": 11280,
+    "directCost": 5879.67
+   },
+   "best": {
+    "price": 12825,
+    "directCost": 6686.17
+   }
+  },
+  "crawlspace/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 6740,
+    "directCost": 3512.5
+   },
+   "better": {
+    "price": 11770,
+    "directCost": 6136.34
+   },
+   "best": {
+    "price": 13440,
+    "directCost": 7007
+   }
+  },
+  "crawlspace/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 13310,
+    "directCost": 6940
+   },
+   "better": {
+    "price": 18220,
+    "directCost": 9499.67
+   },
+   "best": {
+    "price": 19765,
+    "directCost": 10306.17
+   }
+  },
+  "crawlspace/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 14295,
+    "directCost": 7453.33
+   },
+   "better": {
+    "price": 19325,
+    "directCost": 10077.17
+   },
+   "best": {
+    "price": 20995,
+    "directCost": 10947.84
+   }
+  },
+  "crawlspace/2400/easy/R19/keep/blank": {
+   "best": {
+    "price": 1635,
+    "directCost": 851.5
+   }
+  },
+  "crawlspace/2400/easy/R19/keep/25": {
+   "best": {
+    "price": 1880,
+    "directCost": 979.83
+   }
+  },
+  "crawlspace/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 13310,
+    "directCost": 6940
+   },
+   "better": {
+    "price": 18220,
+    "directCost": 9499.67
+   },
+   "best": {
+    "price": 19765,
+    "directCost": 10306.17
+   }
+  },
+  "crawlspace/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 14295,
+    "directCost": 7453.33
+   },
+   "better": {
+    "price": 19325,
+    "directCost": 10077.17
+   },
+   "best": {
+    "price": 20995,
+    "directCost": 10947.84
+   }
+  },
+  "crawlspace/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 7300,
+    "directCost": 3806
+   },
+   "better": {
+    "price": 12355,
+    "directCost": 6440.22
+   },
+   "best": {
+    "price": 14235,
+    "directCost": 7423.12
+   }
+  },
+  "crawlspace/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 7795,
+    "directCost": 4062.67
+   },
+   "better": {
+    "price": 12970,
+    "directCost": 6761.05
+   },
+   "best": {
+    "price": 14975,
+    "directCost": 7808.12
+   }
+  },
+  "crawlspace/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 16105,
+    "directCost": 8398
+   },
+   "better": {
+    "price": 21160,
+    "directCost": 11032.22
+   },
+   "best": {
+    "price": 23045,
+    "directCost": 12015.12
+   }
+  },
+  "crawlspace/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 17460,
+    "directCost": 9103.83
+   },
+   "better": {
+    "price": 22635,
+    "directCost": 11802.22
+   },
+   "best": {
+    "price": 24645,
+    "directCost": 12849.29
+   }
+  },
+  "crawlspace/2400/difficult/R19/keep/blank": {
+   "best": {
+    "price": 1975,
+    "directCost": 1027.9
+   }
+  },
+  "crawlspace/2400/difficult/R19/keep/25": {
+   "best": {
+    "price": 2220,
+    "directCost": 1156.23
+   }
+  },
+  "crawlspace/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 16105,
+    "directCost": 8398
+   },
+   "better": {
+    "price": 21160,
+    "directCost": 11032.22
+   },
+   "best": {
+    "price": 23045,
+    "directCost": 12015.12
+   }
+  },
+  "crawlspace/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 17460,
+    "directCost": 9103.83
+   },
+   "better": {
+    "price": 22635,
+    "directCost": 11802.22
+   },
+   "best": {
+    "price": 24645,
+    "directCost": 12849.29
+   }
+  },
+  "rim_joist/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 276.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 267.52
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 333.9
+   }
+  },
+  "rim_joist/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 341.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 331.69
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 398.07
+   }
+  },
+  "rim_joist/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 495.63
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 486.27
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 552.65
+   }
+  },
+  "rim_joist/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 559.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 550.44
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 616.82
+   }
+  },
+  "rim_joist/150/easy/R19/keep/blank": {},
+  "rim_joist/150/easy/R19/keep/25": {},
+  "rim_joist/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 495.63
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 486.27
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 552.65
+   }
+  },
+  "rim_joist/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 559.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 550.44
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 616.82
+   }
+  },
+  "rim_joist/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 304.53
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 287.47
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 351.05
+   }
+  },
+  "rim_joist/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 368.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 351.64
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 415.22
+   }
+  },
+  "rim_joist/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 569.13
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 552.07
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 615.65
+   }
+  },
+  "rim_joist/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 616.24
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 679.82
+   }
+  },
+  "rim_joist/150/difficult/R19/keep/blank": {},
+  "rim_joist/150/difficult/R19/keep/25": {},
+  "rim_joist/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 569.13
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 552.07
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 615.65
+   }
+  },
+  "rim_joist/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 616.24
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 679.82
+   }
+  },
+  "rim_joist/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 2760,
+    "directCost": 1437.5
+   },
+   "better": {
+    "price": 1795,
+    "directCost": 933.76
+   },
+   "best": {
+    "price": 2645,
+    "directCost": 1376.91
+   }
+  },
+  "rim_joist/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 3005,
+    "directCost": 1565.83
+   },
+   "better": {
+    "price": 1915,
+    "directCost": 997.93
+   },
+   "best": {
+    "price": 2765,
+    "directCost": 1441.08
+   }
+  },
+  "rim_joist/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 5260,
+    "directCost": 2742.5
+   },
+   "better": {
+    "price": 4380,
+    "directCost": 2283.76
+   },
+   "best": {
+    "price": 5230,
+    "directCost": 2726.91
+   }
+  },
+  "rim_joist/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 5630,
+    "directCost": 2935
+   },
+   "better": {
+    "price": 4750,
+    "directCost": 2476.26
+   },
+   "best": {
+    "price": 5600,
+    "directCost": 2919.41
+   }
+  },
+  "rim_joist/1000/easy/R19/keep/blank": {},
+  "rim_joist/1000/easy/R19/keep/25": {},
+  "rim_joist/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 5260,
+    "directCost": 2742.5
+   },
+   "better": {
+    "price": 4380,
+    "directCost": 2283.76
+   },
+   "best": {
+    "price": 5230,
+    "directCost": 2726.91
+   }
+  },
+  "rim_joist/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 5630,
+    "directCost": 2935
+   },
+   "better": {
+    "price": 4750,
+    "directCost": 2476.26
+   },
+   "best": {
+    "price": 5600,
+    "directCost": 2919.41
+   }
+  },
+  "rim_joist/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 3110,
+    "directCost": 1621.25
+   },
+   "better": {
+    "price": 2135,
+    "directCost": 1111.06
+   },
+   "best": {
+    "price": 2945,
+    "directCost": 1534.96
+   }
+  },
+  "rim_joist/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 3360,
+    "directCost": 1749.58
+   },
+   "better": {
+    "price": 2380,
+    "directCost": 1239.39
+   },
+   "best": {
+    "price": 3190,
+    "directCost": 1663.29
+   }
+  },
+  "rim_joist/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 6290,
+    "directCost": 3277.5
+   },
+   "better": {
+    "price": 5310,
+    "directCost": 2767.31
+   },
+   "best": {
+    "price": 6120,
+    "directCost": 3191.21
+   }
+  },
+  "rim_joist/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 6780,
+    "directCost": 3534.17
+   },
+   "better": {
+    "price": 5800,
+    "directCost": 3023.98
+   },
+   "best": {
+    "price": 6615,
+    "directCost": 3447.88
+   }
+  },
+  "rim_joist/1000/difficult/R19/keep/blank": {},
+  "rim_joist/1000/difficult/R19/keep/25": {},
+  "rim_joist/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 6290,
+    "directCost": 3277.5
+   },
+   "better": {
+    "price": 5310,
+    "directCost": 2767.31
+   },
+   "best": {
+    "price": 6120,
+    "directCost": 3191.21
+   }
+  },
+  "rim_joist/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 6780,
+    "directCost": 3534.17
+   },
+   "better": {
+    "price": 5800,
+    "directCost": 3023.98
+   },
+   "best": {
+    "price": 6615,
+    "directCost": 3447.88
+   }
+  },
+  "rim_joist/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 6370,
+    "directCost": 3320
+   },
+   "better": {
+    "price": 4070,
+    "directCost": 2121.22
+   },
+   "best": {
+    "price": 6025,
+    "directCost": 3139.49
+   }
+  },
+  "rim_joist/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 6740,
+    "directCost": 3512.5
+   },
+   "better": {
+    "price": 4440,
+    "directCost": 2313.72
+   },
+   "best": {
+    "price": 6270,
+    "directCost": 3267.82
+   }
+  },
+  "rim_joist/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 12420,
+    "directCost": 6475
+   },
+   "better": {
+    "price": 10120,
+    "directCost": 5276.22
+   },
+   "best": {
+    "price": 12160,
+    "directCost": 6339.49
+   }
+  },
+  "rim_joist/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 13280,
+    "directCost": 6924.17
+   },
+   "better": {
+    "price": 10980,
+    "directCost": 5725.39
+   },
+   "best": {
+    "price": 13020,
+    "directCost": 6788.66
+   }
+  },
+  "rim_joist/2400/easy/R19/keep/blank": {},
+  "rim_joist/2400/easy/R19/keep/25": {},
+  "rim_joist/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 12420,
+    "directCost": 6475
+   },
+   "better": {
+    "price": 10120,
+    "directCost": 5276.22
+   },
+   "best": {
+    "price": 12160,
+    "directCost": 6339.49
+   }
+  },
+  "rim_joist/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 13280,
+    "directCost": 6924.17
+   },
+   "better": {
+    "price": 10980,
+    "directCost": 5725.39
+   },
+   "best": {
+    "price": 13020,
+    "directCost": 6788.66
+   }
+  },
+  "rim_joist/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 7300,
+    "directCost": 3806
+   },
+   "better": {
+    "price": 4680,
+    "directCost": 2439.02
+   },
+   "best": {
+    "price": 6630,
+    "directCost": 3456.09
+   }
+  },
+  "rim_joist/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 7795,
+    "directCost": 4062.67
+   },
+   "better": {
+    "price": 5050,
+    "directCost": 2631.52
+   },
+   "best": {
+    "price": 7000,
+    "directCost": 3648.59
+   }
+  },
+  "rim_joist/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 14935,
+    "directCost": 7786
+   },
+   "better": {
+    "price": 12310,
+    "directCost": 6419.02
+   },
+   "best": {
+    "price": 14260,
+    "directCost": 7436.09
+   }
+  },
+  "rim_joist/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 16165,
+    "directCost": 8427.67
+   },
+   "better": {
+    "price": 13420,
+    "directCost": 6996.52
+   },
+   "best": {
+    "price": 15370,
+    "directCost": 8013.59
+   }
+  },
+  "rim_joist/2400/difficult/R19/keep/blank": {},
+  "rim_joist/2400/difficult/R19/keep/25": {},
+  "rim_joist/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 14935,
+    "directCost": 7786
+   },
+   "better": {
+    "price": 12310,
+    "directCost": 6419.02
+   },
+   "best": {
+    "price": 14260,
+    "directCost": 7436.09
+   }
+  },
+  "rim_joist/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 16165,
+    "directCost": 8427.67
+   },
+   "better": {
+    "price": 13420,
+    "directCost": 6996.52
+   },
+   "best": {
+    "price": 15370,
+    "directCost": 8013.59
+   }
+  },
+  "garage/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 276.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 326
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 502.54
+   }
+  },
+  "garage/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 341.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 390.17
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 566.71
+   }
+  },
+  "garage/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 495.63
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 544.75
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 721.29
+   }
+  },
+  "garage/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 559.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 608.92
+   },
+   "best": {
+    "price": 1510,
+    "directCost": 785.46
+   }
+  },
+  "garage/150/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 276.88
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 198.7
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 279.19
+   }
+  },
+  "garage/150/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 341.05
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 262.87
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 343.36
+   }
+  },
+  "garage/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 495.63
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 544.75
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 721.29
+   }
+  },
+  "garage/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 559.8
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 608.92
+   },
+   "best": {
+    "price": 1510,
+    "directCost": 785.46
+   }
+  },
+  "garage/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 304.53
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 333.35
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 562.39
+   }
+  },
+  "garage/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 368.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 397.52
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 626.56
+   }
+  },
+  "garage/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 569.13
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 597.95
+   },
+   "best": {
+    "price": 1675,
+    "directCost": 871.99
+   }
+  },
+  "garage/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 662.12
+   },
+   "best": {
+    "price": 1920,
+    "directCost": 1000.32
+   }
+  },
+  "garage/150/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 304.53
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 201.5
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 301.24
+   }
+  },
+  "garage/150/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 368.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 265.67
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 365.41
+   }
+  },
+  "garage/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 569.13
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 597.95
+   },
+   "best": {
+    "price": 1675,
+    "directCost": 871.99
+   }
+  },
+  "garage/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 633.3
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 662.12
+   },
+   "best": {
+    "price": 1920,
+    "directCost": 1000.32
+   }
+  },
+  "garage/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 2760,
+    "directCost": 1437.5
+   },
+   "better": {
+    "price": 2605,
+    "directCost": 1357
+   },
+   "best": {
+    "price": 4970,
+    "directCost": 2591.26
+   }
+  },
+  "garage/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 3005,
+    "directCost": 1565.83
+   },
+   "better": {
+    "price": 2730,
+    "directCost": 1421.17
+   },
+   "best": {
+    "price": 5340,
+    "directCost": 2783.76
+   }
+  },
+  "garage/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 5260,
+    "directCost": 2742.5
+   },
+   "better": {
+    "price": 5195,
+    "directCost": 2707
+   },
+   "best": {
+    "price": 7560,
+    "directCost": 3941.26
+   }
+  },
+  "garage/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 5630,
+    "directCost": 2935
+   },
+   "better": {
+    "price": 5565,
+    "directCost": 2899.5
+   },
+   "best": {
+    "price": 8175,
+    "directCost": 4262.09
+   }
+  },
+  "garage/1000/easy/R19/keep/blank": {
+   "good": {
+    "price": 2760,
+    "directCost": 1437.5
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 584.45
+   },
+   "best": {
+    "price": 2030,
+    "directCost": 1057.09
+   }
+  },
+  "garage/1000/easy/R19/keep/25": {
+   "good": {
+    "price": 3005,
+    "directCost": 1565.83
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 648.62
+   },
+   "best": {
+    "price": 2275,
+    "directCost": 1185.42
+   }
+  },
+  "garage/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 5260,
+    "directCost": 2742.5
+   },
+   "better": {
+    "price": 5195,
+    "directCost": 2707
+   },
+   "best": {
+    "price": 7560,
+    "directCost": 3941.26
+   }
+  },
+  "garage/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 5630,
+    "directCost": 2935
+   },
+   "better": {
+    "price": 5565,
+    "directCost": 2899.5
+   },
+   "best": {
+    "price": 8175,
+    "directCost": 4262.09
+   }
+  },
+  "garage/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 3110,
+    "directCost": 1621.25
+   },
+   "better": {
+    "price": 2700,
+    "directCost": 1406
+   },
+   "best": {
+    "price": 5820,
+    "directCost": 3033.51
+   }
+  },
+  "garage/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 3360,
+    "directCost": 1749.58
+   },
+   "better": {
+    "price": 2820,
+    "directCost": 1470.17
+   },
+   "best": {
+    "price": 6310,
+    "directCost": 3290.18
+   }
+  },
+  "garage/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 6290,
+    "directCost": 3277.5
+   },
+   "better": {
+    "price": 5960,
+    "directCost": 3107.25
+   },
+   "best": {
+    "price": 8995,
+    "directCost": 4689.76
+   }
+  },
+  "garage/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 6780,
+    "directCost": 3534.17
+   },
+   "better": {
+    "price": 6455,
+    "directCost": 3363.92
+   },
+   "best": {
+    "price": 9735,
+    "directCost": 5074.76
+   }
+  },
+  "garage/1000/difficult/R19/keep/blank": {
+   "good": {
+    "price": 3110,
+    "directCost": 1621.25
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 602.3
+   },
+   "best": {
+    "price": 2310,
+    "directCost": 1202.69
+   }
+  },
+  "garage/1000/difficult/R19/keep/25": {
+   "good": {
+    "price": 3360,
+    "directCost": 1749.58
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 666.47
+   },
+   "best": {
+    "price": 2555,
+    "directCost": 1331.02
+   }
+  },
+  "garage/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 6290,
+    "directCost": 3277.5
+   },
+   "better": {
+    "price": 5960,
+    "directCost": 3107.25
+   },
+   "best": {
+    "price": 8995,
+    "directCost": 4689.76
+   }
+  },
+  "garage/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 6780,
+    "directCost": 3534.17
+   },
+   "better": {
+    "price": 6455,
+    "directCost": 3363.92
+   },
+   "best": {
+    "price": 9735,
+    "directCost": 5074.76
+   }
+  },
+  "garage/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 6370,
+    "directCost": 3320
+   },
+   "better": {
+    "price": 5970,
+    "directCost": 3111
+   },
+   "best": {
+    "price": 11545,
+    "directCost": 6018.32
+   }
+  },
+  "garage/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 6740,
+    "directCost": 3512.5
+   },
+   "better": {
+    "price": 6090,
+    "directCost": 3175.17
+   },
+   "best": {
+    "price": 12280,
+    "directCost": 6403.32
+   }
+  },
+  "garage/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 12420,
+    "directCost": 6475
+   },
+   "better": {
+    "price": 12105,
+    "directCost": 6311
+   },
+   "best": {
+    "price": 17680,
+    "directCost": 9218.32
+   }
+  },
+  "garage/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 13280,
+    "directCost": 6924.17
+   },
+   "better": {
+    "price": 12845,
+    "directCost": 6696
+   },
+   "best": {
+    "price": 19035,
+    "directCost": 9924.15
+   }
+  },
+  "garage/2400/easy/R19/keep/blank": {
+   "good": {
+    "price": 6370,
+    "directCost": 3320
+   },
+   "better": {
+    "price": 2355,
+    "directCost": 1226.2
+   },
+   "best": {
+    "price": 4430,
+    "directCost": 2309.17
+   }
+  },
+  "garage/2400/easy/R19/keep/25": {
+   "good": {
+    "price": 6740,
+    "directCost": 3512.5
+   },
+   "better": {
+    "price": 2475,
+    "directCost": 1290.37
+   },
+   "best": {
+    "price": 4800,
+    "directCost": 2501.67
+   }
+  },
+  "garage/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 12420,
+    "directCost": 6475
+   },
+   "better": {
+    "price": 12105,
+    "directCost": 6311
+   },
+   "best": {
+    "price": 17680,
+    "directCost": 9218.32
+   }
+  },
+  "garage/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 13280,
+    "directCost": 6924.17
+   },
+   "better": {
+    "price": 12845,
+    "directCost": 6696
+   },
+   "best": {
+    "price": 19035,
+    "directCost": 9924.15
+   }
+  },
+  "garage/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 7300,
+    "directCost": 3806
+   },
+   "better": {
+    "price": 6280,
+    "directCost": 3273.6
+   },
+   "best": {
+    "price": 13545,
+    "directCost": 7061.72
+   }
+  },
+  "garage/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 7795,
+    "directCost": 4062.67
+   },
+   "better": {
+    "price": 6525,
+    "directCost": 3401.93
+   },
+   "best": {
+    "price": 14530,
+    "directCost": 7575.05
+   }
+  },
+  "garage/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 14935,
+    "directCost": 7786
+   },
+   "better": {
+    "price": 13825,
+    "directCost": 7208.6
+   },
+   "best": {
+    "price": 21175,
+    "directCost": 11041.72
+   }
+  },
+  "garage/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 16165,
+    "directCost": 8427.67
+   },
+   "better": {
+    "price": 14685,
+    "directCost": 7657.77
+   },
+   "best": {
+    "price": 22900,
+    "directCost": 11940.05
+   }
+  },
+  "garage/2400/difficult/R19/keep/blank": {
+   "good": {
+    "price": 7300,
+    "directCost": 3806
+   },
+   "better": {
+    "price": 2435,
+    "directCost": 1269.25
+   },
+   "best": {
+    "price": 5100,
+    "directCost": 2658.82
+   }
+  },
+  "garage/2400/difficult/R19/keep/25": {
+   "good": {
+    "price": 7795,
+    "directCost": 4062.67
+   },
+   "better": {
+    "price": 2560,
+    "directCost": 1333.42
+   },
+   "best": {
+    "price": 5470,
+    "directCost": 2851.32
+   }
+  },
+  "garage/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 14935,
+    "directCost": 7786
+   },
+   "better": {
+    "price": 13825,
+    "directCost": 7208.6
+   },
+   "best": {
+    "price": 21175,
+    "directCost": 11041.72
+   }
+  },
+  "garage/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 16165,
+    "directCost": 8427.67
+   },
+   "better": {
+    "price": 14685,
+    "directCost": 7657.77
+   },
+   "best": {
+    "price": 22900,
+    "directCost": 11940.05
+   }
+  },
+  "commercial/150/easy/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 326
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 502.54
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 701.99
+   }
+  },
+  "commercial/150/easy/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 390.17
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 566.71
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 766.16
+   }
+  },
+  "commercial/150/easy/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 544.75
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 721.29
+   },
+   "best": {
+    "price": 1770,
+    "directCost": 920.74
+   }
+  },
+  "commercial/150/easy/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 608.92
+   },
+   "better": {
+    "price": 1510,
+    "directCost": 785.46
+   },
+   "best": {
+    "price": 1890,
+    "directCost": 984.91
+   }
+  },
+  "commercial/150/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 198.7
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 279.19
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 352.33
+   }
+  },
+  "commercial/150/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 262.87
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 343.36
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 416.5
+   }
+  },
+  "commercial/150/easy/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 544.75
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 721.29
+   },
+   "best": {
+    "price": 1770,
+    "directCost": 920.74
+   }
+  },
+  "commercial/150/easy/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 608.92
+   },
+   "better": {
+    "price": 1510,
+    "directCost": 785.46
+   },
+   "best": {
+    "price": 1890,
+    "directCost": 984.91
+   }
+  },
+  "commercial/150/difficult/R0/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 333.35
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 562.39
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 753.09
+   }
+  },
+  "commercial/150/difficult/R0/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 397.52
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 626.56
+   },
+   "best": {
+    "price": 1570,
+    "directCost": 817.26
+   }
+  },
+  "commercial/150/difficult/R0/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 597.95
+   },
+   "better": {
+    "price": 1675,
+    "directCost": 871.99
+   },
+   "best": {
+    "price": 2040,
+    "directCost": 1062.69
+   }
+  },
+  "commercial/150/difficult/R0/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 662.12
+   },
+   "better": {
+    "price": 1920,
+    "directCost": 1000.32
+   },
+   "best": {
+    "price": 2285,
+    "directCost": 1191.02
+   }
+  },
+  "commercial/150/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 201.5
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 301.24
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 371.23
+   }
+  },
+  "commercial/150/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 265.67
+   },
+   "better": {
+    "price": 1500,
+    "directCost": 365.41
+   },
+   "best": {
+    "price": 1500,
+    "directCost": 435.4
+   }
+  },
+  "commercial/150/difficult/R19/remove/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 597.95
+   },
+   "better": {
+    "price": 1675,
+    "directCost": 871.99
+   },
+   "best": {
+    "price": 2040,
+    "directCost": 1062.69
+   }
+  },
+  "commercial/150/difficult/R19/remove/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 662.12
+   },
+   "better": {
+    "price": 1920,
+    "directCost": 1000.32
+   },
+   "best": {
+    "price": 2285,
+    "directCost": 1191.02
+   }
+  },
+  "commercial/1000/easy/R0/keep/blank": {
+   "good": {
+    "price": 2605,
+    "directCost": 1357
+   },
+   "better": {
+    "price": 4970,
+    "directCost": 2591.26
+   },
+   "best": {
+    "price": 7520,
+    "directCost": 3920.67
+   }
+  },
+  "commercial/1000/easy/R0/keep/25": {
+   "good": {
+    "price": 2730,
+    "directCost": 1421.17
+   },
+   "better": {
+    "price": 5340,
+    "directCost": 2783.76
+   },
+   "best": {
+    "price": 7890,
+    "directCost": 4113.17
+   }
+  },
+  "commercial/1000/easy/R0/remove/blank": {
+   "good": {
+    "price": 5195,
+    "directCost": 2707
+   },
+   "better": {
+    "price": 7560,
+    "directCost": 3941.26
+   },
+   "best": {
+    "price": 10110,
+    "directCost": 5270.67
+   }
+  },
+  "commercial/1000/easy/R0/remove/25": {
+   "good": {
+    "price": 5565,
+    "directCost": 2899.5
+   },
+   "better": {
+    "price": 8175,
+    "directCost": 4262.09
+   },
+   "best": {
+    "price": 10725,
+    "directCost": 5591.5
+   }
+  },
+  "commercial/1000/easy/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 584.45
+   },
+   "better": {
+    "price": 2030,
+    "directCost": 1057.09
+   },
+   "best": {
+    "price": 2880,
+    "directCost": 1499.49
+   }
+  },
+  "commercial/1000/easy/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 648.62
+   },
+   "better": {
+    "price": 2275,
+    "directCost": 1185.42
+   },
+   "best": {
+    "price": 3000,
+    "directCost": 1563.66
+   }
+  },
+  "commercial/1000/easy/R19/remove/blank": {
+   "good": {
+    "price": 5195,
+    "directCost": 2707
+   },
+   "better": {
+    "price": 7560,
+    "directCost": 3941.26
+   },
+   "best": {
+    "price": 10110,
+    "directCost": 5270.67
+   }
+  },
+  "commercial/1000/easy/R19/remove/25": {
+   "good": {
+    "price": 5565,
+    "directCost": 2899.5
+   },
+   "better": {
+    "price": 8175,
+    "directCost": 4262.09
+   },
+   "best": {
+    "price": 10725,
+    "directCost": 5591.5
+   }
+  },
+  "commercial/1000/difficult/R0/keep/blank": {
+   "good": {
+    "price": 2700,
+    "directCost": 1406
+   },
+   "better": {
+    "price": 5820,
+    "directCost": 3033.51
+   },
+   "best": {
+    "price": 8170,
+    "directCost": 4259.82
+   }
+  },
+  "commercial/1000/difficult/R0/keep/25": {
+   "good": {
+    "price": 2820,
+    "directCost": 1470.17
+   },
+   "better": {
+    "price": 6310,
+    "directCost": 3290.18
+   },
+   "best": {
+    "price": 8540,
+    "directCost": 4452.32
+   }
+  },
+  "commercial/1000/difficult/R0/remove/blank": {
+   "good": {
+    "price": 5960,
+    "directCost": 3107.25
+   },
+   "better": {
+    "price": 8995,
+    "directCost": 4689.76
+   },
+   "best": {
+    "price": 11435,
+    "directCost": 5961.07
+   }
+  },
+  "commercial/1000/difficult/R0/remove/25": {
+   "good": {
+    "price": 6455,
+    "directCost": 3363.92
+   },
+   "better": {
+    "price": 9735,
+    "directCost": 5074.76
+   },
+   "best": {
+    "price": 12170,
+    "directCost": 6346.07
+   }
+  },
+  "commercial/1000/difficult/R19/keep/blank": {
+   "good": {
+    "price": 1500,
+    "directCost": 602.3
+   },
+   "better": {
+    "price": 2310,
+    "directCost": 1202.69
+   },
+   "best": {
+    "price": 3205,
+    "directCost": 1669.09
+   }
+  },
+  "commercial/1000/difficult/R19/keep/25": {
+   "good": {
+    "price": 1500,
+    "directCost": 666.47
+   },
+   "better": {
+    "price": 2555,
+    "directCost": 1331.02
+   },
+   "best": {
+    "price": 3450,
+    "directCost": 1797.42
+   }
+  },
+  "commercial/1000/difficult/R19/remove/blank": {
+   "good": {
+    "price": 5960,
+    "directCost": 3107.25
+   },
+   "better": {
+    "price": 8995,
+    "directCost": 4689.76
+   },
+   "best": {
+    "price": 11435,
+    "directCost": 5961.07
+   }
+  },
+  "commercial/1000/difficult/R19/remove/25": {
+   "good": {
+    "price": 6455,
+    "directCost": 3363.92
+   },
+   "better": {
+    "price": 9735,
+    "directCost": 5074.76
+   },
+   "best": {
+    "price": 12170,
+    "directCost": 6346.07
+   }
+  },
+  "commercial/2400/easy/R0/keep/blank": {
+   "good": {
+    "price": 5970,
+    "directCost": 3111
+   },
+   "better": {
+    "price": 11545,
+    "directCost": 6018.32
+   },
+   "best": {
+    "price": 17575,
+    "directCost": 9163.81
+   }
+  },
+  "commercial/2400/easy/R0/keep/25": {
+   "good": {
+    "price": 6090,
+    "directCost": 3175.17
+   },
+   "better": {
+    "price": 12280,
+    "directCost": 6403.32
+   },
+   "best": {
+    "price": 18190,
+    "directCost": 9484.64
+   }
+  },
+  "commercial/2400/easy/R0/remove/blank": {
+   "good": {
+    "price": 12105,
+    "directCost": 6311
+   },
+   "better": {
+    "price": 17680,
+    "directCost": 9218.32
+   },
+   "best": {
+    "price": 23710,
+    "directCost": 12363.81
+   }
+  },
+  "commercial/2400/easy/R0/remove/25": {
+   "good": {
+    "price": 12845,
+    "directCost": 6696
+   },
+   "better": {
+    "price": 19035,
+    "directCost": 9924.15
+   },
+   "best": {
+    "price": 24940,
+    "directCost": 13005.48
+   }
+  },
+  "commercial/2400/easy/R19/keep/blank": {
+   "good": {
+    "price": 2355,
+    "directCost": 1226.2
+   },
+   "better": {
+    "price": 4430,
+    "directCost": 2309.17
+   },
+   "best": {
+    "price": 6590,
+    "directCost": 3434.09
+   }
+  },
+  "commercial/2400/easy/R19/keep/25": {
+   "good": {
+    "price": 2475,
+    "directCost": 1290.37
+   },
+   "better": {
+    "price": 4800,
+    "directCost": 2501.67
+   },
+   "best": {
+    "price": 6835,
+    "directCost": 3562.42
+   }
+  },
+  "commercial/2400/easy/R19/remove/blank": {
+   "good": {
+    "price": 12105,
+    "directCost": 6311
+   },
+   "better": {
+    "price": 17680,
+    "directCost": 9218.32
+   },
+   "best": {
+    "price": 23710,
+    "directCost": 12363.81
+   }
+  },
+  "commercial/2400/easy/R19/remove/25": {
+   "good": {
+    "price": 12845,
+    "directCost": 6696
+   },
+   "better": {
+    "price": 19035,
+    "directCost": 9924.15
+   },
+   "best": {
+    "price": 24940,
+    "directCost": 13005.48
+   }
+  },
+  "commercial/2400/difficult/R0/keep/blank": {
+   "good": {
+    "price": 6280,
+    "directCost": 3273.6
+   },
+   "better": {
+    "price": 13545,
+    "directCost": 7061.72
+   },
+   "best": {
+    "price": 19310,
+    "directCost": 10067.91
+   }
+  },
+  "commercial/2400/difficult/R0/keep/25": {
+   "good": {
+    "price": 6525,
+    "directCost": 3401.93
+   },
+   "better": {
+    "price": 14530,
+    "directCost": 7575.05
+   },
+   "best": {
+    "price": 20170,
+    "directCost": 10517.08
+   }
+  },
+  "commercial/2400/difficult/R0/remove/blank": {
+   "good": {
+    "price": 13825,
+    "directCost": 7208.6
+   },
+   "better": {
+    "price": 21175,
+    "directCost": 11041.72
+   },
+   "best": {
+    "price": 26940,
+    "directCost": 14047.91
+   }
+  },
+  "commercial/2400/difficult/R0/remove/25": {
+   "good": {
+    "price": 14685,
+    "directCost": 7657.77
+   },
+   "better": {
+    "price": 22900,
+    "directCost": 11940.05
+   },
+   "best": {
+    "price": 28540,
+    "directCost": 14882.08
+   }
+  },
+  "commercial/2400/difficult/R19/keep/blank": {
+   "good": {
+    "price": 2435,
+    "directCost": 1269.25
+   },
+   "better": {
+    "price": 5100,
+    "directCost": 2658.82
+   },
+   "best": {
+    "price": 7245,
+    "directCost": 3777.64
+   }
+  },
+  "commercial/2400/difficult/R19/keep/25": {
+   "good": {
+    "price": 2560,
+    "directCost": 1333.42
+   },
+   "better": {
+    "price": 5470,
+    "directCost": 2851.32
+   },
+   "best": {
+    "price": 7615,
+    "directCost": 3970.14
+   }
+  },
+  "commercial/2400/difficult/R19/remove/blank": {
+   "good": {
+    "price": 13825,
+    "directCost": 7208.6
+   },
+   "better": {
+    "price": 21175,
+    "directCost": 11041.72
+   },
+   "best": {
+    "price": 26940,
+    "directCost": 14047.91
+   }
+  },
+  "commercial/2400/difficult/R19/remove/25": {
+   "good": {
+    "price": 14685,
+    "directCost": 7657.77
+   },
+   "better": {
+    "price": 22900,
+    "directCost": 11940.05
+   },
+   "best": {
+    "price": 28540,
+    "directCost": 14882.08
+   }
+  }
+ }
+}
