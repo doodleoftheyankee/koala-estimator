@@ -4,19 +4,46 @@ import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, nyDate } from '@/lib/jobs/dates';
 import { CREW_SECTION_LABELS, CREW_SECTIONS, groupForCrew } from '@/lib/jobs/status';
 import type { CrewJob } from '@/lib/jobs/crew';
-import { Badge } from '@/components/ui';
-import { Banner, CloudOff, EmptyState, Hammer, Monogram, SectionHead, SyncIndicator, SyncNowButton } from '@/components/daymark';
+import {
+  Banner,
+  CloudCheck,
+  CloudOff,
+  CloudUpload,
+  EmptyState,
+  Hammer,
+  Monogram,
+  RefreshCw,
+  SectionHead,
+  ShieldCheck,
+  SyncIndicator,
+  SyncNowButton,
+  Tag,
+  TriangleAlert,
+  type LucideIcon,
+  type TagTone,
+} from '@/components/daymark';
 import { num, plural } from '@/lib/format';
 import { useLive } from '@/app/field/hooks';
 
-export const ACTUALS_BADGE: Record<ActualsSyncState, { tone: 'slate' | 'green' | 'amber' | 'red' | 'blue'; label: string }> = {
-  pending: { tone: 'amber', label: 'Not synced' },
-  synced: { tone: 'green', label: 'Synced' },
-  // Verified is green everywhere (the one status vocabulary in components/daymark/StatusBadge).
-  locked: { tone: 'green', label: 'Verified' },
-  invalid: { tone: 'red', label: 'Needs fixing' },
-  error: { tone: 'amber', label: 'Retrying' },
+/** The crew's actuals, as a status tag: icon + word + colour, like every status in the app. */
+export const ACTUALS_BADGE: Record<ActualsSyncState, { tone: TagTone; icon: LucideIcon; label: string }> = {
+  pending: { tone: 'warn', icon: CloudUpload, label: 'Not synced' },
+  synced: { tone: 'ok', icon: CloudCheck, label: 'Synced' },
+  // Verified is green everywhere, with the same shield as the office's job page (StatusBadge).
+  locked: { tone: 'ok', icon: ShieldCheck, label: 'Verified' },
+  invalid: { tone: 'bad', icon: TriangleAlert, label: 'Needs fixing' },
+  error: { tone: 'warn', icon: RefreshCw, label: 'Retrying' },
 };
+
+/** A crew actuals tag. */
+export function ActualsTag({ state }: { state: ActualsSyncState }) {
+  const b = ACTUALS_BADGE[state];
+  return (
+    <Tag tone={b.tone} icon={b.icon}>
+      {b.label}
+    </Tag>
+  );
+}
 
 const UNSYNCED: ReadonlySet<ActualsSyncState> = new Set(['pending', 'error', 'invalid']);
 
@@ -46,7 +73,7 @@ export function JobList({
       <header className="flex items-start gap-3 px-4 pt-4 lg:pt-8">
         <Monogram size={48} label="" className="mt-0.5 lg:hidden" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-[30px] leading-[1.07] font-extrabold tracking-[-0.02em] text-ink">Jobs</h1>
+          <h1 className="text-[30px] leading-[1.07] font-extrabold tracking-[-0.02em] text-ink">{profile.role === 'crew' ? 'Jobs' : 'Crew app'}</h1>
           <SyncIndicator
             state={syncing ? 'syncing' : !online ? 'offline' : unsynced ? 'pending' : 'synced'}
             pending={unsynced}
@@ -105,7 +132,7 @@ function JobCard({ job, draft, today, onOpen }: { job: CrewJob; draft: LocalActu
         ? `${dayLabel(job.scheduledStart, today)}${job.scheduledDays ? ` · ${job.scheduledDays} day${job.scheduledDays === 1 ? '' : 's'}` : ''}`
         : 'Not scheduled yet';
   const overdue = job.status === 'scheduled' && job.scheduledStart !== null && job.scheduledStart < today;
-  const badge = draft && draft.syncState !== 'synced' ? ACTUALS_BADGE[draft.syncState] : null;
+  const badge = draft && draft.syncState !== 'synced' ? draft.syncState : null;
   return (
     <button type="button" onClick={onOpen} className="block w-full rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 active:bg-slate-50">
       <div className="flex items-start justify-between gap-2">
@@ -120,8 +147,12 @@ function JobCard({ job, draft, today, onOpen }: { job: CrewJob; draft: LocalActu
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {hazards ? <Badge tone="red">Hazards</Badge> : null}
-          {badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : null}
+          {hazards ? (
+            <Tag tone="bad" icon={TriangleAlert}>
+              Hazards
+            </Tag>
+          ) : null}
+          {badge ? <ActualsTag state={badge} /> : null}
         </div>
       </div>
       <p className="mt-2 text-xs text-slate-500">{job.areas.map((a) => a.name).join(' · ') || 'No areas'}</p>

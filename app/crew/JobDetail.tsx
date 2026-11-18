@@ -8,11 +8,11 @@ import { dayLabel, formatNyDateTime, nyDate } from '@/lib/jobs/dates';
 import { mapsUrl, naturalKey, PRODUCT_LABELS, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
 import type { ProductCode } from '@/lib/pricing';
 import { ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
-import { Alert, Badge, Button, Card } from '@/components/ui';
-import { jobBadgeStatus, StatusBadge } from '@/components/daymark';
+import { Alert, Button, Card } from '@/components/ui';
+import { jobBadgeStatus, RefreshCw, Smartphone, StatusBadge, Tag } from '@/components/daymark';
 import { useLive } from '@/app/field/hooks';
 import { ActualsForm } from './ActualsForm';
-import { ACTUALS_BADGE } from './JobList';
+import { ActualsTag } from './JobList';
 import { useActualsEditor } from './useActualsEditor';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
@@ -301,8 +301,11 @@ function AreaCard({ area }: { area: CrewArea }) {
 
 function SyncState({ draft, online }: { draft: LocalActuals; online: boolean }) {
   if (draft.syncState === 'pending' || draft.syncState === 'error') {
-    return <Badge tone="amber">{online ? 'Syncing…' : 'Saved on phone'}</Badge>;
+    return (
+      <Tag tone="warn" icon={online ? RefreshCw : Smartphone}>
+        {online ? 'Syncing…' : 'Saved on phone'}
+      </Tag>
+    );
   }
-  const b = ACTUALS_BADGE[draft.syncState];
-  return <Badge tone={b.tone}>{b.label}</Badge>;
+  return <ActualsTag state={draft.syncState} />;
 }

@@ -371,7 +371,7 @@ await lookupButton.waitFor();
 await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent.includes('Look up from the address') && !b.disabled));
 await page.screenshot({ path: SHOTS + '03c-roof-button.png', fullPage: true });
 await lookupButton.click();
-const roof = page.getByRole('dialog', { name: /Roof takeoff/ });
+const roof = page.getByRole('dialog', { name: /Roof lookup for / });
 const focusIs = (fn) => page.waitForFunction(fn, null, { timeout: 3000 }).then(() => true, () => false);
 check(await focusIs(() => document.activeElement?.getAttribute('role') === 'dialog'), 'focus moves into the sheet when it opens');
 await roof.getByRole('button', { name: 'Stop' }).click();

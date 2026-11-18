@@ -206,7 +206,7 @@ export function RoofLookupSheet({
       ref={dialog}
       role="dialog"
       aria-modal="true"
-      aria-label={`Roof takeoff for ${area.name}`}
+      aria-label={`Roof lookup for ${area.name}`}
       tabIndex={-1}
       onKeyDown={trapTab}
       className="fixed inset-0 z-50 m-0 flex flex-col overflow-y-auto overscroll-contain bg-canvas text-ink outline-none"
@@ -217,7 +217,7 @@ export function RoofLookupSheet({
           <div className="min-w-0 flex-1">
             <h2 className="flex items-center gap-2 text-[22px] leading-tight font-extrabold tracking-[-0.01em]">
               <Icon icon={Satellite} />
-              Roof takeoff
+              Roof lookup
             </h2>
             <p className="truncate text-[15px] font-semibold text-ink-2">{area.name}</p>
           </div>
