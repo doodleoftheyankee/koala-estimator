@@ -10,6 +10,7 @@ import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor,
 import { num, pct, TIER_LABELS, usd } from '@/lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
+import { Icon, Star } from '@/components/daymark';
 import { DeviationNote } from './DeviationNote';
 import { OptionLines, type OnAck, type OnLineOverride } from './OptionLines';
 import { PriceAdvicePanel } from './PriceAdvicePanel';
@@ -69,7 +70,7 @@ export function OptionsStep({
   return (
     <>
       <Card>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Crew">
             <Select value={draft.crewId ?? ''} onChange={(e) => update((d) => ({ ...d, crewId: e.target.value || null }))}>
               <option value="">Default crew</option>
@@ -270,7 +271,14 @@ function OptionCard({
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" variant={selected ? 'primary' : 'secondary'} onClick={onSelect}>
-          {selected ? '★ Recommended' : 'Recommend this'}
+          {selected ? (
+            <>
+              <Icon icon={Star} size="s" className="fill-current" />
+              Recommended
+            </>
+          ) : (
+            'Recommend this'
+          )}
         </Button>
         <Button
           size="sm"

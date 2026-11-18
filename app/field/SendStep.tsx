@@ -9,6 +9,7 @@ import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
 import { usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
+import { Check, Circle, Icon, Star } from '@/components/daymark';
 import type { PricingResult } from './EstimateEditor';
 
 type SendResult =
@@ -136,7 +137,7 @@ export function SendStep({
           {checks.map((c, i) => (
             <li key={i} className="flex gap-2 text-sm">
               <span aria-hidden className={c.ok ? 'text-emerald-600' : 'text-amber-600'}>
-                {c.ok ? '✓' : '•'}
+                <Icon icon={c.ok ? Check : Circle} size="s" />
               </span>
               <span className={c.ok ? 'text-slate-700' : 'text-amber-900'}>{c.label}</span>
             </li>
@@ -181,7 +182,7 @@ export function SendStep({
               <li key={o.tier} className="flex justify-between text-sm">
                 <span>
                   {o.label}
-                  {draft.selectedTier === o.tier ? ' ★' : ''}
+                  {draft.selectedTier === o.tier ? <Icon icon={Star} size="xs" label="Recommended" className="ml-1 inline-block fill-current align-[-2px]" /> : null}
                 </span>
                 <span className="font-semibold">{usd(o.price)}</span>
               </li>

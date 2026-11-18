@@ -45,13 +45,13 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
             <Input autoComplete="off" value={p.street} onChange={(e) => setP({ street: e.target.value })} />
           </Field>
           <div className="grid grid-cols-6 gap-3">
-            <Field label="City" className="col-span-3">
+            <Field label="City" className="col-span-6 sm:col-span-3">
               <Input value={p.city} onChange={(e) => setP({ city: e.target.value })} />
             </Field>
-            <Field label="State" className="col-span-1">
+            <Field label="State" className="col-span-2 sm:col-span-1">
               <Input maxLength={2} value={p.state} onChange={(e) => setP({ state: e.target.value.toUpperCase() })} />
             </Field>
-            <Field label="ZIP" className="col-span-2">
+            <Field label="ZIP" className="col-span-4 sm:col-span-2">
               <Input inputMode="numeric" maxLength={10} value={p.zip} onChange={(e) => setP({ zip: e.target.value })} />
             </Field>
           </div>

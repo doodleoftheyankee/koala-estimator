@@ -17,7 +17,7 @@ export function DeviationNote({ flag, ack, onNote }: { flag: DeviationFlag; ack:
   return (
     <Alert tone={explained ? 'green' : 'amber'}>
       <p className="font-semibold">
-        <span aria-hidden>{explained ? '✓ ' : '! '}</span>
+        {/* The box's own icon says which: a tick once explained, a warning until then. */}
         <span className="sr-only">{explained ? 'Explained: ' : stale ? 'Check your note: ' : 'Needs a note: '}</span>
         {flag.message}
       </p>

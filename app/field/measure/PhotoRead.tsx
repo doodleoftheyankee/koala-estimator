@@ -12,6 +12,8 @@ import type { RemotePhoto } from '@/lib/photos/rules';
 import type { AreaDraft } from '@/lib/sync/draft';
 import type { Measurement } from '@/lib/measure/measure';
 import { Alert, Badge, Button } from '@/components/ui';
+import { Check, Icon, Sparkles } from '@/components/daymark';
+import { formatShortDateTime } from '@/lib/format';
 import { useLive, useOnline } from '../hooks';
 
 const CONFIDENCE_TONE: Record<Confidence, 'green' | 'amber' | 'slate'> = { high: 'green', medium: 'amber', low: 'slate' };
@@ -148,7 +150,8 @@ export function PhotoRead({
 
   const button = (
     <Button variant={stored ? 'secondary' : 'primary'} size={stored ? 'md' : 'lg'} className="w-full" disabled={busy || !online || !photoCount} onClick={read}>
-      {busy ? `Reading ${photoCount} photo${photoCount === 1 ? '' : 's'}… ${elapsed}s` : stored ? (newSinceRead ? '✨ Read again with the new photos' : '✨ Read again') : `✨ Read ${photoCount === 1 ? 'this photo' : `these ${photoCount} photos`}`}
+      {busy ? null : <Icon icon={Sparkles} />}
+      {busy ? `Reading ${photoCount} photo${photoCount === 1 ? '' : 's'}… ${elapsed}s` : stored ? (newSinceRead ? 'Read again with the new photos' : 'Read again') : `Read ${photoCount === 1 ? 'this photo' : `these ${photoCount} photos`}`}
     </Button>
   );
 
@@ -179,8 +182,11 @@ export function PhotoRead({
       {stored ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="font-bold text-violet-900">✨ Photo read</h4>
-            <span className="text-xs text-slate-500">{new Date(stored.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+            <h4 className="flex items-center gap-1.5 font-bold text-violet-900">
+              <Icon icon={Sparkles} size="s" />
+              Photo read
+            </h4>
+            <span className="text-xs text-slate-500">{formatShortDateTime(stored.createdAt)}</span>
           </div>
           <p className="text-sm text-slate-800">{stored.read.summary}</p>
           {!stored.read.matchesArea ? (
@@ -230,10 +236,11 @@ export function PhotoRead({
               ))}
             </div>
           ) : stored.read.matchesArea ? (
-            <p className="text-sm text-emerald-800">
+            <p className="flex items-start gap-1.5 text-sm text-emerald-800">
+              <Icon icon={Check} size="s" className="mt-0.5" />
               {all.length && decided.length
-                ? `✓ All suggestions handled (${decided.filter((d) => d === 'applied').length} applied, ${decided.filter((d) => d === 'dismissed').length} skipped).`
-                : '✓ The area matches what the photos show.'}
+                ? `All suggestions handled (${decided.filter((d) => d === 'applied').length} applied, ${decided.filter((d) => d === 'dismissed').length} skipped).`
+                : 'The area matches what the photos show.'}
             </p>
           ) : null}
 

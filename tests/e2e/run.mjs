@@ -147,7 +147,7 @@ step('pitch from a photo of the gable, in Measure');
   const read = await readingText();
   check((await sheet.getByTestId('pitch-value').innerText()).replace(/\s+/g, '') === '6.3/12', 'three taps on a tilted photo read 6.3/12');
   check(read.includes('Angle 27.7°') && read.includes('Pitch factor ×1.129'), 'with its angle and pitch factor: ' + read);
-  check(read.includes('Left side 6.3/12') && read.includes('Right side 6.3/12') && read.includes('✓ Both sides agree.'), 'both sides read 6.3/12 and agree');
+  check(read.includes('Left side 6.3/12') && read.includes('Right side 6.3/12') && read.includes('Both sides agree.'), 'both sides read 6.3/12 and agree');
   await page.screenshot({ path: SHOTS + '03a2-pitch-read.png' });
 
   // Dragging the peak sideways: a magnifier while dragging, and the sides stop agreeing.
@@ -213,7 +213,7 @@ step('pitch from a photo of the gable, in Measure');
 
 step('AI photo read');
 await page.getByRole('button', { name: /Read this photo/ }).click();
-await page.getByText('✨ Photo read').waitFor({ timeout: 60000 });
+await page.getByRole('heading', { name: 'Photo read', exact: true }).waitFor({ timeout: 60000 });
 check((await page.getByText(/Recessed lights that may not be IC-rated/).count()) > 0, 'photo read flags the recessed lights as a hazard');
 check((await page.getByText('Suggested changes').count()) === 1, 'photo read suggests changes to the area');
 await page.screenshot({ path: SHOTS + '03b-photo-read.png', fullPage: true });

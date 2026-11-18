@@ -6,6 +6,7 @@ import type { AreaDraft } from '@/lib/sync/draft';
 import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type Measurement } from '@/lib/measure/measure';
 import { parsePitch } from '@/lib/measure/units';
 import { Alert, Button, Card, Chips, Field, Input, Toggle } from '@/components/ui';
+import { Camera, Icon, Ruler } from '@/components/daymark';
 import { LengthInput, ShapeEditor } from './ShapeEditor';
 import { PitchPhotoSheet } from './PitchPhoto';
 
@@ -31,7 +32,8 @@ function PitchInput({ label, value, placeholder, field, onChange, onPhoto }: { l
         <span className="mb-3 w-20 font-bold text-brand-800">{factorText(value)}</span>
       </div>
       <Button variant="secondary" className="w-full" onClick={onPhoto} aria-label={`Pitch from a photo, for the ${PITCH_FIELDS[field]}`}>
-        📷 Pitch from a photo
+        <Icon icon={Camera} />
+        Pitch from a photo
       </Button>
     </div>
   );
@@ -72,7 +74,10 @@ export function MeasureSheet({
     <div role="dialog" aria-modal="true" aria-label={`Measure ${area.name}`} className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-100">
       <div className="sticky top-0 z-10 bg-white shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-2">
-          <h2 className="truncate text-lg font-bold">📐 {area.name}</h2>
+          <h2 className="flex min-w-0 items-center gap-2 text-lg font-bold">
+            <Icon icon={Ruler} />
+            <span className="truncate">{area.name}</span>
+          </h2>
           <Button onClick={onClose}>{r.net > 0 && !r.errors.length ? `Use ${sq(r.net)} sq ft` : 'Done'}</Button>
         </div>
         <div className="mx-auto grid max-w-2xl grid-cols-[1fr_1fr_1.3fr] gap-2 px-4 pb-3" aria-live="polite">
