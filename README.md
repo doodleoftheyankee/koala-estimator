@@ -118,11 +118,13 @@ under Project → Settings → Environment Variables.
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | everything |
 | `SUPABASE_SERVICE_ROLE_KEY` | creating quotes and PDFs, the signing page, invites (server only) |
 | `APP_URL` | links in quote emails |
-| `RESEND_API_KEY`, `QUOTE_FROM_EMAIL`, `OFFICE_NOTIFY_EMAIL` | email. Without these, quotes still work: the estimator gets a link to share by hand. |
+| `RESEND_API_KEY`, `QUOTE_FROM_EMAIL`, `OFFICE_NOTIFY_EMAIL` | email. Without these, quotes still work: the estimator gets a link to share by hand. Each store's own sender and office email (Pricing, Store) come first; these are the fallback, so every store after the first must set its own sender. |
 | `GOOGLE_MAPS_API_KEY` | the drive-time lookup button (optional) |
 | `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite roof takeoff (optional), on each area ("Look up from the address": attic floor or roof deck, crawlspace floor, garage ceiling or wall run) and on the Roof lookup page (`/field/roof`: any address, with roofing squares, waste, bundles, roof edges, materials, a one-page print and recent lookups). Only Roof Takeoff's `/api` is used, server to server (contract v1.2; older answers still work); its own page is retired. A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button and the page say the lookup isn't set up. |
 | `CRON_SECRET` | the nightly learning run. Vercel Cron sends it automatically; without it the run is disabled. Any long random string. |
-| `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional) |
+| `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional; a store's own owner report email comes first) |
+| `GOOGLE_EXPORT_KEY`, `GOOGLE_EXPORT_KEYS` | the Google Sheets feed (`/api/export/google`). `GOOGLE_EXPORT_KEY` reads the first store; other stores get their own key in `GOOGLE_EXPORT_KEYS`, a JSON object of store id to key. A key never reads another store. |
+| `ROOF_CHECK_SPOT` | optional `lat,lng` for the roof lookup self-check (`/api/roof/check`) |
 
 ### 3. First owner account
 ```bash
@@ -131,16 +133,37 @@ NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
 ```
 After that, invite everyone else from **Team** in the app.
 
+### Stores (multi-location)
+Every store has its own prices, crews, settings, customers, jobs and learning; people have a role
+per store. The first store was created from the existing setup by the multi-location migrations
+(`20261119000001` to `…05`), without changing a price (`lib/server/newarkParity.test.ts` proves it).
+To open another store (after the cleanup migration below is applied):
+```bash
+NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  npm run create:location -- --name "Koala Insulation of Dover" --short Dover --tz America/New_York --state DE --zone 4A
+npm run bootstrap:owner -- --email owner@dover.example --name "Dover Owner" --location <store id it printed>
+```
+The new store starts from the industry starting values (not another store's learned numbers), and
+its costs, crew rates and code minimums are flagged for its owner to confirm. People who work in
+several stores pick the store at the top of the screen. Products (the shared catalog) can be changed
+only by someone who owns every store. "STOP" opt-outs are shared by every store. Corporate users
+(`profiles.corporate`, set with the service role) can read every store and change nothing.
+
+**Before opening a second store**, apply the multi-location cleanup migration (a follow-up pull
+request, applied after this code is deployed): it removes the temporary single-store defaults.
+`create_location()` refuses until it is applied.
+
 ### 4. Replace the placeholders (owner)
 The seed data is clearly marked **placeholder**. The Pricing page shows a banner until
 each item is filled in:
 - Material costs and coverage, crew rates, overhead, target and floor margin, minimum job
   price, disposal and vehicle cost.
-- **Energy code edition.** Newark and New Castle County enforce the 2018 IECC, so the seed
+- **Energy code edition.** The Pricing page shows the edition stored for the store. Newark and New Castle County enforce the 2018 IECC, so the seed
   uses zone 4A attic R-49 (the 2024 IECC, adopted by the state in April 2026, keeps R-49 for
   attics but raises walls). Better and Best attic options go to R-60.
 - Financing: the quote line is off until you sign up with a lender and enter its terms.
-- Branding (license number, phone, colors), quote terms, warranty text, shop address.
+- Store details on Pricing, Store (license number, phone, color, logo, shop address, sender
+  emails), quote terms and warranty text.
 - The learned coefficients start from industry rules of thumb. The nightly learning run
   replaces them with your own job data as crews enter actuals.
 

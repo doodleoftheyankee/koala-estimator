@@ -4,7 +4,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Tier } from '@/lib/pricing';
-import type { QuoteDocument } from './model';
+import { LOCATION_COLUMNS, parseLocation, type LocationInfo } from '@/lib/locations/location';
+import { withTimeZone, type QuoteDocument } from './model';
 import { hashQuoteToken, isWellFormedToken } from './token';
 
 export type QuoteStatus = 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'superseded';
@@ -23,11 +24,14 @@ export interface PublicQuoteRow {
   signed_price: number | string | null;
   signer_name: string | null;
   signed_pdf_path: string | null;
+  location_id: string;
   document: QuoteDocument;
+  /** The store that sent the quote (its name, time zone, state, sender and office emails). */
+  location: LocationInfo;
 }
 
 const COLUMNS =
-  'id, estimate_id, version, status, pdf_path, pdf_sha256, expires_at, first_viewed_at, signed_at, signed_tier, signed_price, signer_name, signed_pdf_path, snapshot';
+  'id, estimate_id, version, status, pdf_path, pdf_sha256, expires_at, first_viewed_at, signed_at, signed_tier, signed_price, signer_name, signed_pdf_path, location_id, snapshot';
 
 /** Returns the quote for a raw URL token, or null when the token is malformed or unknown. */
 export async function findQuoteByToken(admin: SupabaseClient, token: string): Promise<PublicQuoteRow | null> {
@@ -35,10 +39,13 @@ export async function findQuoteByToken(admin: SupabaseClient, token: string): Pr
   const { data, error } = await admin.from('quotes').select(COLUMNS).eq('public_token_hash', hashQuoteToken(token)).maybeSingle();
   if (error) throw new Error(`Quote lookup failed: ${error.message}`);
   if (!data) return null;
-  const { snapshot, ...rest } = data as Omit<PublicQuoteRow, 'document'> & { snapshot: { document?: QuoteDocument } | null };
+  const { snapshot, ...rest } = data as Omit<PublicQuoteRow, 'document' | 'location'> & { snapshot: { document?: QuoteDocument } | null };
   const document = snapshot?.document;
   if (!document || !Array.isArray(document.options)) throw new Error('Quote snapshot has no document');
-  return { ...rest, document };
+  const loc = await admin.from('locations').select(LOCATION_COLUMNS).eq('id', rest.location_id).single();
+  if (loc.error) throw new Error(`Quote location lookup failed: ${loc.error.message}`);
+  const location = parseLocation(loc.data);
+  return { ...rest, location, document: withTimeZone(document, location.timeZone) };
 }
 
 export function isExpired(row: Pick<PublicQuoteRow, 'expires_at'>, now = new Date()): boolean {

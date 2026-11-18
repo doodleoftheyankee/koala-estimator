@@ -54,6 +54,11 @@ const deviationAckValueSchema = z.union([deviationAckSchema, trimmed(500).transf
 
 export const draftSchema = z.object({
   id: z.uuid(),
+  /**
+   * The store the estimate is for (set when it is created; drafts from before stores have none and
+   * belong to the person's only store). The server keeps the store it first saved the estimate in.
+   */
+  locationId: z.uuid().nullable().optional(),
   status: z.enum(ESTIMATE_STATUSES),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -107,15 +112,27 @@ export const syncableDraftSchema = draftSchema.refine((d) => d.areas.length > 0,
   path: ['areas'],
 });
 
-export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID()): EstimateDraft {
+/** The store a new estimate is for: its id, and its town and state (the defaults for the address). */
+export interface DraftStore {
+  id: string | null;
+  city: string;
+  state: string;
+}
+
+export function newDraft(
+  now = new Date(),
+  uuid: () => string = () => crypto.randomUUID(),
+  store: DraftStore = { id: null, city: '', state: '' },
+): EstimateDraft {
   const ts = now.toISOString();
   return {
     id: uuid(),
+    locationId: store.id,
     status: 'draft',
     createdAt: ts,
     updatedAt: ts,
     customer: { id: uuid(), firstName: '', lastName: '', email: '', phone: '', smsConsent: false, emailConsent: true },
-    property: { id: uuid(), street: '', city: 'Newark', state: 'DE', zip: '', yearBuilt: null, utility: null, homeType: null },
+    property: { id: uuid(), street: '', city: store.city, state: store.state, zip: '', yearBuilt: null, utility: null, homeType: null },
     areas: [],
     crewId: null,
     driveMinutesOneWay: null,

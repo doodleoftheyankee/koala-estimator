@@ -106,6 +106,8 @@ create policy audit_read on audit_log for select
 create policy profiles_read on profiles for select using (can_see_profile(id));
 create policy profiles_owner_update on profiles for update
   using (is_owner_of_profile(id)) with check (is_owner_of_profile(id));
+-- An owner invites new people (the invite then adds them to the owner's store).
+create policy profiles_owner_insert on profiles for insert with check (has_role('owner'));
 
 -- Store pricing and setup: the store's staff (not crews) read, the store's owner writes.
 do $$
@@ -293,7 +295,7 @@ $$;
 create or replace view crew_job_view with (security_barrier = true) as
 with signed as (
   select j.id, j.status, j.scheduled_start, j.scheduled_days, j.crew_id, j.started_at, j.completed_at, j.estimate_id,
-         q.signed_tier, q.snapshot,
+         j.location_id, q.signed_tier, q.snapshot,
          (select o from jsonb_array_elements(coalesce(q.snapshot->'options', '[]')) o
            where o->>'tier' = q.signed_tier::text limit 1) as opt
     from jobs j
@@ -322,7 +324,8 @@ select s.id as job_id, s.status, s.scheduled_start, s.scheduled_days, s.crew_id,
                                             'qty', (l.v->>'qty')::numeric, 'unit', l.v->>'unit',
                                             'hours', (l.v->>'hours')::numeric) order by l.i)
           from jsonb_array_elements(coalesce(s.opt->'lines', '[]')) with ordinality l(v, i)
-         where l.v->>'areaId' = sa.area_id::text and l.v->>'kind' in ('material', 'labor', 'removal')) as scope
+         where l.v->>'areaId' = sa.area_id::text and l.v->>'kind' in ('material', 'labor', 'removal')) as scope,
+       s.location_id
 from signed s
 join estimates e            on e.id = s.estimate_id
 join properties p           on p.id = e.property_id
@@ -333,7 +336,7 @@ left join estimate_areas a  on a.id = sa.area_id;
 create or replace view crew_actuals_view with (security_barrier = true) as
 select a.id, a.job_id, a.area_id, a.product, a.actual_material_qty, a.actual_material_unit, a.actual_hours,
        a.actual_crew_size, a.actual_drive_minutes, a.actual_days, a.notes, a.entered_by, a.entered_at,
-       a.verified_at, a.row_version
+       a.verified_at, a.row_version, a.location_id
   from job_actuals a
  where has_location_role(a.location_id, 'owner', 'office') or is_crew_job(a.job_id);
 

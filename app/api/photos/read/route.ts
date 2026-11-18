@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { authorize } from '@/lib/server/auth';
+import { authorize, roleIn } from '@/lib/server/auth';
+import { LOCATION_COLUMNS, parseLocation, stateName, type LocationInfo } from '@/lib/locations/location';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUuid, photoPath } from '@/lib/photos/rules';
@@ -51,6 +52,22 @@ export async function POST(request: NextRequest) {
   const ctx = readContextSchema.safeParse(ctxJson);
   if (!ctx.success) return fail('Area details are incomplete', 400);
 
+  // The read belongs to the estimate's store (the store the estimator works in when the estimate
+  // has not synced yet), and the model is told where the house is from that store.
+  const admin = createAdminClient();
+  const { data: estRow, error: estError } = await admin.from('estimates').select('location_id').eq('id', ctx.data.estimateId).maybeSingle();
+  if (estError) return fail(`Could not check the estimate: ${estError.message}`, 500, 'failed');
+  const locationId = (estRow?.location_id as string | undefined) ?? profile.locationId;
+  const role = roleIn(profile, locationId);
+  if (!role || role === 'crew') return fail('Estimate not found', 404);
+  let store: LocationInfo = profile.location;
+  if (locationId !== profile.locationId) {
+    const { data: locRow, error: locError } = await admin.from('locations').select(LOCATION_COLUMNS).eq('id', locationId).single();
+    if (locError) return fail(`Could not load the store: ${locError.message}`, 500, 'failed');
+    store = parseLocation(locRow);
+  }
+  ctx.data.region = `${stateName(store.state)}, IECC climate zone ${store.climateZone}`;
+
   const files = form.getAll('photo').filter((f): f is File => f instanceof File);
   const localIds = form.getAll('photoId').map(String);
   const remoteIds = [...new Set(form.getAll('remotePhotoId').map(String).filter(isUuid))];
@@ -65,7 +82,6 @@ export async function POST(request: NextRequest) {
   }
   if (total > MAX_READ_TOTAL_BYTES) return fail('The photos are too large together', 413);
 
-  const admin = createAdminClient();
   const images: ReadImage[] = [];
   const sentIds: string[] = [];
   for (const [i, f] of files.entries()) {
@@ -101,6 +117,7 @@ export async function POST(request: NextRequest) {
       status: 'pending',
       area_id: (areaRow?.id as string | undefined) ?? null,
       estimate_id: ctx.data.estimateId,
+      location_id: locationId,
       created_by: profile.userId,
       photo_ids: sentIds,
       photo_count: images.length,
@@ -190,9 +207,14 @@ export async function PATCH(request: NextRequest) {
   const body = feedbackSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return fail('Invalid feedback', 400);
   const admin = createAdminClient();
-  const { data: analysis } = await admin.from('photo_analyses').select('id, created_by').eq('id', body.data.analysisId).eq('status', 'done').maybeSingle();
+  const { data: analysis } = await admin
+    .from('photo_analyses')
+    .select('id, created_by, location_id')
+    .eq('id', body.data.analysisId)
+    .eq('status', 'done')
+    .maybeSingle();
   if (!analysis) return fail('Unknown photo read', 404);
-  if (analysis.created_by !== profile.userId && profile.role !== 'owner') return fail('Not your photo read', 403);
+  if (analysis.created_by !== profile.userId && roleIn(profile, analysis.location_id as string) !== 'owner') return fail('Not your photo read', 403);
   const { error: insertError } = await admin.from('photo_corrections').insert(
     body.data.decisions.map((d) => ({
       analysis_id: body.data.analysisId,

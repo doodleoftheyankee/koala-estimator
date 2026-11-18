@@ -10,7 +10,8 @@ export async function GET() {
   const supabase = await createClient();
   let q = supabase
     .from('estimates')
-    .select('id, status, row_version, updated_at, client_doc')
+    .select('id, status, row_version, updated_at, client_doc, location_id')
+    .eq('location_id', profile.locationId)
     .not('client_doc', 'is', null)
     .order('updated_at', { ascending: false })
     .limit(100);
@@ -23,7 +24,8 @@ export async function GET() {
     status: r.status as string,
     rowVersion: r.row_version as number,
     updatedAt: r.updated_at as string,
-    doc: r.client_doc,
+    // Drafts saved before stores existed carry no store; the row knows it.
+    doc: r.client_doc && typeof r.client_doc === 'object' ? { ...(r.client_doc as object), locationId: r.location_id } : r.client_doc,
   }));
   return NextResponse.json({ estimates: rows });
 }

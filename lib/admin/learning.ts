@@ -1,7 +1,7 @@
 // Pure helpers for the owner's learning dashboard (app/admin/learning, PLAN.md §6): plain-English
 // names for coefficient kinds and scopes, the candidate-vs-active diff, row schemas for the
 // learning tables, lenient parsers for the jsonb the nightly job writes (gate results, backtest,
-// accuracy, win-rate buckets), the action forms, and number/date formatting in Newark, DE time.
+// accuracy, win-rate buckets), the action forms, and number/date formatting in the store's time zone.
 // No I/O and no server-only imports, so client components can use the formatters too.
 import { z } from 'zod';
 import {
@@ -19,8 +19,6 @@ import type { AccuracyReport, BacktestMetrics, GateResult, WinRateBucket } from 
 import type { NightlySummary } from '@/lib/learning/nightly';
 import { optionalTextField, textField, uuidField } from './forms';
 
-/** Business dates and times are Newark, DE local time. */
-export const BUSINESS_TZ = 'America/New_York';
 
 // ---------------------------------------------------------------------------
 // Coefficient kinds and scopes
@@ -904,15 +902,9 @@ export function formatMetric(v: number | null | undefined): string {
   return v.toFixed(2);
 }
 
-const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: BUSINESS_TZ,
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-});
-const dateFmt = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: 'short', day: 'numeric' });
+const dateTimeFmt = (timeZone: string) =>
+  new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const dateFmt = (timeZone: string) => new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'short', day: 'numeric' });
 
 // Newer ICU puts a narrow no-break space before AM/PM; plain spaces keep output stable everywhere.
 const clean = (s: string) => s.replace(/[  ]/g, ' ');
@@ -923,16 +915,16 @@ function toDate(iso: string | null | undefined): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-/** "Oct 20, 2026, 2:15 AM" in Eastern time; "—" when missing or invalid. */
-export function formatDateTime(iso: string | null | undefined): string {
+/** "Oct 20, 2026, 2:15 AM" in the store's time zone; "—" when missing or invalid. */
+export function formatDateTime(iso: string | null | undefined, timeZone: string): string {
   const d = toDate(iso);
-  return d ? clean(dateTimeFmt.format(d)) : DASH;
+  return d ? clean(dateTimeFmt(timeZone).format(d)) : DASH;
 }
 
-/** "Oct 20, 2026" in Eastern time. */
-export function formatDate(iso: string | null | undefined): string {
+/** "Oct 20, 2026" in the store's time zone. */
+export function formatDate(iso: string | null | undefined, timeZone: string): string {
   const d = toDate(iso);
-  return d ? clean(dateFmt.format(d)) : DASH;
+  return d ? clean(dateFmt(timeZone).format(d)) : DASH;
 }
 
 /** How long a run took: "42 s", "3 min 5 s", "1 h 2 min"; null when it has not finished. */

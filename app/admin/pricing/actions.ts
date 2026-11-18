@@ -26,6 +26,7 @@ import { crossCheckSettings, parseSettingsForm, SETTING_LABELS, settingObject, t
 import {
   codeRequirementForm,
   crewForm,
+  locationForm,
   materialForm,
   newCrewForm,
   parseTierForm,
@@ -36,6 +37,7 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 type DbError = { code?: string; message: string } | null;
 
 const NOT_OWNER = 'Only the owner can change pricing.';
+const SHARED_CATALOG = 'Products are shared by every store. Only someone who owns every store can change them.';
 const PATH = '/admin/pricing';
 
 /** Throws on a Supabase error so restore steps fail loudly. */
@@ -50,19 +52,20 @@ function friendly(err: NonNullable<DbError>, what: string): string {
   return `Saving ${what.toLowerCase()} failed: ${err.message}`;
 }
 
-async function ownerDb(): Promise<{ db: Db; userId: string } | null> {
+/** The owner of the active store. Every read and write below is limited to that store. */
+async function ownerDb(): Promise<{ db: Db; userId: string; loc: string } | null> {
   const profile = await getSessionProfile();
   if (!profile || profile.role !== 'owner') return null;
-  return { db: await createClient(), userId: profile.userId };
+  return { db: await createClient(), userId: profile.userId, loc: profile.locationId };
 }
 
 /**
  * After a write: rebuild the pricing bundle. On failure restore the previous values and
  * refuse the change; on success revalidate the page.
  */
-async function verifyOrRestore(db: Db, restore: () => Promise<void>): Promise<ActionResult> {
+async function verifyOrRestore(db: Db, loc: string, restore: () => Promise<void>): Promise<ActionResult> {
   try {
-    await loadPricingBundle(db);
+    await loadPricingBundle(db, loc);
   } catch (e) {
     let note = '';
     try {
@@ -99,19 +102,19 @@ interface SettingRow {
 export async function saveSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db, userId } = owner;
+  const { db, userId, loc } = owner;
 
   const parsed = parseSettingsForm(formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const values = parsed.values;
 
   if (typeof values.default_crew_id === 'string') {
-    const crew = await db.from('crews').select('id').eq('id', values.default_crew_id).eq('active', true).maybeSingle();
+    const crew = await db.from('crews').select('id').eq('id', values.default_crew_id).eq('location_id', loc).eq('active', true).maybeSingle();
     if (crew.error) return failure(crew.error.message);
     if (!crew.data) return failure('The default crew must be an active crew.');
   }
 
-  const all = await db.from('app_settings').select('key, value, description');
+  const all = await db.from('app_settings').select('key, value, description').eq('location_id', loc);
   if (all.error) return failure(all.error.message);
   const previous = (all.data as SettingRow[]) ?? [];
   const prevByKey = new Map(previous.map((r) => [r.key, r]));
@@ -132,6 +135,7 @@ export async function saveSettings(_prev: ActionResult | null, fd: FormData): Pr
     const before = prevByKey.get(key);
     const description = before?.description ?? null;
     return {
+      location_id: loc,
       key,
       value: values[key] as Json,
       description: isPlaceholder(description) ? stripPlaceholder(description, SETTING_LABELS[key] ?? null) : description,
@@ -147,17 +151,43 @@ export async function saveSettings(_prev: ActionResult | null, fd: FormData): Pr
       must(
         await db
           .from('app_settings')
-          .upsert(existed.map((r) => ({ key: r.key, value: r.value, description: r.description, updated_at: now, updated_by: userId })), { onConflict: 'key' }),
+          .upsert(
+            existed.map((r) => ({ location_id: loc, key: r.key, value: r.value, description: r.description, updated_at: now, updated_by: userId })),
+            { onConflict: 'location_id,key' },
+          ),
       );
     }
-    if (added.length) must(await db.from('app_settings').delete().in('key', added));
+    if (added.length) must(await db.from('app_settings').delete().eq('location_id', loc).in('key', added));
   };
 
-  const write = await db.from('app_settings').upsert(rows, { onConflict: 'key' }).select('key');
+  const write = await db.from('app_settings').upsert(rows, { onConflict: 'location_id,key' }).select('key');
   if (write.error) return abortWith(friendly(write.error, 'Settings'), restore);
   if ((write.data ?? []).length !== rows.length) return abortWith(NOT_OWNER, restore);
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
+}
+
+// ---------------------------------------------------------------------------
+// Store details (the locations row)
+// ---------------------------------------------------------------------------
+
+export async function saveLocation(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const owner = await ownerDb();
+  if (!owner) return failure(NOT_OWNER);
+  const { db, loc } = owner;
+
+  const parsed = parseWith(locationForm, formToObject(fd));
+  if (!parsed.ok) return failure(parsed.error);
+
+  const write = await db.from('locations').update(parsed.data).eq('id', loc).select('id');
+  if (write.error) {
+    if (write.error.code === '22023') return failure('That time zone is not recognized. Use one like America/New_York.');
+    return failure(friendly(write.error, 'Store details'));
+  }
+  if (!write.data?.length) return failure(NOT_OWNER);
+  // The store's name and time zone show on every screen.
+  revalidatePath('/', 'layout');
+  return success('Store details saved.');
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +197,7 @@ export async function saveSettings(_prev: ActionResult | null, fd: FormData): Pr
 export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
 
   const parsed = parseWith(materialForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -177,6 +207,7 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
     .from('materials')
     .select('id, name, unit, cost_per_unit, coverage_sqft_in, needs_owner_input')
     .eq('id', input.id)
+    .eq('location_id', loc)
     .maybeSingle();
   if (prev.error) return failure(prev.error.message);
   if (!prev.data) return failure('That material no longer exists. Reload the page.');
@@ -213,15 +244,15 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
   if (write.error) return failure(friendly(write.error, 'Material'));
   if (!write.data?.length) return failure(NOT_OWNER);
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
 }
 
 // ---------------------------------------------------------------------------
 // Crews
 // ---------------------------------------------------------------------------
 
-async function defaultCrewId(db: Db): Promise<string | null> {
-  const r = await db.from('app_settings').select('value').eq('key', 'default_crew_id').maybeSingle();
+async function defaultCrewId(db: Db, loc: string): Promise<string | null> {
+  const r = await db.from('app_settings').select('value').eq('location_id', loc).eq('key', 'default_crew_id').maybeSingle();
   const v = (r.data as { value: unknown } | null)?.value;
   return typeof v === 'string' ? v : null;
 }
@@ -229,18 +260,18 @@ async function defaultCrewId(db: Db): Promise<string | null> {
 export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
 
   const parsed = parseWith(crewForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const input = parsed.data;
 
-  const prev = await db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').eq('id', input.id).maybeSingle();
+  const prev = await db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').eq('id', input.id).eq('location_id', loc).maybeSingle();
   if (prev.error) return failure(prev.error.message);
   if (!prev.data) return failure('That crew no longer exists. Reload the page.');
   const before = prev.data as { name: string; size: number; blended_hourly_cost: number | string; active: boolean; needs_owner_input: boolean };
 
-  if (!input.active && before.active && (await defaultCrewId(db)) === input.id) {
+  if (!input.active && before.active && (await defaultCrewId(db, loc)) === input.id) {
     return failure('This is the default crew. Pick a different default crew in Business settings before deactivating it.');
   }
 
@@ -267,13 +298,13 @@ export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promis
   if (write.error) return failure(friendly(write.error, 'A crew with that name'));
   if (!write.data?.length) return failure(NOT_OWNER);
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
 }
 
 export async function addCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
 
   const parsed = parseWith(newCrewForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -281,13 +312,13 @@ export async function addCrew(_prev: ActionResult | null, fd: FormData): Promise
 
   const write = await db
     .from('crews')
-    .insert({ name: input.name, size: input.size, blended_hourly_cost: input.blended_hourly_cost, active: true, needs_owner_input: false })
+    .insert({ name: input.name, size: input.size, blended_hourly_cost: input.blended_hourly_cost, active: true, needs_owner_input: false, location_id: loc })
     .select('id')
     .single();
   if (write.error) return failure(friendly(write.error, 'A crew with that name'));
   const id = (write.data as { id: string }).id;
 
-  const result = await verifyOrRestore(db, async () => {
+  const result = await verifyOrRestore(db, loc, async () => {
     must(await db.from('crews').delete().eq('id', id));
   });
   return result.ok ? success(`Added ${input.name}.`) : result;
@@ -312,7 +343,7 @@ interface TierBefore {
 export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
 
   const parsed = parseTierForm(formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -322,6 +353,7 @@ export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData
     db
       .from('tier_templates')
       .select('id, job_type, label, primary_product, target_r, include_air_sealing, include_removal, marketing_bullets, active')
+      .eq('location_id', loc)
       .in(
         'id',
         rows.map((r) => r.id),
@@ -379,7 +411,7 @@ export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData
     if (!write.data?.length) return abortWith(NOT_OWNER, restore);
   }
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
 }
 
 // ---------------------------------------------------------------------------
@@ -389,13 +421,13 @@ export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData
 export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
 
   const parsed = parseWith(codeRequirementForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const input = parsed.data;
 
-  const prev = await db.from('code_requirements').select('min_r, alt_spec, code_edition, source_note').eq('id', input.id).maybeSingle();
+  const prev = await db.from('code_requirements').select('min_r, alt_spec, code_edition, source_note').eq('id', input.id).eq('location_id', loc).maybeSingle();
   if (prev.error) return failure(prev.error.message);
   if (!prev.data) return failure('That code requirement no longer exists. Reload the page.');
   const before = prev.data as { min_r: number | string; alt_spec: string | null; code_edition: string; source_note: string | null };
@@ -421,7 +453,7 @@ export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormDa
   }
   if (!write.data?.length) return failure(NOT_OWNER);
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +463,12 @@ export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormDa
 export async function saveProduct(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
   if (!owner) return failure(NOT_OWNER);
-  const { db } = owner;
+  const { db, loc } = owner;
+
+  // Products are shared by every store, so only someone who owns every store may change them.
+  const shared = await db.rpc('can_edit_shared_catalog');
+  if (shared.error) return failure(shared.error.message);
+  if (shared.data !== true) return failure(SHARED_CATALOG);
 
   const parsed = parseWith(productForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -471,5 +508,5 @@ export async function saveProduct(_prev: ActionResult | null, fd: FormData): Pro
   if (write.error) return failure(friendly(write.error, 'Product'));
   if (!write.data?.length) return failure(NOT_OWNER);
 
-  return verifyOrRestore(db, restore);
+  return verifyOrRestore(db, loc, restore);
 }

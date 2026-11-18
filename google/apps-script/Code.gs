@@ -238,7 +238,7 @@ function writeDashboard_(data) {
   const stamp = Utilities.formatDate(new Date(data.generatedAt), ss.getSpreadsheetTimeZone(), 'MMM d, yyyy h:mm a');
   sh.setRowHeight(1, 16);
   sh.setRowHeight(DASH_ROWS.title, 40);
-  sh.getRange(DASH_ROWS.title, 2, 1, spanCols_(6)).merge().setValue('Koala Insulation of Newark').setFontSize(20).setFontWeight('bold');
+  sh.getRange(DASH_ROWS.title, 2, 1, spanCols_(6)).merge().setValue(data.store || 'Koala Estimator').setFontSize(20).setFontWeight('bold');
   sh.getRange(DASH_ROWS.subtitle, 2, 1, spanCols_(6)).merge()
     .setValue('Sales and crew dashboard  ·  ' + data.estimates.length + ' estimates  ·  ' + data.jobs.length + ' jobs  ·  updated ' + stamp)
     .setFontColor(THEME.muted);

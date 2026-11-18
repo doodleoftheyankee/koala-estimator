@@ -57,12 +57,12 @@ const s = StyleSheet.create({
   footerRight: { position: 'absolute', bottom: 20, left: 40, right: 40, textAlign: 'right', fontSize: 8.5, color: '#64748b' },
 });
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, tz: string): string {
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
 }
 
-function formatDateTime(iso: string): string {
+function formatDateTime(iso: string, tz: string): string {
   return new Date(iso).toLocaleString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -70,7 +70,7 @@ function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     second: '2-digit',
-    timeZone: 'America/New_York',
+    timeZone: tz,
     timeZoneName: 'short',
   });
 }
@@ -133,8 +133,8 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
           <View>
             <Text style={s.quoteTitle}>{signature ? 'Signed Quote' : 'Quote'}</Text>
             <Text style={[s.small, s.right]}>No. {doc.quoteNumber}</Text>
-            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt)}</Text>
-            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil)}</Text>
+            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt, doc.timeZone)}</Text>
+            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil, doc.timeZone)}</Text>
           </View>
         </View>
 
@@ -193,7 +193,7 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
               </Text>
               <Image src={{ data: Buffer.from(signature.imagePng), format: 'png' }} style={s.sigImage} />
               <Text>Signed electronically by {signature.signerName}</Text>
-              <Text style={s.small}>Date: {formatDateTime(signature.signedAt)}</Text>
+              <Text style={s.small}>Date: {formatDateTime(signature.signedAt, doc.timeZone)}</Text>
               <Text style={s.small}>IP address: {signature.ip ?? 'not recorded'}</Text>
             </>
           ) : (

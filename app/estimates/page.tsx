@@ -74,7 +74,6 @@ function totalOf(r: Row, quote: NonNullable<Row['quotes']>[number] | undefined):
 }
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const when = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -101,6 +100,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
        options:estimate_options(tier, price),
        quotes(id, version, status, sent_at, signed_at, signed_price)`,
     )
+    .eq('location_id', profile.locationId)
     .order('updated_at', { ascending: false })
     .order('version', { referencedTable: 'quotes', ascending: false })
     .limit(1, { referencedTable: 'quotes' })
@@ -111,7 +111,12 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   const [res, estimatorsRes] = await Promise.all([
     query,
     canFilterEstimator
-      ? db.from('profiles').select('id, full_name').in('role', ['owner', 'office', 'estimator']).order('full_name')
+      ? db
+          .from('location_members')
+          .select('profile:profiles(id, full_name)')
+          .eq('location_id', profile.locationId)
+          .eq('active', true)
+          .in('role', ['owner', 'office', 'estimator'])
       : Promise.resolve(null),
   ]);
 
@@ -123,7 +128,13 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
     if (parsed.success) rows = parsed.data;
     else error = `Unexpected data from the server (${parsed.error.issues[0]?.message ?? 'parse error'}).`;
   }
-  const estimators = estimatorsRes && !estimatorsRes.error ? (estimatorSchema.safeParse(estimatorsRes.data).data ?? []) : [];
+  const estimators =
+    estimatorsRes && !estimatorsRes.error
+      ? (estimatorSchema.safeParse((estimatorsRes.data ?? []).map((m) => (Array.isArray(m.profile) ? m.profile[0] : m.profile))).data ?? []).sort(
+          (a, b) => a.full_name.localeCompare(b.full_name),
+        )
+      : [];
+  const when = new Intl.DateTimeFormat('en-US', { timeZone: profile.location.timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   const items = rows.map((r) => {
     const quote = r.quotes?.[0];
@@ -220,7 +231,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                         {it.estimator} · {it.updated}
                       </span>
                     </div>
-                    {it.quote ? <QuoteLine quote={it.quote} /> : null}
+                    {it.quote ? <QuoteLine quote={it.quote} when={when} /> : null}
                     {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
                     <div className="mt-3 flex gap-2">
                       <RowActions id={it.id} quoteId={it.quote?.id ?? null} />
@@ -255,7 +266,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                       <td className="px-4 py-3 text-slate-600">{it.estimator}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={it.status} />
-                        {it.quote ? <QuoteLine quote={it.quote} compact /> : null}
+                        {it.quote ? <QuoteLine quote={it.quote} when={when} compact /> : null}
                         {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{it.total != null ? usd.format(it.total) : '—'}</td>
@@ -287,7 +298,7 @@ function StatusBadge({ status }: { status: EstimateStatus }) {
   );
 }
 
-function QuoteLine({ quote, compact = false }: { quote: NonNullable<Row['quotes']>[number]; compact?: boolean }) {
+function QuoteLine({ quote, when, compact = false }: { quote: NonNullable<Row['quotes']>[number]; when: Intl.DateTimeFormat; compact?: boolean }) {
   const date = quote.signed_at ?? quote.sent_at;
   const label = quote.signed_at ? 'signed' : quote.status;
   return (

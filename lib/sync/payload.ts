@@ -28,6 +28,8 @@ export function buildSyncPayload(
   return {
     estimate: {
       id: draft.id,
+      // The store the server priced it for; for an existing estimate the database keeps its own.
+      location_id: bundle.location?.id ?? draft.locationId ?? null,
       status,
       coefficient_set_id: bundle.coefficientSet.id,
       pricing_snapshot: bundle.snapshot,
@@ -39,7 +41,7 @@ export function buildSyncPayload(
       notes: draft.notes || null,
       priced_offline: opts.pricedOffline,
       client_created_at: draft.createdAt,
-      client_doc: { ...draft, status, bundleHash: bundle.hash },
+      client_doc: { ...draft, locationId: bundle.location?.id ?? draft.locationId ?? null, status, bundleHash: bundle.hash },
     },
     customer: {
       id: draft.customer.id,

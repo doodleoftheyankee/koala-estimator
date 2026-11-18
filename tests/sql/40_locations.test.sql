@@ -10,6 +10,7 @@
 \set crewb   '00000000-0000-0000-0000-0000000000e4'
 \set both    '00000000-0000-0000-0000-0000000000e5'
 \set corp    '00000000-0000-0000-0000-0000000000e6'
+\set newb    '00000000-0000-0000-0000-0000000000e7'
 \set owna    '00000000-0000-0000-0000-0000000000a1'
 \set offa    '00000000-0000-0000-0000-0000000000a2'
 \set esta    '00000000-0000-0000-0000-0000000000a3'
@@ -122,7 +123,7 @@ begin
 end $$;
 
 -- People: an owner, office, estimator and crew in the new store; one estimator in both; corporate.
-insert into auth.users (id) values (:'ownb'), (:'offb'), (:'estb'), (:'crewb'), (:'both'), (:'corp');
+insert into auth.users (id) values (:'ownb'), (:'offb'), (:'estb'), (:'crewb'), (:'both'), (:'corp'), (:'newb');
 insert into profiles (id, role, full_name) values
   (:'ownb', 'owner', 'Owner B'), (:'offb', 'office', 'Office B'), (:'estb', 'estimator', 'Estimator B'),
   (:'crewb', 'crew', 'Crew B'), (:'both', 'estimator', 'Estimator Both'), (:'corp', 'office', 'Corporate');
@@ -330,6 +331,33 @@ begin
   assert ok, 'nobody grants themselves corporate access';
 end $$;
 
+-- Owner B invites someone: the profile, then their role in store B (the Team page's invite).
+do $$
+declare v_b uuid := (select v::uuid from t_ids where k = 'b'); ok boolean := false;
+begin
+  insert into profiles (id, full_name, email, role) values ('00000000-0000-0000-0000-0000000000e7', 'New Hire', 'new@b.test', 'estimator');
+  insert into location_members (location_id, profile_id, role) values (v_b, '00000000-0000-0000-0000-0000000000e7', 'estimator');
+  assert exists (select 1 from profiles where id = '00000000-0000-0000-0000-0000000000e7'), 'owner B sees the new hire';
+  assert (select count(*) from location_members where profile_id = '00000000-0000-0000-0000-0000000000e7') = 1,
+    'the new hire works in store B only (no automatic pilot membership with two stores)';
+  begin
+    insert into profiles (id, full_name, email, role, corporate)
+    values ('00000000-0000-0000-0000-0000000000e8', 'Sneaky', 'x@b.test', 'owner', true);
+  exception when insufficient_privilege or foreign_key_violation then ok := true;
+  end;
+  assert ok, 'an invite cannot grant corporate access';
+end $$;
+select set_config('request.jwt.claim.sub', :'estb', false);
+do $$
+declare ok boolean := false;
+begin
+  begin
+    insert into profiles (id, full_name, email, role) values ('00000000-0000-0000-0000-0000000000e8', 'Nope', 'n@b.test', 'owner');
+  exception when insufficient_privilege or foreign_key_violation then ok := true;
+  end;
+  assert ok, 'an estimator cannot add people';
+end $$;
+
 -- The pilot owner sees none of store B, and can no longer edit the shared catalog either.
 select set_config('request.jwt.claim.sub', :'owna', false);
 do $$
@@ -487,3 +515,4 @@ do $$ begin
   assert (select count(*) from audit_log where table_name = 'materials' and location_id = (select v::uuid from t_ids where k = 'b')) > 0,
     'store B changes are audited under store B';
 end $$;
+\echo '  ok'

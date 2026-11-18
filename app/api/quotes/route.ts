@@ -11,7 +11,8 @@ import { buildQuoteDocument } from '@/lib/quotes/model';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
 import { loadQuoteSettings } from '@/lib/quotes/settings';
 import { newQuoteToken, sha256Hex } from '@/lib/quotes/token';
-import { authorize } from '@/lib/server/auth';
+import { authorize, roleIn } from '@/lib/server/auth';
+import { LOCATION_COLUMNS, parseLocation, senderAddress } from '@/lib/locations/location';
 import { loadPricingBundle } from '@/lib/server/bundle';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
@@ -30,6 +31,7 @@ interface EstimateRow {
   row_version: number;
   client_doc: unknown;
   estimator_id: string;
+  location_id: string;
 }
 
 function pricesOf(options: PricedOption[]): Partial<Record<Tier, number>> {
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: estData, error: estErr } = await supabase
       .from('estimates')
-      .select('id, status, row_version, client_doc, estimator_id')
+      .select('id, status, row_version, client_doc, estimator_id, location_id')
       .eq('id', estimateId)
       .maybeSingle();
     if (estErr) throw new Error(`Loading the estimate failed: ${estErr.message}`);
@@ -88,7 +90,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Add the customer's email address before sending the quote." }, { status: 400 });
     }
 
-    const bundle = await loadPricingBundle(supabase);
+    // Everything below is the estimate's store: its prices, its branding, its time zone, its sender.
+    const role = roleIn(profile, estimate.location_id);
+    if (!role || role === 'crew') return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
+    const { data: locRow, error: locErr } = await supabase.from('locations').select(LOCATION_COLUMNS).eq('id', estimate.location_id).single();
+    if (locErr) throw new Error(`Loading the location failed: ${locErr.message}`);
+    const location = parseLocation(locRow);
+
+    const bundle = await loadPricingBundle(supabase, estimate.location_id);
     const priced = priceEstimate(
       { ...toEstimateInput(draft), areas: priceableAreas(draft) },
       bundle.snapshot,
@@ -121,10 +130,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const policy = canSendQuote(profile.role, options, bundle.snapshot.settings);
+    const policy = canSendQuote(role, options, bundle.snapshot.settings);
     if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons }, { status: 403 });
 
-    const settings = await loadQuoteSettings(supabase);
+    const settings = await loadQuoteSettings(supabase, location);
     const admin = createAdminClient();
 
     const { data: last, error: lastErr } = await admin
@@ -148,6 +157,7 @@ export async function POST(request: Request) {
       estimator: { name: profile.fullName, email: profile.email },
       terms: settings.terms,
       warranty: settings.warranty,
+      timeZone: location.timeZone,
     });
 
     const pdf = await renderQuotePdf(document);
@@ -162,6 +172,7 @@ export async function POST(request: Request) {
       .from('quotes')
       .insert({
         estimate_id: estimateId,
+        location_id: estimate.location_id,
         version,
         status: 'sent',
         pdf_path: pdfPath,
@@ -222,7 +233,7 @@ export async function POST(request: Request) {
 
     const url = `${serverEnv.appUrl()}/q/${token}`;
     const mail = quoteEmail(document, url);
-    const result = await sendEmail({ to: customerEmail, ...mail });
+    const result = await sendEmail({ to: customerEmail, ...mail, from: senderAddress(location, serverEnv.quoteFromEmail()) });
 
     return NextResponse.json({ quoteId, version, url, emailed: result.sent, rowVersion, clientDoc });
   } catch (e) {

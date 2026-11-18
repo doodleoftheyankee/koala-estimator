@@ -11,6 +11,7 @@ import {
   textField,
   uuidField,
 } from './forms';
+import { isTimeZone } from '@/lib/locations/location';
 
 /** Products that can be the primary (R-bearing) product of a tier. */
 export const PRIMARY_PRODUCTS = PRODUCTS.filter((p) => p !== 'air_sealing' && p !== 'removal');
@@ -85,3 +86,46 @@ export function parseTierForm(obj: Record<string, string>): { ok: true; jobType:
   if (rows.length === 0) return { ok: false, error: 'Nothing to save.' };
   return { ok: true, jobType: jt.data, rows };
 }
+
+const optionalEmail = (label: string) => optionalTextField(label, 200).pipe(z.email(`${label} is not a valid email`).nullable());
+const optionalSender = (label: string) =>
+  optionalTextField(label, 200).pipe(
+    z
+      .string()
+      .regex(/^(?:[^<>]+<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>|[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)$/, `${label} must be an email, or "Name <email>"`)
+      .nullable(),
+  );
+
+/** The store's own details (the locations row): name, time zone, contact details and branding. */
+export const locationForm = z.object({
+  name: textField('Store name', 120),
+  short_name: textField('Short name', 60),
+  time_zone: textField('Time zone', 64).refine(isTimeZone, 'Time zone must be one like America/New_York'),
+  state: textField('State', 2)
+    .transform((v) => v.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{2}$/, 'State must be a two-letter code like DE')),
+  default_county: optionalTextField('County', 80),
+  climate_zone: textField('Climate zone', 3)
+    .transform((v) => v.toUpperCase())
+    .pipe(z.string().regex(/^[1-8][A-C]?$/, 'Climate zone must look like 4A')),
+  shop_address: optionalTextField('Shop address', 300),
+  phone: optionalTextField('Phone', 50),
+  license_number: optionalTextField('License number', 100),
+  brand_color: optionalTextField('Brand color', 7).pipe(
+    z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'Brand color must look like #0f766e')
+      .nullable(),
+  ),
+  logo_path: optionalTextField('Logo URL', 500).pipe(
+    z
+      .string()
+      .regex(/^https:\/\//, 'Logo URL must start with https://')
+      .nullable(),
+  ),
+  utilities: linesField('Utilities', 20, 80),
+  quote_from_email: optionalSender('Quote sender'),
+  office_notify_email: optionalEmail('Office notification email'),
+  owner_report_email: optionalEmail('Owner report email'),
+});
+export type LocationFormValues = z.infer<typeof locationForm>;

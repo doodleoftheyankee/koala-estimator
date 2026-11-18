@@ -35,10 +35,11 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, []);
 
   const createEstimate = useCallback(async () => {
-    const draft = newDraft();
+    // New estimates belong to the store the estimator is working in.
+    const draft = newDraft(new Date(), undefined, { id: profile.locationId, city: profile.town ?? '', state: profile.state ?? '' });
     await db().estimates.put(newLocalEstimate(draft, profile.userId));
     go({ kind: 'edit', id: draft.id });
-  }, [go, profile.userId]);
+  }, [go, profile.userId, profile.locationId, profile.town, profile.state]);
 
   useEffect(() => {
     let cancelled = false;

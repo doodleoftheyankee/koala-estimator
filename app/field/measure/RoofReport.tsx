@@ -6,7 +6,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { pitchText, roundFt, roundSqft, type RoofResult } from '@/lib/roof/lookup';
-import { COMPANY, EDGE_INFO, EDGES_NOT_MEASURED, oneDecimal, OUTLINE_COLOR, REPORT_FOOTER, reportFaceColumns, squaresLabel, type TakeoffData, type TakeoffFace } from '@/lib/roof/roofing';
+import { EDGE_INFO, EDGES_NOT_MEASURED, oneDecimal, OUTLINE_COLOR, REPORT_FOOTER, reportFaceColumns, squaresLabel, type TakeoffData, type TakeoffFace } from '@/lib/roof/roofing';
 import { mapShapes, paintRoofMap, satelliteUrl } from '@/lib/roof/draw';
 
 const comma = (n: number) => n.toLocaleString('en-US');
@@ -78,7 +78,7 @@ export function RoofReport({ data, result, excluded }: { data: TakeoffData; resu
   return createPortal(
     <div id="roof-report" className="roof-report" data-testid="roof-report">
       <header className="mb-2.5 border-b-2 border-slate-900 pb-1.5">
-        <p className="text-[8.5pt] font-bold uppercase tracking-wider text-teal-800">{COMPANY} · Roof takeoff</p>
+        <p className="text-[8.5pt] font-bold uppercase tracking-wider text-teal-800">{data.company ? `${data.company} · ` : ''}Roof takeoff</p>
         <h1 className="text-[17pt] font-bold leading-tight [overflow-wrap:anywhere]">{data.title}</h1>
         <p className="text-[8.5pt] text-slate-600">
           Looked up {data.lookedUp}. {data.photo}.
@@ -195,7 +195,7 @@ export function RoofReport({ data, result, excluded }: { data: TakeoffData; resu
       <footer className="mt-2.5 flex flex-wrap justify-between gap-3 border-t border-slate-900 pt-1 text-[9pt] font-semibold">
         <span>{REPORT_FOOTER}</span>
         <span className="font-normal text-slate-600">
-          {COMPANY} · Overhang used: {data.overhangIn ? `${data.overhangIn}"` : 'none'}
+          {data.company ? `${data.company} · ` : ''}Overhang used: {data.overhangIn ? `${data.overhangIn}"` : 'none'}
         </span>
       </footer>
     </div>,

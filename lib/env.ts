@@ -14,7 +14,9 @@ export const serverEnv = {
   serviceRoleKey: () => required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY),
   appUrl: () => (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
   resendApiKey: () => process.env.RESEND_API_KEY || null,
-  quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>',
+  /** Deployment-wide sender, used when a store has no sender email of its own (lib/locations senderAddress). */
+  quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || null,
+  /** Fallback for a store without its own office notification email. */
   officeNotifyEmail: () => process.env.OFFICE_NOTIFY_EMAIL || null,
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || null,
   /** The Roof Takeoff service behind the satellite lookup: only its /api is used (no trailing slash). */
@@ -25,4 +27,6 @@ export const serverEnv = {
   cronSecret: () => process.env.CRON_SECRET || null,
   /** Where the nightly job reports failures (and, in Phase 4, the weekly owner report). */
   ownerReportEmail: () => process.env.OWNER_REPORT_EMAIL || null,
+  /** Testing only: the shop location the Roof Takeoff health check looks up (lat,lng). */
+  roofCheckSpot: () => process.env.ROOF_CHECK_SPOT || null,
 };

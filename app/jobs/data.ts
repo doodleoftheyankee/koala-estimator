@@ -77,9 +77,9 @@ export interface JobList {
  * cancelled jobs (all of `showAll`). One query per group (lib/jobs/officeList.ts); a group that
  * fails to load is reported in `error` and the others are still returned.
  */
-export async function loadJobList(db: Db, showAll: HistoryGroup | null = null): Promise<JobList> {
+export async function loadJobList(db: Db, locationId: string, showAll: HistoryGroup | null = null): Promise<JobList> {
   const queries = officeListQueries(showAll);
-  const results = await Promise.all(queries.map((q) => loadListQuery(db, q)));
+  const results = await Promise.all(queries.map((q) => loadListQuery(db, locationId, q)));
   const errors = new Set<string>();
   const lists: JobListItem[][] = [];
   const partial: JobList['partial'] = {};
@@ -100,17 +100,17 @@ export async function loadJobList(db: Db, showAll: HistoryGroup | null = null): 
   return { jobs: uniqueById(lists), partial, error: errors.size ? [...errors].join(' ') : null };
 }
 
-async function loadListQuery(db: Db, q: ListQuery): Promise<{ rows: unknown[]; total: number } | { error: string }> {
+async function loadListQuery(db: Db, locationId: string, q: ListQuery): Promise<{ rows: unknown[]; total: number } | { error: string }> {
   try {
-    return await fetchRows((from, to) => buildListQuery(db, q).range(from, to), q.limit);
+    return await fetchRows((from, to) => buildListQuery(db, locationId, q).range(from, to), q.limit);
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 }
 
 /** A list query as a PostgREST query on jobs (staff RLS through the user's client). */
-function buildListQuery(db: Db, q: ListQuery) {
-  let query = db.from('jobs').select([LIST_SELECT, ...q.embeds].join(', '), { count: 'exact' });
+function buildListQuery(db: Db, locationId: string, q: ListQuery) {
+  let query = db.from('jobs').select([LIST_SELECT, ...q.embeds].join(', '), { count: 'exact' }).eq('location_id', locationId);
   for (const f of q.filters) {
     if (f.op === 'eq') query = query.eq(f.column, f.value);
     else if (f.op === 'in') query = query.in(f.column, f.values);
@@ -219,7 +219,7 @@ export interface JobDetail {
   actuals: OfficeActual[];
 }
 
-export async function loadJob(db: Db, id: string): Promise<{ job: JobDetail | null; error: string | null }> {
+export async function loadJob(db: Db, id: string, locationId: string): Promise<{ job: JobDetail | null; error: string | null }> {
   const [jobRes, actualsRes] = await Promise.all([
     db
       .from('jobs')
@@ -233,6 +233,7 @@ export async function loadJob(db: Db, id: string): Promise<{ job: JobDetail | nu
            areas:estimate_areas(id, name, job_type, sqft, sort_order))`,
       )
       .eq('id', id)
+      .eq('location_id', locationId)
       .maybeSingle(),
     db
       .from('job_actuals')
@@ -304,8 +305,8 @@ export async function loadJob(db: Db, id: string): Promise<{ job: JobDetail | nu
   };
 }
 
-export async function loadCrews(db: Db): Promise<Array<{ id: string; name: string; active: boolean }>> {
-  const res = await db.from('crews').select('id, name, active').order('name');
+export async function loadCrews(db: Db, locationId: string): Promise<Array<{ id: string; name: string; active: boolean }>> {
+  const res = await db.from('crews').select('id, name, active').eq('location_id', locationId).order('name');
   const parsed = z.array(z.object({ id: z.guid(), name: z.string(), active: z.boolean() })).safeParse(res.data ?? []);
   return parsed.success ? parsed.data : [];
 }

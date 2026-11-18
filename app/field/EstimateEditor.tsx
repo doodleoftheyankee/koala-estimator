@@ -43,7 +43,9 @@ export function EstimateEditor({
   requestSync: () => void;
 }) {
   const record = useLive(() => db().estimates.get(id), [id], undefined as LocalEstimate | undefined);
-  const bundle = useLive(() => getCachedBundle(), [], null);
+  // Priced only with its own store's prices.
+  const store = record?.draft.locationId ?? profile.locationId;
+  const bundle = useLive(() => getCachedBundle(store), [store], null);
   const [draft, setDraft] = useState<EstimateDraft | null>(null);
   const [step, setStep] = useState<Step>('customer');
 
@@ -232,7 +234,7 @@ export function EstimateEditor({
         {!bundle ? <Alert tone="amber">Pricing has not been downloaded to this phone yet. Connect once to price estimates.</Alert> : null}
 
         <fieldset disabled={locked} className="m-0 min-w-0 space-y-3 border-0 p-0">
-          {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
+          {step === 'customer' ? <CustomerStep draft={draft} update={update} utilities={profile.utilities ?? []} /> : null}
           {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} /> : null}
           {step === 'options' ? (
             <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />

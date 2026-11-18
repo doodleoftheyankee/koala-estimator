@@ -42,8 +42,6 @@ import { trainWinModel, winRateBuckets } from './winRate';
 
 /** A 'running' learning run older than this never finished (the function timed out or crashed). */
 export const STALE_RUN_MS = 15 * 60_000;
-/** Business dates (email subjects) are Newark, DE dates. */
-const BUSINESS_TZ = 'America/New_York';
 
 // ---------------------------------------------------------------------------
 // Row parsing (PostgREST returns numeric columns as numbers or strings)
@@ -637,6 +635,9 @@ export interface NightlyDeps {
   updateDeviationOutcomes(): Promise<number>;
   ownerEmail: string | null;
   sendEmail(msg: EmailOut): Promise<unknown>;
+  /** The store this run is for: its time zone dates the emails, its name heads them. */
+  timeZone: string;
+  storeName?: string;
   /** Wall clock for finishedAt (the run's `now` is fixed). */
   clock(): Date;
   log?(message: string): void;
@@ -803,7 +804,7 @@ async function calibrationStep(
         outcome = 'awaiting_approval';
         message = 'Every gate passed, but the active set changed during the run; awaiting owner approval.';
       } else {
-        await deps.promoteSet(setId, `Nightly calibration ${businessDate(now)}: ${result.changedCount} changed, every gate passed (auto-promote).`);
+        await deps.promoteSet(setId, `Nightly calibration ${businessDate(now, deps.timeZone)}: ${result.changedCount} changed, every gate passed (auto-promote).`);
         out.promoted = true;
         outcome = 'promoted';
         message = 'Every gate passed; promoted automatically.';
@@ -933,9 +934,9 @@ async function winModelStep(
 // Reporting
 // ---------------------------------------------------------------------------
 
-/** "Oct 20, 2026" in Newark, DE. */
-export function businessDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { timeZone: BUSINESS_TZ, year: 'numeric', month: 'short', day: 'numeric' });
+/** "Oct 20, 2026" in the store's time zone. */
+export function businessDate(d: Date, timeZone: string): string {
+  return d.toLocaleDateString('en-US', { timeZone, year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /** True when any step failed (the cron route answers 500 so the failure shows in Vercel's log). */
@@ -952,9 +953,10 @@ const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => HTML_ESCAPES[c] ?? c);
 
 /** The owner's notice when a nightly step failed. */
-export function nightlyFailureEmail(now: Date, problems: readonly string[]): Omit<EmailOut, 'to'> {
-  const date = businessDate(now);
-  const subject = `Nightly learning run had ${problems.length === 1 ? 'a problem' : `${problems.length} problems`} (${date})`;
+export function nightlyFailureEmail(now: Date, problems: readonly string[], timeZone: string, storeName?: string): Omit<EmailOut, 'to'> {
+  const date = businessDate(now, timeZone);
+  const where = storeName ? `${storeName}, ` : '';
+  const subject = `Nightly learning run had ${problems.length === 1 ? 'a problem' : `${problems.length} problems`} (${where}${date})`;
   const reassurance =
     'Pricing is unaffected: a failed step never changes the active coefficient set. The next nightly run will try again.';
   const text = [`The nightly learning run for ${date} did not finish cleanly:`, '', ...problems.map((p) => `- ${p}`), '', reassurance].join('\n');
@@ -967,7 +969,7 @@ export function nightlyFailureEmail(now: Date, problems: readonly string[]): Omi
 async function notifyOwner(deps: NightlyDeps, now: Date, problems: readonly string[]): Promise<void> {
   if (!deps.ownerEmail) return;
   try {
-    await deps.sendEmail({ to: deps.ownerEmail, ...nightlyFailureEmail(now, problems) });
+    await deps.sendEmail({ to: deps.ownerEmail, ...nightlyFailureEmail(now, problems, deps.timeZone, deps.storeName) });
   } catch (e) {
     // The run's results are already recorded; a mail outage must not turn into a failed run.
     deps.log?.(`[nightly] emailing the owner failed: ${errorMessage(e)}`);

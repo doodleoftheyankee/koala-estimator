@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseWith } from './forms';
-import { crewForm, materialForm, newCrewForm, parseTierForm, productForm, codeRequirementForm, PRIMARY_PRODUCTS } from './pricingForms';
+import { crewForm, locationForm, materialForm, newCrewForm, parseTierForm, productForm, codeRequirementForm, PRIMARY_PRODUCTS } from './pricingForms';
 
 const ID = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
 const ID2 = '1f14e45f-ceea-467f-a8f6-3b3a0c6c2b11';
@@ -76,5 +76,55 @@ describe('parseTierForm', () => {
     if (!r.ok) expect(r.error).toMatch(/^Good: /);
     expect(parseTierForm({ job_type: 'roof' }).ok).toBe(false);
     expect(parseTierForm({ job_type: 'attic' })).toEqual({ ok: false, error: 'Nothing to save.' });
+  });
+});
+
+describe('locationForm', () => {
+  const base = {
+    name: 'Koala Insulation of Newark',
+    short_name: 'Newark',
+    time_zone: 'America/New_York',
+    state: 'de',
+    default_county: 'New Castle',
+    climate_zone: '4a',
+    shop_address: 'Newark, DE 19711',
+    phone: '',
+    license_number: '',
+    brand_color: '#0f766e',
+    logo_path: '',
+    utilities: 'Delmarva Power\n\nDelaware Electric Co-op\n',
+    quote_from_email: 'Koala Newark <quotes@example.com>',
+    office_notify_email: '',
+    owner_report_email: 'owner@example.com',
+  };
+
+  it('normalizes the state, zone, blanks and utilities', () => {
+    const r = parseWith(locationForm, base);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data).toMatchObject({
+        state: 'DE',
+        climate_zone: '4A',
+        phone: null,
+        logo_path: null,
+        office_notify_email: null,
+        utilities: ['Delmarva Power', 'Delaware Electric Co-op'],
+        quote_from_email: 'Koala Newark <quotes@example.com>',
+      });
+    }
+  });
+
+  it('rejects a bad time zone, state, zone, color, logo and sender', () => {
+    for (const bad of [
+      { time_zone: 'Eastern' },
+      { state: 'Delaware' },
+      { climate_zone: '9Z' },
+      { brand_color: 'teal' },
+      { logo_path: 'http://example.com/logo.png' },
+      { quote_from_email: 'not an email' },
+      { owner_report_email: 'nope' },
+    ]) {
+      expect(parseWith(locationForm, { ...base, ...bad }).ok, JSON.stringify(bad)).toBe(false);
+    }
   });
 });

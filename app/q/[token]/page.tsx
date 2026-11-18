@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Alert, Card } from '@/components/ui';
+import { esignConsent } from '@/lib/quotes/consent';
 import { financingLine } from '@/lib/quotes/email';
 import { findQuoteByToken, isExpired, type PublicQuoteRow } from '@/lib/quotes/lookup';
 import { DEFAULT_BRAND_COLOR, formatUsd, type QuoteDocument } from '@/lib/quotes/model';
@@ -20,9 +21,9 @@ export const metadata: Metadata = {
 const TIER_NAMES = { good: 'Good', better: 'Better', best: 'Best' } as const;
 const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, tz: string): string {
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
 }
 
 function brandColor(doc: QuoteDocument): string {
@@ -79,7 +80,7 @@ function QuoteHeader({ doc }: { doc: QuoteDocument }) {
     <Card>
       <h1 className="text-2xl font-bold text-slate-900">Your insulation quote</h1>
       <p className="mt-1 text-sm text-slate-500">
-        No. {doc.quoteNumber} · Issued {fmtDate(doc.issuedAt)} · Valid until {fmtDate(doc.validUntil)}
+        No. {doc.quoteNumber} · Issued {fmtDate(doc.issuedAt, doc.timeZone)} · Valid until {fmtDate(doc.validUntil, doc.timeZone)}
       </p>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
         <div>
@@ -143,7 +144,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
           </p>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">Thank you{quote.signer_name ? `, ${quote.signer_name}` : ''}!</h1>
           <p className="mt-2 text-slate-700">
-            Your quote {doc.quoteNumber} was signed{quote.signed_at ? ` on ${fmtDate(quote.signed_at)}` : ''}.
+            Your quote {doc.quoteNumber} was signed{quote.signed_at ? ` on ${fmtDate(quote.signed_at, doc.timeZone)}` : ''}.
           </p>
           {quote.signed_tier ? (
             <p className="mt-3 text-lg text-slate-900">
@@ -195,7 +196,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
       <Shell doc={doc}>
         <Alert tone="amber">
           <p className="text-base">
-            This quote expired on {fmtDate(doc.validUntil)}. Prices may have changed; please call <OfficeContact doc={doc} /> for an updated
+            This quote expired on {fmtDate(doc.validUntil, doc.timeZone)}. Prices may have changed; please call <OfficeContact doc={doc} /> for an updated
             quote.
           </p>
         </Alert>
@@ -218,7 +219,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   return (
     <Shell doc={doc}>
       <QuoteHeader doc={doc} />
-      <SignForm token={token} options={options} recommendedTier={doc.recommendedTier} defaultTier={defaultTier} brandColor={brandColor(doc)} pdfHref={pdfHref}>
+      <SignForm token={token} options={options} recommendedTier={doc.recommendedTier} defaultTier={defaultTier} brandColor={brandColor(doc)} pdfHref={pdfHref} consentText={esignConsent(quote.location.state)}>
         {doc.notes ? (
           <Card>
             <h2 className="text-lg font-semibold text-slate-900">Notes</h2>

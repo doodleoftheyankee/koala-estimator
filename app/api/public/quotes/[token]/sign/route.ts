@@ -5,7 +5,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
 import { TIERS } from '@/lib/pricing';
-import { ESIGN_CONSENT } from '@/lib/quotes/consent';
+import { esignConsent } from '@/lib/quotes/consent';
+import { senderAddress } from '@/lib/locations/location';
 import { officeSignedNotice, sendEmail, signedConfirmationEmail } from '@/lib/quotes/email';
 import { findQuoteByToken, isExpired } from '@/lib/quotes/lookup';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
@@ -104,7 +105,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
         esign_audit: {
           ip,
           userAgent,
-          consentText: ESIGN_CONSENT,
+          consentText: esignConsent(quote.location.state),
           documentSha256: quote.pdf_sha256,
           signedPdfSha256: sha256Hex(signedPdf),
           signatureSha256: sha256Hex(png),
@@ -129,6 +130,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
 
     // Emails are best-effort: the signature is already recorded.
     try {
+      const from = senderAddress(quote.location, serverEnv.quoteFromEmail());
       const pdfUrl = `${serverEnv.appUrl()}/api/public/quotes/${token}/pdf`;
       const jobs: Array<Promise<unknown>> = [];
       if (doc.customer.email) {
@@ -137,11 +139,12 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
             to: doc.customer.email,
             ...signedConfirmationEmail(doc, tier, option.price, pdfUrl),
             attachments: [{ filename: `${doc.quoteNumber}-signed.pdf`, content: signedPdf }],
+            from,
           }),
         );
       }
-      const office = serverEnv.officeNotifyEmail();
-      if (office) jobs.push(sendEmail({ to: office, ...officeSignedNotice(doc, tier, option.price, quote.estimate_id) }));
+      const office = quote.location.officeNotifyEmail ?? serverEnv.officeNotifyEmail();
+      if (office) jobs.push(sendEmail({ to: office, ...officeSignedNotice(doc, tier, option.price, quote.estimate_id), from }));
       await Promise.allSettled(jobs);
     } catch (e) {
       console.error('[sign] email failed', e instanceof Error ? e.message : e);

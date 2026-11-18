@@ -1,7 +1,8 @@
 // Database adapter for the nightly learning job (PLAN.md §6.7): the only part of lib/learning
 // that talks to Postgres. Every function takes a service-role client (RLS is bypassed, so callers
-// must be trusted server code), reads in pages so nothing is truncated at PostgREST's row cap,
-// and parses rows at the boundary with the schemas in nightlyCore.ts.
+// must be trusted server code) and the store (`loc`) it works on: one store's jobs only ever tune
+// that store's prices. Reads in pages so nothing is truncated at PostgREST's row cap, and parses
+// rows at the boundary with the schemas in nightlyCore.ts.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { WinModel } from '@/lib/pricing';
@@ -82,8 +83,8 @@ function check(what: string, error: { message: string } | null): void {
 // ---------------------------------------------------------------------------
 
 /** app_settings.learning with defaults for anything missing or out of range. */
-export async function loadLearningSettings(admin: SupabaseClient): Promise<LearningSettings> {
-  const { data, error } = await admin.from('app_settings').select('value').eq('key', 'learning').maybeSingle();
+export async function loadLearningSettings(admin: SupabaseClient, loc: string): Promise<LearningSettings> {
+  const { data, error } = await admin.from('app_settings').select('value').eq('location_id', loc).eq('key', 'learning').maybeSingle();
   check('Loading learning settings', error);
   return parseLearningSettings((data as { value?: unknown } | null)?.value);
 }
@@ -93,11 +94,12 @@ export async function loadLearningSettings(admin: SupabaseClient): Promise<Learn
  * STALE_RUN_MS (function timeout, crash) are closed as failed first; if one is still running
  * (a duplicate cron delivery or a manual run), returns null instead of starting another.
  */
-export async function startRun(admin: SupabaseClient, kind: RunKind, summary: Record<string, unknown>): Promise<string | null> {
+export async function startRun(admin: SupabaseClient, loc: string, kind: RunKind, summary: Record<string, unknown>): Promise<string | null> {
   const nowMs = Date.now();
   const stale = await admin
     .from('learning_runs')
     .update({ status: 'failed', finished_at: new Date(nowMs).toISOString(), error: 'Did not finish (timed out or crashed).' })
+    .eq('location_id', loc)
     .eq('kind', kind)
     .eq('status', 'running')
     .lt('started_at', new Date(nowMs - STALE_RUN_MS).toISOString());
@@ -106,12 +108,13 @@ export async function startRun(admin: SupabaseClient, kind: RunKind, summary: Re
   const running = await admin
     .from('learning_runs')
     .select('id', { count: 'exact', head: true })
+    .eq('location_id', loc)
     .eq('kind', kind)
     .eq('status', 'running');
   check('Checking for running learning runs', running.error);
   if ((running.count ?? 0) > 0) return null;
 
-  const { data, error } = await admin.from('learning_runs').insert({ kind, status: 'running', summary }).select('id').single();
+  const { data, error } = await admin.from('learning_runs').insert({ kind, status: 'running', summary, location_id: loc }).select('id').single();
   check('Starting the learning run', error);
   return idRowSchema.parse(data).id;
 }
@@ -137,15 +140,15 @@ export async function finishRun(admin: SupabaseClient, runId: string, f: RunFini
 // Coefficients
 // ---------------------------------------------------------------------------
 
-export async function loadActiveSetId(admin: SupabaseClient): Promise<string | null> {
-  const { data, error } = await admin.from('coefficient_sets').select('id').eq('status', 'active').maybeSingle();
+export async function loadActiveSetId(admin: SupabaseClient, loc: string): Promise<string | null> {
+  const { data, error } = await admin.from('coefficient_sets').select('id').eq('location_id', loc).eq('status', 'active').maybeSingle();
   check('Loading the active coefficient set', error);
   return data ? idRowSchema.parse(data).id : null;
 }
 
 /** The active coefficient set with guardrail bounds and evidence. Throws when none is active. */
-export async function loadActiveCoefficients(admin: SupabaseClient): Promise<ActiveCoefficients> {
-  const { data, error } = await admin.from('coefficient_sets').select('id, version').eq('status', 'active').maybeSingle();
+export async function loadActiveCoefficients(admin: SupabaseClient, loc: string): Promise<ActiveCoefficients> {
+  const { data, error } = await admin.from('coefficient_sets').select('id, version').eq('location_id', loc).eq('status', 'active').maybeSingle();
   check('Loading the active coefficient set', error);
   if (!data) throw new Error('There is no active coefficient set.');
   const set = activeSetRowSchema.parse(data);
@@ -171,9 +174,14 @@ export async function loadActiveCoefficients(admin: SupabaseClient): Promise<Act
  */
 export async function insertCandidateSet(
   admin: SupabaseClient,
+  loc: string,
   args: { runId: string; parentSetId: string; result: CalibrationResult },
 ): Promise<string> {
-  const { data, error } = await admin.from('coefficient_sets').insert(candidateSetRow(args)).select('id').single();
+  const { data, error } = await admin
+    .from('coefficient_sets')
+    .insert({ ...candidateSetRow(args), location_id: loc })
+    .select('id')
+    .single();
   check('Storing the candidate set', error);
   const setId = idRowSchema.parse(data).id;
 
@@ -192,6 +200,7 @@ export async function insertCandidateSet(
   const older = await admin
     .from('coefficient_sets')
     .update({ status: 'rejected', notes: 'Replaced by a newer nightly candidate' })
+    .eq('location_id', loc)
     .eq('status', 'candidate')
     .eq('source', 'nightly')
     .neq('id', setId);
@@ -220,11 +229,11 @@ export async function rejectSet(admin: SupabaseClient, setId: string, reason: st
  * snapshot and signed tier, estimate_areas and the estimate's drive time as fallbacks for quotes
  * that predate snapshot.input. Excluded actuals are left out of each job's rows.
  */
-export async function loadJobsForLearning(admin: SupabaseClient): Promise<JobForLearning[]> {
+export async function loadJobsForLearning(admin: SupabaseClient, loc: string): Promise<JobForLearning[]> {
   const jobs = parseRows(
     jobRowSchema,
     await fetchAll('completed jobs', (from, to) =>
-      admin.from('jobs').select('id, quote_id, estimate_id, completed_at').eq('status', 'completed').order('id').range(from, to),
+      admin.from('jobs').select('id, quote_id, estimate_id, completed_at').eq('location_id', loc).eq('status', 'completed').order('id').range(from, to),
     ),
     'job',
   );
@@ -276,13 +285,14 @@ export async function loadJobsForLearning(admin: SupabaseClient): Promise<JobFor
  * One row per decided estimate (see decideEstimates): won, lost, or its latest quote expired or
  * declined, with the lead source name and the deciding quote's snapshot.
  */
-export async function loadDecidedQuotes(admin: SupabaseClient): Promise<QuoteOutcomeRow[]> {
+export async function loadDecidedQuotes(admin: SupabaseClient, loc: string): Promise<QuoteOutcomeRow[]> {
   const quotes = parseRows(
     outcomeQuoteRowSchema,
     await fetchAll('quotes', (from, to) =>
       admin
         .from('quotes')
         .select('id, estimate_id, version, status, signed_at, signed_tier, expires_at')
+        .eq('location_id', loc)
         .order('id')
         .range(from, to),
     ),
@@ -302,7 +312,7 @@ export async function loadDecidedQuotes(admin: SupabaseClient): Promise<QuoteOut
     fetchIn('leads', leadIds, (ids, from, to) =>
       admin.from('leads').select('id, source_id').in('id', ids).order('id').range(from, to),
     ),
-    fetchAll('lead sources', (from, to) => admin.from('lead_sources').select('id, name').order('id').range(from, to)),
+    fetchAll('lead sources', (from, to) => admin.from('lead_sources').select('id, name').eq('location_id', loc).order('id').range(from, to)),
   ]);
 
   const decided = decideEstimates({
@@ -337,11 +347,20 @@ export async function loadDecidedQuotes(admin: SupabaseClient): Promise<QuoteOut
  * Stores a trained win model and makes it the active one. The partial unique index allows one
  * active row, so the new row is inserted inactive, the old one switched off, then the new on.
  */
-export async function insertWinModel(admin: SupabaseClient, runId: string, model: Omit<WinModel, 'id' | 'trainedAt'>): Promise<string> {
-  const { data, error } = await admin.from('win_models').insert(winModelRow(runId, model)).select('id').single();
+export async function insertWinModel(
+  admin: SupabaseClient,
+  loc: string,
+  runId: string,
+  model: Omit<WinModel, 'id' | 'trainedAt'>,
+): Promise<string> {
+  const { data, error } = await admin
+    .from('win_models')
+    .insert({ ...winModelRow(runId, model), location_id: loc })
+    .select('id')
+    .single();
   check('Storing the win model', error);
   const id = idRowSchema.parse(data).id;
-  const off = await admin.from('win_models').update({ is_active: false }).eq('is_active', true).neq('id', id);
+  const off = await admin.from('win_models').update({ is_active: false }).eq('location_id', loc).eq('is_active', true).neq('id', id);
   check('Deactivating the previous win model', off.error);
   const on = await admin.from('win_models').update({ is_active: true }).eq('id', id);
   check('Activating the win model', on.error);
@@ -364,13 +383,15 @@ export async function insertWinModel(admin: SupabaseClient, runId: string, model
  * re-read of its quote's options each night (the snapshot's document is not loaded); flags still
  * waiting for actuals cost no quote read at all.
  */
-export async function updateDeviationOutcomes(admin: SupabaseClient): Promise<number> {
+export async function updateDeviationOutcomes(admin: SupabaseClient, loc: string): Promise<number> {
   const flags = parseRows(
     flagRowSchema,
     await fetchAll('deviation flags', (from, to) =>
       admin
         .from('deviation_flags')
-        .select('id, estimate_id, flag_key, metric')
+        // Flags take their store from their estimate.
+        .select('id, estimate_id, flag_key, metric, estimates!inner(location_id)')
+        .eq('estimates.location_id', loc)
         .is('outcome', null)
         .in('metric', ['qty', 'hours'])
         .not('flag_key', 'is', null)

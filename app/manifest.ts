@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Koala Insulation Estimator',
     short_name: 'Koala Est.',
-    description: 'Field estimates and quotes for Koala Insulation of Newark',
+    description: 'Field estimates and quotes for Koala Insulation stores',
     start_url: '/field',
     scope: '/',
     display: 'standalone',

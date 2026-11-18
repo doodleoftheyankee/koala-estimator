@@ -67,6 +67,16 @@ export interface CachedProfile {
   userId: string;
   fullName: string;
   role: Role;
+  /** The store the person is working in on this phone, and what new estimates need from it. */
+  locationId: string;
+  locationName: string;
+  /** The store's town (its short name) and state: a new estimate's address starts with them. */
+  town?: string;
+  state: string;
+  timeZone: string;
+  utilities: string[];
+  /** Works in more than one store (the list offers a way to switch). */
+  multiStore?: boolean;
 }
 
 interface MetaRow {
@@ -110,17 +120,29 @@ export const META = {
   profile: 'profile',
 } as const;
 
-export async function getCachedBundle(): Promise<PricingBundle | null> {
-  return getMeta<PricingBundle>(META.bundle);
+/**
+ * The cached pricing bundle. With a store, only that store's bundle: an estimate is never priced
+ * on this phone with another store's prices (a bundle cached before stores existed is the pilot
+ * store's and still counts).
+ */
+export async function getCachedBundle(locationId?: string | null): Promise<PricingBundle | null> {
+  const bundle = await getMeta<PricingBundle>(META.bundle);
+  if (!bundle || !locationId || !bundle.location) return bundle;
+  return bundle.location.id === locationId ? bundle : null;
 }
 
 /**
  * When a different user signs in on this device, drop the previous user's *synced* copies
- * (they are safe on the server) and the cached bundle. Unsynced work is kept, hidden, until
+ * (they are safe on the server) and the cached bundle; when the same user switches store, drop
+ * the cached bundle. Unsynced work is kept, hidden, until
  * its owner signs back in, so nothing typed in an attic is ever lost.
  */
 export async function switchUser(profile: CachedProfile): Promise<void> {
   const prev = await getMeta<CachedProfile>(META.profile);
+  if (prev && prev.userId === profile.userId && prev.locationId !== profile.locationId) {
+    // Same person, another store: that store's prices must be downloaded before pricing.
+    await db().meta.delete(META.bundle);
+  }
   if (prev && prev.userId !== profile.userId) {
     await db().estimates.where('ownerId').equals(prev.userId).and((e) => e.syncState === 'synced' || e.syncState === 'locked').delete();
     // Uploaded photos are safe on the server; ones still waiting to upload stay, like unsynced estimates.

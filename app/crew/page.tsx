@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireRole } from '@/lib/server/auth';
+import { phoneProfile, requireRole } from '@/lib/server/auth';
 import { CrewApp } from './CrewApp';
 
 export const metadata: Metadata = { title: 'Crew' };
@@ -9,5 +9,5 @@ export const metadata: Metadata = { title: 'Crew' };
 // job site with no signal.
 export default async function CrewPage() {
   const profile = await requireRole('crew', 'owner', 'office');
-  return <CrewApp profile={{ userId: profile.userId, fullName: profile.fullName, role: profile.role }} />;
+  return <CrewApp profile={phoneProfile(profile)} />;
 }

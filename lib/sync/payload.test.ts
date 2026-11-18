@@ -4,13 +4,14 @@ import { priceEstimate, type PricingBundle } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { draftSchema, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput, type EstimateDraft } from './draft';
 import { buildSyncPayload } from './payload';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function filledDraft() {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid, PILOT_STORE);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com', phone: '302-555-0100' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic', uuid), sqft: 1000 }];
@@ -20,7 +21,7 @@ function filledDraft() {
 
 describe('draft', () => {
   it('a new draft is valid but not syncable until it has an area', () => {
-    const d = newDraft(new Date(), uuid);
+    const d = newDraft(new Date(), uuid, PILOT_STORE);
     expect(draftSchema.safeParse({ ...d, customer: { ...d.customer, firstName: 'A', lastName: 'B' }, property: { ...d.property, street: 'x', zip: '19711' } }).success).toBe(true);
     expect(syncableDraftSchema.safeParse(d).success).toBe(false);
     expect(syncableDraftSchema.safeParse(filledDraft()).success).toBe(true);

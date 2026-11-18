@@ -2,7 +2,7 @@
 // Network side of offline sync: pushes pending estimates, pulls the pricing bundle and
 // remote estimates. Safe to call often; only one run is in flight at a time.
 import type { PricingBundle } from '@/lib/pricing';
-import type { RemoteEstimate, SyncResponse } from '@/lib/sync/protocol';
+import { bundleEtag, type RemoteEstimate, type SyncResponse } from '@/lib/sync/protocol';
 import { db, getCachedBundle, META, setMeta, type LocalEstimate } from './db';
 import { applySyncResult, mergeRemote } from './syncCore';
 import { syncPhotos } from './photos';
@@ -65,7 +65,7 @@ async function pushAll(): Promise<void> {
 export async function refreshBundle(): Promise<PricingBundle | null> {
   const cached = await getCachedBundle();
   try {
-    const res = await fetch('/api/bundle', { headers: cached ? { 'If-None-Match': `"${cached.hash}"` } : {} });
+    const res = await fetch('/api/bundle', { headers: cached ? { 'If-None-Match': bundleEtag(cached.hash, cached.location) } : {} });
     if (res.status === 401) throw new AuthRequiredError('Signed out');
     if (res.status === 304) return cached;
     if (!res.ok) return cached;

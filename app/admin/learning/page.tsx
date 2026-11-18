@@ -109,26 +109,27 @@ async function loadCoefficients(db: Db, setId: string | undefined): Promise<Dash
   return parseRows(coefficientRowSchema, ok(r, 'coefficients'), 'coefficient');
 }
 
-async function loadDashboard(db: Db) {
+async function loadDashboard(db: Db, loc: string, tz: string) {
   const [active, candidate, sets, runs, lastCalibration, calibrations, winRun, winModel, changes, settings, products, jobTypes, accessLevels] =
     await Promise.all([
-      db.from('coefficient_sets').select(SET_COLUMNS).eq('status', 'active').maybeSingle(),
-      db.from('coefficient_sets').select(CANDIDATE_SET_COLUMNS).eq('status', 'candidate').order('version', { ascending: false }).limit(1).maybeSingle(),
-      db.from('coefficient_sets').select(SET_COLUMNS).order('version', { ascending: false }).limit(HISTORY_LIMIT),
-      db.from('learning_runs').select(RUN_COLUMNS).order('started_at', { ascending: false }).limit(RUN_LOG_LIMIT),
-      db.from('learning_runs').select(RUN_COLUMNS).eq('kind', 'calibration').order('started_at', { ascending: false }).limit(1).maybeSingle(),
+      db.from('coefficient_sets').select(SET_COLUMNS).eq('location_id', loc).eq('status', 'active').maybeSingle(),
+      db.from('coefficient_sets').select(CANDIDATE_SET_COLUMNS).eq('location_id', loc).eq('status', 'candidate').order('version', { ascending: false }).limit(1).maybeSingle(),
+      db.from('coefficient_sets').select(SET_COLUMNS).eq('location_id', loc).order('version', { ascending: false }).limit(HISTORY_LIMIT),
+      db.from('learning_runs').select(RUN_COLUMNS).eq('location_id', loc).order('started_at', { ascending: false }).limit(RUN_LOG_LIMIT),
+      db.from('learning_runs').select(RUN_COLUMNS).eq('location_id', loc).eq('kind', 'calibration').order('started_at', { ascending: false }).limit(1).maybeSingle(),
       // A few extra in case some succeeded without accuracy (no verified jobs yet).
       db
         .from('learning_runs')
         .select(RUN_COLUMNS)
+        .eq('location_id', loc)
         .eq('kind', 'calibration')
         .eq('status', 'succeeded')
         .order('started_at', { ascending: false })
         .limit(ACCURACY_RUNS * 3),
-      db.from('learning_runs').select(RUN_COLUMNS).eq('kind', 'win_model').eq('status', 'succeeded').order('started_at', { ascending: false }).limit(1).maybeSingle(),
-      db.from('win_models').select(WIN_MODEL_COLUMNS).eq('is_active', true).maybeSingle(),
-      db.from('coefficient_changes').select(CHANGE_COLUMNS).order('at', { ascending: false }).order('id', { ascending: false }).limit(CHANGELOG_LIMIT),
-      db.from('app_settings').select('value').eq('key', 'learning').maybeSingle(),
+      db.from('learning_runs').select(RUN_COLUMNS).eq('location_id', loc).eq('kind', 'win_model').eq('status', 'succeeded').order('started_at', { ascending: false }).limit(1).maybeSingle(),
+      db.from('win_models').select(WIN_MODEL_COLUMNS).eq('location_id', loc).eq('is_active', true).maybeSingle(),
+      db.from('coefficient_changes').select(CHANGE_COLUMNS).eq('location_id', loc).order('at', { ascending: false }).order('id', { ascending: false }).limit(CHANGELOG_LIMIT),
+      db.from('app_settings').select('value').eq('location_id', loc).eq('key', 'learning').maybeSingle(),
       db.from('products').select('code, label'),
       db.from('job_types').select('code, label'),
       db.from('access_levels').select('code, label'),
@@ -185,6 +186,7 @@ async function loadDashboard(db: Db) {
   const settingsRow = settingRow.parse(ok(settings, 'learning settings') ?? null);
 
   return {
+    tz,
     activeSet,
     activeCoefficients,
     candidate: candidateSet
@@ -237,7 +239,7 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
   let data: Dashboard | null = null;
   let loadError: string | null = null;
   try {
-    data = await loadDashboard(db);
+    data = await loadDashboard(db, profile.locationId, profile.location.timeZone);
   } catch (e) {
     loadError = errorMessage(e);
   }
@@ -392,7 +394,7 @@ function Overview({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
             sub={
               activeSet ? (
                 <>
-                  {setSourceLabel(activeSet.source)} · active since {formatDateTime(activeSet.activated_at)}
+                  {setSourceLabel(activeSet.source)} · active since {formatDateTime(activeSet.activated_at, data.tz)}
                 </>
               ) : (
                 'Pricing will not work until a set is active. Restore one from History.'
@@ -406,7 +408,7 @@ function Overview({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
             sub={
               last ? (
                 <>
-                  {last.status === 'running' ? `Started ${formatDateTime(last.started_at)}` : `Finished ${formatDateTime(last.finished_at)}`}
+                  {last.status === 'running' ? `Started ${formatDateTime(last.started_at, data.tz)}` : `Finished ${formatDateTime(last.finished_at, data.tz)}`}
                   {data.lastCalibrationStalled ? (
                     <span className="block text-amber-800">It never finished (timed out or crashed); the next run closes it and starts over.</span>
                   ) : null}
@@ -459,7 +461,7 @@ function Candidate({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
             <h3 className="text-lg font-semibold text-slate-900">Candidate v{c.set.version}</h3>
             <Badge tone="amber">Waiting for approval</Badge>
             <span className="text-sm text-slate-500">
-              {setSourceLabel(c.set.source)} · created {formatDateTime(c.set.created_at)}
+              {setSourceLabel(c.set.source)} · created {formatDateTime(c.set.created_at, data.tz)}
             </span>
             {c.set.notes ? <p className="w-full text-sm text-slate-600">{c.set.notes}</p> : null}
             {c.runMessage ? <p className="w-full text-sm text-slate-600">{c.runMessage}</p> : null}
@@ -737,7 +739,7 @@ function Accuracy({ data }: { data: Dashboard }) {
             ))}
             <p className="text-slate-500">
               Based on {formatCount(latest.report.n)} job {plural(latest.report.n, 'area')} with verified actuals, as of the run on{' '}
-              {formatDate(latest.run.started_at)}. &ldquo;Estimators&rdquo; is what they quoted, including their own overrides.
+              {formatDate(latest.run.started_at, data.tz)}. &ldquo;Estimators&rdquo; is what they quoted, including their own overrides.
             </p>
           </div>
           <AccuracySparkline points={data.accuracy} />
@@ -756,7 +758,7 @@ function Accuracy({ data }: { data: Dashboard }) {
           >
             {data.accuracy.map(({ run, report }) => (
               <tr key={run.id}>
-                <Td>{formatDate(run.started_at)}</Td>
+                <Td>{formatDate(run.started_at, data.tz)}</Td>
                 <Td right>{formatCount(report.n)}</Td>
                 <Td right>{formatMape(report.hoursMapeModel)}</Td>
                 <Td right>{formatMape(report.hoursMapeEstimator)}</Td>
@@ -824,7 +826,7 @@ function WinRate({ data }: { data: Dashboard }) {
           <>
             <div className="grid gap-4 sm:grid-cols-4">
               <Stat label="Trained" sub={`on ${formatCount(winModel.row.n_quotes)} decided ${plural(winModel.row.n_quotes, 'quote')}`}>
-                {formatDate(winModel.row.trained_at)}
+                {formatDate(winModel.row.trained_at, data.tz)}
               </Stat>
               <Stat label="AUC" sub="How well it tells wins from losses: 0.5 is a coin flip, 1.0 is perfect.">
                 {formatMetric(winModel.metrics.auc)}
@@ -839,7 +841,7 @@ function WinRate({ data }: { data: Dashboard }) {
             <p className="text-sm text-slate-600">Estimators see a recommended price with its win probability next to their own.</p>
             {winRun && !winRun.summary.trained && winRun.summary.reason ? (
               <p className="text-sm text-slate-500">
-                The last run ({formatDate(winRun.row.started_at)}) kept this model: {winRun.summary.reason}
+                The last run ({formatDate(winRun.row.started_at, data.tz)}) kept this model: {winRun.summary.reason}
               </p>
             ) : null}
           </>
@@ -850,7 +852,7 @@ function WinRate({ data }: { data: Dashboard }) {
       {buckets ? (
         <Card className="space-y-3">
           <p className="text-sm text-slate-600">
-            From the run on {formatDate(winRun?.row.started_at)}
+            From the run on {formatDate(winRun?.row.started_at, data.tz)}
             {typeof winRun?.summary.nQuotes === 'number'
               ? `, over ${formatCount(winRun.summary.nQuotes)} decided ${plural(winRun.summary.nQuotes, 'quote')}.`
               : '.'}
@@ -909,9 +911,9 @@ function History({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
                     {setSourceLabel(s.source)}
                     {s.parent_id && s.source === 'rollback' ? <span className="block text-xs text-slate-500">copy of {versionLabel(data, s.parent_id)}</span> : null}
                   </Td>
-                  <Td className="whitespace-nowrap">{formatDateTime(s.created_at)}</Td>
+                  <Td className="whitespace-nowrap">{formatDateTime(s.created_at, data.tz)}</Td>
                   <Td className="whitespace-nowrap">
-                    {formatDateTime(s.activated_at)}
+                    {formatDateTime(s.activated_at, data.tz)}
                     {activatedBy ? <span className="block text-xs text-slate-500">by {activatedBy}</span> : null}
                   </Td>
                   <Td className="min-w-56 whitespace-pre-line text-slate-600">{s.notes ?? '—'}</Td>
@@ -958,7 +960,7 @@ function Changelog({ data }: { data: Dashboard }) {
           >
             {data.changes.map((c) => (
               <tr key={c.id}>
-                <Td className="whitespace-nowrap">{formatDateTime(c.at)}</Td>
+                <Td className="whitespace-nowrap">{formatDateTime(c.at, data.tz)}</Td>
                 <Td>
                   <span className="font-medium text-slate-800">{KIND_LABELS[c.kind]}</span>
                   <span className="block text-xs text-slate-500">{scopeLabel(c, data.names)}</span>
@@ -1020,7 +1022,7 @@ function RunLog({ data }: { data: Dashboard }) {
                     <span className="font-medium text-slate-800">{runKindLabel(r.kind)}</span>
                     <span className="block text-xs text-slate-500">{trigger}</span>
                   </Td>
-                  <Td className="whitespace-nowrap">{formatDateTime(r.started_at)}</Td>
+                  <Td className="whitespace-nowrap">{formatDateTime(r.started_at, data.tz)}</Td>
                   <Td right>{formatDuration(r.started_at, r.finished_at) ?? '—'}</Td>
                   <Td>
                     <RunStatusBadge status={r.status} />

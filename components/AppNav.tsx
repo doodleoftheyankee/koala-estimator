@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { SessionProfile } from '@/lib/server/auth';
+import { LocationSwitcher } from './LocationSwitcher';
 import { SignOutButton } from './SignOutButton';
 
 export function AppNav({ profile }: { profile: SessionProfile }) {
@@ -27,8 +28,10 @@ export function AppNav({ profile }: { profile: SessionProfile }) {
           ))}
         </nav>
         <div className="flex items-center gap-3 text-sm text-slate-600">
+          <LocationSwitcher memberships={profile.memberships} current={profile.locationId} />
           <span>
             {profile.fullName} · <span className="capitalize">{profile.role}</span>
+            {profile.memberships.length < 2 ? <> · {profile.location.shortName}</> : null}
           </span>
           <SignOutButton />
         </div>

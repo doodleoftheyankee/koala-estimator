@@ -74,9 +74,13 @@ export function SendStep({
       return;
     }
     // Price with the freshest bundle so our expected prices match the server's.
-    const fresh = (await refreshBundle()) ?? (await getCachedBundle());
+    const fresh = (await refreshBundle()) ?? (await getCachedBundle(draft.locationId));
     if (!fresh) {
       setResult({ kind: 'error', msg: 'Pricing is not available. Try again with signal.' });
+      return;
+    }
+    if (draft.locationId && fresh.location && fresh.location.id !== draft.locationId) {
+      setResult({ kind: 'error', msg: 'This estimate belongs to another store. Switch to that store (top of the screen) to send it.' });
       return;
     }
     const current = synced.draft;

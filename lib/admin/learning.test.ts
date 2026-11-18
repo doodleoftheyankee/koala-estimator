@@ -105,6 +105,8 @@ const NAMES = scopeNamesFrom({
 // Kinds and scopes
 // ---------------------------------------------------------------------------
 
+const NY = 'America/New_York';
+
 describe('kind labels', () => {
   it('names and explains every kind in plain English', () => {
     for (const k of COEFF_KINDS) {
@@ -858,13 +860,15 @@ describe('formatting', () => {
 
   it('formats dates and times in Eastern time', () => {
     // 07:15 UTC is 3:15 AM EDT in October and 2:15 AM EST in January.
-    expect(formatDateTime('2026-10-20T07:15:00Z')).toBe('Oct 20, 2026, 3:15 AM');
-    expect(formatDateTime('2027-01-12T07:15:00Z')).toBe('Jan 12, 2027, 2:15 AM');
+    expect(formatDateTime('2026-10-20T07:15:00Z', NY)).toBe('Oct 20, 2026, 3:15 AM');
+    expect(formatDateTime('2027-01-12T07:15:00Z', NY)).toBe('Jan 12, 2027, 2:15 AM');
     // Just after midnight UTC is still the previous day in Newark.
-    expect(formatDate('2026-10-21T02:30:00Z')).toBe('Oct 20, 2026');
-    expect(formatDateTime(null)).toBe('—');
-    expect(formatDateTime('not a date')).toBe('—');
-    expect(formatDate(undefined)).toBe('—');
+    expect(formatDate('2026-10-21T02:30:00Z', NY)).toBe('Oct 20, 2026');
+    expect(formatDateTime(null, NY)).toBe('—');
+    expect(formatDateTime('not a date', NY)).toBe('—');
+    expect(formatDate(undefined, NY)).toBe('—');
+    // Another store's time zone: 07:15 UTC is 12:15 AM in Phoenix (no daylight saving).
+    expect(formatDateTime('2026-10-20T07:15:00Z', 'America/Phoenix')).toBe('Oct 20, 2026, 12:15 AM');
   });
 
   it('formats run durations', () => {

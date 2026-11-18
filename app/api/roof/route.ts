@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { authorize } from '@/lib/server/auth';
+import { authorize, roleIn } from '@/lib/server/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { serverEnv } from '@/lib/env';
@@ -51,10 +51,22 @@ export async function POST(request: NextRequest) {
   const pin = 'lat' in body.data ? { lat: body.data.lat, lng: body.data.lng } : typedPin;
   const admin = createAdminClient();
 
+  // The lookup belongs to the estimate's store, or to the store the person is working in.
+  let locationId = profile.locationId;
+  if (estimateId) {
+    const { data: est, error: estError } = await admin.from('estimates').select('location_id').eq('id', estimateId).maybeSingle();
+    if (estError) return fail(`Could not check the estimate: ${estError.message}`, 500, 'failed');
+    if (est) {
+      locationId = est.location_id as string;
+      const role = roleIn(profile, locationId);
+      if (!role || role === 'crew') return fail('That estimate could not be found.', 404, 'not_found');
+    }
+  }
+
   // The same house looked up in the last day: use it again (no Google calls, no new row, not
   // counted toward the cap) unless the estimator pressed "Look up again".
   if (!fresh) {
-    const saved = await savedLookup(admin, address, pin);
+    const saved = await savedLookup(admin, locationId, address, pin);
     if (saved) return NextResponse.json({ lookupId: saved.id, result: saved.result, reused: true, lookedUpAt: saved.created_at });
   }
 
@@ -64,6 +76,7 @@ export async function POST(request: NextRequest) {
     .from('roof_lookups')
     .insert({
       status: 'pending',
+      location_id: locationId,
       created_by: profile.userId,
       estimate_id: estimateId ?? null,
       area_id: areaId ?? null,
@@ -122,6 +135,7 @@ export async function GET(request: NextRequest) {
     const { data, error: readError } = await supabase
       .from('roof_lookups')
       .select(RECENT_COLUMNS)
+      .eq('location_id', profile.locationId)
       .eq('status', 'done')
       .eq('result->>format', String(RESULT_FORMAT))
       .order('created_at', { ascending: false })
