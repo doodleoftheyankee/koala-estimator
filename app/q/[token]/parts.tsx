@@ -14,7 +14,7 @@ import { Download, Globe, Icon, Mail, Phone, type LucideIcon } from '@/component
 import { formatPhone } from '@/lib/format';
 import type { Tier } from '@/lib/pricing';
 import { DEFAULT_BRAND_COLOR, type Branding, type QuoteDocument } from '@/lib/quotes/model';
-import { initials, licenseLine, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
+import { initials, licenseLine, longDate, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
 
 /** The page column: one column on phones, the wide two-column grid from 1024px. */
 export const PAGE = 'mx-auto w-full max-w-2xl px-4 lg:max-w-6xl';
@@ -69,7 +69,12 @@ export function Masthead({ branding }: { branding: Branding | null }) {
 
 /** "Quote KN-2026-…" over the page title. */
 export function QuoteNumber({ value }: { value: string }) {
-  return <SignLabel tone="ink-2">Quote {value}</SignLabel>;
+  // The number keeps its own case ("…-v1"), as on the PDF and in the emails.
+  return (
+    <SignLabel tone="ink-2">
+      Quote <span className="normal-case">{value}</span>
+    </SignLabel>
+  );
 }
 
 /** The screen title (Display, 30px; 36px on desktops). */
@@ -105,6 +110,7 @@ export function QuoteIntro({ doc }: { doc: QuoteDocument }) {
       <address className="text-[17px] leading-snug font-medium text-ink-2 not-italic">
         {[doc.property.line1, doc.property.line2].filter(Boolean).join(', ')}
       </address>
+      <p className="mt-1 text-[15px] leading-snug font-medium text-ink-2">Issued {longDate(doc.issuedAt)}</p>
       <dl className="plate mt-5 grid grid-cols-2 overflow-hidden">
         <div className="min-w-0 px-3.5 py-3.5 sm:px-4">
           <dt>
@@ -303,15 +309,46 @@ export function SignedSummary({ tier, label, price }: { tier: Tier | null; label
   );
 }
 
-/** The office phone as a link inside a sentence, or "our office" when there is none. */
-export function OfficeContact({ branding }: { branding: Branding | null }) {
-  return branding?.phone ? (
-    <a className="font-extrabold whitespace-nowrap text-ink underline underline-offset-2" href={telHref(branding.phone)}>
-      {formatPhone(branding.phone)}
-    </a>
-  ) : (
-    <span className="font-extrabold text-ink">our office</span>
-  );
+/**
+ * How to reach us, inside a sentence, verb included: "call (302) 555-0100", else "email Eddie
+ * Estimator", else "email office@…", else "reply to the email that brought you here". A franchise
+ * without an office phone in its settings still gives the customer a real way to get in touch.
+ * `capital` starts it with a capital letter (after "Questions?").
+ */
+export function OfficeContact({ branding, estimator = null, capital = false }: { branding: Branding | null; estimator?: QuoteDocument['estimator'] | null; capital?: boolean }) {
+  const verb = (w: string) => (capital ? w[0]!.toUpperCase() + w.slice(1) : w);
+  const link = 'font-extrabold text-ink underline underline-offset-2';
+  if (branding?.phone) {
+    return (
+      <>
+        {verb('call')}{' '}
+        <a className={cx(link, 'whitespace-nowrap')} href={telHref(branding.phone)}>
+          {formatPhone(branding.phone)}
+        </a>
+      </>
+    );
+  }
+  if (estimator?.email) {
+    return (
+      <>
+        {verb('email')}{' '}
+        <a className={link} href={`mailto:${estimator.email}`}>
+          {estimator.name}
+        </a>
+      </>
+    );
+  }
+  if (branding?.email) {
+    return (
+      <>
+        {verb('email')}{' '}
+        <a className={cx(link, 'break-all')} href={`mailto:${branding.email}`}>
+          {branding.email}
+        </a>
+      </>
+    );
+  }
+  return <>{verb('reply to the email that brought you here')}</>;
 }
 
 /** The one action of a closed state: call the office when it has a phone, else email the estimator. */
@@ -337,6 +374,14 @@ export function ReachUsAction({ branding, estimator }: { branding: Branding | nu
       <a href={`mailto:${branding.email}`} className={buttonClass({ variant: 'main' })} style={buttonStyle('main', false)}>
         <Icon icon={Mail} />
         Email {branding.company}
+      </a>
+    );
+  }
+  if (branding?.website) {
+    return (
+      <a href={webHref(branding.website)} className={buttonClass({ variant: 'main' })} style={buttonStyle('main', false)}>
+        <Icon icon={Globe} />
+        Visit our website
       </a>
     );
   }

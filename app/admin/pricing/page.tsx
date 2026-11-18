@@ -215,6 +215,8 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
     ...placeholderSettings.map((s) => ({ href: '#business', text: `Setting: ${SETTING_LABELS[s.key] ?? humanize(s.key)}` })),
     ...flaggedMaterials.map((m) => ({ href: '#materials', text: `Material: ${m.name} (${productById.get(m.product_id)?.label ?? 'product'})` })),
     ...flaggedCrews.map((c) => ({ href: '#crews', text: `Crew: ${c.name}` })),
+    // Customers see the office phone on every quote and are told to call it when a quote is closed.
+    ...(objectFieldText(settingObject(map, 'branding'), 'phone').trim() ? [] : [{ href: '#business', text: 'Branding: office phone for customers' }]),
   ];
 
   const defaultMaterials = config.materials

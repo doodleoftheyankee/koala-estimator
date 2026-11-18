@@ -15,7 +15,7 @@ export default async function QuoteNotFound() {
     >
       <p>The link may be cut short or mistyped. Open it again from your email or text message.</p>
       <p>
-        Still stuck? Contact <OfficeContact branding={branding} /> and we will send you a new link.
+        Still stuck? <OfficeContact branding={branding} capital /> and we will send you a new link.
       </p>
     </ClosedState>
   );

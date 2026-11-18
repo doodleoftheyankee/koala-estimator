@@ -6,7 +6,7 @@ import path from 'node:path';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ClosedState, ContactCard, Masthead, QuoteIntro, ReachUsAction, SignedSummary, TermsCard } from '@/app/q/[token]/parts';
+import { ClosedState, ContactCard, Masthead, OfficeContact, QuoteIntro, ReachUsAction, SignedSummary, TermsCard } from '@/app/q/[token]/parts';
 import { initials, licenseLine, longDate, monthlyFigure, price, priceExact, shortDate, telHref, webHref, type QuoteOptionView } from '@/app/q/[token]/quote-view';
 import { CHOSEN_CARD_STYLE, SignForm } from '@/app/q/[token]/SignForm';
 import { CircleCheck } from '@/components/daymark/icons';
@@ -88,6 +88,13 @@ describe('quote page figures come from the quote, formatted as before', () => {
       expect(price(n)).toBe(formatUsd(n));
       expect(priceExact(n)).toBe(formatUsd(n, true));
     }
+  });
+
+  it('the intro says when the quote was issued, as the PDF does (RC-6)', () => {
+    const doc = makeDoc();
+    const out = html(createElement(QuoteIntro, { doc })).replace(/<[^>]+>/g, '');
+    expect(out).toContain(`Issued ${longDate(doc.issuedAt)}`);
+    expect(out).toContain(`Quote ${doc.quoteNumber}`);
   });
 
   it('a date-only "price holds until" never shifts a day', () => {
@@ -270,7 +277,8 @@ describe('closed states', () => {
         createElement('p', null, 'Prices may have changed.'),
       ),
     );
-    expect(out).toContain(`Quote ${doc.quoteNumber}`);
+    // The number keeps its own case inside the capitals label ("…-v1", as on the PDF).
+    expect(out).toContain(`Quote <span class="normal-case">${doc.quoteNumber}</span>`);
     expect(out.match(/<h1/g)).toHaveLength(1);
     expect(out.match(/<main/g)).toHaveLength(1);
     expect(out).toContain('Call (555) 010-0199');
@@ -280,7 +288,18 @@ describe('closed states', () => {
   it('the action falls back to emailing the estimator, then the office', () => {
     expect(html(createElement(ReachUsAction, { branding: { ...BRAND, phone: null }, estimator: doc.estimator }))).toContain('Email Sam Rivera');
     expect(html(createElement(ReachUsAction, { branding: { ...BRAND, phone: null }, estimator: { name: 'Sam', email: null } }))).toContain('Email Acme Attics of Springfield');
-    expect(html(createElement(ReachUsAction, { branding: { ...BRAND, phone: null, email: null }, estimator: null }))).toBe('');
+    expect(html(createElement(ReachUsAction, { branding: { ...BRAND, phone: null, email: null }, estimator: null }))).toContain('Visit our website');
+    expect(html(createElement(ReachUsAction, { branding: { ...BRAND, phone: null, email: null, website: null }, estimator: null }))).toBe('');
+  });
+
+  it('a closed quote always says how to get in touch, even with no office phone (RV-11)', () => {
+    const say = (branding: typeof BRAND | null, estimator: typeof doc.estimator | null) =>
+      html(createElement(OfficeContact, { branding, estimator, capital: true })).replace(/<[^>]+>/g, '');
+    expect(say(BRAND, doc.estimator)).toBe('Call (555) 010-0199');
+    expect(say({ ...BRAND, phone: null }, doc.estimator)).toBe('Email Sam Rivera');
+    expect(say({ ...BRAND, phone: null }, null)).toBe(`Email ${BRAND.email}`);
+    expect(say({ ...BRAND, phone: null, email: null }, null)).toBe('Reply to the email that brought you here');
+    expect(say(null, null)).not.toMatch(/our office/);
   });
 
   it('the contact card leaves out an office with no way to reach it', () => {

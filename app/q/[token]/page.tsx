@@ -73,7 +73,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
         <p>Your quote was signed{quote.signed_at ? ` on ${longDate(quote.signed_at)}` : ''}.</p>
         {quote.signed_tier ? <SignedSummary tier={quote.signed_tier} label={opt?.label ?? null} price={signedPrice} /> : null}
         <p>
-          We will contact you shortly to schedule the work. Questions? Call <OfficeContact branding={doc.branding} />.
+          We will contact you shortly to schedule the work. Questions? <OfficeContact branding={doc.branding} estimator={doc.estimator} capital />.
         </p>
       </ClosedState>
     );
@@ -83,7 +83,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
     return (
       <ClosedState quoteNumber={doc.quoteNumber} icon={Files} tone="info" title="There’s a newer version of this quote" action={reachUs} aside={contacts}>
         <p>
-          A newer version of this quote was sent to you. Please use the link in the most recent email, or contact <OfficeContact branding={doc.branding} />.
+          A newer version of this quote was sent to you. Please use the link in the most recent email, or <OfficeContact branding={doc.branding} estimator={doc.estimator} />.
         </p>
       </ClosedState>
     );
@@ -93,7 +93,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
     return (
       <ClosedState quoteNumber={doc.quoteNumber} icon={Lock} title="This quote is no longer open" action={reachUs} aside={contacts}>
         <p>
-          If you would like an updated quote, contact <OfficeContact branding={doc.branding} />.
+          If you would like an updated quote, <OfficeContact branding={doc.branding} estimator={doc.estimator} />.
         </p>
       </ClosedState>
     );
@@ -103,7 +103,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
     return (
       <ClosedState quoteNumber={doc.quoteNumber} icon={Clock} tone="warn" title="This quote has expired" action={reachUs} aside={contacts}>
         <p>
-          This quote expired on {longDate(doc.validUntil)}. Prices may have changed; please call <OfficeContact branding={doc.branding} /> for an updated quote.
+          This quote expired on {longDate(doc.validUntil)}. Prices may have changed; for an updated quote, <OfficeContact branding={doc.branding} estimator={doc.estimator} />.
         </p>
       </ClosedState>
     );
