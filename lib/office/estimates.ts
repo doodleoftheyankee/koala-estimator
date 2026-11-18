@@ -6,9 +6,11 @@
 //    as on the estimator's phone (lib/field/estimateList.ts); the latest quote only adds what the
 //    estimate does not carry (the customer opened it, or it was closed as declined). "Ready"
 //    (complete, not sent yet) shows as Draft.
-//  - Price: the same headline price the field app shows. A signed quote's signed price; otherwise
-//    the price of the option the estimator recommended (selected), else Better, else the first
-//    option. Nothing is re-priced here: every figure is a price the server already stored.
+//  - Price: a signed quote's signed price; otherwise the price of the option the estimator
+//    recommended (selected); otherwise the stored model price. This is the order the list has
+//    always used. Whether an estimate with no recommended option should show Better instead (as
+//    the field app's dock does) is a value change and belongs to the accuracy round. Nothing is
+//    re-priced here: every figure is a price the server already stored.
 //  - Figures: each tile says exactly what it counts, and lost, declined, expired and void rows
 //    are never in a money total.
 import { formatShortDateTime, TIER_LABELS } from '@/lib/format';
@@ -77,10 +79,10 @@ export interface HeadlinePrice {
 }
 
 /**
- * The row's headline price, chosen the way the field app chooses it (app/field/EstimateEditor.tsx
- * summaryPrice): the signed price, else the selected option, else Better, else the first option
- * (Good, Better, Best order). `modelTotalPrice` is only a last resort for rows saved without
- * options.
+ * The row's headline price: the signed price, else the price of the option the estimator
+ * recommended (selected), else the stored `model_total_price`. Same order as before Daymark, so
+ * the figure in the Price column is unchanged. The model price has no option name, because it is
+ * not always the recommended option's price.
  */
 export function headlinePrice(args: {
   selectedTier: string | null;
@@ -90,11 +92,8 @@ export function headlinePrice(args: {
 }): HeadlinePrice {
   const selected = isTier(args.selectedTier) ? args.selectedTier : null;
   if (isPrice(args.signedPrice)) return { price: args.signedPrice, tier: selected, signed: true };
-  const options = (args.options ?? [])
-    .filter((o): o is { tier: Tier; price: number } => isTier(o.tier) && isPrice(o.price))
-    .sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier));
-  const pick = options.find((o) => o.tier === selected) ?? options.find((o) => o.tier === 'better') ?? options[0];
-  if (pick) return { price: pick.price, tier: pick.tier, signed: false };
+  const pick = selected ? (args.options ?? []).find((o) => o.tier === selected) : undefined;
+  if (pick && isPrice(pick.price)) return { price: pick.price, tier: selected, signed: false };
   return { price: isPrice(args.modelTotalPrice) ? args.modelTotalPrice : null, tier: null, signed: false };
 }
 
@@ -103,7 +102,7 @@ export function priceLabel(p: HeadlinePrice): string | null {
   if (p.price === null) return null;
   const tier = p.tier ? TIER_LABELS[p.tier] : null;
   if (p.signed) return tier ? `Signed, ${tier}` : 'Signed';
-  return tier ?? 'Recommended';
+  return tier;
 }
 
 /** One line of what last happened to the estimate. */

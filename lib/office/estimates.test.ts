@@ -77,33 +77,32 @@ describe('headlinePrice', () => {
     { tier: 'better', price: 4095 },
   ];
 
-  it('shows the recommended option, falling back to Better, not the cheapest (UX-02)', () => {
-    expect(headlinePrice({ selectedTier: null, options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
+  it('shows the recommended option when the estimator picked one', () => {
     expect(headlinePrice({ selectedTier: 'best', options, modelTotalPrice: 6000, signedPrice: null })).toEqual({ price: 6920, tier: 'best', signed: false });
+    expect(headlinePrice({ selectedTier: 'better', options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
   });
 
-  it('uses the first option in Good, Better, Best order when there is no Better', () => {
-    const noBetter = [
-      { tier: 'best', price: 6920 },
-      { tier: 'good', price: 2375 },
-    ];
-    expect(headlinePrice({ selectedTier: null, options: noBetter, modelTotalPrice: null, signedPrice: null }).tier).toBe('good');
+  it('falls back to the stored model price when no option is recommended, as before Daymark (RC-1)', () => {
+    // Choosing Better instead would change the figure in the Price column; that is the accuracy round's call.
+    expect(headlinePrice({ selectedTier: null, options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 2375, tier: null, signed: false });
+    expect(headlinePrice({ selectedTier: 'nonsense', options, modelTotalPrice: 2375, signedPrice: null }).price).toBe(2375);
+  });
+
+  it('falls back to the stored model price when the recommended option has no price', () => {
+    expect(headlinePrice({ selectedTier: 'good', options: [{ tier: 'good', price: null }], modelTotalPrice: 3100, signedPrice: null })).toEqual({ price: 3100, tier: null, signed: false });
+    expect(headlinePrice({ selectedTier: null, options: [], modelTotalPrice: 3100, signedPrice: null })).toEqual({ price: 3100, tier: null, signed: false });
+    expect(headlinePrice({ selectedTier: null, options: [{ tier: 'good', price: null }], modelTotalPrice: null, signedPrice: null }).price).toBeNull();
+    expect(headlinePrice({ selectedTier: 'nonsense', options: null, modelTotalPrice: null, signedPrice: null })).toEqual({ price: null, tier: null, signed: false });
   });
 
   it('shows the signed price once the customer signed', () => {
     expect(headlinePrice({ selectedTier: 'good', options, modelTotalPrice: 2375, signedPrice: 2500 })).toEqual({ price: 2500, tier: 'good', signed: true });
   });
 
-  it('falls back to the stored model price only when no option has a price', () => {
-    expect(headlinePrice({ selectedTier: null, options: [], modelTotalPrice: 3100, signedPrice: null })).toEqual({ price: 3100, tier: null, signed: false });
-    expect(headlinePrice({ selectedTier: null, options: [{ tier: 'good', price: null }], modelTotalPrice: null, signedPrice: null }).price).toBeNull();
-    expect(headlinePrice({ selectedTier: 'nonsense', options: null, modelTotalPrice: null, signedPrice: null })).toEqual({ price: null, tier: null, signed: false });
-  });
-
   it('never changes a value: the price is one the server stored', () => {
     for (const sel of [null, 'good', 'better', 'best']) {
       const p = headlinePrice({ selectedTier: sel, options, modelTotalPrice: 1, signedPrice: null }).price;
-      expect(options.map((o) => o.price)).toContain(p);
+      expect([...options.map((o) => o.price), 1]).toContain(p);
     }
   });
 
@@ -111,7 +110,7 @@ describe('headlinePrice', () => {
     expect(priceLabel({ price: 4095, tier: 'better', signed: false })).toBe('Better');
     expect(priceLabel({ price: 2500, tier: 'good', signed: true })).toBe('Signed, Good');
     expect(priceLabel({ price: 2500, tier: null, signed: true })).toBe('Signed');
-    expect(priceLabel({ price: 3100, tier: null, signed: false })).toBe('Recommended');
+    expect(priceLabel({ price: 3100, tier: null, signed: false })).toBeNull();
     expect(priceLabel({ price: null, tier: null, signed: false })).toBeNull();
   });
 });

@@ -944,12 +944,13 @@ op.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
 await op.goto(BASE + '/estimates');
 await op.screenshot({ path: SHOTS + '11-estimates.png', fullPage: true });
 {
-  // The office list shows the same headline price as the field app (the recommended option, else
-  // Better), and its figures add up exactly the rows they name.
+  // The office list shows the price it always has: the recommended option's price, else the
+  // stored model price (Sam Offline has no recommended option). Its figures add up exactly the
+  // rows they name.
   const money = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
-  const headline = Number(psql("select o.price from estimate_options o join estimates e on e.id = o.estimate_id join customers c on c.id = e.customer_id where c.last_name = 'Offline' and o.tier = coalesce(e.selected_tier, 'better')"));
+  const headline = Number(psql("select coalesce((select o.price from estimate_options o where o.estimate_id = e.id and o.tier = e.selected_tier), e.model_total_price) from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Offline'"));
   const offlineRow = op.getByRole('row', { name: /Sam Offline/ });
-  check((await offlineRow.innerText()).includes(money(headline)), `the office list shows the recommended price ${money(headline)}, as the field app does`);
+  check((await offlineRow.innerText()).includes(money(headline)), `the office list shows the stored price ${money(headline)} (recommended option, else the model price)`);
   const signedSum = Number(psql("select sum(signed_price) from quotes where status = 'signed'"));
   const figures = await op.getByRole('region', { name: 'Figures for this list' }).innerText();
   check(figures.includes(money(signedSum)) && /1 quote, signed by the customer/.test(figures), `the Signed figure is the signed quotes' total, ${money(signedSum)}`);
