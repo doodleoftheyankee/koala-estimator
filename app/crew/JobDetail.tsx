@@ -116,7 +116,10 @@ export function JobDetail({
             <p className="truncate font-semibold">{job.customer.name}</p>
             <p className="truncate text-xs text-slate-500">{job.address.street}</p>
           </div>
-          <StatusBadge status={jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart })} />
+          {/* Verified once the office has locked this job's actuals, as on the office's job page. */}
+          <StatusBadge
+            status={job.status === 'completed' && draft?.syncState === 'locked' ? 'job.verified' : jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart })}
+          />
         </div>
       </header>
 
