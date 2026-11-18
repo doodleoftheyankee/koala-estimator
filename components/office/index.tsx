@@ -112,8 +112,11 @@ export const TABLE = {
 export const ROW_LINK =
   "font-extrabold text-ink no-underline after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:outline-offset-2";
 
-/** Things inside a covered row that keep their own click (menus, PDF links). */
-export const ABOVE_ROW_LINK = 'relative z-10';
+/**
+ * Things inside a covered row that keep their own click (menus, PDF links). While a menu inside
+ * is open (or focused) it rises above the next rows' actions, which would otherwise cover it.
+ */
+export const ABOVE_ROW_LINK = 'relative z-10 focus-within:z-20 has-[[aria-expanded=true]]:z-20';
 
 export interface Fact {
   key: string;
