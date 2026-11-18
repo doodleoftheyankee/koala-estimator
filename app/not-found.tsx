@@ -1,7 +1,9 @@
-// A page that does not exist: branded, inside the app menu for signed-in staff, with a way on.
+// A page that does not exist: branded, with a way on. It stays free of the app shell on purpose:
+// the root not-found page is part of every route's client bundle, the public customer quote
+// included, so the menu is not loaded here. Sections that call notFound() inside their own shell
+// have their own not-found page (app/jobs/not-found.tsx keeps the menu).
 // (Signed-out visitors to staff pages are sent to sign in by proxy.ts before they get here.)
 import type { Metadata } from 'next';
-import { StaffShell } from '@/components/shell/StaffShell';
 import { NotFoundState } from '@/components/shell/StatePages';
 import { menuFor } from '@/lib/nav';
 import { getSessionProfile } from '@/lib/server/auth';
@@ -17,8 +19,8 @@ export default async function NotFound() {
   // Office roles get the quiet register their own pages use; estimators and crews the field one.
   const office = profile.role === 'owner' || profile.role === 'office';
   return (
-    <StaffShell register={office ? 'quiet' : undefined}>
+    <div data-register={office ? 'quiet' : undefined}>
       <NotFoundState primary={{ href: home.href, label: `Go to ${home.label}` }} />
-    </StaffShell>
+    </div>
   );
 }

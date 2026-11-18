@@ -6,13 +6,11 @@
 //
 // The choice is stored in localStorage (lib/theme.ts), applied to <html> at once, and applied
 // before first paint on the next load by the inline script in app/layout.tsx.
-import { useEffect, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import {
   applyThemeChoice,
-  readThemeChoice,
   resolveTheme,
   THEME_CHOICES,
-  THEME_COLORS,
   THEME_HINTS,
   THEME_LABELS,
   THEME_STORAGE_KEY,
@@ -22,17 +20,12 @@ import {
 } from '@/lib/theme';
 import { Segmented } from './choice';
 import { Contrast, Moon, Smartphone, Sun, type LucideIcon } from './icons';
+import { currentThemeChoice, rememberThemeChoice, syncThemeColor, themeStorage } from './ThemeRestore';
+
+export { ThemeRestore } from './ThemeRestore';
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
-
-function storage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function media(q: string): MediaQueryList | null {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(q) : null;
@@ -44,7 +37,9 @@ function subscribe(cb: () => void) {
   const more = media('(prefers-contrast: more)');
   const onStorage = (e: StorageEvent) => {
     if (e.key === null || e.key === THEME_STORAGE_KEY) {
-      applyThemeChoice(document.documentElement, readThemeChoice(storage()));
+      // Another tab changed the theme: follow the stored choice again.
+      rememberThemeChoice(null);
+      applyThemeChoice(document.documentElement, currentThemeChoice());
       cb();
     }
   };
@@ -61,39 +56,17 @@ function subscribe(cb: () => void) {
 
 /** "choice|resolved", a stable string snapshot. */
 function snapshot(): string {
-  const choice = readThemeChoice(storage());
+  const choice = currentThemeChoice();
   const resolved = resolveTheme(choice, { dark: !!media('(prefers-color-scheme: dark)')?.matches, moreContrast: !!media('(prefers-contrast: more)')?.matches });
   return `${choice}|${resolved}`;
 }
 
-/** Points the browser-bar colour at the theme in use (the layout's media variants for Auto). */
-function syncThemeColor(choice: ThemeChoice) {
-  for (const meta of Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]'))) {
-    if (!meta.dataset.auto) meta.dataset.auto = meta.content;
-    meta.content = choice === 'system' ? meta.dataset.auto : THEME_COLORS[choice];
-  }
-}
-
 export function setThemeChoice(choice: ThemeChoice) {
-  writeThemeChoice(storage(), choice);
+  writeThemeChoice(themeStorage(), choice);
+  rememberThemeChoice(choice);
   applyThemeChoice(document.documentElement, choice);
   syncThemeColor(choice);
   notify();
-}
-
-/**
- * Re-applies the stored choice once the page is running. The inline script in app/layout.tsx does
- * this before first paint, but Next renders not-found and error pages on the client, where that
- * script never runs; without this a Night or Sun+ phone would see those pages in Day.
- */
-export function ThemeRestore() {
-  useEffect(() => {
-    const choice = readThemeChoice(storage());
-    if (document.documentElement.getAttribute('data-theme-choice') === choice) return;
-    applyThemeChoice(document.documentElement, choice);
-    syncThemeColor(choice);
-  }, []);
-  return null;
 }
 
 export function useTheme(): { choice: ThemeChoice; resolved: ResolvedTheme; setChoice: (c: ThemeChoice) => void } {

@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Banner } from '@/components/daymark/Banner';
 import { Button } from '@/components/daymark/Button';
-import { CHOSEN_STYLE, RadioDot, onRovingKeys } from '@/components/daymark/choice';
+import { CHOSEN_STYLE, RadioDot, onRovingKeys } from '@/components/daymark/chosen';
 import { cx } from '@/components/daymark/cx';
 import { Field, Input } from '@/components/daymark/Form';
 import { SignLabel } from '@/components/daymark/Gauge';

@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { fontVariables } from './fonts';
-import { ThemeRestore } from '@/components/daymark/Theme';
+import { ThemeInitScript, ThemeRestore } from '@/components/daymark/ThemeRestore';
 import { ToastProvider } from '@/components/daymark/Toast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
-import { THEME_COLORS, THEME_INIT_SCRIPT } from '@/lib/theme';
+import { THEME_COLORS } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: { default: 'Koala Estimator', template: '%s · Koala Estimator' },
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // the server sent <html> without it.
     <html lang="en" className={fontVariables} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <ThemeInitScript />
       </head>
       <body className="min-h-dvh antialiased">
         <ToastProvider>{children}</ToastProvider>

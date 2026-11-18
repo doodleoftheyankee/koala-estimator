@@ -3,16 +3,15 @@
 // own <html>, the Daymark styles, fonts and theme. Try again reloads the page.
 import './globals.css';
 import { fontVariables } from './fonts';
-import { ThemeRestore } from '@/components/daymark/Theme';
+import { ThemeInitScript, ThemeRestore } from '@/components/daymark/ThemeRestore';
 import { ErrorState } from '@/components/shell/StatePages';
-import { THEME_INIT_SCRIPT } from '@/lib/theme';
 
 export default function GlobalError({ error }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <html lang="en" className={fontVariables} suppressHydrationWarning>
       <head>
         <title>Something went wrong · Koala Estimator</title>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <ThemeInitScript />
       </head>
       <body className="min-h-dvh antialiased">
         <ErrorState error={error} retry={() => window.location.reload()} home={{ href: '/', label: 'Go to the start page' }} />
