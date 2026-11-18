@@ -96,6 +96,24 @@ export const personHours = (n: number | null | undefined, opts: { short?: boolea
   finite(n) ? `${num(n, opts.digits ?? 1)} ${opts.short ? 'p-h' : n === 1 ? 'person-hour' : 'person-hours'}` : DASH;
 
 // ---------------------------------------------------------------------------
+// Phone numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * A phone number for reading. North American numbers, however they were typed or stored
+ * ("+13025550007", "302.555.0007"), read "(302) 555-0007"; anything else (an extension, another
+ * country) shows as typed. Links keep using the digits (tel:).
+ */
+export function formatPhone(raw: string | null | undefined): string {
+  const typed = raw?.trim() ?? '';
+  if (!typed) return DASH;
+  if (/[a-z]/i.test(typed)) return typed;
+  const digits = typed.replace(/\D/g, '');
+  const national = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.length === 10 && !typed.startsWith('+') ? digits : null;
+  return national ? `(${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}` : typed;
+}
+
+// ---------------------------------------------------------------------------
 // Dates and times, always in BUSINESS_TIME_ZONE
 // ---------------------------------------------------------------------------
 

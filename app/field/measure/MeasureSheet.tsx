@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
 import type { AreaDraft } from '@/lib/sync/draft';
 import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type Measurement } from '@/lib/measure/measure';
 import { parsePitch } from '@/lib/measure/units';
+import { num } from '@/lib/format';
 import { Alert, Button, Card, Chips, Field, Input, Toggle } from '@/components/ui';
 import { Camera, Icon, Ruler } from '@/components/daymark';
 import { LengthInput, ShapeEditor } from './ShapeEditor';
 import { PitchPhotoSheet } from './PitchPhoto';
 
-const sq = (n: number) => Math.round(n).toLocaleString('en-US');
+const sq = (n: number) => num(Math.round(n));
 
 function factorText(pitch: string): string {
   const p = parsePitch(pitch);

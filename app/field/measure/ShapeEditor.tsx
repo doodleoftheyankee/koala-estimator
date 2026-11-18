@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { PRESET_DIMS, SHAPE_NAMES, solveShape, type Point, type ShapeInput, type ShapeKind, type SolvedShape } from '@/lib/measure/geometry';
 import { layoutShape } from '@/lib/measure/layout';
 import { formatFeet, parseFeet } from '@/lib/measure/units';
+import { num } from '@/lib/format';
 import { Button, cx } from '@/components/ui';
 
 const ICONS: Record<ShapeKind, string> = {
@@ -99,7 +100,7 @@ export function ShapeEditor({ shape, onChange, compact }: { shape: ShapeInput; o
 
       <ShapePreview shape={solved.ok ? solved.shape : null} empty={shape.kind === 'custom' ? 'Draw the outline below' : 'Enter the sizes'} compact={compact} />
       <p className="min-h-5 text-center text-sm font-semibold text-slate-700">
-        {solved.ok ? `${Math.round(solved.shape.area).toLocaleString('en-US')} sq ft · perimeter ${formatFeet(solved.shape.perimeter)}` : ''}
+        {solved.ok ? `${num(Math.round(solved.shape.area))} sq ft · perimeter ${formatFeet(solved.shape.perimeter)}` : ''}
       </p>
 
       {shape.kind === 'custom' ? (

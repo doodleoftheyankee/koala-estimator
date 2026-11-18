@@ -7,7 +7,7 @@ import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
-import { usd } from '@/lib/format';
+import { formatDateTime, usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
 import { Check, Circle, Icon, Star } from '@/components/daymark';
 import type { PricingResult } from './EstimateEditor';
@@ -238,7 +238,7 @@ export function SendStep({
       {draft.lastQuote ? (
         <Card>
           <p className="text-sm text-slate-600">
-            Last sent: v{draft.lastQuote.version} on {new Date(draft.lastQuote.sentAt).toLocaleString()}
+            Last sent: v{draft.lastQuote.version} on {formatDateTime(draft.lastQuote.sentAt)}
           </p>
           {online ? (
             <a className="mt-1 inline-block text-sm font-semibold text-brand-800 underline" href={`/api/quotes/${draft.lastQuote.quoteId}/pdf${locked ? '?signed=1' : ''}`} target="_blank" rel="noreferrer">

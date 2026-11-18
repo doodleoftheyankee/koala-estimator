@@ -7,7 +7,7 @@ import { priceableAreas, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, ackSummary, flagsForOption, isAcknowledged, setDeviationAck } from '@/lib/field/flags';
 import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, setPriceOverride, tiersWithLine } from '@/lib/field/lineOverrides';
 import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor, type PriceAdvice } from '@/lib/field/priceAdvice';
-import { num, pct, TIER_LABELS, usd } from '@/lib/format';
+import { formatDateTime, num, pct, TIER_LABELS, usd } from '@/lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import { Icon, Star } from '@/components/daymark';
@@ -138,7 +138,7 @@ export function OptionsStep({
 
       {bundle ? (
         <p className="px-1 text-xs text-slate-500">
-          Pricing v{bundle.coefficientSet.version} · {bundle.hash.slice(0, 7)} · downloaded {new Date(bundle.builtAt).toLocaleString()}
+          Pricing v{bundle.coefficientSet.version} · {bundle.hash.slice(0, 7)} · downloaded {formatDateTime(bundle.builtAt)}
         </p>
       ) : null}
     </>

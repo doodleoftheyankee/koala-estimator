@@ -11,6 +11,7 @@ import { cx } from '@/components/daymark/cx';
 import { SignLabel } from '@/components/daymark/Gauge';
 import { StatusBadge } from '@/components/daymark/StatusBadge';
 import { Download, Globe, Icon, Mail, Phone, type LucideIcon } from '@/components/daymark/icons';
+import { formatPhone } from '@/lib/format';
 import type { Tier } from '@/lib/pricing';
 import { DEFAULT_BRAND_COLOR, type Branding, type QuoteDocument } from '@/lib/quotes/model';
 import { initials, licenseLine, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
@@ -51,7 +52,7 @@ function LogoTile({ branding, className = 'h-11 w-11' }: { branding: Branding; c
  */
 export function Masthead({ branding }: { branding: Branding | null }) {
   if (!branding) return <div aria-hidden className="h-[var(--bw-x)] bg-rule" />;
-  const sub = [branding.phone, licenseLine(branding)].filter((x): x is string => !!x);
+  const sub = [branding.phone ? formatPhone(branding.phone) : null, licenseLine(branding)].filter((x): x is string => !!x);
   return (
     <header className="border-b-[length:var(--bw-x)] border-solid border-rule bg-surface print:border-b">
       <div className={cx(PAGE, 'flex items-center gap-3 py-3 lg:py-4')}>
@@ -60,7 +61,7 @@ export function Masthead({ branding }: { branding: Branding | null }) {
           <p className="text-[18px] leading-tight font-extrabold text-ink sm:text-[20px]">{branding.company}</p>
           {sub.length ? <p className="mt-0.5 text-[15px] leading-snug font-semibold text-ink-2">{sub.join(' · ')}</p> : null}
         </div>
-        {branding.phone ? <IconLink href={telHref(branding.phone)} icon={Phone} label={`Call ${branding.company} at ${branding.phone}`} text="Call" /> : null}
+        {branding.phone ? <IconLink href={telHref(branding.phone)} icon={Phone} label={`Call ${branding.company} at ${formatPhone(branding.phone)}`} text="Call" /> : null}
       </div>
     </header>
   );
@@ -218,7 +219,7 @@ export function ContactCard({
             <LogoTile branding={office} className="h-12 w-12" />
             <div className="min-w-0 flex-1">
               <p className="text-[17px] leading-tight font-extrabold break-words text-ink">{office.company}</p>
-              {office.phone ? <p className="mt-0.5 text-[15px] leading-snug font-semibold text-ink-2">{office.phone}</p> : null}
+              {office.phone ? <p className="mt-0.5 text-[15px] leading-snug font-semibold text-ink-2">{formatPhone(office.phone)}</p> : null}
               {officeLinks.map((l) => (
                 <a key={l.href} href={l.href} className="mt-0.5 flex items-center gap-1.5 text-[15px] font-semibold break-all text-ink-2 underline underline-offset-2">
                   <Icon icon={l.icon} size="xs" />
@@ -226,7 +227,7 @@ export function ContactCard({
                 </a>
               ))}
             </div>
-            {office.phone ? <IconLink href={telHref(office.phone)} icon={Phone} label={`Call ${office.company} at ${office.phone}`} /> : null}
+            {office.phone ? <IconLink href={telHref(office.phone)} icon={Phone} label={`Call ${office.company} at ${formatPhone(office.phone)}`} /> : null}
           </li>
         ) : null}
       </ul>
@@ -306,7 +307,7 @@ export function SignedSummary({ tier, label, price }: { tier: Tier | null; label
 export function OfficeContact({ branding }: { branding: Branding | null }) {
   return branding?.phone ? (
     <a className="font-extrabold whitespace-nowrap text-ink underline underline-offset-2" href={telHref(branding.phone)}>
-      {branding.phone}
+      {formatPhone(branding.phone)}
     </a>
   ) : (
     <span className="font-extrabold text-ink">our office</span>
@@ -319,7 +320,7 @@ export function ReachUsAction({ branding, estimator }: { branding: Branding | nu
     return (
       <a href={telHref(branding.phone)} className={buttonClass({ variant: 'main' })} style={buttonStyle('main', false)}>
         <Icon icon={Phone} />
-        Call {branding.phone}
+        Call {formatPhone(branding.phone)}
       </a>
     );
   }

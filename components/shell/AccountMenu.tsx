@@ -7,6 +7,7 @@ import { ThemeSwitcher } from '../daymark/Theme';
 import { cx } from '../daymark/cx';
 import { ChevronRight, Icon, Info, LifeBuoy } from '../daymark/icons';
 import { SignOutButton } from '../SignOutButton';
+import { formatPhone } from '@/lib/format';
 import { moreItems, type NavItem, type RoleMenu } from '@/lib/nav';
 import { Avatar, NAV_ICONS, ShellLink, useShellOnline, type ShellOrg, type ShellProfile } from './parts';
 
@@ -99,7 +100,7 @@ function HelpLine({ role, phone }: { role: ShellProfile['role']; phone: string |
     <>
       Need help? Call the office:{' '}
       <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="font-bold text-ink underline underline-offset-4">
-        {phone}
+        {formatPhone(phone)}
       </a>
     </>
   );

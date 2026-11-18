@@ -13,6 +13,7 @@ import {
   inches,
   isWholeDollars,
   formatMoney,
+  formatPhone,
   num,
   pct,
   percent,
@@ -109,6 +110,22 @@ describe('numbers and units', () => {
     expect(personHours(12.5, { short: true })).toBe('12.5 p-h');
     expect(sqft(null)).toBe(DASH);
     expect(pitch(undefined)).toBe(DASH);
+  });
+});
+
+describe('formatPhone', () => {
+  it('reads North American numbers the same way however they were stored', () => {
+    expect(formatPhone('+13025550007')).toBe('(302) 555-0007');
+    expect(formatPhone('302.555.0007')).toBe('(302) 555-0007');
+    expect(formatPhone('1-302-555-0007')).toBe('(302) 555-0007');
+    expect(formatPhone('(555) 010-0142')).toBe('(555) 010-0142');
+  });
+  it('leaves anything else as typed, and dashes a missing number', () => {
+    expect(formatPhone('302-555-0100 ext 12')).toBe('302-555-0100 ext 12');
+    expect(formatPhone('+44 20 7946 0958')).toBe('+44 20 7946 0958');
+    expect(formatPhone('555-0100')).toBe('555-0100');
+    expect(formatPhone('  ')).toBe(DASH);
+    expect(formatPhone(null)).toBe(DASH);
   });
 });
 

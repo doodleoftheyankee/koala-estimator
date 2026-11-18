@@ -1,7 +1,7 @@
 'use client';
 import { scaleCurve, type ChartBox } from '@/lib/field/curve';
 import type { PriceAdvice } from '@/lib/field/priceAdvice';
-import { pct, usd } from '@/lib/format';
+import { num, pct, usd } from '@/lib/format';
 import { Button } from '@/components/ui';
 
 /**
@@ -51,7 +51,7 @@ export function PriceAdvicePanel({
         </Button>
       )}
       {limitNote ? <p className="text-xs text-amber-800">{limitNote}</p> : null}
-      <p className="text-xs text-slate-500">Learned from {nQuotes.toLocaleString('en-US')} won or lost quotes. A guide, not a rule: you know this customer.</p>
+      <p className="text-xs text-slate-500">Learned from {num(nQuotes)} won or lost quotes. A guide, not a rule: you know this customer.</p>
     </div>
   );
 }
