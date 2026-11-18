@@ -1,6 +1,7 @@
 // The thumb dock: a fixed bottom bar with a 3px rule on top, safe-area padding, an optional
 // one-line "what this does" note, and the 64px action(s). Put the screen's main action here and
-// repeat the chosen value in it ("Use 1,970 sq ft").
+// repeat the chosen value in it ("Use 1,970 sq ft"). Inside the app shell it sits above the phone
+// tab bar and beside the desktop sidebar (--shell-bottom, --shell-left in app/globals.css).
 //
 //   <Dock note="Fills the Attic floor and notes the source">
 //     <Button variant="primary" size="lg" block>Use {sqft(area)}</Button>
@@ -30,7 +31,7 @@ export function Dock({
       aria-label={label}
       className={cx(
         'border-t-[length:var(--bw-x)] border-solid border-rule bg-surface px-4 pt-3',
-        inline ? 'pb-3' : 'fixed inset-x-0 bottom-0 z-30 pb-[max(12px,var(--safe-bottom))]',
+        inline ? 'pb-3' : 'fixed right-0 bottom-[var(--shell-bottom)] left-[var(--shell-left)] z-30 pb-[max(12px,var(--shell-safe))]',
         className,
       )}
     >
@@ -51,5 +52,5 @@ export function Dock({
 
 /** Reserves room under the page content for a Dock (with or without a note). */
 export function DockSpacer({ withNote = false }: { withNote?: boolean }) {
-  return <div aria-hidden className={withNote ? 'h-[calc(128px+var(--safe-bottom))]' : 'h-[calc(96px+var(--safe-bottom))]'} />;
+  return <div aria-hidden className={withNote ? 'h-[calc(128px+var(--shell-safe))]' : 'h-[calc(96px+var(--shell-safe))]'} />;
 }

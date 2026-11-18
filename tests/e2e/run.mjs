@@ -984,7 +984,7 @@ check(psql('select count(*) from learning_runs') !== '0', 'learning run recorded
 
 step('owner learning dashboard');
 await op.goto(BASE + '/admin/learning');
-await op.getByRole('heading', { name: 'Learning' }).waitFor();
+await op.getByRole('heading', { name: 'Insights' }).waitFor();
 await op.screenshot({ path: SHOTS + '19-learning.png', fullPage: true });
 await op.getByRole('button', { name: 'Run learning now' }).click();
 await op.getByRole('button', { name: 'Run learning now' }).waitFor({ timeout: 120000 });

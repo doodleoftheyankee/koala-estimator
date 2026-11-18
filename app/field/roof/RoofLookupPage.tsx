@@ -73,9 +73,6 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
               {profile.fullName} · <span className={online ? 'text-emerald-700' : 'text-amber-700'}>{online ? 'Online' : 'Offline'}</span>
             </p>
           </div>
-          <a href="/field" className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50">
-            ← Estimates
-          </a>
         </div>
       </header>
 
@@ -210,7 +207,7 @@ function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; pro
     }
   };
   return (
-    <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur">
+    <div className="shell-dock z-30 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur">
       <div className="mx-auto max-w-2xl">
         <Button size="lg" className="w-full" disabled={Boolean(reason) || busy || Boolean(t.state.running)} onClick={start}>
           {busy ? 'Starting…' : 'Start an estimate here'}

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -186,7 +185,6 @@ export default async function PricingPage() {
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Pricing</h1>
@@ -513,7 +511,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <Alert tone="blue">
           These values are learned nightly from verified job actuals. Review candidates, approve or reject them, and roll back on the{' '}
           <a href="/admin/learning" className="font-semibold underline">
-            Learning dashboard
+            Insights page
           </a>
           .
         </Alert>

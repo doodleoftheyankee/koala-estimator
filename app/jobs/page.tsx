@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -23,7 +22,7 @@ const GROUP_TONE: Record<OfficeGroup, 'slate' | 'green' | 'amber' | 'red' | 'blu
 };
 
 export default async function JobsPage({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
-  const profile = await requireRole('owner', 'office');
+  await requireRole('owner', 'office');
   const db = await createClient();
   const { all } = await searchParams;
   const { jobs, partial, error } = await loadJobList(db, all && isHistoryGroup(all) ? all : null);
@@ -32,7 +31,6 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Jobs</h1>

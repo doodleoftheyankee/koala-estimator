@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -43,7 +42,6 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   if (!job) {
     return (
       <>
-        <AppNav profile={profile} />
         <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
           <BackLink />
           <Alert tone="red">Could not load this job: {error}</Alert>
@@ -70,7 +68,6 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
         <BackLink />
         <div className="flex flex-wrap items-start justify-between gap-3">

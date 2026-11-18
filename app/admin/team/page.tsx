@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Select } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -66,7 +65,6 @@ export default async function TeamPage() {
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold text-slate-900">Team</h1>
 

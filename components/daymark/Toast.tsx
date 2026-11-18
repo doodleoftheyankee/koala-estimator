@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div aria-live="polite" role="status" className="pointer-events-none fixed inset-x-0 bottom-[calc(108px+var(--safe-bottom))] z-50 flex justify-center px-4">
+      <div aria-live="polite" role="status" className="pointer-events-none fixed right-0 bottom-[calc(108px+var(--shell-bottom)+var(--shell-safe))] left-[var(--shell-left)] z-50 flex justify-center px-4">
         {toast ? <ToastView key={toast.id} toast={toast} onClose={dismiss} /> : null}
       </div>
     </ToastContext.Provider>

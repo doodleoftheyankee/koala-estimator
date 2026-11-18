@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -11,8 +12,11 @@ export interface SessionProfile {
   fullName: string;
 }
 
-/** The signed-in user's active profile, or null. */
-export async function getSessionProfile(): Promise<SessionProfile | null> {
+/**
+ * The signed-in user's active profile, or null. Read once per request: the app shell in a
+ * section's layout and the page's own requireRole(...) share it.
+ */
+export const getSessionProfile = cache(async function getSessionProfile(): Promise<SessionProfile | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,7 +25,7 @@ export async function getSessionProfile(): Promise<SessionProfile | null> {
   const { data } = await supabase.from('profiles').select('role, full_name, active').eq('id', user.id).maybeSingle();
   if (!data || !data.active) return null;
   return { userId: user.id, email: user.email ?? null, role: data.role as Role, fullName: data.full_name as string };
-}
+});
 
 /** For pages: redirect to /login when signed out, or to / when the role is not allowed. */
 export async function requireRole(...roles: Role[]): Promise<SessionProfile> {

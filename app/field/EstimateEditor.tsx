@@ -257,7 +257,7 @@ export function EstimateEditor({
         ) : null}
       </div>
 
-      <footer className="safe-bottom fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white px-3 pt-2">
+      <footer className="shell-dock z-30 border-t border-slate-200 bg-white px-3 pt-2">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-slate-500">{priced?.ok ? 'Recommended option' : 'Price'}</p>

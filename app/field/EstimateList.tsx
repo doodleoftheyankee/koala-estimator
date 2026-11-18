@@ -58,23 +58,11 @@ export function EstimateList({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {profile.role !== 'estimator' ? (
-              <a href="/estimates" className="rounded-lg px-3 py-2 text-sm font-medium text-brand-800 hover:bg-brand-50">
-                Office
-              </a>
-            ) : null}
             <Button size="sm" variant="secondary" onClick={onSync} disabled={!online}>
               Sync{unsynced ? ` (${unsynced})` : ''}
             </Button>
           </div>
         </div>
-        <a
-          href="/field/roof"
-          className="mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-white px-4 py-2 ring-1 ring-slate-300 hover:bg-slate-50 active:bg-slate-50"
-        >
-          <span className="whitespace-nowrap text-sm font-semibold text-slate-900">🛰️ Roof lookup</span>
-          <span className="text-right text-xs text-slate-500">Any address, no estimate ›</span>
-        </a>
         {!bundle ? (
           <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-900">
             Pricing not downloaded yet. Open this screen once with signal so estimates can be priced offline.
@@ -118,7 +106,7 @@ export function EstimateList({
         })}
       </ul>
 
-      <div className="safe-bottom fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white px-4 pt-3">
+      <div className="shell-dock z-30 border-t border-slate-200 bg-white px-4 pt-3">
         <div className="mx-auto max-w-2xl">
           <Button size="lg" className="w-full" onClick={onNew}>
             + New estimate

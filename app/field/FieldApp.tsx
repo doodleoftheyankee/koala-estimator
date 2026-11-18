@@ -4,6 +4,7 @@ import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offl
 import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
 import { newDraft } from '@/lib/sync/draft';
 import { Alert } from '@/components/ui';
+import { useHideTabBar } from '@/components/shell';
 import { EstimateEditor } from './EstimateEditor';
 import { EstimateList } from './EstimateList';
 import { useOnline } from './hooks';
@@ -17,6 +18,8 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [ready, setReady] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
+  // An open estimate has its own bottom bar (price, Back, Next): the menu's tab bar steps aside.
+  useHideTabBar(view.kind === 'edit');
 
   const runSync = useCallback(() => {
     syncAll(profile.userId).catch((e) => {

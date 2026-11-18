@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Button, Card, Field, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -144,7 +143,6 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Estimates</h1>

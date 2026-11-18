@@ -676,3 +676,43 @@ input[type='number']::-webkit-outer-spin-button {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+/* =================================================================================================
+   APP SHELL (components/shell): the staff menu. A bottom tab bar on phones, a left sidebar from
+   1024px. These variables tell fixed things (docks, toasts) where the free space is:
+     --shell-left    the sidebar's width (0 on phones)
+     --shell-bottom  the tab bar's height, safe area included (0 when it is hidden or on desktop)
+     --shell-safe    the safe area still left for a bottom bar (0 when the tab bar already pads it)
+   A Dock (components/daymark/Dock) and the `shell-dock` class below use them; any other fixed
+   bottom bar should too.
+   ================================================================================================= */
+:root {
+  --tabbar-h: 64px;
+  --sidebar-w: 256px;
+  --shell-left: 0px;
+  --shell-bottom: 0px;
+  --shell-safe: var(--safe-bottom);
+}
+@media screen and (max-width: 1023.98px) {
+  :root:has([data-shell-tabbar]:not([hidden])) {
+    --shell-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+    --shell-safe: 0px;
+  }
+}
+@media screen and (min-width: 1024px) {
+  :root:has([data-shell-sidebar]) {
+    --shell-left: var(--sidebar-w);
+  }
+}
+/* Inside the shell, a page that fills the screen fills the space above the tab bar. */
+[data-shell-content] .min-h-dvh {
+  min-height: calc(100dvh - var(--shell-bottom));
+}
+/* A fixed bottom bar that sits above the tab bar and beside the sidebar. */
+.shell-dock {
+  position: fixed;
+  left: var(--shell-left);
+  right: 0;
+  bottom: var(--shell-bottom);
+  padding-bottom: max(0.75rem, var(--shell-safe));
+}

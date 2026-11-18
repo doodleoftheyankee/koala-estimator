@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -75,7 +74,7 @@ import { SectionHeading } from '../pricing/fields';
 import { approveCandidate, rejectCandidate, restoreSet, runLearningNow } from './actions';
 import { ApproveForm, RejectForm, RestoreSetButton, RunNowForm } from './LearningForms';
 
-export const metadata: Metadata = { title: 'Learning' };
+export const metadata: Metadata = { title: 'Insights' };
 // "Run learning now" is a Server Action on this page; give it the same budget as the nightly cron.
 export const maxDuration = 300;
 
@@ -244,10 +243,9 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">Learning</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Insights</h1>
           {isOwner ? null : <Badge tone="blue">Read-only</Badge>}
         </div>
         <p className="text-sm text-slate-600">
@@ -257,7 +255,7 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
         {notice ? <Alert tone="green">{noticeMessage(notice)}</Alert> : null}
         {isOwner ? null : <Alert tone="blue">You can view everything here. Only the owner can run learning, approve, reject or restore sets.</Alert>}
         {loadError || !data ? (
-          <Alert tone="red">Could not load the learning dashboard: {loadError}</Alert>
+          <Alert tone="red">Could not load Insights: {loadError}</Alert>
         ) : (
           <LearningContent data={data} isOwner={isOwner} />
         )}
@@ -269,7 +267,7 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
 function LearningContent({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
   return (
     <>
-      <nav aria-label="Learning sections" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
+      <nav aria-label="Insights sections" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
         <ul className="flex gap-2 whitespace-nowrap">
           {SECTIONS.map((s) => (
             <li key={s.id}>

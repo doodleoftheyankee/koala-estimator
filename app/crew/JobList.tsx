@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 import { crewDb, type ActualsSyncState, type LocalActuals, type LocalJob } from '@/lib/offline/crewDb';
 import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, nyDate } from '@/lib/jobs/dates';
@@ -50,11 +49,6 @@ export function JobList({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {profile.role !== 'crew' ? (
-              <Link href="/jobs" prefetch={false} className="rounded-lg px-3 py-2 text-sm font-medium text-brand-800 hover:bg-brand-50">
-                Office
-              </Link>
-            ) : null}
             <Button size="sm" variant="secondary" onClick={onSync} disabled={!online || syncing} aria-busy={syncing}>
               {syncing ? 'Syncing…' : `Sync${unsynced ? ` (${unsynced})` : ''}`}
             </Button>
