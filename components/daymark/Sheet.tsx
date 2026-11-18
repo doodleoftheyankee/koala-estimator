@@ -20,6 +20,7 @@ export function Sheet({
   footer,
   className,
   closeLabel = 'Close',
+  register,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +29,9 @@ export function Sheet({
   footer?: ReactNode;
   className?: string;
   closeLabel?: string;
+  /** The register of the page it opens over ('quiet' on office screens). A <dialog> sits in the
+   * top layer, so it says its register itself. */
+  register?: 'quiet';
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -43,6 +47,7 @@ export function Sheet({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
+      data-register={register}
       onCancel={(e) => {
         e.preventDefault();
         onClose();

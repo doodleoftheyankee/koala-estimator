@@ -50,6 +50,7 @@ export function StepTrack({
   onStep,
   badges,
   columns,
+  done,
 }: {
   steps: readonly string[];
   current: number;
@@ -58,6 +59,12 @@ export function StepTrack({
   onStep?: (index: number) => void;
   badges?: Partial<Record<number, StepBadge>>;
   columns?: string;
+  /**
+   * Which steps are complete, when the screen knows. With steps you can tap (onStep), a step
+   * before the current one is not done just because it was passed, so pass this. Without it,
+   * every step before the current one counts as done.
+   */
+  done?: readonly boolean[];
 }) {
   const list = (
     <ol
@@ -66,7 +73,7 @@ export function StepTrack({
       style={{ gridTemplateColumns: columns ?? `repeat(${steps.length}, minmax(0, 1fr))` }}
     >
       {steps.map((s, i) => {
-        const state = i < current ? 'done' : i === current ? 'current' : 'todo';
+        const state = i === current ? 'current' : (done ? done[i] : i < current) ? 'done' : 'todo';
         const badge = badges?.[i];
         const body = (
           <>

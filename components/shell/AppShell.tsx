@@ -175,7 +175,7 @@ export function AppShell({
         </ul>
       </nav>
 
-      <AccountMenu open={menuOpen} onClose={() => setMenuOpen(false)} profile={profile} menu={menu} org={org} version={version} current={current} />
+      <AccountMenu open={menuOpen} onClose={() => setMenuOpen(false)} profile={profile} menu={menu} org={org} version={version} current={current} register={register} />
     </ShellContext.Provider>
   );
 }

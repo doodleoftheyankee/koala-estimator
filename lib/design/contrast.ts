@@ -79,6 +79,10 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { name: 'Plate edges on plates', fg: 'edge', bg: 'surface', min: 3 },
   { name: 'Focus ring on the page', fg: 'focus', bg: 'canvas', min: 3 },
   { name: 'Focus ring on plates', fg: 'focus', bg: 'surface', min: 3 },
+  // Segmented and status-board cells draw focus inside the cell, on the chosen fill, in the
+  // colour of the text on it (--on-chosen). --focus itself is hi-vis in Night and would vanish there.
+  { name: 'Focus ring inside a chosen cell', fg: 'on-chosen', bg: 'chosen-fill', min: 3 },
+  { name: 'Focus ring inside a chosen tab', fg: 'ink-accent', bg: 'ink', min: 3 },
   // Hi-vis: always ink text and an ink edge
   { name: 'Text on hi-vis', fg: 'on-hivis', bg: 'hivis', min: 4.5 },
   { name: 'Hi-vis edge against hi-vis', fg: 'hivis-edge', bg: 'hivis', min: 3 },

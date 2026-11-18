@@ -71,6 +71,8 @@ export function Segmented<T extends string>({
             style={on ? CHOSEN_STYLE : undefined}
             className={cx(
               'flex min-h-[var(--ctl-h)] min-w-0 flex-1 items-center justify-center gap-2 px-2 text-[17px] leading-tight font-extrabold transition-colors duration-[var(--t-quick)] focus-visible:-outline-offset-[6px] disabled:text-ink-3',
+              // Focus sits inside the cell; on the chosen fill it takes the text colour (ink on hi-vis).
+              on && 'focus-visible:outline-[var(--on-chosen)]',
               i > 0 && 'border-l-[length:var(--bw)] border-solid border-edge',
               !on && 'text-ink hover:bg-sunken',
             )}
@@ -210,6 +212,7 @@ export function StatusBoard<T extends string>({
             style={on ? CHOSEN_STYLE : undefined}
             className={cx(
               'flex min-h-[76px] min-w-0 flex-col items-start justify-between gap-2 px-2.5 py-2.5 text-left transition-colors duration-[var(--t-quick)] focus-visible:-outline-offset-[6px]',
+              on && 'focus-visible:outline-[var(--on-chosen)]',
               i > 0 && 'border-l-[length:var(--bw)] border-solid border-edge',
               !on && 'text-ink hover:bg-sunken',
             )}

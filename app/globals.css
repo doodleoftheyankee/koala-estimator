@@ -417,9 +417,10 @@
 
   --ease-daymark: var(--ease);
 
-  /* Reading sizes: 15px is the floor for text (Daymark body is 17px). */
-  --text-xs: 0.8125rem;
-  --text-xs--line-height: 1.3;
+  /* Reading sizes: 15px is the floor for text (Daymark body is 17px), so the legacy text-xs is
+     15px too: no screen can drop below the floor by keeping an old class. */
+  --text-xs: 0.9375rem;
+  --text-xs--line-height: 1.35;
   --text-sm: 0.9375rem;
   --text-sm--line-height: 1.4;
   --text-base: 1.0625rem;

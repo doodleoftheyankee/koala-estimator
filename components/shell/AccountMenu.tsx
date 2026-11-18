@@ -19,6 +19,7 @@ export function AccountMenu({
   org,
   version,
   current,
+  register,
 }: {
   open: boolean;
   onClose: () => void;
@@ -27,6 +28,8 @@ export function AccountMenu({
   org: ShellOrg;
   version: string;
   current: string | null;
+  /** The page's register: office screens open the menu in the quiet register too. */
+  register?: 'quiet';
 }) {
   const online = useShellOnline();
   // Phones: the pages that are not tabs. Desktops show the main menu in the sidebar, so only the
@@ -37,6 +40,7 @@ export function AccountMenu({
     <Sheet
       open={open}
       onClose={onClose}
+      register={register}
       title="Menu"
       className="lg:top-auto lg:right-auto lg:bottom-4 lg:left-[calc(var(--sidebar-w)+12px)] lg:m-0 lg:max-h-[calc(100dvh-32px)] lg:w-[400px] lg:max-w-[400px] lg:rounded-sheet lg:border-b-[length:var(--bw)]"
       footer={

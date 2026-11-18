@@ -7,6 +7,8 @@ import { Button, ButtonLink, buttonClass } from './Button';
 import { Chip } from './Chip';
 import { ChipGroup, ReadoutTiles, Segmented, StatusBoard } from './choice';
 import { Banner } from './Banner';
+import { StepTrack } from './Brand';
+import { Switch } from './Form';
 import { JOB_BADGE_STATUSES, QUOTE_STATUSES, STATUS_META, StatusBadge, jobBadgeStatus } from './StatusBadge';
 import { Button as LegacyButton, Chips as LegacyChips } from '../ui';
 
@@ -121,5 +123,33 @@ describe('one status vocabulary', () => {
     expect(jobBadgeStatus({ status: 'completed', actualsCount: 3, verifiedCount: 1 })).toBe('job.needs_check');
     expect(jobBadgeStatus({ status: 'completed', actualsCount: 3, verifiedCount: 3 })).toBe('job.verified');
     expect(jobBadgeStatus({ status: 'cancelled' })).toBe('job.cancelled');
+  });
+});
+
+describe('focus and state stay visible', () => {
+  it('chosen segments and board cells draw their inset focus in the text colour of the chosen fill', () => {
+    const seg = html(<Segmented label="Theme" value="b" onChange={noop} options={[{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]} />);
+    const chosen = seg.split('<button').find((b) => b.includes('aria-checked="true"'))!;
+    const other = seg.split('<button').find((b) => b.includes('aria-checked="false"'))!;
+    expect(chosen).toContain('focus-visible:outline-[var(--on-chosen)]');
+    expect(other).not.toContain('--on-chosen');
+    const board = html(<StatusBoard label="Show" value="all" onChange={noop} cells={[{ value: 'all', count: '3', label: 'All' }]} />);
+    expect(board).toContain('focus-visible:outline-[var(--on-chosen)]');
+  });
+
+  it('a disabled switch is not faded: its OFF word stays readable (group-disabled, not opacity)', () => {
+    const out = html(<Switch checked={false} onChange={noop} label="Estimators see costs" disabled />);
+    expect(out).not.toContain('opacity');
+    expect(out).toContain('group-disabled:text-ink-2');
+    expect(out).toContain('group-disabled:bg-draft-fill');
+  });
+
+  it('a step you can tap is only "done" when the screen says so', () => {
+    const out = html(<StepTrack steps={['Customer', 'Areas', 'Options']} current={2} onStep={noop} done={[false, true, false]} />);
+    expect(out).toContain('Customer<span class="sr-only"></span>');
+    expect(out).toContain('Areas<span class="sr-only"> (done)</span>');
+    expect(out).toContain(' (current step)');
+    // Without `done`, passed steps count as done (a plain progress track).
+    expect(html(<StepTrack steps={['Customer', 'Areas']} current={1} />)).toContain('Customer<span class="sr-only"> (done)</span>');
   });
 });

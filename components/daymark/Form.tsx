@@ -95,28 +95,33 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={cx('inline-flex min-h-12 shrink-0 items-center justify-center disabled:opacity-60', className)}
+      className={cx('group inline-flex min-h-12 shrink-0 items-center justify-center disabled:cursor-not-allowed', className)}
     >
       <SwitchTrack on={checked} />
     </button>
   );
 }
 
-/** The switch graphic alone (aria-hidden): use inside a control that carries role="switch". */
+/**
+ * The switch graphic alone (aria-hidden): use inside a control that carries role="switch".
+ * Disabled switches (their own `disabled`, or a disabled <fieldset> on a read-only screen) are
+ * never faded: off sits on the draft fill with readable ink-2 words, on stays ink, so the screen
+ * still says plainly whether a setting is on. The control around it carries the `group` class.
+ */
 export function SwitchTrack({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
       className={cx(
         'relative inline-block h-9 w-[76px] shrink-0 rounded-full border-solid border-[length:var(--bw)] font-num text-[11.5px] font-extrabold tracking-[0.06em] [font-stretch:110%] transition-colors duration-[var(--t-quick)]',
-        on ? 'border-ink bg-ink' : 'border-line-strong bg-surface',
+        on ? 'border-ink bg-ink' : 'border-line-strong bg-surface group-disabled:bg-draft-fill',
       )}
     >
       <span
         className={cx('absolute h-[26px] w-[26px] rounded-full transition-[left] duration-[var(--t-quick)] ease-daymark', on ? 'bg-on-ink' : 'bg-line-strong')}
         style={{ top: 'calc(50% - 13px)', left: on ? 'calc(100% - 29px)' : '3px' }}
       />
-      <span className={cx('absolute top-1/2 -translate-y-1/2 leading-none', on ? 'left-[11px] text-on-ink' : 'right-[9px] text-ink-3')}>{on ? 'ON' : 'OFF'}</span>
+      <span className={cx('absolute top-1/2 -translate-y-1/2 leading-none', on ? 'left-[11px] text-on-ink' : 'right-[9px] text-ink-3 group-disabled:text-ink-2')}>{on ? 'ON' : 'OFF'}</span>
     </span>
   );
 }
@@ -145,7 +150,7 @@ export function SwitchRow({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cx(
-        'flex min-h-16 w-full items-center justify-between gap-3 rounded-control border-solid border-[length:var(--bw)] border-line-strong bg-surface px-3.5 py-2 text-left transition-colors hover:bg-sunken disabled:opacity-60',
+        'group flex min-h-16 w-full items-center justify-between gap-3 rounded-control border-solid border-[length:var(--bw)] border-line-strong bg-surface px-3.5 py-2 text-left transition-colors enabled:hover:bg-sunken disabled:cursor-not-allowed',
         className,
       )}
     >
