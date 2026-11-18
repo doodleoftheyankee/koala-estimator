@@ -563,7 +563,7 @@ function EdgesSection({ data, startOpen }: { data: TakeoffData; startOpen: boole
             <ul className="mt-1 divide-y divide-slate-100">
               {data.edges.map((e) => (
                 <li key={e.type} className="flex items-center gap-3 py-2">
-                  <span className="flex w-6 justify-center rounded bg-slate-700 py-1.5">
+                  <span className="flex w-6 justify-center rounded bg-frame py-1.5">
                     <Swatch color={EDGE_INFO[e.type].color} dash={Boolean(EDGE_INFO[e.type].dash)} />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -685,7 +685,7 @@ function MapLegend({ result, excluded, showEdges }: { result: RoofResult; exclud
     );
   if (!items.length) return null;
   return (
-    <ul aria-label="Map key" className="-mt-3 flex flex-wrap gap-x-4 gap-y-1.5 rounded-b-2xl bg-slate-800 px-3 pb-2.5 pt-5 text-xs text-white">
+    <ul aria-label="Map key" className="-mt-3 flex flex-wrap gap-x-4 gap-y-1.5 rounded-b-2xl bg-frame px-3 pb-2.5 pt-5 text-xs text-on-frame">
       {items}
     </ul>
   );
@@ -712,7 +712,7 @@ function SatelliteMap({ result, excluded, showEdges, picking, onTap }: { result:
   // A small roof is shown enlarged; while the estimator picks the right roof, the whole photo shows.
   const k = picking === 'off' ? shapes.magnify : 1;
   return (
-    <div className={cx('relative z-[1] aspect-square w-full overflow-hidden rounded-2xl bg-slate-800 shadow-sm ring-1', picking === 'tap' ? 'ring-4 ring-brand-500' : 'ring-slate-200')}>
+    <div className={cx('relative z-[1] aspect-square w-full overflow-hidden rounded-2xl bg-frame shadow-sm ring-1', picking === 'tap' ? 'ring-4 ring-brand-500' : 'ring-slate-200')}>
       <div className="absolute inset-0" style={{ transform: `scale(${k})` }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- a private, signed-in proxy image */}
         <img src={satelliteUrl(result)} alt={`Aerial photo of ${result.address ?? 'the house'} with the roof outline${showEdges ? ', the roof edges' : ''} and the numbered roof faces`} width={640} height={640} className="absolute inset-0 h-full w-full" onLoad={() => setState('ok')} onError={() => setState('failed')} />
@@ -777,7 +777,7 @@ function SatelliteMap({ result, excluded, showEdges, picking, onTap }: { result:
         ) : null}
       </div>
       {state !== 'ok' ? (
-        <p className="absolute inset-x-0 bottom-3 text-center text-sm text-slate-200">{state === 'loading' ? 'Loading the aerial photo…' : "The aerial photo didn't load. The numbers are still good."}</p>
+        <p className="absolute inset-x-0 bottom-3 text-center text-sm text-on-frame">{state === 'loading' ? 'Loading the aerial photo…' : "The aerial photo didn't load. The numbers are still good."}</p>
       ) : null}
     </div>
   );

@@ -248,7 +248,7 @@ export function SignForm({
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         {TIER_NAMES[o.tier]}
                         {o.tier === recommendedTier ? (
-                          <span className="ml-2 rounded-full px-2 py-0.5 text-white" style={{ backgroundColor: brandColor }}>
+                          <span className="ml-2 rounded-full bg-ink px-2 py-0.5 text-on-ink">
                             Recommended
                           </span>
                         ) : null}

@@ -124,7 +124,7 @@ export function AreaPhotos({ estimateId, areaId, ownerId, remote, onRemoteDelete
         <div role="dialog" aria-modal="true" aria-label="Photo" className="fixed inset-0 z-50 flex flex-col bg-black/90 p-3" onClick={() => setViewing(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={viewing.full} alt="" className="min-h-0 flex-1 object-contain" />
-          {viewing.error ? <p className="mt-2 text-center text-sm text-red-200">Upload problem: {viewing.error}</p> : null}
+          {viewing.error ? <p className="mt-2 text-center text-sm font-bold text-on-frame">Upload problem: {viewing.error}</p> : null}
           <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
             <Button variant="danger" onClick={() => void remove(viewing)}>
               Delete

@@ -395,11 +395,11 @@ function PitchBoard({ photo, points, setPoints }: { photo: HTMLCanvasElement; po
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
-          className="mx-auto block touch-none select-none rounded-2xl bg-slate-800 shadow-sm ring-1 ring-slate-200"
+          className="mx-auto block touch-none select-none rounded-2xl bg-frame shadow-sm ring-1 ring-slate-200"
           style={{ width: layout.w, height: layout.h }}
         />
       ) : (
-        <div className="h-60 w-full rounded-2xl bg-slate-800" />
+        <div className="h-60 w-full rounded-2xl bg-frame" />
       )}
     </div>
   );

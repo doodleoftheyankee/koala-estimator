@@ -201,7 +201,7 @@ export function EstimateEditor({
               {s.label}
               {s.key === 'options' && toExplain > 0 ? (
                 <>
-                  <span aria-hidden className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-xs text-white">
+                  <span aria-hidden className="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-hazard px-1 text-xs font-bold text-on-hazard">
                     {toExplain}
                   </span>
                   <span className="sr-only"> ({toExplain} to explain)</span>

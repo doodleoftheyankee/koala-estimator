@@ -62,12 +62,17 @@ function Shell({ doc, children }: { doc: QuoteDocument; children: ReactNode }) {
   const color = brandColor(doc);
   const contact = [b.phone, b.email, b.website].filter((x): x is string => !!x);
   return (
-    <div className="min-h-dvh bg-slate-50 pb-16">
-      <header className="px-4 pb-5 pt-6 text-white" style={{ backgroundColor: color }}>
-        <div className="mx-auto max-w-2xl">
-          <p className="text-xl font-bold">{b.company}</p>
-          {b.license ? <p className="text-sm opacity-90">License {b.license}</p> : null}
-          {contact.length ? <p className="mt-1 text-sm opacity-90">{contact.join(' · ')}</p> : null}
+    <div className="min-h-dvh bg-canvas pb-16">
+      {/* The franchise colour appears only in its logo tile (decorative; no text sits on it), so
+          the header reads the same in every theme whatever colour a franchise picks. */}
+      <header className="border-b-[length:var(--bw-x)] border-solid border-rule bg-surface px-4 pb-4 pt-5 text-ink">
+        <div className="mx-auto flex max-w-2xl items-start gap-3">
+          <span aria-hidden className="mt-0.5 h-11 w-11 shrink-0 rounded-[12px] border-[length:var(--bw)] border-solid border-edge" style={{ backgroundColor: color }} />
+          <div className="min-w-0">
+            <p className="text-xl font-bold">{b.company}</p>
+            {b.license ? <p className="text-sm text-ink-2">License {b.license}</p> : null}
+            {contact.length ? <p className="mt-1 text-sm text-ink-2">{contact.join(' · ')}</p> : null}
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">{children}</main>
