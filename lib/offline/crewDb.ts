@@ -105,7 +105,8 @@ const PROFILE_KEY = 'profile';
  */
 export async function switchCrewUser(profile: CachedProfile): Promise<void> {
   const prev = (await crewDb().meta.get(PROFILE_KEY))?.value as CachedProfile | undefined;
-  if (prev && prev.userId !== profile.userId) {
+  // Another person, or the same person in another store: drop what is safely on the server.
+  if (prev && (prev.userId !== profile.userId || prev.locationId !== profile.locationId)) {
     await crewDb().transaction('rw', crewDb().jobs, crewDb().actuals, async () => {
       const keep = new Set(
         (await crewDb().actuals.where('ownerId').equals(prev.userId).toArray())

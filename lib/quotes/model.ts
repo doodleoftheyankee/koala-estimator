@@ -36,6 +36,8 @@ export interface QuoteDocument {
   notes: string | null;
   terms: string;
   warranty: string;
+  /** The store's time zone: every date on the quote is a date there. */
+  timeZone: string;
 }
 
 export const DEFAULT_BRAND_COLOR = '#0f766e';
@@ -54,6 +56,7 @@ export function buildQuoteDocument(args: {
   estimator: { name: string; email: string | null };
   terms: string;
   warranty: string;
+  timeZone: string;
 }): QuoteDocument {
   const { draft, issuedAt } = args;
   const valid = new Date(issuedAt.getTime() + args.validDays * 86_400_000);
@@ -70,7 +73,8 @@ export function buildQuoteDocument(args: {
     },
     property: {
       line1: draft.property.street,
-      line2: `${draft.property.city}, ${draft.property.state} ${draft.property.zip}`,
+      // "Newark, DE 19711"; blank parts are left out rather than printed as stray commas.
+      line2: [draft.property.city.trim(), [draft.property.state.trim(), draft.property.zip.trim()].filter(Boolean).join(' ')].filter(Boolean).join(', '),
     },
     estimator: args.estimator,
     options: args.options.map((o) => ({
@@ -85,7 +89,13 @@ export function buildQuoteDocument(args: {
     notes: draft.notes?.trim() || null,
     terms: args.terms,
     warranty: args.warranty,
+    timeZone: args.timeZone,
   };
+}
+
+/** A frozen quote document; documents frozen before stores existed take their store's time zone. */
+export function withTimeZone(doc: Omit<QuoteDocument, 'timeZone'> & { timeZone?: string }, storeTimeZone: string): QuoteDocument {
+  return { ...doc, timeZone: doc.timeZone || storeTimeZone };
 }
 
 export function formatUsd(n: number, cents = false): string {

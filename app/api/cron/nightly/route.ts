@@ -1,10 +1,10 @@
-// GET /api/cron/nightly: the nightly learning job (vercel.json schedules it for 07:15 UTC,
-// 2:15/3:15 AM Eastern). Vercel Cron authenticates with `Authorization: Bearer <CRON_SECRET>`.
+// GET /api/cron/nightly: the nightly learning job for every store (vercel.json schedules it for
+// 07:15 UTC, 2:15/3:15 AM Eastern). Vercel Cron authenticates with `Authorization: Bearer <CRON_SECRET>`.
 // POST does the same, for a manual run with curl:
 //   curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/nightly
 import { NextResponse, type NextRequest } from 'next/server';
 import { serverEnv } from '@/lib/env';
-import { runNightly } from '@/lib/learning/nightly';
+import { runNightlyAllStores } from '@/lib/learning/nightly';
 import { cronAuthorized, summaryHasFailures } from '@/lib/learning/nightlyCore';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -27,9 +27,11 @@ async function handle(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const summary = await runNightly(createAdminClient(), new Date(), { trigger: 'cron' });
-    // A failed step answers 500 (with the full summary) so it shows up in Vercel's cron log.
-    return NextResponse.json(summary, { status: summaryHasFailures(summary) ? 500 : 200, headers: NO_STORE });
+    // Every active store in turn, each learning only from its own jobs.
+    const stores = await runNightlyAllStores(createAdminClient(), new Date());
+    // A failed step in any store answers 500 (with every summary) so it shows up in Vercel's cron log.
+    const failed = stores.some((s) => s.error !== null || (s.summary !== null && summaryHasFailures(s.summary)));
+    return NextResponse.json({ stores }, { status: failed ? 500 : 200, headers: NO_STORE });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error('[cron] nightly run failed', message);

@@ -137,11 +137,26 @@ export interface WinModel {
 
 /** What the client caches for offline pricing. `hash` identifies snapshot + coefficient set + win model. */
 export interface PricingBundle {
+  /** Hash of the pricing inputs (snapshot, coefficients, win model). The store is not part of it. */
   hash: string;
   builtAt: string;
   snapshot: PricingSnapshot;
   coefficientSet: CoefficientSet;
   winModel: WinModel | null;
+  /** The store this bundle prices for (absent in bundles cached before stores existed). */
+  location?: BundleLocation;
+}
+
+/** What the phone needs to know about its store while offline. Not part of the pricing hash. */
+export interface BundleLocation {
+  id: string;
+  name: string;
+  shortName: string;
+  state: string;
+  timeZone: string;
+  utilities: string[];
+  /** Changes whenever the store's details change, so the phone refetches. */
+  rowVersion: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
   const supabase = await createClient();
   const { data, error: dbError } = await supabase
     .from('estimates')
-    .select('id, status, row_version, updated_at, client_doc')
+    .select('id, status, row_version, updated_at, client_doc, location_id')
     .eq('id', id)
     .maybeSingle();
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
     status: data.status as string,
     rowVersion: data.row_version as number,
     updatedAt: data.updated_at as string,
-    doc: data.client_doc,
+    doc: typeof data.client_doc === 'object' ? { ...(data.client_doc as object), locationId: data.location_id } : data.client_doc,
   };
   return NextResponse.json(row);
 }

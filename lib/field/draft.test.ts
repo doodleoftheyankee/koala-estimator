@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { draftSchema, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { withDraftDefaults } from './draft';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
-const base = () => newDraft(new Date('2026-10-20T12:00:00Z'), () => crypto.randomUUID());
+const base = () => newDraft(new Date('2026-10-20T12:00:00Z'), () => crypto.randomUUID(), PILOT_STORE);
 
 /** A draft as the Phase 1 app stored it: no lineOverrides, no deviationAcks. */
 function legacyDraft(): EstimateDraft {

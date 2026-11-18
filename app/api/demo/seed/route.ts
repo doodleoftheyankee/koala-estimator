@@ -25,13 +25,17 @@ export async function GET(request: NextRequest) {
   if (existing.error) return NextResponse.json({ error: existing.error.message }, { status: 500 });
   if ((existing.count ?? 0) > 0) return NextResponse.json({ status: 'already seeded', estimates: existing.count });
 
-  const settings = await admin.from('app_settings').select('key, value');
+  // The demo database has one store (the first one).
+  const store = await admin.from('locations').select('id').order('created_at').limit(1).single();
+  if (store.error) return NextResponse.json({ error: store.error.message }, { status: 500 });
+  const locationId = (store.data as { id: string }).id;
+  const settings = await admin.from('app_settings').select('key, value').eq('location_id', locationId);
   if (settings.error) return NextResponse.json({ error: settings.error.message }, { status: 500 });
-  const { batches, summary } = buildDemoSeed({ bundle: await loadPricingBundle(admin), settings: settings.data, now: new Date() });
+  const { batches, summary } = buildDemoSeed({ bundle: await loadPricingBundle(admin, locationId), settings: settings.data, now: new Date() });
   for (const [i, sql] of batches.entries()) {
     const r = await admin.rpc('demo_exec', { p_sql: sql });
     if (r.error) return NextResponse.json({ error: `Batch ${i + 1} failed: ${r.error.message}` }, { status: 500 });
   }
-  const learning = await runNightly(admin, new Date(), { trigger: 'manual' });
+  const learning = await runNightly(admin, new Date(), { trigger: 'manual', locationId });
   return NextResponse.json({ status: 'seeded', summary, learning });
 }

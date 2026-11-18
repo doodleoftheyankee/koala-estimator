@@ -9,7 +9,7 @@ import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 import { num } from '@/lib/format';
 import { UNIT_LABELS } from '@/lib/jobs/crew';
-import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
+import { formatDateTime, formatYmd, localDate } from '@/lib/jobs/dates';
 import { compareActuals, costTotals, signedOption, type CompareRow, type OfficeActual } from '@/lib/jobs/office';
 import { allowedTransitions, JOB_STATUS_LABELS, officeGroup, OFFICE_GROUP_LABELS, type JobStatus } from '@/lib/jobs/status';
 import { formatVariance, varianceTone } from '@/lib/jobs/variance';
@@ -37,7 +37,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const { id } = await params;
   if (!z.guid().safeParse(id).success) notFound();
   const db = await createClient();
-  const [{ job, error }, crews] = await Promise.all([loadJob(db, id), loadCrews(db)]);
+  const [{ job, error }, crews] = await Promise.all([loadJob(db, id, profile.locationId), loadCrews(db, profile.locationId)]);
   if (!job && !error) notFound();
 
   if (!job) {
@@ -52,7 +52,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     );
   }
 
-  const today = nyDate(new Date());
+  const tz = profile.location.timeZone;
+  const today = localDate(new Date(), tz);
   const option = signedOption(job.quote?.snapshot, job.quote?.signedTier ?? null, job.quote?.signedPrice ?? job.revenue);
   const { rows, job: jobCmp } = compareActuals({
     snapshot: job.quote?.snapshot,
@@ -100,7 +101,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               {option ? `${option.label}${option.price != null ? ` · ${usd.format(option.price)}` : ''}` : '—'}
             </Item>
             <Item label="Quote">
-              {job.quote ? `v${job.quote.version}${job.quote.signedAt ? `, signed ${formatNyDateTime(job.quote.signedAt)}` : ''}` : '—'}
+              {job.quote ? `v${job.quote.version}${job.quote.signedAt ? `, signed ${formatDateTime(job.quote.signedAt, tz)}` : ''}` : '—'}
               {job.quote ? (
                 <>
                   {' · '}
@@ -112,8 +113,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             </Item>
             <Item label="Estimator">{job.estimator ?? '—'}</Item>
             <Item label="Work">
-              {job.startedAt ? `Started ${formatNyDateTime(job.startedAt)}` : 'Not started'}
-              {job.completedAt ? ` · completed ${formatNyDateTime(job.completedAt)}` : ''}
+              {job.startedAt ? `Started ${formatDateTime(job.startedAt, tz)}` : 'Not started'}
+              {job.completedAt ? ` · completed ${formatDateTime(job.completedAt, tz)}` : ''}
             </Item>
           </dl>
         </Card>
@@ -245,7 +246,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             ) : (
               <p className="text-sm text-slate-600">
                 {verifiedCount} of {job.actuals.length} row{job.actuals.length === 1 ? '' : 's'} verified
-                {verifiedCount ? ` (last by ${lastVerifier(job.actuals)})` : ''}. Verified rows are locked for the crew and feed learning unless excluded.
+                {verifiedCount ? ` (last by ${lastVerifier(job.actuals, tz)})` : ''}. Verified rows are locked for the crew and feed learning unless excluded.
               </p>
             )}
             <div className="mt-3 space-y-3">
@@ -287,9 +288,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             Enter or correct actuals
           </h2>
           {rows.map((r) => (
-            <RowEditor key={r.key} jobId={job.id} row={r} />
+            <RowEditor key={r.key} jobId={job.id} row={r} tz={tz} />
           ))}
-          <JobRowEditor jobId={job.id} actual={jobCmp.actual} />
+          <JobRowEditor jobId={job.id} actual={jobCmp.actual} tz={tz} />
         </section>
       </main>
     </>
@@ -327,17 +328,17 @@ function RowBadge({ actual }: { actual: OfficeActual | null }) {
   return <Badge tone="blue">Entered</Badge>;
 }
 
-function lastVerifier(actuals: OfficeActual[]): string {
+function lastVerifier(actuals: OfficeActual[], tz: string): string {
   const last = actuals.filter((a) => a.verifiedAt).sort((a, b) => (b.verifiedAt ?? '').localeCompare(a.verifiedAt ?? ''))[0];
-  return last ? `${last.verifiedBy ?? 'someone'}, ${formatNyDateTime(last.verifiedAt!)}` : '';
+  return last ? `${last.verifiedBy ?? 'someone'}, ${formatDateTime(last.verifiedAt!, tz)}` : '';
 }
 
-function Entered({ actual }: { actual: OfficeActual | null }) {
+function Entered({ actual, tz }: { actual: OfficeActual | null; tz: string }) {
   if (!actual) return <span className="text-xs text-slate-500">Not entered yet</span>;
   return (
     <span className="text-xs text-slate-500">
       Entered by {actual.enteredBy ?? 'unknown'}
-      {actual.enteredAt ? `, ${formatNyDateTime(actual.enteredAt)}` : ''}
+      {actual.enteredAt ? `, ${formatDateTime(actual.enteredAt, tz)}` : ''}
       {actual.verifiedAt ? ` · verified by ${actual.verifiedBy ?? 'unknown'}` : ''}
     </span>
   );
@@ -372,7 +373,7 @@ function CostFields({ actual }: { actual: OfficeActual | null }) {
   );
 }
 
-function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
+function RowEditor({ jobId, row, tz }: { jobId: string; row: CompareRow; tz: string }) {
   const a = row.actual;
   const locked = Boolean(a?.verifiedAt);
   const unit = row.unit ? UNIT_LABELS[row.unit] : 'units';
@@ -389,7 +390,7 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
           </span>
         </summary>
         <div className="mt-3 space-y-4">
-          <Entered actual={a} />
+          <Entered actual={a} tz={tz} />
           <ActionForm action={saveActual} readOnly={false} submitLabel={a ? 'Save row' : 'Add actuals'}>
             <Hidden jobId={jobId} id={a?.id ?? null} areaId={row.areaId} product={row.product} unit={row.unit} />
             {locked ? (
@@ -422,7 +423,7 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
   );
 }
 
-function JobRowEditor({ jobId, actual }: { jobId: string; actual: OfficeActual | null }) {
+function JobRowEditor({ jobId, actual, tz }: { jobId: string; actual: OfficeActual | null; tz: string }) {
   const locked = Boolean(actual?.verifiedAt);
   return (
     <Card>
@@ -435,7 +436,7 @@ function JobRowEditor({ jobId, actual }: { jobId: string; actual: OfficeActual |
           </span>
         </summary>
         <div className="mt-3 space-y-4">
-          <Entered actual={actual} />
+          <Entered actual={actual} tz={tz} />
           <ActionForm action={saveActual} readOnly={false} submitLabel={actual ? 'Save row' : 'Add actuals'}>
             <Hidden jobId={jobId} id={actual?.id ?? null} areaId={null} product={null} unit={null} />
             {locked ? (

@@ -12,3 +12,11 @@ export interface RemoteEstimate {
   updatedAt: string;
   doc: unknown;
 }
+
+/**
+ * ETag of a pricing bundle (GET /api/bundle): its pricing hash plus its store and that store's
+ * details version, so the phone refetches when either changes or the person switches store.
+ */
+export function bundleEtag(hash: string, location: { id: string; rowVersion: number } | undefined): string {
+  return location ? `"${hash}.${location.id}.${location.rowVersion}"` : `"${hash}"`;
+}

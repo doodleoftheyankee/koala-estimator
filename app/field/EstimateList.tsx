@@ -38,12 +38,14 @@ export function EstimateList({
   onNew: () => void;
   onSync: () => void;
 }) {
-  const estimates = useLive(
+  const all = useLive(
     () => db().estimates.where('ownerId').equals(profile.userId).reverse().sortBy('updatedAt'),
     [profile.userId],
     [] as LocalEstimate[],
   );
-  const bundle = useLive(() => getCachedBundle(), [], null);
+  // This store's estimates (and any started before stores existed).
+  const estimates = all.filter((e) => !e.draft.locationId || e.draft.locationId === profile.locationId);
+  const bundle = useLive(() => getCachedBundle(profile.locationId), [profile.locationId], null);
   const unsynced = estimates.filter((e) => ['pending', 'error', 'invalid', 'conflict'].includes(e.syncState)).length;
 
   return (
@@ -52,6 +54,11 @@ export function EstimateList({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-bold">Estimates</h1>
+            {profile.multiStore ? (
+              <a href="/estimates" className="text-xs font-semibold text-brand-800 underline underline-offset-2">
+                {profile.locationName} · switch store
+              </a>
+            ) : null}
             <p className="text-xs text-slate-500">
               {profile.fullName} ·{' '}
               <span className={online ? 'text-emerald-700' : 'text-amber-700'}>{online ? 'Online' : 'Offline, saving on this phone'}</span>

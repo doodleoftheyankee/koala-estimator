@@ -22,7 +22,9 @@ function project(row: Row, columns: string): Row {
   const out: Row = {};
   for (const c of columns.split(',').map((s) => s.trim())) {
     const json = /^(\w+):(\w+)->(\w+)$/.exec(c);
+    const embed = /^(\w+)!inner\(/.exec(c);
     if (json) out[json[1]!] = (row[json[2]!] as Row | null)?.[json[3]!] ?? null;
+    else if (embed) out[embed[1]!] = row[embed[1]!];
     else out[c] = row[c];
   }
   return out;
@@ -50,7 +52,9 @@ function fakeAdmin(tables: Record<string, Row[]>) {
         call.update = patch;
         return q;
       },
-      eq: (col: string, v: unknown) => where(`${col} = ${String(v)}`, (r) => r[col] === v),
+      // "estimates.location_id" filters on an embedded (inner-joined) row.
+      eq: (col: string, v: unknown) =>
+        where(`${col} = ${String(v)}`, (r) => col.split('.').reduce<unknown>((x, k) => (x as Row | null)?.[k], r) === v),
       is: (col: string) => where(`${col} is null`, (r) => r[col] == null),
       not: (col: string) => where(`${col} is not null`, (r) => r[col] != null),
       in: (col: string, vs: unknown[]) => where(`${col} in (${vs.join(',')})`, (r) => vs.includes(r[col])),
@@ -71,10 +75,13 @@ function fakeAdmin(tables: Record<string, Row[]>) {
 const attic = estimate({ areas: [area({ currentR: 19 })] });
 
 /** deviation_flags rows as sync_upsert_estimate stores them for this version of the estimate. */
-const flagRows = (estimateId: string, input: EstimateInput): Row[] =>
+const LOC = 'store-1';
+
+const flagRows = (estimateId: string, input: EstimateInput, loc = LOC): Row[] =>
   computeDeviationFlags(priceEstimate(input, snapshot, coefficients), input, { snapshot, coefficientSet: coefficients }).map((f) => ({
     id: `${estimateId}:${f.key}`,
     estimate_id: estimateId,
+    estimates: { location_id: loc },
     flag_key: f.key,
     metric: f.metric,
     tier: f.tier,
@@ -131,7 +138,7 @@ describe('updateDeviationOutcomes', () => {
     };
     const { admin, calls } = fakeAdmin(tables);
 
-    expect(await updateDeviationOutcomes(admin)).toBe(1);
+    expect(await updateDeviationOutcomes(admin, LOC)).toBe(1);
     const outcomes = Object.fromEntries(tables.deviation_flags.map((f) => [f.id, f.outcome]));
     expect(outcomes).toEqual({
       'e1:a1|cellulose|material|qty': 'model_closer', // the flag row alone (90 vs 62) said estimator_closer
@@ -159,7 +166,7 @@ describe('updateDeviationOutcomes', () => {
 
     // A rerun has nothing left to score and reads no quote.
     const rerun = fakeAdmin(tables);
-    expect(await updateDeviationOutcomes(rerun.admin)).toBe(0);
+    expect(await updateDeviationOutcomes(rerun.admin, LOC)).toBe(0);
     expect(rerun.calls.some((c) => c.table === 'quotes' || c.update)).toBe(false);
   });
 
@@ -182,7 +189,7 @@ describe('updateDeviationOutcomes', () => {
     };
     const { admin } = fakeAdmin(tables);
 
-    expect(await updateDeviationOutcomes(admin)).toBe(1);
+    expect(await updateDeviationOutcomes(admin, LOC)).toBe(1);
     const outcomes = Object.fromEntries(tables.deviation_flags.filter((f) => f.metric === 'hours').map((f) => [f.flag_key, f.outcome]));
     expect(outcomes).toEqual({
       'a1|cellulose|labor|hours': 'estimator_closer', // the row's 18 h vs 10.54 would have said model_closer
@@ -201,7 +208,7 @@ describe('updateDeviationOutcomes', () => {
     };
     const { admin, calls } = fakeAdmin(tables);
 
-    expect(await updateDeviationOutcomes(admin)).toBe(0);
+    expect(await updateDeviationOutcomes(admin, LOC)).toBe(0);
     expect(tables.deviation_flags.every((f) => f.outcome === null)).toBe(true);
     expect(calls.some((c) => c.update)).toBe(false);
     expect(new Set(calls.filter((c) => c.table === 'quotes').map((c) => c.columns))).toEqual(
@@ -218,7 +225,22 @@ describe('updateDeviationOutcomes', () => {
       quotes: [quoteRow('q1', input, 'better')],
     };
     const { admin, calls } = fakeAdmin(tables);
-    expect(await updateDeviationOutcomes(admin)).toBe(0);
+    expect(await updateDeviationOutcomes(admin, LOC)).toBe(0);
     expect(calls.map((c) => c.table)).not.toContain('quotes');
+  });
+
+  it("never scores another store's flags", async () => {
+    const bags = { 'a1|cellulose|material': { qty: 90, reason: 'Deep joist bays', tier: 'better' as const } };
+    const e1 = { ...attic, lineOverrides: bags };
+    const tables = {
+      deviation_flags: flagRows('e1', e1, 'store-2'),
+      jobs: [job('job-1', 'e1', 'q1')],
+      job_actuals: [actualRow('job-1', 'cellulose', { actual_material_qty: 90, actual_hours: 15 })],
+      quotes: [quoteRow('q1', e1, 'best')],
+    };
+    const { admin, calls } = fakeAdmin(tables);
+    expect(await updateDeviationOutcomes(admin, LOC)).toBe(0);
+    expect(calls[0]!.filters).toContain('estimates.location_id = store-1');
+    expect(tables.deviation_flags.every((f) => f.outcome === null)).toBe(true);
   });
 });

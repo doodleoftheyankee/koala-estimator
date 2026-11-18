@@ -24,13 +24,14 @@ import {
   unacknowledgedFlags,
 } from './flags';
 import { applyLineOverride, removeLineOverride, setPriceOverride } from './lineOverrides';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function draftWithAttic(): EstimateDraft {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid, PILOT_STORE);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic', uuid), sqft: 1000, accessLevel: 'easy' }];

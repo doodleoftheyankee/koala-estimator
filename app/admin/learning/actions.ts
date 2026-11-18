@@ -37,15 +37,16 @@ const STALE_CANDIDATE =
 const setRefSchema = z.object({ id: z.string(), version: z.coerce.number(), status: z.enum(SET_STATUSES) });
 type SetRef = z.infer<typeof setRefSchema>;
 
-async function ownerDb(): Promise<{ db: Db; userId: string } | null> {
+/** The owner of the active store; every decision is about that store's sets. */
+async function ownerDb(): Promise<{ db: Db; userId: string; loc: string } | null> {
   const profile = await getSessionProfile();
   if (!profile || profile.role !== 'owner') return null;
-  return { db: await createClient(), userId: profile.userId };
+  return { db: await createClient(), userId: profile.userId, loc: profile.locationId };
 }
 
-/** The set a decision is about, read with the owner's client (null when it does not exist). */
-async function loadSet(db: Db, id: string): Promise<{ set: SetRef | null; error: string | null }> {
-  const res = await db.from('coefficient_sets').select('id, version, status').eq('id', id).maybeSingle();
+/** The set a decision is about, read with the owner's client (null when it does not exist in this store). */
+async function loadSet(db: Db, loc: string, id: string): Promise<{ set: SetRef | null; error: string | null }> {
+  const res = await db.from('coefficient_sets').select('id, version, status').eq('id', id).eq('location_id', loc).maybeSingle();
   if (res.error) return { set: null, error: `Loading the coefficient set failed: ${res.error.message}` };
   try {
     return { set: parseRow(setRefSchema, res.data, 'coefficient set'), error: null };
@@ -86,8 +87,8 @@ export async function runLearningNow(): Promise<ActionResult> {
 
   let message: { ok: boolean; message: string };
   try {
-    // Never throws for a failed step: each one is recorded in learning_runs and the summary.
-    message = nightlyResultMessage(await runNightly(admin, new Date(), { trigger: 'manual', actorId: profile.userId }));
+    // This store only. Never throws for a failed step: each one is recorded in learning_runs and the summary.
+    message = nightlyResultMessage(await runNightly(admin, new Date(), { trigger: 'manual', actorId: profile.userId, locationId: profile.locationId }));
   } catch (e) {
     return failure(`The learning run could not start: ${errorMessage(e)}`);
   }
@@ -106,9 +107,9 @@ export async function approveCandidate(_prev: ActionResult | null, fd: FormData)
   const parsed = parseWith(approveForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;
-  const { db } = owner;
+  const { db, loc } = owner;
 
-  const { set, error } = await loadSet(db, set_id);
+  const { set, error } = await loadSet(db, loc, set_id);
   if (error) return failure(error);
   if (!set || set.status !== 'candidate') return failure(STALE_CANDIDATE);
 
@@ -126,9 +127,9 @@ export async function rejectCandidate(_prev: ActionResult | null, fd: FormData):
   const parsed = parseWith(decisionForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;
-  const { db } = owner;
+  const { db, loc } = owner;
 
-  const { set, error } = await loadSet(db, set_id);
+  const { set, error } = await loadSet(db, loc, set_id);
   if (error) return failure(error);
   if (!set || set.status !== 'candidate') return failure(STALE_CANDIDATE);
 
@@ -148,9 +149,9 @@ export async function restoreSet(_prev: ActionResult | null, fd: FormData): Prom
   const parsed = parseWith(decisionForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;
-  const { db } = owner;
+  const { db, loc } = owner;
 
-  const { set, error } = await loadSet(db, set_id);
+  const { set, error } = await loadSet(db, loc, set_id);
   if (error) return failure(error);
   if (!set) return failure('That coefficient set no longer exists. Reload the page.');
   if (!canRestore(set.status)) {
@@ -168,7 +169,7 @@ export async function restoreSet(_prev: ActionResult | null, fd: FormData): Prom
 
   let version: number | null = null;
   if (typeof res.data === 'string') {
-    const created = await loadSet(db, res.data);
+    const created = await loadSet(db, loc, res.data);
     version = created.set?.version ?? null;
   }
   done({ kind: 'restored', version, from: set.version });

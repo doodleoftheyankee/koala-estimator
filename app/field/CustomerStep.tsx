@@ -4,7 +4,8 @@ import { Card, Field, Input, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import type { Update } from './EstimateEditor';
 
-export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: Update }) {
+/** `utilities`: the store's electric utilities, offered as suggestions. */
+export function CustomerStep({ draft, update, utilities }: { draft: EstimateDraft; update: Update; utilities: readonly string[] }) {
   const c = draft.customer;
   const p = draft.property;
   const setC = (patch: Partial<EstimateDraft['customer']>) => update((d) => ({ ...d, customer: { ...d.customer, ...patch } }));
@@ -62,10 +63,9 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
             <Field label="Electric utility">
               <Input list="utilities" value={p.utility ?? ''} onChange={(e) => setP({ utility: e.target.value || null })} />
               <datalist id="utilities">
-                <option value="Delmarva Power" />
-                <option value="City of Newark" />
-                <option value="Delaware Electric Co-op" />
-                <option value="DEMEC municipal" />
+                {utilities.map((u) => (
+                  <option key={u} value={u} />
+                ))}
               </datalist>
             </Field>
           </div>

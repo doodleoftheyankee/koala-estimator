@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { priceEstimate } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
-import { authorize } from '@/lib/server/auth';
+import { authorize, roleIn } from '@/lib/server/auth';
 import { loadPricingBundle } from '@/lib/server/bundle';
 import { createClient } from '@/lib/supabase/server';
 import { fieldsPushWouldErase, missingDraftFields, OUTDATED_APP_ERROR, type StoredEstimate } from '@/lib/sync/compat';
@@ -21,7 +21,7 @@ const bodySchema = z.object({
  * pricing bundle; the phone's numbers are never trusted. Idempotent on mutationId.
  */
 export async function POST(request: NextRequest) {
-  const { error } = await authorize('owner', 'office', 'estimator');
+  const { profile, error } = await authorize('owner', 'office', 'estimator');
   if (error) return error;
 
   const body = bodySchema.safeParse(await request.json().catch(() => null));
@@ -52,10 +52,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // The store whose prices apply: an existing estimate keeps its own store; a new one is for the
+  // store the phone priced it for when the person estimates there, else the store they work in now.
+  const { data: existing, error: storeError } = await supabase.from('estimates').select('location_id').eq('id', draft.id).maybeSingle();
+  if (storeError) {
+    return NextResponse.json({ status: 'error', error: `Could not read the estimate: ${storeError.message}` } satisfies SyncResponse, { status: 500 });
+  }
+  const locationId =
+    (existing?.location_id as string | undefined) ??
+    (draft.locationId && roleIn(profile, draft.locationId) ? draft.locationId : profile.locationId);
+
   let payload;
   let bundleHash: string;
   try {
-    const bundle = await loadPricingBundle(supabase);
+    const bundle = await loadPricingBundle(supabase, locationId);
     bundleHash = bundle.hash;
     const input = { ...toEstimateInput(draft), areas: priceableAreas(draft) };
     const priced = priceEstimate(input, bundle.snapshot, bundle.coefficientSet);

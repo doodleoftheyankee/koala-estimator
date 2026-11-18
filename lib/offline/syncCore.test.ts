@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import type { LocalEstimate } from './db';
 import { applySyncResult, mergeRemote, resolveConflict, syncBlocker, touch } from './syncCore';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
 const NOW = '2026-10-20T12:00:00.000Z';
 function complete(): EstimateDraft {
-  const d = newDraft(new Date(NOW));
+  const d = newDraft(new Date(NOW), undefined, PILOT_STORE);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee' };
   d.property = { ...d.property, street: '1 Main', zip: '19711' };
   d.areas = [{ ...newArea('attic'), sqft: 900 }];
@@ -20,7 +21,7 @@ function record(over: Partial<LocalEstimate> = {}): LocalEstimate {
 
 describe('syncBlocker', () => {
   it('explains what is missing', () => {
-    expect(syncBlocker(newDraft())).toBeTruthy();
+    expect(syncBlocker(newDraft(undefined, undefined, PILOT_STORE))).toBeTruthy();
     expect(syncBlocker(complete())).toBeNull();
     expect(syncBlocker({ ...complete(), areas: [] })).toBe('Add at least one area');
   });
@@ -32,7 +33,7 @@ describe('touch', () => {
     expect(r).toMatchObject({ mutationId: 'm2', syncState: 'pending', lastError: null });
   });
   it('stays local while incomplete', () => {
-    const r = touch(record(), newDraft(), 'm2', NOW);
+    const r = touch(record(), newDraft(undefined, undefined, PILOT_STORE), 'm2', NOW);
     expect(r.syncState).toBe('local');
     expect(r.lastError).toBeTruthy();
   });

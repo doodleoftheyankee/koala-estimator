@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requireRole } from '@/lib/server/auth';
+import { phoneProfile, requireRole } from '@/lib/server/auth';
 import { RoofLookupPage } from './RoofLookupPage';
 
 export const metadata: Metadata = { title: 'Roof lookup' };
@@ -9,5 +9,5 @@ export const metadata: Metadata = { title: 'Roof lookup' };
 // opens with no signal and says the lookup needs one.
 export default async function RoofPage() {
   const profile = await requireRole('owner', 'office', 'estimator');
-  return <RoofLookupPage profile={{ userId: profile.userId, fullName: profile.fullName, role: profile.role }} />;
+  return <RoofLookupPage profile={phoneProfile(profile)} />;
 }

@@ -5,11 +5,12 @@ import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
 import { escapeHtml, financingLine, officeSignedNotice, quoteEmail, signedConfirmationEmail } from './email';
 import { buildQuoteDocument, DEFAULT_BRAND_COLOR, formatUsd } from './model';
 import { quoteSettingsFromRows } from './settings';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
 const EVIL = '<script>alert("x")</script>';
 
 function makeDoc(firstName = 'Pat') {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'));
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, PILOT_STORE);
   d.customer = { ...d.customer, firstName, lastName: 'Lee & Sons', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic'), sqft: 1000 }];
@@ -24,6 +25,7 @@ function makeDoc(firstName = 'Pat') {
     estimator: { name: 'Sam', email: 'sam@example.com' },
     terms: 'T',
     warranty: 'W',
+    timeZone: 'America/New_York',
   });
 }
 
@@ -95,24 +97,39 @@ describe('financingLine', () => {
 });
 
 describe('quoteSettingsFromRows', () => {
-  it('falls back to defaults', () => {
-    const s = quoteSettingsFromRows([]);
-    expect(s.branding.company).toBe('Koala Insulation of Newark');
+  const store = { name: 'Koala Insulation of Testville', licenseNumber: null, phone: null, brandColor: null, logoPath: null };
+  it('falls back to defaults, naming the store', () => {
+    const s = quoteSettingsFromRows([], store);
+    expect(s.branding.company).toBe('Koala Insulation of Testville');
     expect(s.branding.primaryColor).toBe(DEFAULT_BRAND_COLOR);
     expect(s.validDays).toBe(30);
-    expect(s.terms.length).toBeGreaterThan(10);
+    expect(s.terms).toContain('authorizes Koala Insulation of Testville to schedule');
   });
   it('reads branding, terms and validity', () => {
-    const s = quoteSettingsFromRows([
-      { key: 'branding', value: { company: 'K', license: 'L1', phone: '1', primary_color: '#123456', logo_path: 'logo.png' } },
-      { key: 'quote_terms', value: 'Terms here' },
-      { key: 'warranty_text', value: 'Warranty here' },
-      { key: 'quote_valid_days', value: 14 },
-    ]);
-    expect(s.branding).toMatchObject({ company: 'K', license: 'L1', phone: '1', primaryColor: '#123456', logoUrl: null, email: null });
+    const s = quoteSettingsFromRows(
+      [
+        { key: 'branding', value: { company: 'Old name', license: 'L1', phone: '1', primary_color: '#123456', logo_path: 'logo.png', email: 'a@b.co' } },
+        { key: 'quote_terms', value: 'Terms here' },
+        { key: 'warranty_text', value: 'Warranty here' },
+        { key: 'quote_valid_days', value: 14 },
+      ],
+      store,
+    );
+    // The company is always the store's name; the rest falls back to the old branding setting.
+    expect(s.branding).toMatchObject({ company: 'Koala Insulation of Testville', license: 'L1', phone: '1', primaryColor: '#123456', logoUrl: null, email: 'a@b.co' });
     expect(s).toMatchObject({ terms: 'Terms here', warranty: 'Warranty here', validDays: 14 });
   });
+  it('prefers the store\'s own license, phone, color and logo', () => {
+    const s = quoteSettingsFromRows([{ key: 'branding', value: { license: 'L1', phone: '1', primary_color: '#123456' } }], {
+      ...store,
+      licenseNumber: 'TX-9',
+      phone: '512-555-0100',
+      brandColor: '#654321',
+      logoPath: 'https://example.com/logo.png',
+    });
+    expect(s.branding).toMatchObject({ license: 'TX-9', phone: '512-555-0100', primaryColor: '#654321', logoUrl: 'https://example.com/logo.png' });
+  });
   it('ignores an invalid color', () => {
-    expect(quoteSettingsFromRows([{ key: 'branding', value: { primary_color: 'red;}' } }]).branding.primaryColor).toBe(DEFAULT_BRAND_COLOR);
+    expect(quoteSettingsFromRows([{ key: 'branding', value: { primary_color: 'red;}' } }], store).branding.primaryColor).toBe(DEFAULT_BRAND_COLOR);
   });
 });

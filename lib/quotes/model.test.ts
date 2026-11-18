@@ -4,14 +4,15 @@ import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
 import { buildQuoteDocument, DEFAULT_BRAND_COLOR, formatUsd, quoteNumber } from './model';
 import { hashQuoteToken, isWellFormedToken, newQuoteToken } from './token';
+import { PILOT_STORE } from '@/lib/sync/__fixtures__/store';
 
 describe('quote document', () => {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'));
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, PILOT_STORE);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
-  d.property = { ...d.property, street: '1 Main St', zip: '19711' };
+  d.property = { ...d.property, street: '1 Main St', city: 'Newark', state: 'DE', zip: '19711' };
   d.areas = [{ ...newArea('attic'), sqft: 1000 }];
   const priced = priceEstimate(toEstimateInput(d), snapshot, coefficients);
-  const doc = buildQuoteDocument({
+  const args = {
     draft: d,
     options: priced.options,
     version: 2,
@@ -21,7 +22,9 @@ describe('quote document', () => {
     estimator: { name: 'Sam', email: null },
     terms: 'T',
     warranty: 'W',
-  });
+    timeZone: 'America/New_York',
+  };
+  const doc = buildQuoteDocument(args);
 
   it('carries options and customer items but never costs', () => {
     expect(doc.options.map((o) => o.tier)).toEqual(['good', 'better', 'best']);
@@ -36,6 +39,7 @@ describe('quote document', () => {
     expect(doc.recommendedTier).toBe('better');
     expect(doc.customer.name).toBe('Pat Lee');
     expect(doc.property.line2).toBe('Newark, DE 19711');
+    expect(buildQuoteDocument({ ...args, draft: { ...d, property: { ...d.property, city: '', state: '' } } }).property.line2).toBe('19711');
   });
 
   it('formats dollars', () => {

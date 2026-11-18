@@ -6,7 +6,6 @@ import { compactTakeoff, defaultFaces, EDGE_TYPES, FT_PER_M, takeoffSchema, type
 import {
   atticFloorNote,
   clampWaste,
-  COMPANY,
   DEFAULT_WASTE,
   EDGE_INFO,
   edgeFeet,
@@ -262,10 +261,17 @@ describe('the report and the summary', () => {
     expect(reportFileTitle(takeoffData(crossGable(), choices(12, [5]), 15, noon))).toBe('Roof takeoff - 3 Cross Gable Ct, Newark, DE 19711, USA');
   });
 
+  it("heads the summary with the store's name, or just the title when there is none", () => {
+    expect(summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon, { company: ' Koala Insulation of Dover ' })).split('\n')[0]).toBe(
+      'Koala Insulation of Dover: roof takeoff',
+    );
+    expect(summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon)).split('\n')[0]).toBe('Roof takeoff');
+  });
+
   it('writes a plain-text summary to paste into a note, text or email', () => {
-    const text = summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon));
+    const text = summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon, { company: 'Koala Insulation of Newark' }));
     expect(text.split('\n')).toEqual([
-      `${COMPANY}: roof takeoff`,
+      'Koala Insulation of Newark: roof takeoff',
       '3 Cross Gable Ct, Newark, DE 19711, USA',
       'Looked up Nov 17, 2026, 12:05 PM. High-detail aerial photo from May 2024.',
       '',

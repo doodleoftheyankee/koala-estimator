@@ -203,6 +203,7 @@ function harness(over: Partial<NightlyDeps> = {}, settings: Partial<LearningSett
     insertWinModel,
     updateDeviationOutcomes: async () => 4,
     ownerEmail: 'owner@example.com',
+    timeZone: 'America/New_York',
     sendEmail: async (msg) => {
       emails.push(msg);
     },
@@ -919,17 +920,21 @@ describe('cronAuthorized', () => {
 
 describe('reporting', () => {
   it('uses the Eastern business date', () => {
-    expect(businessDate(new Date('2026-10-21T03:30:00Z'))).toBe('Oct 20, 2026'); // 11:30 PM EDT
-    expect(businessDate(NOW)).toBe('Oct 21, 2026');
+    expect(businessDate(new Date('2026-10-21T03:30:00Z'), 'America/New_York')).toBe('Oct 20, 2026'); // 11:30 PM EDT
+    expect(businessDate(NOW, 'America/New_York')).toBe('Oct 21, 2026');
+    expect(businessDate(new Date('2026-10-21T03:30:00Z'), 'America/Los_Angeles')).toBe('Oct 20, 2026');
   });
 
   it('writes an escaped failure notice', () => {
-    const one = nightlyFailureEmail(NOW, ['Calibration: <boom> & "bust"']);
+    const one = nightlyFailureEmail(NOW, ['Calibration: <boom> & "bust"'], 'America/New_York');
     expect(one.subject).toBe('Nightly learning run had a problem (Oct 21, 2026)');
     expect(one.text).toContain('- Calibration: <boom> & "bust"');
     expect(one.text).toContain('Pricing is unaffected');
     expect(one.html).toContain('<li>Calibration: &lt;boom&gt; &amp; &quot;bust&quot;</li>');
-    expect(nightlyFailureEmail(NOW, ['a', 'b']).subject).toBe('Nightly learning run had 2 problems (Oct 21, 2026)');
+    expect(nightlyFailureEmail(NOW, ['a', 'b'], 'America/New_York').subject).toBe('Nightly learning run had 2 problems (Oct 21, 2026)');
+    expect(nightlyFailureEmail(NOW, ['a'], 'America/New_York', 'Koala Insulation of Dover').subject).toBe(
+      'Nightly learning run had a problem (Koala Insulation of Dover, Oct 21, 2026)',
+    );
   });
 
   it('summaryHasFailures looks at every step', () => {

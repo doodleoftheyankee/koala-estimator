@@ -4,51 +4,56 @@ import {
   addDays,
   dayLabel,
   daysBetween,
-  formatNyDateTime,
+  formatDateTime,
+  formatLongDate,
   formatYmd,
   isYmd,
-  nyDate,
-  nyOffsetMinutes,
-  nyStartOfDay,
+  localDate,
+  offsetMinutes,
+  startOfDay,
   recentCutoffIso,
 } from './dates';
 
-describe('nyDate', () => {
+const NY = 'America/New_York';
+const CHICAGO = 'America/Chicago';
+const PHOENIX = 'America/Phoenix'; // no daylight saving time
+
+describe('localDate', () => {
   it('uses the New York calendar day, not UTC', () => {
-    expect(nyDate('2026-10-21T03:30:00Z')).toBe('2026-10-20'); // 11:30 PM EDT
-    expect(nyDate(new Date('2026-10-21T04:00:00Z'))).toBe('2026-10-21'); // midnight EDT
-    expect(nyDate('2026-01-15T04:59:59Z')).toBe('2026-01-14'); // 11:59 PM EST
-    expect(nyDate('2026-01-15T05:00:00Z')).toBe('2026-01-15');
+    expect(localDate('2026-10-21T03:30:00Z', NY)).toBe('2026-10-20'); // 11:30 PM EDT
+    expect(localDate(new Date('2026-10-21T04:00:00Z'), NY)).toBe('2026-10-21'); // midnight EDT
+    expect(localDate('2026-01-15T04:59:59Z', NY)).toBe('2026-01-14'); // 11:59 PM EST
+    expect(localDate('2026-01-15T05:00:00Z', NY)).toBe('2026-01-15');
   });
 });
 
-describe('nyOffsetMinutes', () => {
+describe('offsetMinutes', () => {
   it('is -240 in summer and -300 in winter', () => {
-    expect(nyOffsetMinutes(new Date('2026-07-01T12:00:00Z'))).toBe(-240);
-    expect(nyOffsetMinutes(new Date('2026-12-01T12:00:00Z'))).toBe(-300);
+    expect(offsetMinutes(new Date('2026-07-01T12:00:00Z'), NY)).toBe(-240);
+    expect(offsetMinutes(new Date('2026-12-01T12:00:00Z'), NY)).toBe(-300);
   });
 });
 
-describe('nyStartOfDay', () => {
+describe('startOfDay', () => {
   it('finds local midnight, including on DST switch days', () => {
-    expect(nyStartOfDay('2026-10-20').toISOString()).toBe('2026-10-20T04:00:00.000Z');
-    expect(nyStartOfDay('2026-01-15').toISOString()).toBe('2026-01-15T05:00:00.000Z');
-    expect(nyStartOfDay('2026-03-08').toISOString()).toBe('2026-03-08T05:00:00.000Z'); // spring forward at 2 AM
-    expect(nyStartOfDay('2026-03-09').toISOString()).toBe('2026-03-09T04:00:00.000Z');
-    expect(nyStartOfDay('2026-11-01').toISOString()).toBe('2026-11-01T04:00:00.000Z'); // fall back at 2 AM
-    expect(nyStartOfDay('2026-11-02').toISOString()).toBe('2026-11-02T05:00:00.000Z');
+    expect(startOfDay('2026-10-20', NY).toISOString()).toBe('2026-10-20T04:00:00.000Z');
+    expect(startOfDay('2026-01-15', NY).toISOString()).toBe('2026-01-15T05:00:00.000Z');
+    expect(startOfDay('2026-03-08', NY).toISOString()).toBe('2026-03-08T05:00:00.000Z'); // spring forward at 2 AM
+    expect(startOfDay('2026-03-09', NY).toISOString()).toBe('2026-03-09T04:00:00.000Z');
+    expect(startOfDay('2026-11-01', NY).toISOString()).toBe('2026-11-01T04:00:00.000Z'); // fall back at 2 AM
+    expect(startOfDay('2026-11-02', NY).toISOString()).toBe('2026-11-02T05:00:00.000Z');
   });
   it('rejects malformed dates', () => {
-    expect(() => nyStartOfDay('2026-02-30')).toThrow(RangeError);
-    expect(() => nyStartOfDay('yesterday')).toThrow(RangeError);
+    expect(() => startOfDay('2026-02-30', NY)).toThrow(RangeError);
+    expect(() => startOfDay('yesterday', NY)).toThrow(RangeError);
   });
   it('brackets every instant: start(day(t)) <= t < start(day(t) + 1)', () => {
     fc.assert(
       fc.property(fc.date({ min: new Date('2020-01-01T00:00:00Z'), max: new Date('2035-12-31T00:00:00Z'), noInvalidDate: true }), (t) => {
-        const day = nyDate(t);
-        expect(nyStartOfDay(day).getTime()).toBeLessThanOrEqual(t.getTime());
-        expect(nyStartOfDay(addDays(day, 1)).getTime()).toBeGreaterThan(t.getTime());
-        expect(nyDate(nyStartOfDay(day))).toBe(day);
+        const day = localDate(t, NY);
+        expect(startOfDay(day, NY).getTime()).toBeLessThanOrEqual(t.getTime());
+        expect(startOfDay(addDays(day, 1), NY).getTime()).toBeGreaterThan(t.getTime());
+        expect(localDate(startOfDay(day, NY), NY)).toBe(day);
       }),
       { numRuns: 300 },
     );
@@ -73,10 +78,10 @@ describe('calendar arithmetic', () => {
 
 describe('recentCutoffIso', () => {
   it('is the start of the New York day N days ago', () => {
-    expect(recentCutoffIso(new Date('2026-10-20T15:00:00Z'), 14)).toBe('2026-10-06T04:00:00.000Z');
+    expect(recentCutoffIso(new Date('2026-10-20T15:00:00Z'), 14, NY)).toBe('2026-10-06T04:00:00.000Z');
     // 10 PM on Oct 20 in New York is already Oct 21 in UTC: still counts from Oct 20.
-    expect(recentCutoffIso(new Date('2026-10-21T02:00:00Z'), 14)).toBe('2026-10-06T04:00:00.000Z');
-    expect(recentCutoffIso(new Date('2026-11-10T15:00:00Z'), 14)).toBe('2026-10-27T04:00:00.000Z');
+    expect(recentCutoffIso(new Date('2026-10-21T02:00:00Z'), 14, NY)).toBe('2026-10-06T04:00:00.000Z');
+    expect(recentCutoffIso(new Date('2026-11-10T15:00:00Z'), 14, NY)).toBe('2026-10-27T04:00:00.000Z');
   });
 });
 
@@ -98,7 +103,31 @@ describe('formatting', () => {
     expect(dayLabel('2026-10-21', 'bad')).toBe('Wed, Oct 21');
   });
   it('shows instants in New York time', () => {
-    expect(formatNyDateTime('2026-10-20T19:45:00Z')).toMatch(/^Oct 20, 3:45\sPM$/);
-    expect(formatNyDateTime(new Date('2026-01-15T04:30:00Z'))).toMatch(/^Jan 14, 11:30\sPM$/);
+    expect(formatDateTime('2026-10-20T19:45:00Z', NY)).toMatch(/^Oct 20, 3:45\sPM$/);
+    expect(formatDateTime(new Date('2026-01-15T04:30:00Z'), NY)).toMatch(/^Jan 14, 11:30\sPM$/);
+  });
+});
+
+describe('other stores\' time zones', () => {
+  it('uses the store\'s calendar day, not New York\'s', () => {
+    // 11:30 PM in New York is 10:30 PM in Chicago and 8:30 PM in Phoenix: still the 20th everywhere.
+    expect(localDate('2026-10-21T03:30:00Z', CHICAGO)).toBe('2026-10-20');
+    // 12:30 AM in New York on the 21st is still the 20th in Chicago.
+    expect(localDate('2026-10-21T04:30:00Z', NY)).toBe('2026-10-21');
+    expect(localDate('2026-10-21T04:30:00Z', CHICAGO)).toBe('2026-10-20');
+  });
+
+  it('starts the day at the store\'s midnight, with or without daylight saving time', () => {
+    expect(startOfDay('2026-10-20', CHICAGO).toISOString()).toBe('2026-10-20T05:00:00.000Z');
+    expect(startOfDay('2026-07-01', PHOENIX).toISOString()).toBe('2026-07-01T07:00:00.000Z');
+    expect(startOfDay('2026-12-01', PHOENIX).toISOString()).toBe('2026-12-01T07:00:00.000Z');
+    expect(recentCutoffIso(new Date('2026-10-20T15:00:00Z'), 14, CHICAGO)).toBe('2026-10-06T05:00:00.000Z');
+  });
+
+  it('formats times in the store\'s zone', () => {
+    expect(formatDateTime('2026-10-20T19:45:00Z', CHICAGO)).toMatch(/^Oct 20, 2:45\sPM$/);
+    expect(formatLongDate('2026-10-21T03:30:00Z', NY)).toBe('October 20, 2026');
+    expect(formatLongDate('2026-10-21T04:30:00Z', NY)).toBe('October 21, 2026');
+    expect(formatLongDate('2026-10-21T04:30:00Z', CHICAGO)).toBe('October 20, 2026');
   });
 });

@@ -52,7 +52,6 @@ export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings
       { key: 'quote_valid_days', label: 'Quote valid for (days)', kind: 'integer', min: 1, max: 365, step: '1' },
       { key: 'estimators_see_costs', label: 'Estimators see costs and margin', kind: 'boolean' },
       { key: 'default_crew_id', label: 'Default crew', kind: 'crew', hint: 'Used when an estimate does not pick a crew' },
-      { key: 'shop_address', label: 'Shop address', kind: 'text', hint: 'Origin for drive-time estimates' },
     ],
   },
   {
@@ -65,20 +64,17 @@ export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings
   },
 ];
 
+/** Quote contact details kept in the store's 'branding' setting. Name, license, phone, color and logo are on the store. */
 export const BRANDING_FIELDS = [
-  { key: 'company', label: 'Company name', type: 'text' },
-  { key: 'license', label: 'License number', type: 'text' },
-  { key: 'phone', label: 'Phone', type: 'tel' },
   { key: 'email', label: 'Email', type: 'email' },
   { key: 'website', label: 'Website', type: 'url' },
-  { key: 'primary_color', label: 'Primary color', type: 'text' },
 ] as const;
 
 /** Readable names, used as the description when a "PLACEHOLDER — ..." description is cleared. */
 export const SETTING_LABELS: Record<string, string> = {
   ...Object.fromEntries(SETTING_GROUPS.flatMap((g) => g.settings.map((s) => [s.key, s.label]))),
   financing: 'Financing partner and terms',
-  branding: 'Quote PDF branding',
+  branding: 'Quote contact details',
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +96,6 @@ const scalarSchemas: Record<string, z.ZodType<Json>> = {
   quote_valid_days: numberField('Quote valid days', { min: 1, max: 365, integer: true }),
   estimators_see_costs: booleanField,
   default_crew_id: uuidField('Default crew'),
-  shop_address: textField('Shop address', 300),
   quote_terms: textField('Quote terms', 10_000),
   warranty_text: textField('Warranty', 10_000),
 };
@@ -112,20 +107,10 @@ const financingSchema = z.object({
   show: booleanField,
 });
 
-const colorField = optionalTextField('Primary color', 7).pipe(
-  z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'Primary color must look like #0f766e')
-    .nullable(),
-);
-
+// Name, license, phone, color and logo moved to the store (locations); the form keeps contact details.
 const brandingSchema = z.object({
-  company: textField('Company name', 200),
-  license: optionalTextField('License number', 100),
-  phone: optionalTextField('Phone', 50),
   email: optionalTextField('Email', 200).pipe(z.email('Branding email is not a valid email').nullable()),
   website: optionalTextField('Website', 300),
-  primary_color: colorField,
 });
 
 /** Keys this form can write, in the order they are saved. */

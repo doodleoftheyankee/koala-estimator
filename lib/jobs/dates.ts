@@ -1,19 +1,25 @@
-// Business dates for jobs. Koala works in Newark, DE: "today", "recently completed" and every
-// date a person reads are America/New_York, whatever the time zone of the server or the phone.
-// Pure (callers pass `now`), so it is testable across DST switches.
+// Business dates for jobs. "Today", "recently completed" and every date a person reads are in
+// the store's time zone (locations.time_zone), whatever the time zone of the server or the phone.
+// Pure (callers pass `now` and the time zone), so it is testable across DST switches.
 
-export const BUSINESS_TZ = 'America/New_York';
-
-const partsFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: BUSINESS_TZ,
-  hourCycle: 'h23',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-});
+const partsFmts = new Map<string, Intl.DateTimeFormat>();
+function partsFmt(tz: string): Intl.DateTimeFormat {
+  let f = partsFmts.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    partsFmts.set(tz, f);
+  }
+  return f;
+}
 
 const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -21,8 +27,9 @@ function toDate(at: Date | string): Date {
   return typeof at === 'string' ? new Date(at) : at;
 }
 
-function wallClock(at: Date): { y: number; m: number; d: number; h: number; mi: number; s: number } {
-  const get = (type: Intl.DateTimeFormatPartTypes) => Number(partsFmt.formatToParts(at).find((p) => p.type === type)?.value ?? NaN);
+function wallClock(at: Date, tz: string): { y: number; m: number; d: number; h: number; mi: number; s: number } {
+  const parts = partsFmt(tz).formatToParts(at);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? NaN);
   return { y: get('year'), m: get('month'), d: get('day'), h: get('hour') % 24, mi: get('minute'), s: get('second') };
 }
 
@@ -43,26 +50,26 @@ function parseYmd(ymd: string): [number, number, number] {
 
 const pad = (n: number, w = 2) => String(n).padStart(w, '0');
 
-/** The New York calendar date (YYYY-MM-DD) of an instant. */
-export function nyDate(at: Date | string): string {
-  const w = wallClock(toDate(at));
+/** The calendar date (YYYY-MM-DD) of an instant in time zone `tz`. */
+export function localDate(at: Date | string, tz: string): string {
+  const w = wallClock(toDate(at), tz);
   return `${pad(w.y, 4)}-${pad(w.m)}-${pad(w.d)}`;
 }
 
-/** New York wall-clock time minus UTC, in minutes (-300 in winter, -240 in summer). */
-export function nyOffsetMinutes(at: Date): number {
-  const w = wallClock(at);
+/** Wall-clock time in `tz` minus UTC, in minutes (New York: -300 in winter, -240 in summer). */
+export function offsetMinutes(at: Date, tz: string): number {
+  const w = wallClock(at, tz);
   const asUtc = Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi, w.s);
   return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60_000);
 }
 
-/** The instant New York's calendar day `ymd` begins. */
-export function nyStartOfDay(ymd: string): Date {
+/** The instant calendar day `ymd` begins in time zone `tz`. */
+export function startOfDay(ymd: string, tz: string): Date {
   const [y, m, d] = parseYmd(ymd);
   const utcMidnight = Date.UTC(y, m - 1, d);
-  let t = utcMidnight - nyOffsetMinutes(new Date(utcMidnight)) * 60_000;
+  let t = utcMidnight - offsetMinutes(new Date(utcMidnight), tz) * 60_000;
   // The offset at local midnight can differ from the one at UTC midnight on a DST switch day.
-  t = utcMidnight - nyOffsetMinutes(new Date(t)) * 60_000;
+  t = utcMidnight - offsetMinutes(new Date(t), tz) * 60_000;
   return new Date(t);
 }
 
@@ -81,17 +88,16 @@ export function daysBetween(a: string, b: string): number {
 }
 
 /**
- * Start of the New York day `days` days before today, as an ISO instant: the lower bound for
- * "completed in the last N days" (today counts as day 0).
+ * Start of the day `days` days before today in time zone `tz`, as an ISO instant: the lower bound
+ * for "completed in the last N days" (today counts as day 0).
  */
-export function recentCutoffIso(now: Date, days: number): string {
-  return nyStartOfDay(addDays(nyDate(now), -days)).toISOString();
+export function recentCutoffIso(now: Date, days: number, tz: string): string {
+  return startOfDay(addDays(localDate(now, tz), -days), tz).toISOString();
 }
 
 // A date column (scheduled_start) has no time zone: format it as the calendar date it names.
 const dateOnlyFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
 const dateOnlyYearFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-const dateTimeFmt = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 /** "Tue, Oct 20" for a YYYY-MM-DD date (the year is added when it differs from `today`'s). Anything else is shown as is. */
 export function formatYmd(ymd: string, today?: string): string {
@@ -111,7 +117,19 @@ export function dayLabel(ymd: string, today: string): string {
   return formatYmd(ymd, today);
 }
 
-/** "Oct 20, 3:45 PM" in New York time. */
-export function formatNyDateTime(at: Date | string): string {
-  return dateTimeFmt.format(toDate(at));
+const dateTimeFmts = new Map<string, Intl.DateTimeFormat>();
+
+/** "Oct 20, 3:45 PM" in time zone `tz`. */
+export function formatDateTime(at: Date | string, tz: string): string {
+  let f = dateTimeFmts.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    dateTimeFmts.set(tz, f);
+  }
+  return f.format(toDate(at));
+}
+
+/** "October 20, 2026" in time zone `tz` (quotes, emails). */
+export function formatLongDate(at: Date | string, tz: string): string {
+  return toDate(at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
 }

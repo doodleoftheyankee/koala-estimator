@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="mb-8 text-center">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-700 text-2xl font-bold text-white">K</div>
         <h1 className="text-2xl font-bold">Koala Estimator</h1>
-        <p className="text-slate-600">Koala Insulation of Newark</p>
+        <p className="text-slate-600">Koala Insulation</p>
       </div>
       {demoEnabled() ? (
         <section className="mb-8 space-y-3" aria-labelledby="demo">

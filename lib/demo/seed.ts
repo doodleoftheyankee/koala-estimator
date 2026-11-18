@@ -10,6 +10,9 @@ import { DEMO_USER_IDS as DEMO } from './accounts';
 
 export function buildDemoSeed(args: { bundle: PricingBundle; settings: Array<{ key: string; value: unknown }>; now: Date }): { batches: string[]; summary: string } {
   const { bundle } = args;
+  // The demo is one store's history (the pilot store's towns); everything is dated in its time zone.
+  if (!bundle.location) throw new Error('The demo seed needs a store-specific pricing bundle.');
+  const store = bundle.location;
   const NOW = args.now;
   const setting = (k: string) => args.settings.find((s) => s.key === k)?.value;
   let seed = 20261020;
@@ -87,7 +90,7 @@ interface Planned {
 }
 
 function plan(createdAt: Date, outcome: Planned['outcome'], stage?: Planned['stage']): Planned {
-  const d = newDraft(createdAt, uuid);
+  const d = newDraft(createdAt, uuid, { id: store.id, city: store.shortName, state: store.state });
   const [town, zip, drive] = pick(TOWNS);
   d.customer = { ...d.customer, firstName: pick(FIRST), lastName: pick(LAST), email: '', phone: `302-555-${String(Math.floor(between(1000, 9999)))}` };
   d.customer.email = `${d.customer.firstName}.${d.customer.lastName}@example.com`.toLowerCase();
@@ -203,6 +206,7 @@ function sqlFor(p: Planned): string {
     estimator: { name: 'Erin Estimator', email: null },
     terms: String(setting('quote_terms') ?? ''),
     warranty: String(setting('warranty_text') ?? ''),
+    timeZone: store.timeZone,
   });
   const snapshot = {
     document,
@@ -241,7 +245,7 @@ function sqlFor(p: Planned): string {
   out.push(`update estimates set status = 'signed', selected_tier = ${s(p.signedTier)}, decided_at = ${ts(decided)} where id = ${est};`);
   const jobRef = `(select id from jobs where quote_id = ${s(quoteId)})`;
   const crew = `(select id from crews where name = 'Crew A')`;
-  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T12:00:00Z');
+  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: store.timeZone }) + 'T12:00:00Z');
   if (p.stage === 'verified' || p.stage === 'awaiting') {
     const start = new Date(Math.min(decided.getTime() + between(5, 20) * DAY, NOW.getTime() - 2 * DAY));
     const done = new Date(Math.min(start.getTime() + Math.max(1, Math.ceil(option.crewDays)) * DAY * 0.8, NOW.getTime() - 0.5 * DAY));

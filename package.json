@@ -2,7 +2,7 @@
   "name": "koala-estimator",
   "version": "0.1.0",
   "private": true,
-  "description": "Koala Insulation of Newark, DE: mobile-first estimator with self-improving pricing",
+  "description": "Koala Insulation: mobile-first estimator with self-improving pricing, one pricing model per store",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:db": "bash scripts/test-db.sh",
-    "bootstrap:owner": "node --experimental-strip-types scripts/create-user.ts"
+    "bootstrap:owner": "node --experimental-strip-types scripts/create-user.ts",
+    "create:location": "node --experimental-strip-types scripts/create-location.ts"
   },
   "engines": {
     "node": ">=20"

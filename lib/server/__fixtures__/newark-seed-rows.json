@@ -1,0 +1,771 @@
+{
+ "codeRequirements": [
+  {
+   "assembly": "crawl_wall",
+   "code_edition": "2018 IECC (local)",
+   "job_type": "crawlspace",
+   "min_r": 10.0
+  },
+  {
+   "assembly": "ceiling",
+   "code_edition": "2018 IECC (local)",
+   "job_type": "attic",
+   "min_r": 49.0
+  },
+  {
+   "assembly": "ceiling",
+   "code_edition": "company default",
+   "job_type": "garage",
+   "min_r": 30.0
+  },
+  {
+   "assembly": "basement_wall",
+   "code_edition": "2018 IECC (local)",
+   "job_type": "rim_joist",
+   "min_r": 10.0
+  },
+  {
+   "assembly": "floor",
+   "code_edition": "2018 IECC (local)",
+   "job_type": "crawlspace",
+   "min_r": 19.0
+  },
+  {
+   "assembly": "wood_frame_wall",
+   "code_edition": "2018 IECC (local)",
+   "job_type": "walls",
+   "min_r": 20.0
+  },
+  {
+   "assembly": "ceiling",
+   "code_edition": "company default",
+   "job_type": "commercial",
+   "min_r": 30.0
+  }
+ ],
+ "coefficientSet": {
+  "id": "5f14cf44-b93c-4780-8dab-51346b0ecd0a",
+  "version": 1
+ },
+ "coefficients": [
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "ocsf",
+   "sample_size": 0,
+   "value": 0.004
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": "attic",
+   "kind": "removal_hrs_per_sqft",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 0.02
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "waste_factor",
+   "n_eff": 0.0,
+   "product": "ccsf",
+   "sample_size": 0,
+   "value": 1.25
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "waste_factor",
+   "n_eff": 0.0,
+   "product": "fiberglass_blown",
+   "sample_size": 0,
+   "value": 1.08
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "waste_factor",
+   "n_eff": 0.0,
+   "product": "ocsf",
+   "sample_size": 0,
+   "value": 1.25
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "fiberglass_blown",
+   "sample_size": 0,
+   "value": 0.15
+  },
+  {
+   "access_level": "moderate",
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "access_mult",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 1.15
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "air_sealing",
+   "sample_size": 0,
+   "value": 0.5
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "cellulose",
+   "sample_size": 0,
+   "value": 0.15
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "drive_time_factor",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 1.1
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "air_sealing",
+   "sample_size": 0,
+   "value": 0.006
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "removal",
+   "sample_size": 0,
+   "value": 1.0
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "ccsf",
+   "sample_size": 0,
+   "value": 0.006
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "batts",
+   "sample_size": 0,
+   "value": 1.0
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": "crawlspace",
+   "kind": "removal_hrs_per_sqft",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 0.03
+  },
+  {
+   "access_level": "difficult",
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "access_mult",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 1.35
+  },
+  {
+   "access_level": "easy",
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "access_mult",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 1.0
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "waste_factor",
+   "n_eff": 0.0,
+   "product": "batts",
+   "sample_size": 0,
+   "value": 1.05
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "fiberglass_blown",
+   "sample_size": 0,
+   "value": 2.0
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "ocsf",
+   "sample_size": 0,
+   "value": 3.0
+  },
+  {
+   "access_level": "extreme",
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "access_mult",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 1.6
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "waste_factor",
+   "n_eff": 0.0,
+   "product": "cellulose",
+   "sample_size": 0,
+   "value": 1.08
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "labor_hrs_per_unit",
+   "n_eff": 0.0,
+   "product": "batts",
+   "sample_size": 0,
+   "value": 0.015
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "ccsf",
+   "sample_size": 0,
+   "value": 3.0
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "removal_hrs_per_sqft",
+   "n_eff": 0.0,
+   "product": null,
+   "sample_size": 0,
+   "value": 0.025
+  },
+  {
+   "access_level": null,
+   "confidence": 0.0,
+   "job_type": null,
+   "kind": "setup_hours",
+   "n_eff": 0.0,
+   "product": "cellulose",
+   "sample_size": 0,
+   "value": 2.0
+  }
+ ],
+ "crews": [
+  {
+   "blended_hourly_cost": 35.0,
+   "id": "bacaec5d-9e6e-4d33-82cd-a973a2ab3740",
+   "name": "Crew A",
+   "size": 2
+  }
+ ],
+ "materials": [
+  {
+   "cost_per_unit": 14.0,
+   "coverage_sqft_in": 200.0,
+   "id": "0163d89c-f813-439b-9d2e-0ae75dda487c",
+   "name": "Cellulose bag (25 lb)",
+   "product_id": "668b37e3-9121-4251-ba7f-c2f0cc2089a4",
+   "unit": "bag"
+  },
+  {
+   "cost_per_unit": 0.75,
+   "coverage_sqft_in": null,
+   "id": "0af69604-eacb-4983-80cd-7bf71b2e13b3",
+   "name": "Batt (per sqft @ rated R)",
+   "product_id": "5fa230c9-cae8-4b5d-9aaf-2d66358f077d",
+   "unit": "sqft"
+  },
+  {
+   "cost_per_unit": 0.12,
+   "coverage_sqft_in": 1.0,
+   "id": "8c6728d1-9147-48f5-8e53-152a9aa60ed1",
+   "name": "Open-cell set (~$1,800/set at full yield, per board ft)",
+   "product_id": "4dbb87ba-9614-46a6-b95b-7d4f39daba1c",
+   "unit": "board_ft"
+  },
+  {
+   "cost_per_unit": 0.1,
+   "coverage_sqft_in": null,
+   "id": "a954f1b5-4f38-4114-8187-0aa790a02932",
+   "name": "Air sealing materials (per sqft)",
+   "product_id": "4917e7cf-9959-41fc-8b23-74f36b05b417",
+   "unit": "sqft"
+  },
+  {
+   "cost_per_unit": 38.0,
+   "coverage_sqft_in": 450.0,
+   "id": "c3ac6a02-a132-4239-9c2e-7bce07c25ec6",
+   "name": "Blown fiberglass bag (~28 lb)",
+   "product_id": "a6f3436c-3b90-4702-b562-c2b48ff4c7c1",
+   "unit": "bag"
+  },
+  {
+   "cost_per_unit": 0.47,
+   "coverage_sqft_in": 1.0,
+   "id": "e0c89276-8f1e-4c6a-bea2-c2e76ba00163",
+   "name": "Closed-cell set (~$2,350/set at full yield, per board ft)",
+   "product_id": "cb834753-66f0-44d8-be7d-f111290db6c6",
+   "unit": "board_ft"
+  }
+ ],
+ "products": [
+  {
+   "code": "ocsf",
+   "id": "4dbb87ba-9614-46a6-b95b-7d4f39daba1c",
+   "is_r_bearing": true,
+   "label": "Open-Cell Spray Foam",
+   "r_per_inch": 3.7,
+   "unit": "board_ft"
+  },
+  {
+   "code": "ccsf",
+   "id": "cb834753-66f0-44d8-be7d-f111290db6c6",
+   "is_r_bearing": true,
+   "label": "Closed-Cell Spray Foam",
+   "r_per_inch": 6.5,
+   "unit": "board_ft"
+  },
+  {
+   "code": "cellulose",
+   "id": "668b37e3-9121-4251-ba7f-c2f0cc2089a4",
+   "is_r_bearing": true,
+   "label": "Blown Cellulose",
+   "r_per_inch": 3.6,
+   "unit": "bag"
+  },
+  {
+   "code": "fiberglass_blown",
+   "id": "a6f3436c-3b90-4702-b562-c2b48ff4c7c1",
+   "is_r_bearing": true,
+   "label": "Blown Fiberglass",
+   "r_per_inch": 2.5,
+   "unit": "bag"
+  },
+  {
+   "code": "batts",
+   "id": "5fa230c9-cae8-4b5d-9aaf-2d66358f077d",
+   "is_r_bearing": true,
+   "label": "Fiberglass Batts",
+   "r_per_inch": 3.2,
+   "unit": "sqft"
+  },
+  {
+   "code": "air_sealing",
+   "id": "4917e7cf-9959-41fc-8b23-74f36b05b417",
+   "is_r_bearing": false,
+   "label": "Air Sealing",
+   "r_per_inch": null,
+   "unit": "sqft"
+  },
+  {
+   "code": "removal",
+   "id": "3d9014df-26c7-4e07-82e8-603ecdbb17b0",
+   "is_r_bearing": false,
+   "label": "Old Insulation Removal",
+   "r_per_inch": null,
+   "unit": "sqft"
+  }
+ ],
+ "settings": [
+  {
+   "key": "branding",
+   "value": {
+    "company": "Koala Insulation of Newark",
+    "license": null,
+    "logo_path": null,
+    "phone": null,
+    "primary_color": null
+   }
+  },
+  {
+   "key": "ceiling_margin_pct",
+   "value": 0.3
+  },
+  {
+   "key": "default_crew_id",
+   "value": "bacaec5d-9e6e-4d33-82cd-a973a2ab3740"
+  },
+  {
+   "key": "deviation_threshold",
+   "value": 0.15
+  },
+  {
+   "key": "disposal_cost_per_sqft",
+   "value": 0.35
+  },
+  {
+   "key": "estimator_override_limit_pct",
+   "value": 0.1
+  },
+  {
+   "key": "estimators_see_costs",
+   "value": false
+  },
+  {
+   "key": "financing",
+   "value": {
+    "apr": 0.0899,
+    "provider": null,
+    "show": false,
+    "term_months": 120
+   }
+  },
+  {
+   "key": "floor_margin_pct",
+   "value": 0.05
+  },
+  {
+   "key": "followup_quiet_hours",
+   "value": {
+    "end": "09:00",
+    "start": "20:00",
+    "tz": "America/New_York"
+   }
+  },
+  {
+   "key": "learning",
+   "value": {
+    "auto_promote": false,
+    "half_life_days": 180,
+    "holdout_frac": 0.2,
+    "max_step_pct": 0.1,
+    "min_n_eff": 3,
+    "min_quotes_for_win_model": 40,
+    "price_recommendations": true,
+    "shrinkage_k": 5,
+    "win_half_life_days": 365,
+    "win_l2": 1.0,
+    "winsor_pct": 0.05
+   }
+  },
+  {
+   "key": "minimum_job_price",
+   "value": 1500
+  },
+  {
+   "key": "overhead_pct",
+   "value": 0.63
+  },
+  {
+   "key": "price_rounding",
+   "value": 5
+  },
+  {
+   "key": "productive_hours_per_day",
+   "value": 7
+  },
+  {
+   "key": "quote_terms",
+   "value": "Quote valid for the period shown. A signed quote authorizes Koala Insulation of Newark to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval."
+  },
+  {
+   "key": "quote_valid_days",
+   "value": 30
+  },
+  {
+   "key": "shop_address",
+   "value": "Newark, DE 19711"
+  },
+  {
+   "key": "target_margin_pct",
+   "value": 0.15
+  },
+  {
+   "key": "vehicle_cost_per_trip",
+   "value": 45
+  },
+  {
+   "key": "warranty_text",
+   "value": "Workmanship warranty \u2014 PLACEHOLDER, owner to replace."
+  }
+ ],
+ "tierTemplates": [
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "commercial",
+   "label": "Closed-Cell Spray Foam",
+   "marketing_bullets": [
+    "Highest R per inch; moisture and air barrier"
+   ],
+   "primary_product": "ccsf",
+   "target_r": null,
+   "tier": "best"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "garage",
+   "label": "Blown Fiberglass",
+   "marketing_bullets": [
+    "Seamless coverage over living space"
+   ],
+   "primary_product": "fiberglass_blown",
+   "target_r": null,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "walls",
+   "label": "Closed-Cell Spray Foam",
+   "marketing_bullets": [
+    "Highest R per inch",
+    "Adds wall rigidity and a moisture barrier"
+   ],
+   "primary_product": "ccsf",
+   "target_r": null,
+   "tier": "best"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "walls",
+   "label": "Dense-Pack Cellulose",
+   "marketing_bullets": [
+    "Installed from outside or inside with minimal disruption",
+    "Fills the full cavity"
+   ],
+   "primary_product": "cellulose",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "crawlspace",
+   "label": "Closed-Cell Spray Foam",
+   "marketing_bullets": [
+    "Moisture-resistant",
+    "Seals out drafts and pests"
+   ],
+   "primary_product": "ccsf",
+   "target_r": null,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "commercial",
+   "label": "Blown Fiberglass",
+   "marketing_bullets": [
+    "Cost-effective code compliance"
+   ],
+   "primary_product": "fiberglass_blown",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "commercial",
+   "label": "Open-Cell Spray Foam",
+   "marketing_bullets": [
+    "Air seal and insulate in one step"
+   ],
+   "primary_product": "ocsf",
+   "target_r": null,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "rim_joist",
+   "label": "Open-Cell Spray Foam",
+   "marketing_bullets": [
+    "Seals the biggest air leak in most basements"
+   ],
+   "primary_product": "ocsf",
+   "target_r": null,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "attic",
+   "label": "Blown Cellulose to Code",
+   "marketing_bullets": [
+    "Brings your attic to current code R-value",
+    "Dense cellulose fills gaps and blocks air movement"
+   ],
+   "primary_product": "cellulose",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": true,
+   "include_removal": false,
+   "job_type": "crawlspace",
+   "label": "Closed-Cell Foam + Air Sealing",
+   "marketing_bullets": [
+    "Moisture-resistant",
+    "Every penetration sealed",
+    "Warmest floors"
+   ],
+   "primary_product": "ccsf",
+   "target_r": null,
+   "tier": "best"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "garage",
+   "label": "Fiberglass Batts",
+   "marketing_bullets": [
+    "Insulates the garage ceiling or walls"
+   ],
+   "primary_product": "batts",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": true,
+   "include_removal": false,
+   "job_type": "attic",
+   "label": "Air Seal + Blown Cellulose",
+   "marketing_bullets": [
+    "Seals the leaks that drive drafts and high bills",
+    "Dense cellulose blocks air movement",
+    "Eligible for most utility rebates"
+   ],
+   "primary_product": "cellulose",
+   "target_r": 60.0,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "rim_joist",
+   "label": "Fiberglass Batts",
+   "marketing_bullets": [
+    "Fills the rim joist bays"
+   ],
+   "primary_product": "batts",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "walls",
+   "label": "Open-Cell Spray Foam",
+   "marketing_bullets": [
+    "Seals and insulates in one step",
+    "Excellent sound dampening"
+   ],
+   "primary_product": "ocsf",
+   "target_r": null,
+   "tier": "better"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "rim_joist",
+   "label": "Closed-Cell Spray Foam",
+   "marketing_bullets": [
+    "Air, moisture and thermal barrier in one"
+   ],
+   "primary_product": "ccsf",
+   "target_r": null,
+   "tier": "best"
+  },
+  {
+   "include_air_sealing": true,
+   "include_removal": true,
+   "job_type": "attic",
+   "label": "Remove, Air Seal + Cellulose",
+   "marketing_bullets": [
+    "Old, dirty or damaged insulation removed",
+    "Full air sealing before new insulation",
+    "Best comfort and efficiency"
+   ],
+   "primary_product": "cellulose",
+   "target_r": 60.0,
+   "tier": "best"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "crawlspace",
+   "label": "Fiberglass Batts",
+   "marketing_bullets": [
+    "Insulates the floor above the crawlspace"
+   ],
+   "primary_product": "batts",
+   "target_r": null,
+   "tier": "good"
+  },
+  {
+   "include_air_sealing": false,
+   "include_removal": false,
+   "job_type": "garage",
+   "label": "Open-Cell Spray Foam",
+   "marketing_bullets": [
+    "Seals and insulates; quieter, more comfortable rooms above"
+   ],
+   "primary_product": "ocsf",
+   "target_r": null,
+   "tier": "best"
+  }
+ ],
+ "winModel": null
+}

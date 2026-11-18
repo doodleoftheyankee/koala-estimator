@@ -12,13 +12,12 @@ import { inviteMember, updateCrewMembership, updateMember } from './actions';
 
 export const metadata: Metadata = { title: 'Team' };
 
-const profileRows = z.array(
+/** This store's people: their role and whether they are active here (and can sign in at all). */
+const memberRows = z.array(
   z.object({
-    id: z.string(),
-    full_name: z.string(),
-    email: z.string().nullable(),
     role: z.enum(ROLES),
     active: z.boolean(),
+    profile: z.object({ id: z.string(), full_name: z.string(), email: z.string().nullable(), active: z.boolean() }),
   }),
 );
 
@@ -48,13 +47,18 @@ function RoleSelect({ name, defaultValue }: { name: string; defaultValue: string
 export default async function TeamPage() {
   const profile = await requireRole('owner');
   const db = await createClient();
+  const loc = profile.locationId;
   const [res, crewsRes, membershipRes] = await Promise.all([
-    db.from('profiles').select('id, full_name, email, role, active').order('active', { ascending: false }).order('full_name'),
-    db.from('crews').select('id, name, active').order('name'),
-    db.from('crew_members').select('crew_id, profile_id, is_lead'),
+    db.from('location_members').select('role, active, profile:profiles!inner(id, full_name, email, active)').eq('location_id', loc),
+    db.from('crews').select('id, name, active').eq('location_id', loc).order('name'),
+    db.from('crew_members').select('crew_id, profile_id, is_lead, crews!inner(location_id)').eq('crews.location_id', loc),
   ]);
-  const parsed = res.error ? null : profileRows.safeParse(res.data);
-  const members = parsed?.success ? parsed.data : null;
+  const parsed = res.error ? null : memberRows.safeParse(res.data);
+  const members = parsed?.success
+    ? parsed.data
+        .map((m) => ({ id: m.profile.id, full_name: m.profile.full_name, email: m.profile.email, role: m.role, active: m.active && m.profile.active }))
+        .sort((a, b) => Number(b.active) - Number(a.active) || a.full_name.localeCompare(b.full_name))
+    : null;
   const crews = crewRows.safeParse(crewsRes.data ?? []).data ?? [];
   // profile id -> crew id -> is lead
   const memberships = new Map<string, Map<string, boolean>>();
@@ -120,7 +124,7 @@ export default async function TeamPage() {
                             <Field label={`Role for ${m.full_name}`}>
                               <RoleSelect name="role" defaultValue={m.role} />
                             </Field>
-                            <ToggleInput name="active" label="Active" hint="Inactive people cannot sign in to the app" defaultChecked={m.active} />
+                            <ToggleInput name="active" label="Active" hint="Inactive people cannot use this store in the app" defaultChecked={m.active} />
                           </div>
                         </ActionForm>
                       )}

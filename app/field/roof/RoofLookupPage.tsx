@@ -98,7 +98,7 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
                 autoComplete="street-address"
                 enterKeyHint="search"
                 maxLength={200}
-                placeholder="12 Main St, Newark, DE 19711"
+                placeholder="Street, city, state ZIP"
               />
             </Field>
             <Button type="submit" size="lg" className="w-full" disabled={!online || !configured || Boolean(t.state.running)}>
@@ -186,7 +186,7 @@ function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; pro
     setBusy(true);
     setError(null);
     try {
-      const draft = newDraft();
+      const draft = newDraft(new Date(), undefined, { id: profile.locationId, city: profile.town ?? '', state: profile.state ?? '' });
       draft.property = { ...draft.property, ...parsed };
       draft.areas = [newArea('attic')];
       await switchUser(profile);

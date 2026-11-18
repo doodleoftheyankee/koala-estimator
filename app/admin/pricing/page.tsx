@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
+import type { LocationInfo } from '@/lib/locations/location';
+import { formatLongDate } from '@/lib/jobs/dates';
 import { createClient } from '@/lib/supabase/server';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
@@ -21,7 +23,7 @@ import {
 import { PRIMARY_PRODUCTS } from '@/lib/admin/pricingForms';
 import { ActionForm, ToggleInput } from './ActionForm';
 import { NumberField, SectionHeading, TextField } from './fields';
-import { addCrew, saveCodeRequirement, saveCrew, saveMaterial, saveProduct, saveSettings, saveTierTemplates } from './actions';
+import { addCrew, saveCodeRequirement, saveCrew, saveLocation, saveMaterial, saveProduct, saveSettings, saveTierTemplates } from './actions';
 
 export const metadata: Metadata = { title: 'Pricing' };
 
@@ -99,23 +101,32 @@ const schemas = {
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-async function loadConfig(db: Db) {
-  const [settings, jobTypes, products, materials, crews, tiers, codes, set] = await Promise.all([
-    db.from('app_settings').select('key, value, description').order('key'),
+async function loadConfig(db: Db, loc: string) {
+  const [settings, jobTypes, products, materials, crews, tiers, codes, set, shared] = await Promise.all([
+    db.from('app_settings').select('key, value, description').eq('location_id', loc).order('key'),
     db.from('job_types').select('code, label').order('sort_order'),
     db.from('products').select('id, code, label, unit, r_per_inch, is_r_bearing, active'),
     db
       .from('materials')
       .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input')
+      .eq('location_id', loc)
       .eq('active', true),
-    db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').order('name'),
+    db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').eq('location_id', loc).order('name'),
     db
       .from('tier_templates')
-      .select('id, job_type, tier, label, primary_product, target_r, include_air_sealing, include_removal, marketing_bullets, active'),
-    db.from('code_requirements').select('id, job_type, assembly, min_r, alt_spec, code_edition, source_note, is_default').order('job_type').order('assembly'),
-    db.from('coefficient_sets').select('id, version, source, notes, activated_at').eq('status', 'active').maybeSingle(),
+      .select('id, job_type, tier, label, primary_product, target_r, include_air_sealing, include_removal, marketing_bullets, active')
+      .eq('location_id', loc),
+    db
+      .from('code_requirements')
+      .select('id, job_type, assembly, min_r, alt_spec, code_edition, source_note, is_default')
+      .eq('location_id', loc)
+      .order('job_type')
+      .order('assembly'),
+    db.from('coefficient_sets').select('id, version, source, notes, activated_at').eq('location_id', loc).eq('status', 'active').maybeSingle(),
+    // Products are shared by every store; only someone who owns every store may change them.
+    db.rpc('can_edit_shared_catalog'),
   ]);
-  for (const r of [settings, jobTypes, products, materials, crews, tiers, codes, set]) {
+  for (const r of [settings, jobTypes, products, materials, crews, tiers, codes, set, shared]) {
     if (r.error) throw new Error(r.error.message);
   }
   const activeSet = schemas.set.parse(set.data);
@@ -131,6 +142,7 @@ async function loadConfig(db: Db) {
   }
   const productOrder = (code: string) => PRODUCTS.indexOf(code as ProductCode);
   return {
+    canEditCatalog: shared.data === true,
     settings: schemas.settings.parse(settings.data),
     jobTypes: schemas.jobTypes.parse(jobTypes.data),
     products: schemas.products.parse(products.data).sort((a, b) => productOrder(a.code) - productOrder(b.code)),
@@ -161,6 +173,7 @@ const TIER_LABELS = { good: 'Good', better: 'Better', best: 'Best' } as const;
 const humanize = (s: string | null) => (s ? s.replace(/_/g, ' ') : '—');
 
 const SECTIONS = [
+  { id: 'store', label: 'Store' },
   { id: 'business', label: 'Business' },
   { id: 'materials', label: 'Materials' },
   { id: 'crews', label: 'Crews' },
@@ -178,7 +191,7 @@ export default async function PricingPage() {
   let config: Config | null = null;
   let loadError: string | null = null;
   try {
-    config = await loadConfig(db);
+    config = await loadConfig(db, profile.locationId);
   } catch (e) {
     loadError = errorMessage(e);
   }
@@ -195,14 +208,14 @@ export default async function PricingPage() {
         {loadError || !config ? (
           <Alert tone="red">Could not load the pricing configuration: {loadError}</Alert>
         ) : (
-          <PricingContent config={config} readOnly={readOnly} />
+          <PricingContent config={config} readOnly={readOnly} location={profile.location} />
         )}
       </main>
     </>
   );
 }
 
-function PricingContent({ config, readOnly }: { config: Config; readOnly: boolean }) {
+function PricingContent({ config, readOnly, location }: { config: Config; readOnly: boolean; location: LocationInfo }) {
   const map = toSettingsMap(config.settings);
   const productById = new Map(config.products.map((p) => [p.id, p]));
   const productByCode = new Map(config.products.map((p) => [p.code, p]));
@@ -212,11 +225,17 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
   const placeholderKeys = new Set(placeholderSettings.map((s) => s.key));
   const flaggedMaterials = config.materials.filter((m) => m.needs_owner_input);
   const flaggedCrews = config.crews.filter((c) => c.needs_owner_input);
+  // A new store's code minimums are copied from another store and say so until the owner saves them.
+  const copiedCodes = config.codes.filter((c) => c.is_default && /^Copied from /.test(c.source_note ?? ''));
   const todo = [
     ...placeholderSettings.map((s) => ({ href: '#business', text: `Setting: ${SETTING_LABELS[s.key] ?? humanize(s.key)}` })),
     ...flaggedMaterials.map((m) => ({ href: '#materials', text: `Material: ${m.name} (${productById.get(m.product_id)?.label ?? 'product'})` })),
     ...flaggedCrews.map((c) => ({ href: '#crews', text: `Crew: ${c.name}` })),
+    ...copiedCodes.map((c) => ({ href: '#code', text: `Code minimum: ${jobTypeLabel(c.job_type)} ${humanize(c.assembly)}` })),
   ];
+  // The code banner reads the edition and attic minimum actually stored for this store.
+  const atticCode = config.codes.find((c) => c.job_type === 'attic' && c.assembly === 'ceiling' && c.is_default);
+  const editions = [...new Set(config.codes.filter((c) => c.is_default && /IECC/i.test(c.code_edition)).map((c) => c.code_edition))];
 
   const defaultMaterials = config.materials
     .filter((m) => m.is_default && productById.has(m.product_id))
@@ -256,6 +275,16 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         </ul>
       </nav>
 
+      {/* ---------------------------------------------------------------- Store */}
+      <section className="space-y-4">
+        <SectionHeading id="store" title="Store">
+          This store&apos;s name, time zone and contact details. They appear on quotes, emails and every screen.
+        </SectionHeading>
+        <Card>
+          <LocationForm location={location} readOnly={readOnly} />
+        </Card>
+      </section>
+
       {/* ------------------------------------------------------------- Business */}
       <section className="space-y-4">
         <SectionHeading id="business" title="Business settings">
@@ -284,7 +313,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
           </Card>
           <Card>
             <h3 className="mb-3 font-semibold text-slate-900">
-              Branding {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
+              Quote contact {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
             </h3>
             <BrandingForm map={map} readOnly={readOnly} />
           </Card>
@@ -445,12 +474,25 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
       {/* ------------------------------------------------------------ Code mins */}
       <section className="space-y-4">
         <SectionHeading id="code" title="Code minimums">
-          Minimum R-values by job type and assembly (IECC climate zone 4A).
+          Minimum R-values by job type and assembly (IECC climate zone {location.climateZone}).
         </SectionHeading>
         <Alert tone="amber">
-          <strong>Owner to confirm:</strong> these were seeded from the <strong>2021 IECC</strong> (attic R-60). Delaware has used both the 2018
-          (attic R-49) and 2021 editions. Confirm which edition Newark and New Castle County enforce for your permits, then update the values and
-          edition below.
+          <strong>Owner to confirm:</strong>{' '}
+          {editions.length ? (
+            <>
+              these follow the <strong>{editions.join(' / ')}</strong>
+              {atticCode ? (
+                <>
+                  {' '}
+                  (attic <strong>R-{atticCode.min_r}</strong>)
+                </>
+              ) : null}
+              .
+            </>
+          ) : (
+            'no code edition is set yet.'
+          )}{' '}
+          Check which edition your city and county enforce for permits, and update the values and edition below when it changes.
         </Alert>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {config.codes.map((c) => (
@@ -480,6 +522,9 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <SectionHeading id="products" title="Products">
           A product used by an active tier cannot be deactivated.
         </SectionHeading>
+        {!readOnly && !config.canEditCatalog ? (
+          <Alert tone="blue">Products are shared by every store. Only someone who owns every store can change them.</Alert>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {config.products.map((p) => (
             <Card key={p.id}>
@@ -489,7 +534,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
                 <span className="text-xs text-slate-500">per {UNIT_LABELS[p.unit] ?? p.unit}</span>
                 {!p.active ? <Badge>Inactive</Badge> : null}
               </div>
-              <ActionForm action={saveProduct} readOnly={readOnly}>
+              <ActionForm action={saveProduct} readOnly={readOnly || !config.canEditCatalog}>
                 <input type="hidden" name="id" value={p.id} />
                 <TextField label="Label" name="label" defaultValue={p.label} required />
                 {p.is_r_bearing ? (
@@ -522,7 +567,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
               <h3 className="font-semibold text-slate-900">Active set v{config.activeSet.version}</h3>
               <Badge tone="green">{config.activeSet.source}</Badge>
               {config.activeSet.activated_at ? (
-                <span className="text-sm text-slate-500">since {new Date(config.activeSet.activated_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}</span>
+                <span className="text-sm text-slate-500">since {formatLongDate(config.activeSet.activated_at, location.timeZone)}</span>
               ) : null}
               {config.activeSet.notes ? <span className="w-full text-sm text-slate-600">{config.activeSet.notes}</span> : null}
             </div>
@@ -656,7 +701,6 @@ function FinancingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean 
 
 function BrandingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean }) {
   const brand = settingObject(map, 'branding');
-  const color = objectFieldText(brand, 'primary_color');
   return (
     <ActionForm action={saveSettings} readOnly={readOnly}>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -666,21 +710,53 @@ function BrandingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean }
             label={f.label}
             name={`branding.${f.key}`}
             type={f.type}
-            required={f.key === 'company'}
             defaultValue={objectFieldText(brand, f.key)}
-            placeholder={f.key === 'primary_color' ? '#0f766e' : undefined}
-            hint={
-              f.key === 'primary_color' && /^#[0-9a-fA-F]{6}$/.test(color) ? (
-                <span className="inline-flex items-center gap-1">
-                  <span aria-hidden className="inline-block h-3 w-3 rounded-sm ring-1 ring-slate-300" style={{ backgroundColor: color }} /> Current color
-                </span>
-              ) : f.key === 'primary_color' ? (
-                'Hex color, e.g. #0f766e'
-              ) : undefined
-            }
           />
         ))}
       </div>
+    </ActionForm>
+  );
+}
+
+const TIME_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
+
+function LocationForm({ location: l, readOnly }: { location: LocationInfo; readOnly: boolean }) {
+  const zones = TIME_ZONES.includes(l.timeZone) ? TIME_ZONES : [l.timeZone, ...TIME_ZONES];
+  return (
+    <ActionForm action={saveLocation} readOnly={readOnly}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <TextField label="Store name" name="name" defaultValue={l.name} required hint="Printed on quotes and emails" />
+        <TextField label="Short name (town)" name="short_name" defaultValue={l.shortName} required hint="Shown in the menu; new addresses start in this town" />
+        <Field label="Time zone" hint="Dates and times on every screen and quote">
+          <Select name="time_zone" defaultValue={l.timeZone} required>
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z.replace('_', ' ')}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <TextField label="State" name="state" defaultValue={l.state} required hint="Two letters, e.g. DE" />
+        <TextField label="County" name="default_county" defaultValue={l.county} />
+        <TextField label="IECC climate zone" name="climate_zone" defaultValue={l.climateZone} required hint="e.g. 4A" />
+        <TextField label="Shop address" name="shop_address" defaultValue={l.shopAddress} hint="Origin for drive-time estimates" />
+        <TextField label="Phone" name="phone" type="tel" defaultValue={l.phone} />
+        <TextField label="License number" name="license_number" defaultValue={l.licenseNumber} />
+        <TextField label="Brand color" name="brand_color" defaultValue={l.brandColor} placeholder="#0f766e" hint="Hex color for quotes" />
+        <TextField label="Logo URL" name="logo_path" type="url" defaultValue={l.logoPath} hint="https:// link to the logo" />
+        <TextField
+          label="Quote sender"
+          name="quote_from_email"
+          defaultValue={l.quoteFromEmail}
+          placeholder="Store name <quotes@example.com>"
+          hint="From address on customer emails (domain must be verified with the email service)"
+        />
+        <TextField label="Office notification email" name="office_notify_email" type="email" defaultValue={l.officeNotifyEmail} hint="Told when a customer signs" />
+        <TextField label="Owner report email" name="owner_report_email" type="email" defaultValue={l.ownerReportEmail} hint="Nightly learning report" />
+      </div>
+      <Field label="Electric utilities" hint="One per line. Offered on the customer screen">
+        <Textarea name="utilities" rows={3} defaultValue={l.utilities.join('\n')} />
+      </Field>
     </ActionForm>
   );
 }

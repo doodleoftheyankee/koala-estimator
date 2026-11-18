@@ -30,7 +30,6 @@ describe('parseSettingsForm', () => {
       quote_valid_days: '30',
       estimators_see_costs: 'false',
       default_crew_id: CREW,
-      shop_address: ' 1 Main St, Newark, DE ',
     });
     expect(r).toEqual({
       ok: true,
@@ -49,7 +48,6 @@ describe('parseSettingsForm', () => {
         quote_valid_days: 30,
         estimators_see_costs: false,
         default_crew_id: CREW,
-        shop_address: '1 Main St, Newark, DE',
       },
     });
   });
@@ -86,34 +84,12 @@ describe('parseSettingsForm', () => {
     expect(parseSettingsForm({ 'financing.apr': '100', 'financing.term_months': '12' }).ok).toBe(false);
   });
 
-  it('parses branding and validates email and color', () => {
-    const r = parseSettingsForm({
-      'branding.company': 'Koala Insulation of Newark',
-      'branding.license': '',
-      'branding.phone': '302-555-0100',
-      'branding.email': 'newark@example.com',
-      'branding.website': '',
-      'branding.primary_color': '#0f766e',
-    });
-    expect(r).toEqual({
-      ok: true,
-      values: {
-        branding: {
-          company: 'Koala Insulation of Newark',
-          license: null,
-          phone: '302-555-0100',
-          email: 'newark@example.com',
-          website: null,
-          primary_color: '#0f766e',
-        },
-      },
-    });
-    const bad = parseSettingsForm({ 'branding.company': 'K', 'branding.email': 'nope', 'branding.primary_color': 'teal' });
+  it('parses the quote contact details (email and website) and validates the email', () => {
+    const r = parseSettingsForm({ 'branding.email': 'office@example.com', 'branding.website': '' });
+    expect(r).toEqual({ ok: true, values: { branding: { email: 'office@example.com', website: null } } });
+    const bad = parseSettingsForm({ 'branding.email': 'nope' });
     expect(bad.ok).toBe(false);
-    if (!bad.ok) {
-      expect(bad.error).toContain('valid email');
-      expect(bad.error).toContain('#0f766e');
-    }
+    if (!bad.ok) expect(bad.error).toContain('valid email');
   });
 
   it('requires a valid crew id and non-empty texts', () => {

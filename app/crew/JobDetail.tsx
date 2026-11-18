@@ -4,7 +4,7 @@ import { crewDb, type LocalActuals, type LocalJob } from '@/lib/offline/crewDb';
 import { setJobStatus, syncActuals } from '@/lib/offline/crewSync';
 import { completionBlockers } from '@/lib/offline/crewSyncCore';
 import type { CachedProfile } from '@/lib/offline/db';
-import { dayLabel, formatNyDateTime, nyDate } from '@/lib/jobs/dates';
+import { dayLabel, formatDateTime, localDate } from '@/lib/jobs/dates';
 import { mapsUrl, naturalKey, PRODUCT_LABELS, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
 import type { ProductCode } from '@/lib/pricing';
 import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
@@ -58,7 +58,7 @@ export function JobDetail({
 
   const job = cached.job;
   const draft = editor.record;
-  const today = nyDate(new Date());
+  const today = localDate(new Date(), profile.timeZone);
 
   async function changeStatus(kind: 'start' | 'undo') {
     setBusy(kind);
@@ -127,7 +127,7 @@ export function JobDetail({
           <p className="text-slate-700">
             {job.address.city} {job.address.zip}
           </p>
-          <p className="mt-1 text-sm text-slate-600">{scheduleLine(job, today)}</p>
+          <p className="mt-1 text-sm text-slate-600">{scheduleLine(job, today, profile.timeZone)}</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <a
               href={mapsUrl(job.address)}
@@ -201,9 +201,9 @@ function rowTitle(job: CrewJob, r: { areaId: string | null; product: ProductCode
   return `${area ? `${area} · ` : ''}${PRODUCT_LABELS[r.product]}`;
 }
 
-function scheduleLine(job: CrewJob, today: string): string {
-  if (job.status === 'completed' && job.completedAt) return `Completed ${formatNyDateTime(job.completedAt)}`;
-  if (job.status === 'in_progress' && job.startedAt) return `Started ${formatNyDateTime(job.startedAt)}`;
+function scheduleLine(job: CrewJob, today: string, tz: string): string {
+  if (job.status === 'completed' && job.completedAt) return `Completed ${formatDateTime(job.completedAt, tz)}`;
+  if (job.status === 'in_progress' && job.startedAt) return `Started ${formatDateTime(job.startedAt, tz)}`;
   if (!job.scheduledStart) return 'Not scheduled yet';
   const days = job.scheduledDays ? ` · planned ${num(job.scheduledDays, 1)} day${job.scheduledDays === 1 ? '' : 's'}` : '';
   return `${dayLabel(job.scheduledStart, today)}${days}`;

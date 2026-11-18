@@ -64,6 +64,8 @@ import {
 import { Alert, Badge, Button, Card, Chips, cx, Field, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import { RoofReport } from './RoofReport';
+import { getMeta, META, type CachedProfile } from '@/lib/offline/db';
+import { useLive } from '@/app/field/hooks';
 
 export const comma = (n: number) => n.toLocaleString('en-US');
 const OVERHANG_OPTIONS = OVERHANG_CHOICES.map((o) => ({ value: String(o), label: o ? `${o}"` : 'None' }));
@@ -125,12 +127,14 @@ export function useTakeoff({
   const houseChoices: RoofChoices | null = useMemo(() => (result ? { overhangIn, ...(savedHouse ?? defaultFaces(result, 'house')) } : null), [result, overhangIn, savedHouse]);
   const wastePct = state.wastePct ?? DEFAULT_WASTE;
   const confirmed = state.confirmed;
+  // The report is headed with the store's name (from the profile this phone signed in with).
+  const company = useLive(async () => (await getMeta<CachedProfile>(META.profile))?.locationName ?? '', [], '');
   const data = useMemo(() => {
     if (!result || !houseChoices || !last) return null;
     // The report's "Check on site" is the house's: what the attic sheet says, house faces and all, in its words for paper.
     const warnings = checkOnSite(result, roofFigures(result, houseChoices), 'attic', confirmed, true);
-    return takeoffData(result, houseChoices, wastePct, new Date(last.lookedUpAt), { warnings, near });
-  }, [result, houseChoices, wastePct, last, confirmed, near]);
+    return takeoffData(result, houseChoices, wastePct, new Date(last.lookedUpAt), { warnings, near, company });
+  }, [result, houseChoices, wastePct, last, confirmed, near, company]);
   // Kept for the result it was started on, so a new result ends it.
   const [pickFor, setPickFor] = useState<{ lookupId: string; at: 'tap' | LatLng } | null>(null);
   const picking: Picking = pickFor && last && pickFor.lookupId === last.lookupId ? pickFor.at : 'off';

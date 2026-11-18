@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { crewDb, type ActualsSyncState, type LocalActuals, type LocalJob } from '@/lib/offline/crewDb';
 import type { CachedProfile } from '@/lib/offline/db';
-import { dayLabel, nyDate } from '@/lib/jobs/dates';
+import { dayLabel, localDate } from '@/lib/jobs/dates';
 import { CREW_SECTION_LABELS, CREW_SECTIONS, groupForCrew } from '@/lib/jobs/status';
 import type { CrewJob } from '@/lib/jobs/crew';
 import { Badge, Button } from '@/components/ui';
@@ -36,7 +36,7 @@ export function JobList({
   const draftByJob = new Map(drafts.map((d) => [d.jobId, d]));
   const unsynced = drafts.filter((d) => d.ownerId === profile.userId && UNSYNCED.has(d.syncState)).length;
   const groups = groupForCrew(jobs.map((j) => ({ ...j.job, id: j.id })));
-  const today = nyDate(new Date());
+  const today = localDate(new Date(), profile.timeZone);
 
   return (
     <div className="pb-10">
@@ -77,7 +77,7 @@ export function JobList({
             <ul className="space-y-2">
               {groups[section].map((job) => (
                 <li key={job.id}>
-                  <JobCard job={job} draft={draftByJob.get(job.id)} today={today} onOpen={() => onOpen(job.id)} />
+                  <JobCard job={job} draft={draftByJob.get(job.id)} today={today} tz={profile.timeZone} onOpen={() => onOpen(job.id)} />
                 </li>
               ))}
             </ul>
@@ -91,11 +91,11 @@ export function JobList({
 /** "today" / "yesterday" read better mid-sentence; dates stay as they are. */
 const relative = (label: string) => (/^(Today|Tomorrow|Yesterday)$/.test(label) ? label.toLowerCase() : label);
 
-function JobCard({ job, draft, today, onOpen }: { job: CrewJob; draft: LocalActuals | undefined; today: string; onOpen: () => void }) {
+function JobCard({ job, draft, today, tz, onOpen }: { job: CrewJob; draft: LocalActuals | undefined; today: string; tz: string; onOpen: () => void }) {
   const hazards = job.areas.some((a) => a.hazards.length > 0);
   const when =
     job.status === 'completed' && job.completedAt
-      ? `Completed ${relative(dayLabel(nyDate(job.completedAt), today))}`
+      ? `Completed ${relative(dayLabel(localDate(job.completedAt, tz), today))}`
       : job.scheduledStart
         ? `${dayLabel(job.scheduledStart, today)}${job.scheduledDays ? ` · ${job.scheduledDays} day${job.scheduledDays === 1 ? '' : 's'}` : ''}`
         : 'Not scheduled yet';

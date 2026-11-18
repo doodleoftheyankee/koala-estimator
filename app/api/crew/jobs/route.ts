@@ -1,5 +1,5 @@
 // GET /api/crew/jobs: the signed-in crew's jobs for the offline crew app. Scheduled and in-progress
-// jobs, plus jobs completed in the last 14 days (New York dates), each with its signed scope
+// jobs, plus jobs completed in the last 14 days (the store's calendar days), each with its signed scope
 // (quantities and hours, never money) and the actuals entered so far (no cost columns).
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -22,15 +22,17 @@ export const dynamic = 'force-dynamic';
 const RECENT_DAYS = 14;
 
 export async function GET() {
-  const { error } = await authorize('crew', 'owner', 'office');
+  const { profile, error } = await authorize('crew', 'owner', 'office');
   if (error) return error;
   const supabase = await createClient();
 
   // crew_job_view only returns jobs of crews the user belongs to (owner/office see all).
-  const cutoff = recentCutoffIso(new Date(), RECENT_DAYS);
+  // Only the store the person is working in.
+  const cutoff = recentCutoffIso(new Date(), RECENT_DAYS, profile.location.timeZone);
   const view = await supabase
     .from('crew_job_view')
     .select(CREW_VIEW_COLUMNS)
+    .eq('location_id', profile.locationId)
     .or(`status.in.(scheduled,in_progress),and(status.eq.completed,completed_at.gte."${cutoff}")`)
     .order('scheduled_start', { ascending: true, nullsFirst: false })
     .order('job_id')

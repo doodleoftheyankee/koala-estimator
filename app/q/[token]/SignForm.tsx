@@ -3,7 +3,6 @@
 // Option picker + e-sign form for the public quote page. Works with a finger on a phone.
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Alert, Button, Card, Field, Input, cx } from '@/components/ui';
-import { ESIGN_CONSENT } from '@/lib/quotes/consent';
 
 type Tier = 'good' | 'better' | 'best';
 
@@ -146,6 +145,7 @@ export function SignForm({
   defaultTier,
   brandColor,
   pdfHref,
+  consentText,
   children,
 }: {
   token: string;
@@ -154,6 +154,8 @@ export function SignForm({
   defaultTier: Tier | null;
   brandColor: string;
   pdfHref: string;
+  /** lib/quotes/consent esignConsent() for the store's state; the server stores the same text. */
+  consentText: string;
   children?: ReactNode;
 }) {
   const [tier, setTier] = useState<Tier | null>(defaultTier);
@@ -324,7 +326,7 @@ export function SignForm({
               className="mt-0.5 h-6 w-6 shrink-0 accent-current"
               style={{ color: brandColor }}
             />
-            <span>{ESIGN_CONSENT}</span>
+            <span>{consentText}</span>
           </label>
           {error ? <Alert tone="red">{error}</Alert> : null}
           <Button size="lg" className="w-full" disabled={!canSubmit} onClick={submit}>

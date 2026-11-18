@@ -22,9 +22,11 @@ export function reuseKeys(address: string): string[] {
  * matched as typed first, then against the address Google matched. A check that fails is logged
  * and the next one tried (the matched-address column may not be there yet).
  */
-export async function savedLookup(db: LookupDb, address: string | null, pin: LatLng | null) {
+export async function savedLookup(db: LookupDb, locationId: string, address: string | null, pin: LatLng | null) {
   const since = new Date(Date.now() - REUSE_HOURS * 60 * 60 * 1000).toISOString();
-  const recent = () => db.from('roof_lookups').select('id, created_at, result, pin_lat, pin_lng').eq('status', 'done').gte('created_at', since);
+  // Only this store's lookups are reused.
+  const recent = () =>
+    db.from('roof_lookups').select('id, created_at, result, pin_lat, pin_lng').eq('location_id', locationId).eq('status', 'done').gte('created_at', since);
   const queries = [];
   if (address !== null) {
     const keys = reuseKeys(address);

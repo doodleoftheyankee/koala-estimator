@@ -36,6 +36,12 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      # Node for the Newark parity check (prices the before/after pricing rows with vitest).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - run: bash scripts/test-db.sh
         env:

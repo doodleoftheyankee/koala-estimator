@@ -7,7 +7,7 @@ import { compactTakeoff, takeoffSchema, type RoofResult } from './lookup';
 const result: RoofResult = compactTakeoff(takeoffSchema.parse(JSON.parse(readFileSync(join(import.meta.dirname, '__fixtures__', 'roof-takeoff', '3-cross-gable.json'), 'utf8'))));
 
 type Row = Record<string, unknown>;
-const COLUMNS = ['id', 'created_at', 'created_by', 'address', 'address_key', 'pin_lat', 'pin_lng', 'status', 'result', 'error'];
+const COLUMNS = ['id', 'location_id', 'created_at', 'created_by', 'address', 'address_key', 'pin_lat', 'pin_lng', 'status', 'result', 'error'];
 
 /**
  * A small stand-in for the service-role client on roof_lookups: filters, order, limit and update,
@@ -54,7 +54,8 @@ function fakeDb(rows: Row[], { matchedColumn = true } = {}): LookupDb {
 }
 
 const now = () => new Date().toISOString();
-const done = (over: Row): Row => ({ id: crypto.randomUUID(), created_at: now(), status: 'done', result, address: null, address_key: null, pin_lat: null, pin_lng: null, matched_key: null, ...over });
+const LOC = 'store-1';
+const done = (over: Row): Row => ({ id: crypto.randomUUID(), location_id: LOC, created_at: now(), status: 'done', result, address: null, address_key: null, pin_lat: null, pin_lng: null, matched_key: null, ...over });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -71,30 +72,35 @@ describe('savedLookup', () => {
   it('finds a lookup of the same house written the way Google writes it', async () => {
     const earlier = done({ address: '12 Elkton Rd, Newark, DE 19711', address_key: '12 elkton rd newark de 19711' });
     const db = fakeDb([earlier]);
-    expect((await savedLookup(db, '12 Elkton Rd, Newark, DE 19711, USA', null))?.id).toBe(earlier.id);
-    expect((await savedLookup(db, '12 Elkton Rd, Newark, DE 19711-5401', null))?.id).toBe(earlier.id);
-    expect(await savedLookup(db, '14 Elkton Rd, Newark, DE 19711', null)).toBeNull();
+    expect((await savedLookup(db, LOC, '12 Elkton Rd, Newark, DE 19711, USA', null))?.id).toBe(earlier.id);
+    expect((await savedLookup(db, LOC, '12 Elkton Rd, Newark, DE 19711-5401', null))?.id).toBe(earlier.id);
+    expect(await savedLookup(db, LOC, '14 Elkton Rd, Newark, DE 19711', null)).toBeNull();
   });
 
   it('finds a page lookup by the address Google matched', async () => {
     const page = done({ address: '3 Cross Gable Ct', address_key: '3 cross gable ct', matched_key: '3 cross gable ct newark de 19711' });
-    expect((await savedLookup(fakeDb([page]), '3 Cross Gable Ct, Newark, DE 19711', null))?.id).toBe(page.id);
+    expect((await savedLookup(fakeDb([page]), LOC, '3 Cross Gable Ct, Newark, DE 19711', null))?.id).toBe(page.id);
   });
 
   it('still finds a lookup by what was typed when the matched-address column is not there yet', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const typed = done({ address: '3 Cross Gable Ct', address_key: '3 cross gable ct' });
     const db = fakeDb([typed], { matchedColumn: false });
-    expect((await savedLookup(db, '3 cross gable  ct', null))?.id).toBe(typed.id);
-    expect(await savedLookup(db, '9 Other St, Newark, DE 19711', null)).toBeNull();
+    expect((await savedLookup(db, LOC, '3 cross gable  ct', null))?.id).toBe(typed.id);
+    expect(await savedLookup(db, LOC, '9 Other St, Newark, DE 19711', null)).toBeNull();
     expect(console.error).toHaveBeenCalledWith('[roof] could not check for a saved lookup', expect.stringContaining('matched_key'));
   });
 
   it('finds a pin within about 2 m, not one farther away', async () => {
     const pin = done({ pin_lat: 39.68347, pin_lng: -75.75039 });
     const db = fakeDb([pin]);
-    expect((await savedLookup(db, null, { lat: 39.683471, lng: -75.750391 }))?.id).toBe(pin.id);
-    expect(await savedLookup(db, null, { lat: 39.6835, lng: -75.75039 })).toBeNull();
+    expect((await savedLookup(db, LOC, null, { lat: 39.683471, lng: -75.750391 }))?.id).toBe(pin.id);
+    expect(await savedLookup(db, LOC, null, { lat: 39.6835, lng: -75.75039 })).toBeNull();
+  });
+
+  it("never reuses another store's lookup", async () => {
+    const other = done({ location_id: 'store-2', address: '12 Elkton Rd, Newark, DE 19711', address_key: '12 elkton rd newark de 19711' });
+    expect(await savedLookup(fakeDb([other]), LOC, '12 Elkton Rd, Newark, DE 19711', null)).toBeNull();
   });
 });
 
@@ -113,8 +119,8 @@ describe('finishLookup', () => {
     expect(row).toEqual({ id: 'a', status: 'done', result });
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('20261118000001'), expect.stringContaining('matched_key'));
     // And it is found again by what was typed.
-    Object.assign(row, { created_at: now(), address: '3 Cross Gable Ct', address_key: '3 cross gable ct', pin_lat: null, pin_lng: null });
-    expect((await savedLookup(db, '3 Cross Gable Ct', null))?.id).toBe('a');
+    Object.assign(row, { location_id: LOC, created_at: now(), address: '3 Cross Gable Ct', address_key: '3 cross gable ct', pin_lat: null, pin_lng: null });
+    expect((await savedLookup(db, LOC, '3 Cross Gable Ct', null))?.id).toBe('a');
   });
 
   it('adds no matched key for a tapped roof', async () => {

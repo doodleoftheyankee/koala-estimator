@@ -8,7 +8,8 @@ import { MAX_CUTOUTS, measuredSqft, newCutout, type Measurement } from '@/lib/me
 import { ACCESS_HINTS } from '@/lib/format';
 
 export const PHOTO_READ_MODEL = 'claude-opus-5-5';
-export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-11';
+// 2026-11-19: the store's area moved from the system prompt to the request (multi-location).
+export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-19';
 /** Photos per read (the area's photo limit). */
 export const MAX_READ_PHOTOS = 6;
 /** Phones shrink each photo to ~1568px on the long edge for reading (the size the model works at). */
@@ -238,6 +239,8 @@ export const readContextSchema = z.object({
   existingMaterial: z.string().max(80).nullable(),
   yearBuilt: z.number().int().min(1700).max(2100).nullable(),
   codeR: z.number().finite().min(0).max(100).nullable(),
+  /** Where the house is, from the estimate's store ("Delaware, IECC climate zone 4A"). Set by the server. */
+  region: z.string().trim().max(160).nullish(),
 });
 export type ReadContext = z.infer<typeof readContextSchema>;
 
@@ -251,7 +254,7 @@ const JOB_WORDS: Record<JobType, string> = {
 };
 
 /** The system prompt. Kept free of per-request details so it stays identical between requests. */
-export const PHOTO_READ_SYSTEM = `You help insulation estimators at Koala Insulation of Newark, Delaware (IECC climate zone 4A) read photos of a space they are quoting. You see the estimator's phone photos of one area and report what you can actually see, so they can fill in the quote faster and catch problems early.
+export const PHOTO_READ_SYSTEM = `You help insulation estimators at a Koala Insulation store read photos of a space they are quoting. You see the estimator's phone photos of one area and report what you can actually see, so they can fill in the quote faster and catch problems early.
 
 Be accurate rather than complete. When something isn't visible or there is no basis for a number, use null (or "not_visible", "unclear", low confidence) instead of guessing. The estimator reviews every finding before it changes the quote.
 
@@ -289,6 +292,7 @@ export function readRequestText(ctx: ReadContext, photoCount: number): string {
   const lines = [
     `These ${photoCount} photo${photoCount === 1 ? '' : 's'} show ${JOB_WORDS[ctx.jobType]} the estimator is quoting, named "${ctx.areaName}".`,
   ];
+  if (ctx.region) lines.push(`The house is in ${ctx.region}.`);
   if (ctx.yearBuilt) lines.push(`The house was built in ${ctx.yearBuilt}.`);
   if (ctx.codeR) lines.push(`The code minimum for this kind of area here is R-${ctx.codeR}.`);
   if (ctx.sqft) lines.push(`The estimator has ${ctx.measured ? 'measured' : 'entered'} ${Math.round(ctx.sqft)} sq ft for this area.`);

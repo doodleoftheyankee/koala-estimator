@@ -138,7 +138,6 @@ export function orderFor(roofSqft: number, wastePct: number): Order {
 // The takeoff as a report or a summary
 // ---------------------------------------------------------------------------------------------
 
-export const COMPANY = 'Koala Insulation of Newark';
 export const LOW_SLOPE_LABEL = 'Low-slope roof (under 2/12, not shingles)';
 export const NO_SHINGLES = 'No shingle area: flat or low-slope roof.';
 /** "Squares", or "Squares (2/12 and up)" when low-slope faces were kept out. */
@@ -200,6 +199,8 @@ export interface TakeoffFace {
 
 /** Everything the printed report and the copied summary say about a lookup. */
 export interface TakeoffData {
+  /** The store whose report this is (its name heads the report); blank when unknown. */
+  company: string;
   /** The address Google matched, or the roof tapped on the photo (near which house, and where). */
   title: string;
   lookedUp: string;
@@ -252,7 +253,7 @@ export function takeoffData(
   c: RoofChoices,
   wastePct: number,
   lookedUpAt: Date,
-  { warnings = r.warnings, near = null }: { warnings?: readonly string[]; near?: string | null } = {},
+  { warnings = r.warnings, near = null, company = '' }: { warnings?: readonly string[]; near?: string | null; company?: string } = {},
 ): TakeoffData {
   const f = roofFigures(r, c);
   const roofSqft = roofSurfaceSqft(r);
@@ -261,6 +262,7 @@ export function takeoffData(
   const waste = clampWaste(wastePct);
   const ordered = shingles !== null && shingles > 0 ? shingles : null;
   return {
+    company: company.trim(),
     title: r.address ?? tappedTitle(r.point, near),
     lookedUp: lookedUpText(lookedUpAt),
     photo: photoText(r),
@@ -295,7 +297,7 @@ export function takeoffData(
 /** The takeoff as plain text, to paste into a note, a text or an email. */
 export function summaryText(d: TakeoffData): string {
   const L: string[] = [];
-  L.push(`${COMPANY}: roof takeoff`, d.title, `Looked up ${d.lookedUp}. ${d.photo}.`, '');
+  L.push(d.company ? `${d.company}: roof takeoff` : 'Roof takeoff', d.title, `Looked up ${d.lookedUp}. ${d.photo}.`, '');
   L.push(`Attic floor: ${sqftText(d.atticFloorSqft)} (${d.atticNote.replace(/\.$/, '')})`);
   if (d.deckSqft !== null) L.push(`Roof deck over the attic (spray foam): ${sqftText(d.deckSqft)}`);
   L.push(`Footprint: ${sqftText(d.footprintSqft)} (roof outline seen from above, to the drip edge)`);

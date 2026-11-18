@@ -4,7 +4,7 @@ import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 
 export const metadata: Metadata = {
   title: { default: 'Koala Estimator', template: '%s · Koala Estimator' },
-  description: 'Koala Insulation of Newark: estimates and quotes',
+  description: 'Koala Insulation: estimates and quotes',
   applicationName: 'Koala Estimator',
   appleWebApp: { capable: true, title: 'Koala Estimator', statusBarStyle: 'default' },
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },

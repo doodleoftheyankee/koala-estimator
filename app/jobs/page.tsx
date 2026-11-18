@@ -4,7 +4,7 @@ import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
+import { formatDateTime, formatYmd, localDate } from '@/lib/jobs/dates';
 import { signedOption } from '@/lib/jobs/office';
 import { groupForOffice, OFFICE_GROUP_LABELS, OFFICE_GROUPS, type OfficeGroup } from '@/lib/jobs/status';
 import { isHistoryGroup } from '@/lib/jobs/officeList';
@@ -26,9 +26,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const profile = await requireRole('owner', 'office');
   const db = await createClient();
   const { all } = await searchParams;
-  const { jobs, partial, error } = await loadJobList(db, all && isHistoryGroup(all) ? all : null);
+  const { jobs, partial, error } = await loadJobList(db, profile.locationId, all && isHistoryGroup(all) ? all : null);
   const groups = groupForOffice(jobs);
-  const today = nyDate(new Date());
+  const tz = profile.location.timeZone;
+  const today = localDate(new Date(), tz);
 
   return (
     <>
@@ -69,7 +70,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
               <ul className="grid gap-3 md:grid-cols-2">
                 {(g === 'verified' || g === 'awaiting_verification' ? sortByCompletion(groups[g]) : groups[g]).map((j) => (
                   <li key={j.id}>
-                    <JobCard job={j} group={g} today={today} />
+                    <JobCard job={j} group={g} today={today} tz={tz} />
                   </li>
                 ))}
               </ul>
@@ -83,7 +84,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
 const sortByCompletion = (jobs: JobListItem[]) => [...jobs].sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
 
-function JobCard({ job, group, today }: { job: JobListItem; group: OfficeGroup; today: string }) {
+function JobCard({ job, group, today, tz }: { job: JobListItem; group: OfficeGroup; today: string; tz: string }) {
   const option = signedOption({ document: { options: job.docOptions } }, job.signedTier, job.signedPrice);
   const when = job.scheduledStart
     ? `${formatYmd(job.scheduledStart, today)}${job.scheduledDays ? ` · ${job.scheduledDays} day${job.scheduledDays === 1 ? '' : 's'}` : ''}`
@@ -104,7 +105,7 @@ function JobCard({ job, group, today }: { job: JobListItem; group: OfficeGroup; 
         {group === 'awaiting_verification' || group === 'verified' ? (
           <span>
             {job.actualsCount ? `${job.verifiedCount}/${job.actualsCount} rows verified` : 'No actuals yet'}
-            {job.completedAt ? ` · done ${formatNyDateTime(job.completedAt)}` : ''}
+            {job.completedAt ? ` · done ${formatDateTime(job.completedAt, tz)}` : ''}
           </span>
         ) : null}
       </div>
