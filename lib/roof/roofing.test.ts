@@ -17,7 +17,6 @@ import {
   NO_SHINGLES,
   oneDecimal,
   orderFor,
-  OUTLINE_COLOR,
   photoText,
   presentEdges,
   REPORT_FOOTER,
@@ -40,21 +39,14 @@ const choices = (overhangIn: number, excluded: number[], unmatchedOut = false): 
 const noon = new Date(2026, 10, 17, 12, 5);
 const roundSqftTo10 = (n: number) => Math.round(n / 10) * 10;
 
-describe('edge colours', () => {
-  it('has one colour and a plain description for every edge type, as on the Roof Takeoff page', () => {
+describe('edge names', () => {
+  it('has a name and a plain description for every edge type (colours live in lib/roof/draw.ts)', () => {
     expect(Object.keys(EDGE_INFO)).toEqual([...EDGE_TYPES]);
-    expect(EDGE_INFO.ridge.color).toBe('#FF5A5A');
-    expect(EDGE_INFO.hip.color).toBe('#FFC21A');
-    expect(EDGE_INFO.valley.color).toBe('#3FA9FF');
-    expect(EDGE_INFO.eave.color).toBe('#4CD07D');
-    expect(EDGE_INFO.rake.color).toBe('#FF7AD0');
-    expect(EDGE_INFO.step.color).toBe('#B794FF');
-    expect(EDGE_INFO.headwall.color).toBe('#4FE3E3');
-    expect(EDGE_INFO.break).toMatchObject({ label: 'Pitch break', color: '#FFFFFF', dash: [7, 5] });
-    const colors = EDGE_TYPES.filter((k) => k !== 'break').map((k) => EDGE_INFO[k].color);
-    expect(new Set(colors).size).toBe(colors.length);
-    expect(colors).not.toContain(OUTLINE_COLOR);
-    for (const k of EDGE_TYPES) expect(EDGE_INFO[k].what).toMatch(/^[A-Z][a-z ,]+$/);
+    expect(EDGE_INFO.break).toMatchObject({ label: 'Pitch break', dash: [7, 5] });
+    for (const k of EDGE_TYPES) {
+      expect(EDGE_INFO[k].what).toMatch(/^[A-Z][a-z ,]+$/);
+      expect(EDGE_INFO[k]).not.toHaveProperty('color');
+    }
   });
 });
 
