@@ -1,12 +1,12 @@
 'use client';
-// "Look up from the address": the roof takeoff for an area. The Roof Takeoff service finds the house
-// on Google's aerial photo and measures the roof; this sheet shows the outline and the roof edges on
-// the photo and the number the area needs (attic floor or roof deck, crawlspace floor, garage
-// ceiling or wall run), with what to check on site right under it, then the roofing numbers and
-// materials (RoofTakeoff). The estimator sets the overhang, picks the roof faces that count, can
-// tap the right roof when Google picked the wrong house, and uses the number. Nothing changes in
-// the estimate until Use.
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+// "Look up from the address": the roof takeoff for an area, in the Daymark field register. The
+// Roof Takeoff service finds the house on Google's aerial photo and measures the roof. The sheet
+// opens on the photo and the house check ("Right house" / "Tap the right roof"), then the number
+// the area needs: readout tiles for an attic (attic floor or roof deck, the chosen one hi-vis),
+// one reading for a crawlspace floor, a garage ceiling or a wall run. The rest is RoofTakeoff's:
+// what to check on site, the overhang and faces, More details. The dock repeats the chosen value
+// ("Use 1,970 sq ft"). Nothing changes in the estimate until Use.
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import type { AreaDraft } from '@/lib/sync/draft';
 import type { Measurement } from '@/lib/measure/measure';
 import {
@@ -26,9 +26,10 @@ import {
   type RoofResult,
 } from '@/lib/roof/lookup';
 import { roofLookupService, setAreaPick, useAreaPick, useHouseLookup } from '@/lib/offline/roofLookup';
-import { Button, cx } from '@/components/ui';
+import { num } from '@/lib/format';
+import { Button, cx, Icon, IconButton, ReadoutTiles, Satellite, SignLabel, TriangleAlert, X } from '@/components/daymark';
 import { useOnline } from '../hooks';
-import { comma, TakeoffBody, useTakeoff } from './RoofTakeoff';
+import { sqftValue, TakeoffBody, TakeoffDock, useTakeoff } from './RoofTakeoff';
 
 /** The area form's limit on square feet. */
 const MAX_SQFT = 200_000;
@@ -68,24 +69,34 @@ export function RoofLookupButton({ estimateId, address, street, onOpen }: { esti
     ? `Looking up ${street.trim()}…`
     : state.last
       ? `Looked up ${street.trim()} on this visit. Tap to see it again.`
-      : `Measures ${street.trim()} from Google's aerial photo: attic floor, roof deck, wall run, and roofing squares and materials.`;
+      : `Measures ${street.trim()} from Google's aerial photo: attic floor, roof deck and wall run.`;
   return (
-    <div className="space-y-1">
-      <Button variant="secondary" size="lg" className="w-full" disabled={Boolean(reason)} onClick={onOpen}>
-        🛰️ Look up from the address
+    <div className="space-y-1.5">
+      <Button size="lg" block icon={Satellite} disabled={Boolean(reason)} onClick={onOpen}>
+        Look up from the address
       </Button>
-      <p className={cx('text-xs', reason ? 'text-slate-600' : 'text-slate-500')}>{reason ?? hint}</p>
+      <p className={cx('text-[15px] leading-snug', reason ? 'font-bold text-ink-2' : 'font-medium text-ink-2')}>{reason ?? hint}</p>
     </div>
   );
 }
 
-/** What Use would apply for this area, or why it can't yet. */
-function applyFor(result: RoofResult, f: RoofFigures, choices: RoofChoices, job: RoofJob, pick: RoofPick): { apply: RoofApply; label: string } | { reason: string } {
+/** What Use would apply for this area, or why it can't yet. `parts` is the button's words around the number. */
+function applyFor(result: RoofResult, f: RoofFigures, choices: RoofChoices, job: RoofJob, pick: RoofPick): { apply: RoofApply; parts: [string, string, string] } | { reason: string } {
   if (job === 'walls') {
-    if (f.wallRunFt === null) return { reason: "No outline was found, so there's no wall run. Measure the walls on site." };
+    if (f.wallRunFt === null)
+      return {
+        reason: "No outline was found, so there's no wall run. Measure the walls on site.",
+      };
     const ft = roundFt(f.wallRunFt);
     if (ft <= 0) return { reason: 'Nothing to use: turn on some roof faces.' };
-    return { apply: { use: 'walls', wallRunFt: ft, note: noteLine(result, f, choices, job) }, label: `Use ${comma(ft)} ft as the wall run` };
+    return {
+      apply: {
+        use: 'walls',
+        wallRunFt: ft,
+        note: noteLine(result, f, choices, job),
+      },
+      parts: ['Use', num(ft), 'ft as the wall run'],
+    };
   }
   if (job === 'garage' && f.facesKept === 0 && !(offersUnmatched(result, job) && !choices.unmatchedOut)) return { reason: "Turn on the garage's roof faces." };
   const deck = job === 'attic' && pick === 'deck';
@@ -94,7 +105,24 @@ function applyFor(result: RoofResult, f: RoofFigures, choices: RoofChoices, job:
   if (sqft <= 0) return { reason: 'Nothing to use: turn on some roof faces.' };
   if (sqft > MAX_SQFT) return { reason: 'Too big for one area. Measure it by hand.' };
   const what = deck ? PICK_WORDS.deck.note : JOB_WORDS[job].number.toLowerCase();
-  return { apply: { use: deck ? 'deck' : 'floor', sqft, what, note: noteLine(result, f, choices, job, pick) }, label: `Use ${comma(sqft)} sq ft` };
+  return {
+    apply: {
+      use: deck ? 'deck' : 'floor',
+      sqft,
+      what,
+      note: noteLine(result, f, choices, job, pick),
+    },
+    parts: ['Use', num(sqft), 'sq ft'],
+  };
+}
+
+/** "Use 1,970 sq ft", the number in gauge numerals; one text run, so it is also the button's name. */
+function UseLabel({ parts }: { parts: [string, string, string] }) {
+  return (
+    <span>
+      {parts[0]} <span className="gauge-m text-[26px] leading-none">{parts[1]}</span> {parts[2]}
+    </span>
+  );
 }
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -106,6 +134,7 @@ export function RoofLookupSheet({
   address,
   onApply,
   onClose,
+  onMeasure,
 }: {
   area: AreaDraft;
   measurement: Measurement | undefined;
@@ -114,6 +143,11 @@ export function RoofLookupSheet({
   address: string;
   onApply: (a: RoofApply) => void;
   onClose: () => void;
+  /**
+   * "Measure by hand" after a failed lookup: open Measure for this area. Without it the button
+   * closes the sheet, back to the area and its Measure button.
+   */
+  onMeasure?: () => void;
 }) {
   const job: RoofJob = roofJob(area.jobType) ?? 'attic';
   const t = useTakeoff({ estimateId, areaId: area.id, address, job });
@@ -165,7 +199,7 @@ export function RoofLookupSheet({
   };
 
   const use = result && f && choices ? applyFor(result, f, choices, job, pick) : null;
-  const blocked = t.needsConfirm ? 'Check the house on the photo first: tap “Yes, this is the house”.' : use && 'reason' in use ? use.reason : null;
+  const blocked = t.needsConfirm ? 'Check the house first: tap Right house.' : use && 'reason' in use ? use.reason : null;
 
   return (
     <div
@@ -175,98 +209,102 @@ export function RoofLookupSheet({
       aria-label={`Roof takeoff for ${area.name}`}
       tabIndex={-1}
       onKeyDown={trapTab}
-      className="fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain bg-slate-100 outline-none"
+      className="fixed inset-0 z-50 m-0 flex flex-col overflow-y-auto overscroll-contain bg-canvas text-ink outline-none"
     >
-      <div className="sticky top-0 z-10 bg-white shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold leading-tight">🛰️ Roof takeoff</h2>
-            <p className="truncate text-xs text-slate-600">{area.name}</p>
+      <div className="sticky top-0 z-10 border-b-[length:var(--bw-x)] border-solid border-rule bg-surface" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-2.5">
+          <IconButton icon={X} label="Close" onClick={onClose} />
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-2 text-[22px] leading-tight font-extrabold tracking-[-0.01em]">
+              <Icon icon={Satellite} />
+              Roof takeoff
+            </h2>
+            <p className="truncate text-[15px] font-semibold text-ink-2">{area.name}</p>
           </div>
-          <Button variant="secondary" onClick={onClose}>
-            Close
-          </Button>
         </div>
-        {f ? <Numbers f={f} job={job} pick={pick} onPick={(p) => setAreaPick(area.id, p)} /> : null}
       </div>
 
-      <div className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 py-4">
-        <TakeoffBody t={t} mode="area" label={address} />
+      <div className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 pt-4 pb-6">
+        <TakeoffBody
+          t={t}
+          mode="area"
+          label={address}
+          numbers={f ? <Numbers f={f} job={job} pick={pick} onPick={(p) => setAreaPick(area.id, p)} /> : null}
+          steps={{ onMeasure: onMeasure ?? onClose }}
+        />
       </div>
 
       {result && use && t.picking === 'off' ? (
-        <div className="sticky bottom-0 z-10 bg-white/95 shadow-[0_-1px_4px_rgba(15,23,42,0.08)] backdrop-blur safe-bottom">
-          <div className="mx-auto max-w-2xl px-4 pt-3">
-            <Button size="lg" className="w-full" disabled={Boolean(blocked) || !('apply' in use)} onClick={() => 'apply' in use && !blocked && onApply(use.apply)}>
-              {'apply' in use ? use.label : 'Use'}
-            </Button>
-            <p className={cx('mt-1 text-center text-xs', blocked ? 'font-medium text-amber-800' : 'text-slate-500')}>
-              {blocked ??
-                (job === 'walls' ? 'Sets the wall run in Measure; you add the wall height.' : `The ${'apply' in use && use.apply.use !== 'walls' ? use.apply.what : 'number'} goes into Square feet, with a line in the prep notes.`)}
-            </p>
-          </div>
-        </div>
+        <TakeoffDock blocked={blocked} note={job === 'walls' ? 'Fills the wall run in Measure; you add the wall height.' : 'Fills Square feet and notes the source.'}>
+          <Button variant="primary" size="lg" block disabled={Boolean(blocked) || !('apply' in use)} onClick={() => 'apply' in use && !blocked && onApply(use.apply)}>
+            {'apply' in use ? <UseLabel parts={use.parts} /> : 'Use'}
+          </Button>
+        </TakeoffDock>
       ) : null}
     </div>
   );
 }
 
-/** The number the area takes, big and kept in view; attic and commercial areas choose between two. */
+/** Gauges this long (five digits and a comma) step down a size so they stay inside a phone's tile. */
+const tileSize = (...values: string[]) => (values.some((v) => v.length >= 6) ? 'l' : 'xl');
+
+/**
+ * The number the area takes. An attic chooses between two readout tiles (the chosen one hi-vis);
+ * a crawlspace, garage or wall run has one reading.
+ */
 function Numbers({ f, job, pick, onPick }: { f: RoofFigures; job: RoofJob; pick: RoofPick; onPick: (p: RoofPick) => void }) {
-  const value = (n: number | null, unit: string, round: (n: number) => number) => (
-    <span className="whitespace-nowrap text-3xl font-extrabold tabular-nums">
-      {n === null ? '—' : comma(round(n))}
-      {n === null ? null : <span className="ml-1 text-sm font-semibold">{unit}</span>}
-    </span>
-  );
   if (job === 'attic') {
-    const option = (p: RoofPick, n: number | null) => {
-      const on = pick === p;
-      return (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={on}
-          onClick={() => onPick(p)}
-          className={cx('flex min-w-0 flex-col items-start rounded-xl px-3 py-2 text-left ring-1 transition-colors', on ? 'bg-brand-50 text-brand-800 ring-2 ring-brand-600' : 'bg-white text-slate-700 ring-slate-300')}
-        >
-          <span className="flex items-start gap-1.5 text-xs font-semibold leading-tight">
-            <span aria-hidden className={cx('mt-0.5 h-3 w-3 shrink-0 rounded-full ring-2', on ? 'bg-brand-600 ring-brand-600' : 'ring-slate-400')} />
-            {PICK_WORDS[p].label}
-          </span>
-          {value(n, 'sq ft', roundSqft)}
-        </button>
-      );
-    };
+    const floor = sqftValue(f.floorSqft);
+    const deck = sqftValue(f.deckSqft);
     return (
-      <div className="mx-auto max-w-2xl px-4 pb-2">
-        <div role="radiogroup" aria-label="Which number to use" className="grid grid-cols-2 gap-2">
-          {option('floor', f.floorSqft)}
-          {option('deck', f.deckSqft)}
-        </div>
-        <p className="mt-1.5 text-xs leading-snug text-slate-600">Top-floor ceiling seen from above. Finished attic rooms, cathedral ceilings and knee walls need measuring on site.</p>
-      </div>
+      <ReadoutTiles
+        label="Which number to use"
+        value={pick}
+        onChange={onPick}
+        size={tileSize(floor, deck)}
+        className="[--sign-size:11px]"
+        options={[
+          {
+            value: 'floor',
+            label: 'Attic floor',
+            meaning: 'Blown-in, on the ceiling',
+            gauge: floor,
+            unit: 'square feet',
+          },
+          {
+            value: 'deck',
+            label: 'Roof deck',
+            meaning: 'Spray foam, under the roof',
+            gauge: deck,
+            unit: f.deckSqft === null ? undefined : 'square feet',
+          },
+        ]}
+      />
     );
   }
   const garageEmpty = job === 'garage' && f.facesKept === 0 && f.floorSqft === 0;
-  const hint =
+  const walls = job === 'walls';
+  const value = walls ? (f.wallRunFt === null ? '—' : num(roundFt(f.wallRunFt))) : garageEmpty ? '—' : sqftValue(f.floorSqft);
+  const hint: ReactNode =
     job === 'crawlspace'
       ? 'The house footprint inside the walls. Leave out the garage and porch.'
       : job === 'garage'
         ? garageEmpty
           ? "Turn on the garage's roof faces."
           : 'From the roof faces turned on below.'
-        : `${f.wallRunRough ? "Rough: from the building's size. " : ''}Porch and garage walls count unless their faces are off.`;
+        : 'Porch and garage walls count unless their faces are off.';
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-2">
-      <div className="rounded-xl bg-brand-50 px-3 py-1.5 text-brand-800">
-        <div className="text-xs font-bold uppercase tracking-wide">
-          {JOB_WORDS[job].number}
-          {job === 'walls' && f.wallRunRough ? <span className="ml-2 font-semibold normal-case tracking-normal text-amber-800">rough: from the building&apos;s size</span> : null}
-        </div>
-        {job === 'walls' ? value(f.wallRunFt, 'ft', roundFt) : value(garageEmpty ? null : f.floorSqft, 'sq ft', roundSqft)}
-      </div>
-      <p className={cx('mt-1.5 text-xs leading-snug', garageEmpty ? 'font-semibold text-amber-800' : 'text-slate-600')}>{hint}</p>
+    <div data-readout className="plate flex min-w-0 flex-col items-start gap-2 p-4">
+      <SignLabel tone="ink">{JOB_WORDS[job].number}</SignLabel>
+      <span className={cx('text-[15px] leading-snug', garageEmpty ? 'font-bold text-warn' : 'font-semibold text-ink-2')}>{hint}</span>
+      {walls && f.wallRunRough ? (
+        <span className="flex items-center gap-1.5 text-[15px] font-bold text-warn">
+          <Icon icon={TriangleAlert} size="xs" />
+          Rough: from the building&apos;s size
+        </span>
+      ) : null}
+      <span className="gauge mt-1 text-[56px] text-ink">{value}</span>
+      {value === '—' ? null : <SignLabel tone="ink">{walls ? 'feet' : 'square feet'}</SignLabel>}
     </div>
   );
 }

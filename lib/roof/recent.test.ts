@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recentLookups, RECENT_LIMIT, type RecentRow } from './recent';
+import { nearestHouse, NEAR_M, recentLookups, RECENT_LIMIT, type RecentRow } from './recent';
 import { SQFT_PER_M2 } from './lookup';
 
 const ME = 'u-me';
@@ -48,6 +48,31 @@ describe('recentLookups', () => {
     expect(out.map((r) => r.id)).toEqual(['pin', 'other pin']);
     expect(out[0]).toMatchObject({ label: 'Roof tapped at 39.68347, -75.75039', tapped: true });
     expect(out[1]!.label).toBe('Roof tapped at 39.68350, -75.75040');
+  });
+
+  it('a tapped roof near a house looked up by its address is titled by that house', () => {
+    const elkton = { lat: 39.6833743, lng: -75.7503689 };
+    const rows = [
+      row('pin', 1, { address: null, matched: null, pin_lat: 39.68347, pin_lng: -75.75039, point: { lat: 39.68347, lng: -75.75039 } }),
+      row('house', 5, { point: elkton }),
+      row('far pin', 6, { address: null, matched: null, pin_lat: 39.6829, pin_lng: -75.7509, point: { lat: 39.6829, lng: -75.7509 } }),
+      row('typed only', 7, { address: '3 Cross Gable Ct', matched: null, point: { lat: 39.681482, lng: -75.7499942 } }),
+      row('pin by the typed one', 8, { address: null, matched: null, pin_lat: 39.68152, pin_lng: -75.75002 }),
+    ];
+    expect(recentLookups(rows, ME).map((r) => [r.id, r.label, r.tapped])).toEqual([
+      ['pin', 'Roof tapped near 12 Elkton Rd, Newark, DE 19711, USA', true],
+      ['house', '12 Elkton Rd, Newark, DE 19711, USA', false],
+      // About 70 m away: too far to say which house it is near.
+      ['far pin', 'Roof tapped at 39.68290, -75.75090', true],
+      ['typed only', '3 Cross Gable Ct', false],
+      ['pin by the typed one', 'Roof tapped near 3 Cross Gable Ct', true],
+    ]);
+    // The nearest of two; nothing for a spot with no house near, or for rows without a place.
+    const neighbour = row('b', 2, { matched: '14 Elkton Rd, Newark, DE 19711, USA', point: { lat: 39.68348, lng: -75.7504 } });
+    expect(nearestHouse([row('a', 1, { point: elkton }), neighbour], { lat: 39.68347, lng: -75.75039 })).toBe('14 Elkton Rd, Newark, DE 19711, USA');
+    expect(nearestHouse([row('a', 1, { point: elkton })], { lat: 39.69, lng: -75.75 })).toBeNull();
+    expect(nearestHouse([row('a', 1, { point: 'here' }), row('b', 2)], elkton)).toBeNull();
+    expect(NEAR_M).toBe(60);
   });
 
   it("names who looked it up when it was someone else (the owner's list)", () => {

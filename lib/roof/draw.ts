@@ -3,7 +3,36 @@
 // draws these shapes as SVG (app/field/measure/RoofTakeoff); the printed report paints them onto a
 // canvas with paintRoofMap. mapShapes is pure; paintRoofMap needs only a 2D canvas context.
 import { MAP_SIZE, mapFrame, mapZoom, type EdgeType, type RoofResult } from './lookup';
-import { EDGE_INFO, OUTLINE_COLOR } from './roofing';
+import { EDGE_INFO } from './roofing';
+
+/**
+ * The colours on the aerial photo (Daymark "Roof map colours"). Coloured lines on a photo can't
+ * meet contrast by themselves, because lawn and shingles vary, so every line is drawn on an ink
+ * casing, the way roads are drawn on maps, and each colour stands out from the casing. The same
+ * values as the --e-* tokens in app/globals.css (draw.test.ts checks); the screen and the printed
+ * report both draw with these. Step and headwall flashing have no token yet: their colours are
+ * the old pink and green, kept apart from the others.
+ */
+export const MAP_COLORS = {
+  /**
+   * The casing under every line, and the face number discs: a face's number is white on an ink
+   * disc; a face left out gets an ink-outlined white disc instead.
+   */
+  casing: '#0C0E10',
+  /** The roof outline, the face numbers and the ring around their discs. */
+  light: '#FFFFFF',
+  /** Each edge type. A pitch break is also dashed (EDGE_INFO.break.dash). */
+  edges: { ridge: '#FF453A', hip: '#FF9F0A', valley: '#2FD0FF', eave: '#FFFFFF', rake: '#C58BFF', step: '#FF7AD0', headwall: '#4CD07D', break: '#FFE14D' } satisfies Record<EdgeType, string>,
+  /** Faces left out: ink shading under the white hatch. */
+  leftOut: 'rgba(12,14,16,0.55)',
+  hatch: 'rgba(255,255,255,0.8)',
+} as const;
+
+/** The colour of an edge type on the photo and in its key. */
+export const edgeColor = (type: EdgeType): string => MAP_COLORS.edges[type];
+
+/** Line widths on screen, in CSS pixels: the colour, and the casing 2px wider on each side. */
+export const MAP_LINES = { edge: 4, outline: 2.5, casing: 4 } as const;
 
 export interface Pt {
   x: number;
@@ -113,13 +142,15 @@ const PRINT = { edge: 5.6, edgeHalo: 10.4, outline: 4, outlineHalo: 8, hatch: 2,
 
 /**
  * Paints the photo and the shapes onto a square canvas `size` pixels wide (the printed report).
- * Without a photo, a dark square stands in.
+ * Without a photo, a dark square stands in. `font` is the family for the face numbers (the
+ * report passes the app's number face, Archivo, once it has loaded).
  */
-export function paintRoofMap(g: CanvasRenderingContext2D, size: number, s: MapShapes, img: CanvasImageSource | null, opts: { edges?: boolean } = {}): void {
+export function paintRoofMap(g: CanvasRenderingContext2D, size: number, s: MapShapes, img: CanvasImageSource | null, opts: { edges?: boolean; font?: string } = {}): void {
   const k = size / MAP_SIZE;
+  const C = MAP_COLORS;
   g.save();
   g.setTransform(k, 0, 0, k, 0, 0);
-  g.fillStyle = '#1e293b';
+  g.fillStyle = C.casing;
   g.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
   // Enlarged about the middle, like the photo on screen; lines and labels keep their size.
   const m = s.magnify;
@@ -139,10 +170,10 @@ export function paintRoofMap(g: CanvasRenderingContext2D, size: number, s: MapSh
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
     g.save();
     path(f.pts, true);
-    g.fillStyle = 'rgba(15,23,42,0.55)';
+    g.fillStyle = C.leftOut;
     g.fill();
     g.clip();
-    g.strokeStyle = 'rgba(255,255,255,0.75)';
+    g.strokeStyle = C.hatch;
     g.lineWidth = PRINT.hatch / m;
     for (let x = x0 - (y1 - y0); x < x1; x += PRINT.hatchGap / m) {
       g.beginPath();
@@ -156,10 +187,10 @@ export function paintRoofMap(g: CanvasRenderingContext2D, size: number, s: MapSh
   g.lineCap = 'round';
   for (const ring of s.outline) {
     path(ring, true);
-    g.strokeStyle = 'rgba(0,0,0,0.6)';
+    g.strokeStyle = C.casing;
     g.lineWidth = PRINT.outlineHalo / m;
     g.stroke();
-    g.strokeStyle = OUTLINE_COLOR;
+    g.strokeStyle = C.light;
     g.lineWidth = PRINT.outline / m;
     g.stroke();
   }
@@ -168,28 +199,28 @@ export function paintRoofMap(g: CanvasRenderingContext2D, size: number, s: MapSh
       const info = EDGE_INFO[e.type];
       path(e.pts, false);
       g.setLineDash([]);
-      g.strokeStyle = 'rgba(0,0,0,0.65)';
+      g.strokeStyle = C.casing;
       g.lineWidth = PRINT.edgeHalo / m;
       g.stroke();
       g.setLineDash(info.dash ? info.dash.map((d) => (d * 1.6) / m) : []);
-      g.strokeStyle = info.color;
+      g.strokeStyle = edgeColor(e.type);
       g.lineWidth = PRINT.edge / m;
       g.stroke();
     }
     g.setLineDash([]);
   }
-  g.font = `700 ${PRINT.font / m}px system-ui, sans-serif`;
+  g.font = `800 ${PRINT.font / m}px ${opts.font ?? 'system-ui, sans-serif'}`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   for (const l of s.labels) {
     g.beginPath();
     g.arc(l.at.x, l.at.y, PRINT.label / m, 0, Math.PI * 2);
-    g.fillStyle = l.out ? '#e2e8f0' : '#0f172a';
+    g.fillStyle = l.out ? C.light : C.casing;
     g.fill();
     g.lineWidth = PRINT.ring / m;
-    g.strokeStyle = '#ffffff';
+    g.strokeStyle = l.out ? C.casing : C.light;
     g.stroke();
-    g.fillStyle = l.out ? '#475569' : '#ffffff';
+    g.fillStyle = l.out ? C.casing : C.light;
     g.fillText(String(l.n), l.at.x, l.at.y + 1 / m);
   }
   g.restore();
