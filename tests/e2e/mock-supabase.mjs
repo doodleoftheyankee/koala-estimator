@@ -210,4 +210,4 @@ http.createServer(async (req, res) => {
   } catch (e) {
     console.error(e); send(res, 500, { error: String(e) });
   }
-}).listen(54321, () => console.log('mock supabase on :54321'));
+}).listen(Number(process.env.MOCK_PORT ?? 54321), () => console.log(`mock supabase on :${process.env.MOCK_PORT ?? 54321}`));

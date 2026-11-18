@@ -10,7 +10,7 @@ import { sign } from './jwt.mjs';
 import { drawGable, turn } from './gable.mjs';
 import { execSync } from 'node:child_process';
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.APP_URL ?? 'http://localhost:3000';
 const SHOTS = (process.env.E2E_SHOTS ?? new URL('./shots', import.meta.url).pathname).replace(/\/?$/, '/');
 execSync(`mkdir -p ${SHOTS}`);
 const psql = (sql) => execSync(`psql "${process.env.E2E_DB_URL}" -tA -c "${sql.replace(/"/g, '\\"')}"`).toString().trim();
@@ -379,7 +379,7 @@ check((await roof.getByText('Low slope: not for shingles').count()) === 1, 'and 
 const useFloor = roof.getByRole('button', { name: 'Use 1,970 sq ft' });
 check(await useFloor.isDisabled(), 'Use waits until the estimator checks the house (Google placed it roughly)');
 check((await roof.getByText('Check the house on the photo first: tap “Yes, this is the house”.').count()) === 1, 'and says so');
-check((await page.locator('a[href*="54321"], a[href*="roof-takeoff"]').count()) === 0 && !/Roof Takeoff site/.test(roofText), 'nothing sends anyone to the Roof Takeoff site any more');
+check((await page.locator(`a[href*="${process.env.MOCK_PORT ?? 54321}"], a[href*="roof-takeoff"]`).count()) === 0 && !/Roof Takeoff site/.test(roofText), 'nothing sends anyone to the Roof Takeoff site any more');
 await page.screenshot({ path: SHOTS + '03e-roof-result.png' });
 await page.setViewportSize({ width: 390, height: 2600 });
 await page.screenshot({ path: SHOTS + '03f-roof-result-full.png' });

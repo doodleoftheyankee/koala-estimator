@@ -14,10 +14,13 @@ set -euo pipefail
 : "${DATABASE_URL:?}" "${POSTGREST_BIN:?}"
 cd "$(dirname "$0")/.."
 WORK="$(mktemp -d)"; export E2E_STORAGE="$WORK/storage" E2E_SHOTS="$WORK/shots"; mkdir -p "$E2E_STORAGE" "$E2E_SHOTS"
-BASE="${DATABASE_URL%%\?*}"; QUERY="${DATABASE_URL#"$BASE"}"; export E2E_DB_URL="${BASE%/*}/koala_e2e$QUERY"
+# Ports and the database name can be changed so several copies can run side by side
+# (E2E_KEEP=1 leaves the stack running after the flow, for screenshots).
+APP_PORT="${APP_PORT:-3000}"; PGRST_PORT="${PGRST_PORT:-3001}"; export MOCK_PORT="${MOCK_PORT:-54321}"; DB_NAME="${E2E_DB_NAME:-koala_e2e}"
+BASE="${DATABASE_URL%%\?*}"; QUERY="${DATABASE_URL#"$BASE"}"; export E2E_DB_URL="${BASE%/*}/$DB_NAME$QUERY"
 pids=(); cleanup() { for p in "${pids[@]}"; do pkill -P "$p" 2>/dev/null || true; kill "$p" 2>/dev/null || true; done; }; trap cleanup EXIT
 
-psql "$DATABASE_URL" -q -c "drop database if exists koala_e2e with (force)" -c "create database koala_e2e"
+psql "$DATABASE_URL" -q -c "drop database if exists $DB_NAME with (force)" -c "create database $DB_NAME"
 D() { psql "$E2E_DB_URL" -q -v ON_ERROR_STOP=1 "$@"; }
 D -f tests/sql/00_supabase_stub.sql
 for f in supabase/migrations/*.sql; do D -f "$f"; done
@@ -34,23 +37,24 @@ db-uri = "$AUTH_URL"
 db-schemas = "public"
 db-anon-role = "anon"
 jwt-secret = "e2e-super-secret-jwt-token-with-at-least-32-characters"
-server-port = 3001
+server-port = $PGRST_PORT
 CONF
 "$POSTGREST_BIN" "$WORK/pgrst.conf" > "$WORK/pgrst.log" 2>&1 & pids+=($!)
-node tests/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 & pids+=($!)
+POSTGREST_URL="http://127.0.0.1:$PGRST_PORT" node tests/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 & pids+=($!)
 
-export NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321 APP_URL=http://localhost:3000 NEXT_TELEMETRY_DISABLED=1 CRON_SECRET=e2e-cron-secret
+export NEXT_PUBLIC_SUPABASE_URL=http://localhost:$MOCK_PORT APP_URL=http://localhost:$APP_PORT NEXT_TELEMETRY_DISABLED=1 CRON_SECRET=e2e-cron-secret
 # AI photo reading talks to the stand-in in mock-supabase.mjs instead of Anthropic.
-export ANTHROPIC_API_KEY=e2e-test-key ANTHROPIC_BASE_URL=http://localhost:54321
+export ANTHROPIC_API_KEY=e2e-test-key ANTHROPIC_BASE_URL=http://localhost:$MOCK_PORT
 # Satellite lookups talk to the Roof Takeoff stand-in in the same file (it expects this partner key).
-export ROOF_TAKEOFF_URL=http://localhost:54321 ROOF_TAKEOFF_KEY=e2e-roof-key
+export ROOF_TAKEOFF_URL=http://localhost:$MOCK_PORT ROOF_TAKEOFF_KEY=e2e-roof-key
 NEXT_PUBLIC_SUPABASE_ANON_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.ANON))")"
 SUPABASE_SERVICE_ROLE_KEY="$(node -e "import('./tests/e2e/jwt.mjs').then(m=>console.log(m.SERVICE))")"
 export NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY
 npx next build > "$WORK/build.log"
 # Run next directly (not through npx) so the cleanup kills the server itself.
-node node_modules/next/dist/bin/next start -p 3000 > "$WORK/next.log" 2>&1 & pids+=($!)
-for _ in $(seq 1 30); do curl -sf http://localhost:3000/login >/dev/null && break; sleep 1; done
+node node_modules/next/dist/bin/next start -p "$APP_PORT" > "$WORK/next.log" 2>&1 & pids+=($!)
+for _ in $(seq 1 30); do curl -sf "http://localhost:$APP_PORT/login" >/dev/null && break; sleep 1; done
 
 node tests/e2e/run.mjs
 echo "Screenshots: $E2E_SHOTS"
+if [ "${E2E_KEEP:-}" = 1 ]; then echo "Stack left running: http://localhost:$APP_PORT (db $DB_NAME). Stop with Ctrl-C."; wait; fi
