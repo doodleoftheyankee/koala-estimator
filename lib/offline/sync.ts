@@ -96,6 +96,8 @@ export async function pullEstimates(ownerId: string): Promise<void> {
       if (merged) await db().estimates.put(merged);
     }
   });
+  // The phone now has the server's list: this is the time "Synced 2 min ago" counts from.
+  await setMeta(META.lastSync, new Date().toISOString());
   emit();
 }
 

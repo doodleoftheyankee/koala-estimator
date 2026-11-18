@@ -1,13 +1,14 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
+import { db, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
 import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
 import { newDraft } from '@/lib/sync/draft';
-import { Alert } from '@/components/ui';
+import { menuFor, phoneTabs } from '@/lib/nav';
+import { Banner, ButtonLink, LoadingSteps } from '@/components/daymark';
 import { useHideTabBar } from '@/components/shell';
 import { EstimateEditor } from './EstimateEditor';
 import { EstimateList } from './EstimateList';
-import { useOnline } from './hooks';
+import { useLive, useOnline } from './hooks';
 
 type View = { kind: 'list' } | { kind: 'edit'; id: string };
 
@@ -18,15 +19,25 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [ready, setReady] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
-  // An open estimate has its own bottom bar (price, Back, Next): the menu's tab bar steps aside.
+  // A sync the person asked for (Sync now): the header says "Syncing…" until it ends. Background
+  // syncs (every minute, on reconnect) stay quiet and only move "Synced 2 min ago" along.
+  const [syncing, setSyncing] = useState(false);
+  const lastSync = useLive(() => getMeta<string>(META.lastSync), [], null as string | null);
+  // An open estimate has its own bottom bar (price, Previous, Next): the menu's tab bar steps aside.
   useHideTabBar(view.kind === 'edit');
 
-  const runSync = useCallback(() => {
-    syncAll(profile.userId).catch((e) => {
-      if (e instanceof AuthRequiredError) setSignedOut(true);
-      else console.error(e);
-    });
-  }, [profile.userId]);
+  const runSync = useCallback(
+    () =>
+      syncAll(profile.userId).catch((e) => {
+        if (e instanceof AuthRequiredError) setSignedOut(true);
+        else console.error(e);
+      }),
+    [profile.userId],
+  );
+  const syncNow = useCallback(() => {
+    setSyncing(true);
+    void runSync().finally(() => setSyncing(false));
+  }, [runSync]);
 
   // Views are kept in component state + history.replaceState (not the Next router) so
   // switching screens never needs the network.
@@ -68,7 +79,7 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, [online, runSync]);
 
   useEffect(() => {
-    const t = setInterval(runSync, SYNC_INTERVAL_MS);
+    const t = setInterval(() => runSync(), SYNC_INTERVAL_MS);
     const onVisible = () => document.visibilityState === 'visible' && runSync();
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -77,26 +88,49 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
     };
   }, [runSync]);
 
-  if (!ready) return <div className="p-6 text-center text-slate-500">Loading…</div>;
+  // The dock offers Roof lookup only when the menu has no Roof lookup tab (an estimator's has one).
+  const roofIsTab = phoneTabs(menuFor(profile.role)).some((i) => i.href === '/field/roof');
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl">
-      {signedOut ? (
-        <div className="p-3">
-          <Alert tone="red">
-            Your session expired. Your work is saved on this phone.{' '}
-            <a className="font-semibold underline" href="/login?next=/field">
-              Sign in again
-            </a>{' '}
-            to sync it.
-          </Alert>
+    <main className="mx-auto w-full max-w-2xl">
+      {!ready ? (
+        <div className="px-4 pt-6">
+          <LoadingSteps steps={[{ label: 'Opening the estimates on this phone', state: 'doing' }]} />
         </div>
-      ) : null}
-      {view.kind === 'list' ? (
-        <EstimateList profile={profile} online={online} onOpen={(id) => go({ kind: 'edit', id })} onNew={createEstimate} onSync={runSync} />
       ) : (
-        <EstimateEditor key={view.id} id={view.id} profile={profile} online={online} onBack={() => go({ kind: 'list' })} requestSync={runSync} />
+        <>
+          {signedOut ? (
+            <div className="px-4 pt-4">
+              <Banner
+                tone="bad"
+                title="Your session expired."
+                action={
+                  <ButtonLink href="/login?next=/field" size="sm" prefetch={false}>
+                    Sign in again
+                  </ButtonLink>
+                }
+              >
+                Your work is saved on this phone. Sign in again to sync it.
+              </Banner>
+            </div>
+          ) : null}
+          {view.kind === 'list' ? (
+            <EstimateList
+              title={profile.role === 'estimator' ? 'Estimates' : 'Field app'}
+              profile={profile}
+              online={online}
+              syncing={syncing}
+              lastSync={lastSync}
+              showRoofLookup={!roofIsTab}
+              onOpen={(id) => go({ kind: 'edit', id })}
+              onNew={createEstimate}
+              onSync={syncNow}
+            />
+          ) : (
+            <EstimateEditor key={view.id} id={view.id} profile={profile} online={online} onBack={() => go({ kind: 'list' })} requestSync={runSync} />
+          )}
+        </>
       )}
-    </div>
+    </main>
   );
 }

@@ -6,6 +6,7 @@ import { db } from '@/lib/offline/db';
 import { addAreaPhoto, removeAreaPhoto, type LocalPhoto } from '@/lib/offline/photos';
 import { MAX_PHOTOS_PER_AREA, type RemotePhoto } from '@/lib/photos/rules';
 import { Badge, Button } from '@/components/ui';
+import { Camera, Icon, Image as ImageIcon } from '@/components/daymark';
 import { useLive, useOnline } from '../hooks';
 
 interface Shown {
@@ -110,11 +111,13 @@ export function AreaPhotos({ estimateId, areaId, ownerId, remote, onRemoteDelete
         <div className="grid grid-cols-2 gap-2">
           <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void add(e.target.files).then(() => (e.target.value = ''))} />
           <input ref={library} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void add(e.target.files).then(() => (e.target.value = ''))} />
-          <Button variant="secondary" disabled={busy !== null} onClick={() => camera.current?.click()}>
-            📷 Take photo
+          <Button variant="secondary" className="px-3!" disabled={busy !== null} onClick={() => camera.current?.click()}>
+            <Icon icon={Camera} />
+            Take photo
           </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => library.current?.click()}>
-            🖼 Choose
+          <Button variant="secondary" className="px-3!" disabled={busy !== null} onClick={() => library.current?.click()}>
+            <Icon icon={ImageIcon} />
+            Choose
           </Button>
         </div>
       ) : null}

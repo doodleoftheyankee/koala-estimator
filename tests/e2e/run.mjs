@@ -58,7 +58,7 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: SHOTS + '01-list.png' });
 
 step('create estimate');
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Pat');
 await page.getByLabel('Last name').fill('Lee');
 await page.getByLabel('Email').fill('pat@example.com');
@@ -147,7 +147,7 @@ step('pitch from a photo of the gable, in Measure');
   const read = await readingText();
   check((await sheet.getByTestId('pitch-value').innerText()).replace(/\s+/g, '') === '6.3/12', 'three taps on a tilted photo read 6.3/12');
   check(read.includes('Angle 27.7°') && read.includes('Pitch factor ×1.129'), 'with its angle and pitch factor: ' + read);
-  check(read.includes('Left side 6.3/12') && read.includes('Right side 6.3/12') && read.includes('✓ Both sides agree.'), 'both sides read 6.3/12 and agree');
+  check(read.includes('Left side 6.3/12') && read.includes('Right side 6.3/12') && read.includes('Both sides agree.'), 'both sides read 6.3/12 and agree');
   await page.screenshot({ path: SHOTS + '03a2-pitch-read.png' });
 
   // Dragging the peak sideways: a magnifier while dragging, and the sides stop agreeing.
@@ -213,7 +213,7 @@ step('pitch from a photo of the gable, in Measure');
 
 step('AI photo read');
 await page.getByRole('button', { name: /Read this photo/ }).click();
-await page.getByText('✨ Photo read').waitFor({ timeout: 60000 });
+await page.getByRole('heading', { name: 'Photo read', exact: true }).waitFor({ timeout: 60000 });
 check((await page.getByText(/Recessed lights that may not be IC-rated/).count()) > 0, 'photo read flags the recessed lights as a hazard');
 check((await page.getByText('Suggested changes').count()) === 1, 'photo read suggests changes to the area');
 await page.screenshot({ path: SHOTS + '03b-photo-read.png', fullPage: true });
@@ -282,6 +282,22 @@ check(photoList.photos?.length === 1 && photoList.photos[0].url.includes('/objec
 await page.screenshot({ path: SHOTS + '05-sent.png', fullPage: true });
 console.log('  link', link);
 
+step('back on the list, the sent quote stays Sent, and the waiting total is the sum of its rows');
+await page.getByRole('button', { name: 'Back to estimates' }).click();
+const sentRow = page.locator('button[data-status=sent]', { hasText: 'Pat Lee' });
+await sentRow.getByText('Sent', { exact: true }).waitFor();
+check((await sentRow.count()) === 1, 'the list shows the quote it just sent as Sent');
+await page.getByRole('button', { name: 'Sync now' }).click();
+await page.waitForTimeout(4000); // a full sync: push, then pull
+check(psql(`select status from estimates where id = '${estId}'`) === 'sent', 'opening and leaving a sent quote without changes keeps it Sent on the server');
+{
+  const money = (t) => Number(t.replace(/[^0-9.]/g, ''));
+  const waitingPrices = await page.locator('button[data-status=sent], button[data-status=viewed]').locator('[data-testid=row-price]').allInnerTexts();
+  const total = await page.getByTestId('waiting-total').innerText();
+  check(waitingPrices.length > 0 && money(total) === waitingPrices.reduce((s, p) => s + money(p), 0), `"Waiting to sign" ${total} is the sum of the sent rows' prices (${waitingPrices.join(' + ')})`);
+}
+await page.screenshot({ path: SHOTS + '05b-list-sent.png' });
+
 step('customer signs');
 const cust = await browser.newContext(phone);
 const cp = await cust.newPage();
@@ -322,7 +338,7 @@ const roofCalls = () => {
 const roofImageLoaded = () => page.waitForFunction(() => { const i = document.querySelector('[role=dialog] img'); return i && i.complete && i.naturalWidth === 1280; });
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor();
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Robin');
 await page.getByLabel('Last name').fill('Roof');
 await page.getByLabel('Street address').fill('12 Elkton Rd');
@@ -858,7 +874,7 @@ await page.screenshot({ path: SHOTS + '08a-roof-page-offline-375.png' });
 await page.setViewportSize(phone.viewport);
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Sam');
 await page.getByLabel('Last name').fill('Offline');
 await page.getByLabel('Street address').fill('99 Crawl Ln');

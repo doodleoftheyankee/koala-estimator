@@ -5,6 +5,7 @@ import { areaSchema, newArea, type AreaDraft, type EstimateDraft } from '@/lib/s
 import { ACCESS_HINTS, ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
 import { Alert, Badge, Button, Card, Chips, Field, Input, Select, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
+import { Button as DmButton, Ruler } from '@/components/daymark';
 import type { Update } from './EstimateEditor';
 import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
 import { MeasureSheet } from './measure/MeasureSheet';
@@ -114,7 +115,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
                 <span className="block text-sm text-slate-600">
-                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ' 📐' : ''}` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
+                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ', measured' : ''}` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
                 </span>
               </span>
               {valid ? <Badge tone="green">Ready</Badge> : <Badge tone="amber">Incomplete</Badge>}
@@ -151,7 +152,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 ) : null}
                 {roofDone?.areaId === a.id ? (
                   <div role="status">
-                    <Alert tone="green">✓ {roofDone.text}</Alert>
+                    <Alert tone="green">{roofDone.text}</Alert>
                   </div>
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
@@ -179,7 +180,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                   </Field>
                 </div>
                 <Field label="Current R-value" hint="Estimate from type and depth if there is no label." group>
-                  <div className="flex gap-2">
+                  <div className="flex items-start gap-2">
                     <NumberInput aria-label="Current R-value" className="w-24" value={a.currentR} onValue={(v) => set(a.id, { currentR: v ?? 0 })} />
                     <Chips label="Common R-values" value={String(a.currentR)} onChange={(v) => set(a.id, { currentR: Number(v) })} options={['0', '11', '19', '30'].map((r) => ({ value: r, label: `R-${r}` }))} />
                   </div>
@@ -273,7 +274,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
         <h2 className="mb-2 font-semibold">Add an area</h2>
         <div className="grid grid-cols-2 gap-2">
           {JOB_TYPES.map((j) => (
-            <Button key={j} variant="secondary" onClick={() => add(j)}>
+            <Button key={j} variant="secondary" className="px-3! whitespace-nowrap" onClick={() => add(j)}>
               + {JOB_TYPE_LABELS[j]}
             </Button>
           ))}
@@ -303,9 +304,9 @@ function MeasureButton({
   const differs = measured !== null && Math.round(sqft) !== measured;
   return (
     <div className="space-y-2">
-      <Button variant="secondary" size="lg" className="w-full" onClick={onOpen}>
-        📐 {measurement ? 'Edit measurement' : 'Measure this area'}
-      </Button>
+      <DmButton size="lg" block icon={Ruler} onClick={onOpen}>
+        {measurement ? 'Edit measurement' : 'Measure this area'}
+      </DmButton>
       {measurement ? (
         <p className="text-sm text-slate-600">
           {measurementSummary(measurement)} · {measured === null ? 'not finished' : `${num(measured)} sq ft net`}
