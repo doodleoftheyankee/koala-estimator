@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { SessionProfile } from '@/lib/server/auth';
+import { Monogram } from './daymark/Brand';
 import { SignOutButton } from './SignOutButton';
 
 export function AppNav({ profile }: { profile: SessionProfile }) {
@@ -16,7 +17,7 @@ export function AppNav({ profile }: { profile: SessionProfile }) {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
         <Link href="/" className="flex items-center gap-2 font-bold text-brand-800">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-700 text-white">K</span>
+          <Monogram size={32} label="" />
           Koala Estimator
         </Link>
         <nav className="flex flex-1 flex-wrap gap-1 text-sm">

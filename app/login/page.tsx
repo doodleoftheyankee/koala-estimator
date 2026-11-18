@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { DEMO_ACCOUNTS, demoEnabled, type DemoRole } from '@/lib/demo/accounts';
 import { safeNext } from '@/lib/safeNext';
 import { LoginForm } from './LoginForm';
+import { Monogram } from '@/components/daymark/Brand';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
@@ -10,7 +11,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-700 text-2xl font-bold text-white">K</div>
+        <Monogram size={56} className="mx-auto mb-3" label="" />
         <h1 className="text-2xl font-bold">Koala Estimator</h1>
         <p className="text-slate-600">Koala Insulation of Newark</p>
       </div>

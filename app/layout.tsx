@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { fontVariables } from './fonts';
+import { ToastProvider } from '@/components/daymark/Toast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import { THEME_COLORS, THEME_INIT_SCRIPT } from '@/lib/theme';
 
@@ -32,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-dvh antialiased">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
         <ServiceWorkerRegistrar />
       </body>
     </html>
