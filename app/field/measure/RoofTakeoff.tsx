@@ -666,7 +666,7 @@ function MapLegend({ result, excluded, showEdges }: { result: RoofResult; exclud
       <li key={e.type} className="flex items-center gap-2">
         <Swatch color={edgeColor(e.type)} dash={Boolean(EDGE_INFO[e.type].dash)} />
         <span>
-          {e.label} <b className="gauge-m text-[17px] text-ink">{feet(roundFt(e.ft))}</b>
+          {e.label} <b className="gauge-m text-[17px] whitespace-nowrap text-ink">{feet(roundFt(e.ft))}</b>
         </span>
       </li>,
     );
