@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { z } from 'zod';
-import { Ban, Banner, Button, ButtonLink, Download, EmptyState, Field, FileText, Icon, Plus, Search, Select, StatusBadge, Tag } from '@/components/daymark';
+import { Banner, Button, ButtonLink, Download, EmptyState, Field, FileText, Icon, Plus, Search, Select, StatusBadge } from '@/components/daymark';
 import { PageHeader } from '@/components/shell';
 import { ABOVE_ROW_LINK, FilterChips, KpiStrip, ROW_LINK, TABLE, type KpiItem } from '@/components/office';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { formatDateTime, formatMoney, plural, relativeTime } from '@/lib/format';
+import { formatDateTime, formatMoney, num, plural, relativeTime } from '@/lib/format';
 import { canMarkLost } from '@/lib/jobs/forms';
 import {
   activityLine,
@@ -107,7 +107,7 @@ function toItem(r: Row): Item {
   return {
     id: r.id,
     status,
-    customer: name || 'Customer not named yet',
+    customer: name || 'New customer',
     address: r.property ? [r.property.street, r.property.city].filter((s) => s.trim()).join(', ') || null : null,
     estimator: r.estimator?.full_name ?? '—',
     price: head.price,
@@ -320,7 +320,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
                       {it.address ? <p className="mt-0.5 text-[15px] font-medium text-ink-2">{it.address}</p> : null}
                     </td>
                     <td className={TABLE.td}>
-                      <Badge status={it.status} />
+                      <StatusBadge status={it.status} />
                       {it.activity ? <p className="mt-1.5 text-[15px] leading-snug font-medium text-ink-2 [overflow-wrap:anywhere]">{it.activity}</p> : null}
                     </td>
                     <td className={`${TABLE.td} ${TABLE.tdNum} pr-6`}>
@@ -352,7 +352,7 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
 function moneyLine(g: MoneyGroup, noun: string, what: string): string {
   const base = `${plural(g.count, noun)}, ${what}`;
   if (g.unpriced === 0) return base;
-  return `${base}. ${g.unpriced} without a price ${g.unpriced === 1 ? 'is' : 'are'} not in the total`;
+  return `${base}. ${num(g.unpriced)} without a price ${g.unpriced === 1 ? 'is' : 'are'} not in the total`;
 }
 
 function kpiItems(k: EstimateKpis): KpiItem[] {
@@ -372,13 +372,13 @@ function kpiItems(k: EstimateKpis): KpiItem[] {
     {
       key: 'drafts',
       label: 'Drafts',
-      value: String(k.drafts.count),
+      value: num(k.drafts.count),
       detail: `${k.drafts.count === 1 ? 'estimate' : 'estimates'} not sent yet`,
     },
     {
       key: 'closed',
       label: 'Lost or expired',
-      value: String(k.closed.count),
+      value: num(k.closed.count),
       detail: closedWords(k.closed) ? `${closedWords(k.closed)}. Not in any total` : 'Lost, declined or expired. Not in any total',
     },
   ];
@@ -397,19 +397,8 @@ function countNote(
 // Row parts
 // ---------------------------------------------------------------------------
 
-function Badge({ status }: { status: RowStatus }) {
-  if (status === 'void') {
-    return (
-      <Tag tone="draft" icon={Ban}>
-        Void
-      </Tag>
-    );
-  }
-  return <StatusBadge status={status} />;
-}
-
 function Price({ price, label }: { price: number | null; label: string | null }) {
-  if (price === null) return <span className="text-[15px] font-semibold text-ink-3">No price yet</span>;
+  if (price === null) return <span className="text-[15px] font-semibold text-ink-3">Not priced</span>;
   return (
     <span className="inline-flex flex-col items-end gap-1">
       <span className="gauge-m text-[22px] text-ink">{formatMoney(price)}</span>
@@ -465,13 +454,13 @@ function EstimateCard({ item: it, showEstimator, now }: { item: Item; showEstima
           </Link>
           {it.address ? <p className="mt-0.5 text-[15px] font-medium text-ink-2">{it.address}</p> : null}
         </div>
-        <Badge status={it.status} />
+        <StatusBadge status={it.status} />
       </div>
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <span className="sr-only">Price: </span>
           {it.price === null ? (
-            <span className="text-[15px] font-semibold text-ink-3">No price yet</span>
+            <span className="text-[15px] font-semibold text-ink-3">Not priced</span>
           ) : (
             <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className="gauge-m text-[26px] text-ink">{formatMoney(it.price)}</span>

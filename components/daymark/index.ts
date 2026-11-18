@@ -19,7 +19,7 @@ export { Dock, DockSpacer } from './Dock';
 export { Sheet } from './Sheet';
 export { ToastProvider, ToastView, useToast } from './Toast';
 export type { ToastInput } from './Toast';
-export { EmptyState, LoadingSteps, ProgressBar, Skeleton, SyncIndicator } from './States';
+export { EmptyState, LoadingSteps, ProgressBar, Skeleton, SyncIndicator, SyncNowButton } from './States';
 export type { StepState, SyncState } from './States';
 export { Field, Input, Textarea, Select, Switch, SwitchTrack, SwitchRow, INPUT_CLASS } from './Form';
 export { Monogram, StepTrack, type StepBadge } from './Brand';

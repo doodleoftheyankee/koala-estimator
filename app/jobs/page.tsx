@@ -166,7 +166,7 @@ function kpiItem(s: OpenStage, g: MoneyGroup): KpiItem {
   return {
     key: s,
     label: STAGE_LABELS[s],
-    value: String(g.count),
+    value: num(g.count),
     detail: [KPI_DETAIL[s](g.count), work, missing].filter(Boolean).join(' · '),
   };
 }

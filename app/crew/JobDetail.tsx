@@ -7,9 +7,9 @@ import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, formatNyDateTime, nyDate } from '@/lib/jobs/dates';
 import { mapsUrl, naturalKey, PRODUCT_LABELS, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
 import type { ProductCode } from '@/lib/pricing';
-import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
 import { ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
 import { Alert, Badge, Button, Card } from '@/components/ui';
+import { jobBadgeStatus, StatusBadge } from '@/components/daymark';
 import { useLive } from '@/app/field/hooks';
 import { ActualsForm } from './ActualsForm';
 import { ACTUALS_BADGE } from './JobList';
@@ -17,7 +17,6 @@ import { useActualsEditor } from './useActualsEditor';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
 
-const STATUS_TONE = { scheduled: 'blue', in_progress: 'amber', completed: 'green', cancelled: 'slate' } as const;
 
 export function JobDetail({
   id,
@@ -117,7 +116,7 @@ export function JobDetail({
             <p className="truncate font-semibold">{job.customer.name}</p>
             <p className="truncate text-xs text-slate-500">{job.address.street}</p>
           </div>
-          <Badge tone={STATUS_TONE[job.status]}>{JOB_STATUS_LABELS[job.status]}</Badge>
+          <StatusBadge status={jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart })} />
         </div>
       </header>
 

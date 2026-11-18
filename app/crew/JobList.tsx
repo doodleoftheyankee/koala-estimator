@@ -4,13 +4,16 @@ import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, nyDate } from '@/lib/jobs/dates';
 import { CREW_SECTION_LABELS, CREW_SECTIONS, groupForCrew } from '@/lib/jobs/status';
 import type { CrewJob } from '@/lib/jobs/crew';
-import { Badge, Button } from '@/components/ui';
+import { Badge } from '@/components/ui';
+import { Banner, CloudOff, EmptyState, Hammer, Monogram, SectionHead, SyncIndicator, SyncNowButton } from '@/components/daymark';
+import { num, plural } from '@/lib/format';
 import { useLive } from '@/app/field/hooks';
 
 export const ACTUALS_BADGE: Record<ActualsSyncState, { tone: 'slate' | 'green' | 'amber' | 'red' | 'blue'; label: string }> = {
   pending: { tone: 'amber', label: 'Not synced' },
   synced: { tone: 'green', label: 'Synced' },
-  locked: { tone: 'blue', label: 'Verified' },
+  // Verified is green everywhere (the one status vocabulary in components/daymark/StatusBadge).
+  locked: { tone: 'green', label: 'Verified' },
   invalid: { tone: 'red', label: 'Needs fixing' },
   error: { tone: 'amber', label: 'Retrying' },
 };
@@ -39,35 +42,43 @@ export function JobList({
 
   return (
     <div className="pb-10">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-bold">Jobs</h1>
-            <p className="text-xs text-slate-500">
-              {profile.fullName} ·{' '}
-              <span className={online ? 'text-emerald-700' : 'text-amber-700'}>{online ? 'Online' : 'Offline, saving on this phone'}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={onSync} disabled={!online || syncing} aria-busy={syncing}>
-              {syncing ? 'Syncing…' : `Sync${unsynced ? ` (${unsynced})` : ''}`}
-            </Button>
-          </div>
+      {/* The same header as the field list: the mark, the page name, the phone's one sync state. */}
+      <header className="flex items-start gap-3 px-4 pt-4 lg:pt-8">
+        <Monogram size={48} label="" className="mt-0.5 lg:hidden" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[30px] leading-[1.07] font-extrabold tracking-[-0.02em] text-ink">Jobs</h1>
+          <SyncIndicator
+            state={syncing ? 'syncing' : !online ? 'offline' : unsynced ? 'pending' : 'synced'}
+            pending={unsynced}
+            className="mt-0.5"
+          />
         </div>
+        <SyncNowButton online={online} syncing={syncing} onSync={onSync} />
       </header>
 
+      {!online ? (
+        <div className="px-4 pt-4">
+          <Banner tone="hazard" icon={CloudOff} title="Offline." live={false}>
+            Saving on this phone.{unsynced ? ` ${plural(unsynced, 'job')} will sync when you have signal.` : ''}
+          </Banner>
+        </div>
+      ) : null}
+
       {jobs.length === 0 ? (
-        <p className="m-3 rounded-2xl bg-white p-6 text-center text-slate-500 ring-1 ring-slate-200">
-          {online ? 'No jobs assigned to your crew right now.' : 'No jobs on this phone yet. Open this screen once with signal.'}
-        </p>
+        <EmptyState
+          className="px-4"
+          icon={Hammer}
+          title={online ? 'No jobs for your crew right now' : 'No jobs on this phone yet'}
+          hint={online ? 'Ask the office to add you to a crew, or to give your crew a job.' : 'Open this screen once with signal to load your jobs.'}
+        />
       ) : null}
 
       {CREW_SECTIONS.map((section) =>
         groups[section].length ? (
-          <section key={section} className="px-3 pt-4" aria-labelledby={`sec-${section}`}>
-            <h2 id={`sec-${section}`} className="mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <section key={section} className="space-y-2.5 px-3 pt-4" aria-labelledby={`sec-${section}`}>
+            <SectionHead id={`sec-${section}`} count={num(groups[section].length)} className="px-1">
               {CREW_SECTION_LABELS[section]}
-            </h2>
+            </SectionHead>
             <ul className="space-y-2">
               {groups[section].map((job) => (
                 <li key={job.id}>

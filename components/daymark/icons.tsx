@@ -54,6 +54,7 @@ export {
   ChevronsUpDown,
   Circle,
   CircleCheck,
+  CircleDashed,
   CircleDot,
   CircleHelp,
   CircleX,

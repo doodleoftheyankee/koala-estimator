@@ -12,6 +12,7 @@ export function ActionForm({
   action,
   readOnly,
   submitLabel = 'Save',
+  submitVariant = 'primary',
   resetOnSuccess = false,
   className,
   children,
@@ -19,6 +20,8 @@ export function ActionForm({
   action: AdminAction;
   readOnly: boolean;
   submitLabel?: string;
+  /** primary = the form's main action; secondary for a side step; danger (quiet red) for undoing or cancelling. */
+  submitVariant?: 'primary' | 'secondary' | 'danger';
   resetOnSuccess?: boolean;
   className?: string;
   children: ReactNode;
@@ -49,7 +52,7 @@ export function ActionForm({
       </fieldset>
       {readOnly ? null : (
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending} aria-busy={pending}>
+          <Button type="submit" variant={submitVariant} disabled={pending} aria-busy={pending}>
             {pending ? 'Saving…' : submitLabel}
           </Button>
           <div aria-live="polite" className="min-w-0 flex-1 text-sm">

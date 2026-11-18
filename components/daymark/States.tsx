@@ -11,6 +11,7 @@
 // and never as a status badge.
 import type { ReactNode } from 'react';
 import { relativeTime } from '@/lib/format';
+import { buttonClass } from './Button';
 import { cx } from './cx';
 import { Check, Circle, CloudAlert, CloudCheck, CloudOff, CloudUpload, Icon, LoaderCircle, RefreshCw, TriangleAlert, type LucideIcon } from './icons';
 
@@ -124,5 +125,26 @@ export function SyncIndicator({
     <span role="status" className={cls}>
       {inner}
     </span>
+  );
+}
+
+/**
+ * The "Sync now" button beside a phone screen's SyncIndicator (field list, crew list): 56px, the
+ * refresh icon spinning while a sync runs, and off with no signal (its name says why).
+ */
+export function SyncNowButton({ online, syncing, onSync, className }: { online: boolean; syncing: boolean; onSync: () => void; className?: string }) {
+  const label = online ? 'Sync now' : 'Sync now (needs signal)';
+  return (
+    <button
+      type="button"
+      onClick={onSync}
+      disabled={!online}
+      aria-label={label}
+      title={label}
+      aria-busy={syncing || undefined}
+      className={buttonClass({ variant: 'secondary', size: 'md', disabled: !online }, cx('w-14 shrink-0 px-0', className))}
+    >
+      <Icon icon={RefreshCw} className={syncing ? 'motion-safe:animate-spin motion-safe:[animation-duration:1.6s]' : undefined} />
+    </button>
   );
 }

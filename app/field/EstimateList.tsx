@@ -42,6 +42,7 @@ import {
   StatusBadge,
   StatusBoard,
   SyncIndicator,
+  SyncNowButton,
   buttonClass,
   cx,
   CloudOff,
@@ -49,7 +50,6 @@ import {
   FilePenLine,
   OctagonAlert,
   Plus,
-  RefreshCw,
   Satellite,
   Search,
   TriangleAlert,
@@ -126,7 +126,7 @@ export function EstimateList({
               className="mt-0.5"
             />
           </div>
-          <SyncButton online={online} syncing={syncing} onSync={onSync} />
+          <SyncNowButton online={online} syncing={syncing} onSync={onSync} />
         </header>
 
         {!online ? (
@@ -229,23 +229,6 @@ export function EstimateList({
   );
 }
 
-function SyncButton({ online, syncing, onSync }: { online: boolean; syncing: boolean; onSync: () => void }) {
-  const label = online ? 'Sync now' : 'Sync now (needs signal)';
-  return (
-    <button
-      type="button"
-      onClick={onSync}
-      disabled={!online}
-      aria-label={label}
-      title={label}
-      aria-busy={syncing || undefined}
-      className={buttonClass({ variant: 'secondary', size: 'md', disabled: !online }, 'w-14 shrink-0 px-0')}
-    >
-      <Icon icon={RefreshCw} className={syncing ? 'motion-safe:animate-spin motion-safe:[animation-duration:1.6s]' : undefined} />
-    </button>
-  );
-}
-
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div role="search" className="relative">
@@ -279,13 +262,18 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
 
 function NothingShown({ query, filter, onClear }: { query: string; filter: BoardFilter; onClear: () => void }) {
   const what = filter === 'all' ? 'estimates' : FILTER_NAMES[filter];
+  // The same pattern as the office list's "No estimates match these filters": why, then the way back.
   return (
-    <div className="plate flex flex-col items-start gap-3 p-4">
-      <p className="text-[18px] font-extrabold text-ink">{query.trim() ? `No ${what} match “${query.trim()}”` : `No ${what} on this phone`}</p>
-      <Button size="sm" onClick={onClear}>
-        Show all estimates
-      </Button>
-    </div>
+    <EmptyState
+      icon={Search}
+      title={query.trim() ? `No ${what} match “${query.trim()}”` : `No ${what} on this phone`}
+      hint={query.trim() ? 'Try a name, a street or a quote number.' : 'Show every estimate on this phone instead.'}
+      action={
+        <Button size="sm" onClick={onClear}>
+          Show all estimates
+        </Button>
+      }
+    />
   );
 }
 

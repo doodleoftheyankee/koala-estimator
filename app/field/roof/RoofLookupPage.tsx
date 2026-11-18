@@ -100,7 +100,7 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
         />
 
         {!online ? (
-          <Banner tone="hazard" icon={CloudOff} title="No signal." live={false}>
+          <Banner tone="hazard" icon={CloudOff} title="Offline." live={false}>
             The roof lookup needs internet. Your estimates still work offline.
           </Banner>
         ) : !configured ? (

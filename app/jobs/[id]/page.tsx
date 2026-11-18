@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { formatDateTime, formatMoney, num } from '@/lib/format';
-import { Banner, ButtonLink, Download, Icon, jobBadgeStatus, Mail, Phone, StatusBadge } from '@/components/daymark';
+import { formatDateTime, formatMoney, formatPhone, num, pct } from '@/lib/format';
+import { Ban, Banner, ButtonLink, CircleDashed, Download, Icon, jobBadgeStatus, Mail, PencilLine, Phone, ShieldCheck, StatusBadge, Tag } from '@/components/daymark';
 import { PageHeader } from '@/components/shell';
 import { FactStrip } from '@/components/office';
 import { UNIT_LABELS } from '@/lib/jobs/crew';
@@ -22,7 +22,8 @@ import { loadCrews, loadJob } from '../data';
 
 export const metadata: Metadata = { title: 'Job' };
 
-const usdCents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+/** Costs and revenue with cents, as the actuals were entered. */
+const usdCents = { format: (n: number) => formatMoney(n, { cents: 'always' }) };
 
 const ACTION_LABEL: Record<JobStatus, string> = {
   scheduled: 'Back to scheduled',
@@ -83,7 +84,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           {phoneHref ? (
             <a href={phoneHref} className="-ml-1 inline-flex min-h-12 items-center gap-2 rounded-control px-1 font-bold text-ink underline underline-offset-4 hover:bg-sunken">
               <Icon icon={Phone} size="s" />
-              {job.customer.phone}
+              {formatPhone(job.customer.phone)}
             </a>
           ) : (
             <span className="inline-flex min-h-12 items-center gap-2">
@@ -181,7 +182,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             {transitions.length === 0 ? <p className="text-sm text-slate-500">No status changes are possible from {JOB_STATUS_LABELS[job.status].toLowerCase()}.</p> : null}
             <div className="space-y-3">
               {transitions.map((t) => (
-                <ActionForm key={t} action={changeStatus} readOnly={false} submitLabel={ACTION_LABEL[t]}>
+                <ActionForm key={t} action={changeStatus} readOnly={false} submitLabel={ACTION_LABEL[t]} submitVariant={t === 'cancelled' ? 'danger' : 'secondary'}>
                   <input type="hidden" name="id" value={job.id} />
                   <input type="hidden" name="status" value={t} />
                   {t === 'cancelled' ? (
@@ -286,7 +287,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 <Alert tone="blue">Actuals can be verified once the job is completed.</Alert>
               ) : null}
               {profile.role === 'owner' && verifiedCount > 0 ? (
-                <ActionForm action={unverifyActuals} readOnly={false} submitLabel="Unverify">
+                <ActionForm action={unverifyActuals} readOnly={false} submitLabel="Unverify" submitVariant="danger">
                   <input type="hidden" name="id" value={job.id} />
                   <p className="text-sm text-slate-700">Owner only: unlocks the rows so they can be corrected. They leave learning until verified again.</p>
                 </ActionForm>
@@ -303,7 +304,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               <Item label="Total">{costs.total !== null ? usdCents.format(costs.total) : '—'}</Item>
               <Item label="Revenue">{revenue != null ? usdCents.format(revenue) : '—'}</Item>
               <Item label="Gross margin">
-                {costs.total !== null && revenue != null && revenue > 0 ? `${usdCents.format(revenue - costs.total)} (${(((revenue - costs.total) / revenue) * 100).toFixed(1)}%)` : '—'}
+                {costs.total !== null && revenue != null && revenue > 0 ? `${usdCents.format(revenue - costs.total)} (${pct((revenue - costs.total) / revenue, 1)})` : '—'}
               </Item>
             </dl>
             <p className="mt-2 text-xs text-slate-500">From invoices and payroll, entered per row below. Office and owner only.</p>
@@ -340,11 +341,31 @@ function VarianceBadge({ pct }: { pct: number | null }) {
   return tone ? <Badge tone={tone}>{formatVariance(pct)}</Badge> : <span className="text-slate-400">—</span>;
 }
 
+/** One actuals row's state: icon + word + colour, Verified as on the job's own badge. */
 function RowBadge({ actual }: { actual: OfficeActual | null }) {
-  if (!actual) return <Badge tone="amber">Not entered</Badge>;
-  if (actual.excluded) return <Badge tone="slate">Excluded</Badge>;
-  if (actual.verifiedAt) return <Badge tone="green">Verified</Badge>;
-  return <Badge tone="blue">Entered</Badge>;
+  if (!actual)
+    return (
+      <Tag tone="warn" icon={CircleDashed}>
+        Not entered
+      </Tag>
+    );
+  if (actual.excluded)
+    return (
+      <Tag tone="draft" icon={Ban}>
+        Excluded
+      </Tag>
+    );
+  if (actual.verifiedAt)
+    return (
+      <Tag tone="ok" icon={ShieldCheck}>
+        Verified
+      </Tag>
+    );
+  return (
+    <Tag tone="info" icon={PencilLine}>
+      Entered
+    </Tag>
+  );
 }
 
 function lastVerifier(actuals: OfficeActual[]): string {
