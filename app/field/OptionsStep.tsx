@@ -7,6 +7,7 @@ import { priceableAreas, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, ackSummary, flagsForOption, isAcknowledged, setDeviationAck } from '@/lib/field/flags';
 import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, setPriceOverride, tiersWithLine } from '@/lib/field/lineOverrides';
 import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor, type PriceAdvice } from '@/lib/field/priceAdvice';
+import { recommendedTier } from '@/lib/field/recommended';
 import { formatDateTime, num, pct, TIER_LABELS, usd } from '@/lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
@@ -45,6 +46,8 @@ export function OptionsStep({
   const winModel = bundle?.winModel ?? null;
   const features = winModel ? winFeaturesFor(priceableAreas(draft)) : null;
   const options = priced?.ok?.options ?? [];
+  // The same option the dock and the customer quote mark as recommended.
+  const recommended = recommendedTier(options, draft.selectedTier);
   const areaNames = new Map(draft.areas.map((a) => [a.id, a.name]));
   const toExplain = ackSummary(flags, draft.deviationAcks).pending;
 
@@ -115,7 +118,7 @@ export function OptionsStep({
           <OptionCard
             key={o.tier}
             option={o}
-            selected={draft.selectedTier === o.tier}
+            recommended={recommended?.tier === o.tier ? (recommended.picked ? 'picked' : 'default') : null}
             onSelect={() => update((d) => ({ ...d, selectedTier: o.tier }))}
             override={draft.overrides[o.tier] ?? null}
             onOverride={(ov) => update((d) => setPriceOverride(d, o.tier, ov))}
@@ -156,7 +159,7 @@ function adviceFor(model: WinModel, option: PricedOption, features: Omit<WinFeat
 
 function OptionCard({
   option: o,
-  selected,
+  recommended,
   onSelect,
   override,
   onOverride,
@@ -171,7 +174,8 @@ function OptionCard({
   advice,
 }: {
   option: PricedOption;
-  selected: boolean;
+  /** This card is the recommended option: picked by the estimator, or the default (Better). */
+  recommended: 'picked' | 'default' | null;
   onSelect: () => void;
   override: { price: number; reason: string } | null;
   onOverride: (o: { price: number; reason: string } | null) => void;
@@ -201,159 +205,163 @@ function OptionCard({
       : null;
 
   return (
-    <Card className={cx(selected && 'ring-2 ring-brand-600')}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{TIER_LABELS[tier]}</p>
-          <h3 className="font-semibold">{o.label}</h3>
+    <div role="group" aria-label={`${TIER_LABELS[tier]} option`}>
+      <Card className={cx(recommended && 'ring-2 ring-brand-600')}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{TIER_LABELS[tier]}</p>
+            <h3 className="font-semibold">{o.label}</h3>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold">{usd(o.price)}</p>
+            {o.financing ? <p className="text-xs text-slate-500">or {usd(o.financing.monthly)}/mo</p> : null}
+          </div>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold">{usd(o.price)}</p>
-          {o.financing ? <p className="text-xs text-slate-500">or {usd(o.financing.monthly)}/mo</p> : null}
-        </div>
-      </div>
 
-      <ul className="mt-3 space-y-1 text-sm">
-        {o.customerItems.map((it, i) => (
-          <li key={i} className="flex justify-between gap-3">
-            <span className="text-slate-700">{it.description}</span>
-          </li>
+        <ul className="mt-3 space-y-1 text-sm">
+          {o.customerItems.map((it, i) => (
+            <li key={i} className="flex justify-between gap-3">
+              <span className="text-slate-700">{it.description}</span>
+            </li>
+          ))}
+        </ul>
+
+        {o.hasLineOverrides ? (
+          <p className="mt-2 text-xs text-amber-800">
+            Your line changes move the model price {usd(o.modelPrice)} to {usd(o.adjustedPrice)} ({formatPctDiff(relativeDiff(o.adjustedPrice, o.modelPrice))}).
+          </p>
+        ) : null}
+        {o.isOverridden ? (
+          <p className="mt-2 text-xs text-amber-800">
+            Adjusted from {usd(o.modelPrice)} ({deltaPct >= 0 ? '+' : ''}
+            {pct(deltaPct)}): {o.overrideReason}
+          </p>
+        ) : null}
+        {o.belowFloor ? <Alert tone="red">Below the floor margin. Only the owner can send this price.</Alert> : null}
+
+        {mine.total.map((f) => (
+          <div key={f.key} className="mt-2">
+            <DeviationNote flag={f} ack={ackState(f, acks)} onNote={(note) => onAck(f, note)} />
+          </div>
         ))}
-      </ul>
 
-      {o.hasLineOverrides ? (
-        <p className="mt-2 text-xs text-amber-800">
-          Your line changes move the model price {usd(o.modelPrice)} to {usd(o.adjustedPrice)} ({formatPctDiff(relativeDiff(o.adjustedPrice, o.modelPrice))}).
-        </p>
-      ) : null}
-      {o.isOverridden ? (
-        <p className="mt-2 text-xs text-amber-800">
-          Adjusted from {usd(o.modelPrice)} ({deltaPct >= 0 ? '+' : ''}
-          {pct(deltaPct)}): {o.overrideReason}
-        </p>
-      ) : null}
-      {o.belowFloor ? <Alert tone="red">Below the floor margin. Only the owner can send this price.</Alert> : null}
+        {showCosts ? (
+          <dl className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-2 text-xs">
+            <div>
+              <dt className="text-slate-500">Cost (loaded)</dt>
+              <dd className="font-semibold">{usd(o.loadedCost)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Margin</dt>
+              <dd className={cx('font-semibold', o.belowFloor && 'text-red-700')}>{pct(o.marginPct)}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Crew days</dt>
+              <dd className="font-semibold">
+                {num(o.crewDays, 1)} ({num(o.laborHours, 1)} h)
+              </dd>
+            </div>
+          </dl>
+        ) : null}
 
-      {mine.total.map((f) => (
-        <div key={f.key} className="mt-2">
-          <DeviationNote flag={f} ack={ackState(f, acks)} onNote={(note) => onAck(f, note)} />
-        </div>
-      ))}
+        {advice ? (
+          <PriceAdvicePanel
+            advice={advice.advice}
+            nQuotes={advice.model.nQuotes}
+            showCosts={showCosts}
+            limitNote={limitNote}
+            onUse={() => onOverride({ price: advice.advice.best.price, reason: recommendationReason(advice.model) })}
+          />
+        ) : null}
 
-      {showCosts ? (
-        <dl className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-2 text-xs">
-          <div>
-            <dt className="text-slate-500">Cost (loaded)</dt>
-            <dd className="font-semibold">{usd(o.loadedCost)}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Margin</dt>
-            <dd className={cx('font-semibold', o.belowFloor && 'text-red-700')}>{pct(o.marginPct)}</dd>
-          </div>
-          <div>
-            <dt className="text-slate-500">Crew days</dt>
-            <dd className="font-semibold">
-              {num(o.crewDays, 1)} ({num(o.laborHours, 1)} h)
-            </dd>
-          </div>
-        </dl>
-      ) : null}
-
-      {advice ? (
-        <PriceAdvicePanel
-          advice={advice.advice}
-          nQuotes={advice.model.nQuotes}
-          showCosts={showCosts}
-          limitNote={limitNote}
-          onUse={() => onOverride({ price: advice.advice.best.price, reason: recommendationReason(advice.model) })}
-        />
-      ) : null}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" variant={selected ? 'primary' : 'secondary'} onClick={onSelect}>
-          {selected ? (
-            <>
-              <Icon icon={Star} size="s" className="fill-current" />
-              Recommended
-            </>
-          ) : (
-            'Recommend this'
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            // Start from the saved override: it may have changed since (e.g. "Use this price").
-            if (!editing) {
-              setPrice(override?.price ?? null);
-              setReason(override?.reason ?? '');
-            }
-            setEditing((e) => !e);
-          }}
-        >
-          {override ? 'Edit price' : 'Adjust price'}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setDetails((v) => !v)} aria-expanded={details}>
-          {details ? 'Hide details' : 'Details'}
-          {linesToExplain > 0 ? <Badge tone="amber">{linesToExplain} to explain</Badge> : null}
-        </Button>
-        {selected ? <Badge tone="green">Highlighted on the quote</Badge> : null}
-      </div>
-
-      {editing ? (
-        <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
-          <Field
-            label="Customer price"
-            hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {/* The recommended card says so; tapping it keeps it recommended. Others offer the action. */}
+          <Button size="sm" variant={recommended ? 'primary' : 'secondary'} onClick={onSelect}>
+            {recommended ? (
+              <>
+                <Icon icon={Star} size="s" className={cx(recommended === 'picked' && 'fill-current')} />
+                {recommended === 'picked' ? 'Recommended' : 'Recommended (default)'}
+              </>
+            ) : (
+              'Make recommended'
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              // Start from the saved override: it may have changed since (e.g. "Use this price").
+              if (!editing) {
+                setPrice(override?.price ?? null);
+                setReason(override?.reason ?? '');
+              }
+              setEditing((e) => !e);
+            }}
           >
-            <NumberInput value={price} onValue={setPrice} />
-          </Field>
-          <Field label="Reason (required)">
-            <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. matched competitor quote" />
-          </Field>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              disabled={!price || price <= 0 || reason.trim().length < 3}
-              onClick={() => {
-                onOverride({ price: price!, reason: reason.trim() });
-                setEditing(false);
-              }}
+            Change price
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setDetails((v) => !v)} aria-expanded={details}>
+            {details ? 'Hide details' : 'Details'}
+            {linesToExplain > 0 ? <Badge tone="amber">{linesToExplain} to explain</Badge> : null}
+          </Button>
+          {/* The quote marks the picked option, else Better (lib/quotes/model.ts). */}
+          {recommended === 'picked' || (recommended === 'default' && tier === 'better') ? <Badge tone="green">Highlighted on the quote</Badge> : null}
+        </div>
+
+        {editing ? (
+          <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
+            <Field
+              label="Customer price"
+              hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
             >
-              Apply
-            </Button>
-            {override ? (
+              <NumberInput value={price} onValue={setPrice} />
+            </Field>
+            <Field label="Reason (required)">
+              <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. matched competitor quote" />
+            </Field>
+            <div className="flex gap-2">
               <Button
                 size="sm"
-                variant="secondary"
+                disabled={!price || price <= 0 || reason.trim().length < 3}
                 onClick={() => {
-                  onOverride(null);
-                  setPrice(null);
-                  setReason('');
+                  onOverride({ price: price!, reason: reason.trim() });
                   setEditing(false);
                 }}
               >
-                Use model price
+                Apply
               </Button>
-            ) : null}
+              {override ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    onOverride(null);
+                    setPrice(null);
+                    setReason('');
+                    setEditing(false);
+                  }}
+                >
+                  Use model price
+                </Button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {details ? (
-        <OptionLines
-          tier={o.tier}
-          lines={o.lines}
-          areaNames={areaNames}
-          tiersByKey={tiersByKey}
-          flagsByLine={mine.byLine}
-          acks={acks}
-          onAck={onAck}
-          onLineOverride={onLineOverride}
-          showCosts={showCosts}
-        />
-      ) : null}
-    </Card>
+        {details ? (
+          <OptionLines
+            tier={o.tier}
+            lines={o.lines}
+            areaNames={areaNames}
+            tiersByKey={tiersByKey}
+            flagsByLine={mine.byLine}
+            acks={acks}
+            onAck={onAck}
+            onLineOverride={onLineOverride}
+            showCosts={showCosts}
+          />
+        ) : null}
+      </Card>
+    </div>
   );
 }

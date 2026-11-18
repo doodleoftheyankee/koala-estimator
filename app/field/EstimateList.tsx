@@ -174,7 +174,7 @@ export function EstimateList({
                     <span>
                       Waiting to sign{' '}
                       <span data-testid="waiting-total" className="gauge-m text-[20px] text-ink">
-                        {formatMoney(waiting.total)}
+                        {formatMoney(waiting.total, { cents: 'never' })}
                       </span> · {plural(waiting.count, 'quote')}
                     </span>
                   ) : null}
@@ -300,7 +300,7 @@ function Row({ row, onOpen }: { row: EstimateRow; onOpen: (id: string) => void }
     price = (
       <span className="flex shrink-0 flex-col items-end gap-1 text-right">
         <span data-testid="row-price" className="gauge text-[34px] text-ink">
-          {formatMoney(row.price)}
+          {formatMoney(row.price, { cents: 'never' })}
         </span>
         <SignLabel size={11.5}>{row.priceLabel}</SignLabel>
       </span>

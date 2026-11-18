@@ -164,7 +164,8 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* The material gets the whole row on phones, so a long name ("Blown fiberglass") is never cut. */}
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Existing insulation">
                     <Select
                       value={a.existingMaterial ?? 'None'}

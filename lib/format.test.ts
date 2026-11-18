@@ -68,6 +68,12 @@ describe('formatMoney', () => {
     expect(formatMoney(-12.5, { sign: true })).toBe('-$12.50');
     expect(formatMoney(0, { sign: true })).toBe('$0');
   });
+  it('reads an overridden price with cents the same in the field dock, the list and the Options card (RC-4)', () => {
+    // The dock and the field list use formatMoney(n, { cents: 'never' }); Options, Send and the
+    // quote's option cards use usd(n). Same value, same words.
+    for (const n of [4321.5, 4321.49, 4095, 1999.99]) expect(formatMoney(n, { cents: 'never' })).toBe(usd(n));
+    expect(formatMoney(4321.5, { cents: 'never' })).toBe('$4,322');
+  });
   it('shows a dash for a missing amount', () => {
     expect(formatMoney(null)).toBe(DASH);
     expect(formatMoney(undefined)).toBe(DASH);

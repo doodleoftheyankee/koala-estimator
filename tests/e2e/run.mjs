@@ -245,7 +245,15 @@ await page.getByRole('button', { name: 'Next' }).click();
 
 step('options');
 await page.getByText('Better', { exact: true }).first().waitFor();
-await page.getByRole('button', { name: 'Recommend this' }).nth(1).click();
+{
+  // Better is the default recommendation until the estimator picks one; the card and the dock agree.
+  const better = page.getByRole('group', { name: 'Better option' });
+  check((await better.getByRole('button', { name: 'Recommended (default)' }).count()) === 1, 'Better shows as the default recommendation before one is picked');
+  check((await page.getByRole('button', { name: 'Make recommended' }).count()) === 2, 'the other two options offer Make recommended');
+  await better.getByRole('button', { name: 'Recommended (default)' }).click();
+  await better.getByRole('button', { name: 'Recommended', exact: true }).waitFor();
+  check((await page.getByRole('button', { name: 'Recommended', exact: true }).count()) === 1, 'picking Better makes it the one recommended option');
+}
 await page.waitForTimeout(800);
 await page.screenshot({ path: SHOTS + '04-options.png', fullPage: true });
 const prices = await page.locator('p.text-2xl').allTextContents();

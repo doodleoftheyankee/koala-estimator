@@ -5,10 +5,11 @@ import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
 import { resolveConflict, touch } from '@/lib/offline/syncCore';
-import { priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { withDraftDefaults } from '@/lib/field/draft';
 import { ackSummary } from '@/lib/field/flags';
 import { formatMoney, TIER_LABELS } from '@/lib/format';
+import { recommendedTier } from '@/lib/field/recommended';
 import {
   Banner,
   Button,
@@ -107,7 +108,8 @@ export function EstimateEditor({
   // first), saved with its option so the list can say which one it is.
   const summary = useMemo(() => {
     const opts = priced?.ok?.options ?? [];
-    const o = opts.find((x) => x.tier === draft?.selectedTier) ?? opts.find((x) => x.tier === 'better') ?? opts[0];
+    const rec = recommendedTier(opts, draft?.selectedTier);
+    const o = rec ? opts.find((x) => x.tier === rec.tier) : undefined;
     return o ? { price: o.price, tier: o.tier } : null;
   }, [priced, draft?.selectedTier]);
   const summaryRef = useRef(summary);
@@ -194,6 +196,16 @@ export function EstimateEditor({
   const prev = stepIndex > 0 ? STEPS[stepIndex - 1]! : null;
   const next = stepIndex < STEPS.length - 1 ? STEPS[stepIndex + 1]! : null;
   const toExplain = ackSummary(flags, draft.deviationAcks).pending;
+  // Steps can be tapped in any order, so a step is done only when its part of the estimate is:
+  // the customer and address the server needs, a priced area, priced options with one picked as
+  // recommended and nothing left to explain, and a quote that went out.
+  const sent = draft.status === 'sent' || draft.status === 'viewed' || draft.status === 'signed';
+  const stepDone: Record<Step, boolean> = {
+    customer: draftSchema.shape.customer.safeParse(draft.customer).success && draftSchema.shape.property.safeParse(draft.property).success,
+    areas: priceableAreas(draft).length > 0,
+    options: (priced?.ok?.options.length ?? 0) > 0 && toExplain === 0 && (draft.selectedTier !== null || sent),
+    send: sent,
+  };
   const goTo = (k: Step) => {
     setStep(k);
     window.scrollTo(0, 0);
@@ -232,6 +244,7 @@ export function EstimateEditor({
           className="mt-2.5"
           steps={STEP_LABELS}
           current={stepIndex}
+          done={STEPS.map((s) => stepDone[s.key])}
           onStep={(i) => goTo(STEPS[i]!.key)}
           badges={toExplain > 0 ? { [OPTIONS_STEP]: { count: toExplain, label: `${toExplain} to explain` } } : undefined}
           // Columns sized to their labels, so "1 Customer" fits a 390px phone at 15px.
@@ -303,7 +316,7 @@ export function EstimateEditor({
           <div className="min-w-0 flex-1">
             <SignLabel size={11}>{summary ? 'Recommended' : 'Price'}</SignLabel>
             <p className="mt-1 flex min-w-0 items-baseline gap-2">
-              <span className="gauge-m text-[26px] text-ink">{summary ? formatMoney(summary.price) : '—'}</span>
+              <span className="gauge-m text-[26px] text-ink">{summary ? formatMoney(summary.price, { cents: 'never' }) : '—'}</span>
               {summary ? (
                 <SignLabel size={11} tone="ink" className="truncate">
                   {TIER_LABELS[summary.tier]}
