@@ -1,16 +1,18 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { num } from '@/lib/format';
+import { formatDateTime, formatMoney, num } from '@/lib/format';
+import { Banner, ButtonLink, Download, Icon, jobBadgeStatus, Mail, Phone, StatusBadge } from '@/components/daymark';
+import { PageHeader } from '@/components/shell';
+import { FactStrip } from '@/components/office';
 import { UNIT_LABELS } from '@/lib/jobs/crew';
 import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
 import { compareActuals, costTotals, signedOption, type CompareRow, type OfficeActual } from '@/lib/jobs/office';
-import { allowedTransitions, JOB_STATUS_LABELS, officeGroup, OFFICE_GROUP_LABELS, type JobStatus } from '@/lib/jobs/status';
+import { allowedTransitions, JOB_STATUS_LABELS, type JobStatus } from '@/lib/jobs/status';
 import { formatVariance, varianceTone } from '@/lib/jobs/variance';
 import type { ProductCode, ProductUnit } from '@/lib/pricing';
 import { ActionForm, ToggleInput } from '../../admin/pricing/ActionForm';
@@ -20,10 +22,8 @@ import { loadCrews, loadJob } from '../data';
 
 export const metadata: Metadata = { title: 'Job' };
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const usdCents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
-const STATUS_TONE: Record<JobStatus, 'slate' | 'green' | 'amber' | 'blue'> = { scheduled: 'blue', in_progress: 'amber', completed: 'green', cancelled: 'slate' };
 const ACTION_LABEL: Record<JobStatus, string> = {
   scheduled: 'Back to scheduled',
   in_progress: 'Mark in progress',
@@ -41,12 +41,20 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
   if (!job) {
     return (
-      <>
-        <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-          <BackLink />
-          <Alert tone="red">Could not load this job: {error}</Alert>
-        </main>
-      </>
+      <main className="@container mx-auto max-w-6xl space-y-5 px-4 py-6 md:px-6">
+        <PageHeader back={{ href: '/jobs', label: 'Jobs' }} title="This job did not load" />
+        <Banner
+          tone="bad"
+          title="Could not load this job"
+          action={
+            <ButtonLink href={`/jobs/${id}`} size="sm" prefetch={false}>
+              Try again
+            </ButtonLink>
+          }
+        >
+          {error}
+        </Banner>
+      </main>
     );
   }
 
@@ -62,58 +70,81 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const costs = costTotals(job.actuals);
   const transitions = allowedTransitions(job.status, profile.role);
   const verifiedCount = job.actuals.filter((a) => a.verifiedAt).length;
-  const group = officeGroup({ status: job.status, actualsCount: job.actuals.length, verifiedCount });
+  const badge = jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart, actualsCount: job.actuals.length, verifiedCount });
   const revenue = option?.price ?? job.revenue;
   const crewOptions = crews.filter((c) => c.active || c.id === job.crewId);
+  const phoneHref = job.customer.phone ? `tel:${job.customer.phone.replace(/[^\d+]/g, '')}` : null;
 
   return (
     <>
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-        <BackLink />
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-slate-900">{job.customer.name}</h1>
-            <p className="text-slate-600">{job.address}</p>
-            <p className="text-sm text-slate-600">
-              {job.customer.phone ? (
-                <a className="font-medium text-brand-800 underline" href={`tel:${job.customer.phone.replace(/[^\d+]/g, '')}`}>
-                  {job.customer.phone}
-                </a>
-              ) : (
-                'No phone'
-              )}
-              {job.customer.email ? ` · ${job.customer.email}` : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge tone={STATUS_TONE[job.status]}>{JOB_STATUS_LABELS[job.status]}</Badge>
-            {job.status === 'completed' ? <Badge tone={group === 'verified' ? 'green' : 'amber'}>{OFFICE_GROUP_LABELS[group]}</Badge> : null}
-          </div>
+      <main className="@container mx-auto max-w-6xl space-y-5 px-4 py-6 md:px-6">
+        <PageHeader back={{ href: '/jobs', label: 'Jobs' }} title={job.customer.name} meta={<StatusBadge status={badge} />} description={job.address} />
+        <div className="-mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[16px] font-semibold text-ink-2">
+          {phoneHref ? (
+            <a href={phoneHref} className="-ml-1 inline-flex min-h-12 items-center gap-2 rounded-control px-1 font-bold text-ink underline underline-offset-4 hover:bg-sunken">
+              <Icon icon={Phone} size="s" />
+              {job.customer.phone}
+            </a>
+          ) : (
+            <span className="inline-flex min-h-12 items-center gap-2">
+              <Icon icon={Phone} size="s" />
+              No phone
+            </span>
+          )}
+          {job.customer.email ? (
+            <a href={`mailto:${job.customer.email}`} className="inline-flex min-h-12 items-center gap-2 rounded-control px-1 font-bold text-ink underline underline-offset-4 hover:bg-sunken [overflow-wrap:anywhere]">
+              <Icon icon={Mail} size="s" />
+              {job.customer.email}
+            </a>
+          ) : null}
         </div>
 
-        <Card>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Item label="Signed option">
-              {option ? `${option.label}${option.price != null ? ` · ${usd.format(option.price)}` : ''}` : '—'}
-            </Item>
-            <Item label="Quote">
-              {job.quote ? `v${job.quote.version}${job.quote.signedAt ? `, signed ${formatNyDateTime(job.quote.signedAt)}` : ''}` : '—'}
-              {job.quote ? (
-                <>
-                  {' · '}
-                  <a className="font-medium text-brand-800 underline" href={`/api/quotes/${job.quote.id}/pdf`} target="_blank" rel="noopener">
+        <FactStrip
+          title="About this job"
+          facts={[
+            {
+              key: 'option',
+              label: 'Signed option',
+              value: option ? (
+                <span className="flex flex-col gap-1">
+                  <span>{option.label}</span>
+                  {option.price != null ? <span className="gauge-m text-[22px]">{formatMoney(option.price)}</span> : null}
+                </span>
+              ) : (
+                '—'
+              ),
+            },
+            {
+              key: 'quote',
+              label: 'Quote',
+              value: job.quote ? (
+                <span className="flex flex-col gap-1">
+                  <span>
+                    Quote v{job.quote.version}
+                    {job.quote.signedAt ? `, signed ${formatDateTime(job.quote.signedAt)}` : ''}
+                  </span>
+                  <a className="-my-2 inline-flex min-h-12 items-center gap-1.5 self-start rounded-control font-bold text-ink underline underline-offset-4 hover:bg-sunken" href={`/api/quotes/${job.quote.id}/pdf`} target="_blank" rel="noopener">
+                    <Icon icon={Download} size="s" />
                     PDF
                   </a>
+                </span>
+              ) : (
+                '—'
+              ),
+            },
+            { key: 'estimator', label: 'Estimator', value: job.estimator ?? '—' },
+            {
+              key: 'work',
+              label: 'Work',
+              value: (
+                <>
+                  {job.startedAt ? `Started ${formatDateTime(job.startedAt)}` : 'Not started'}
+                  {job.completedAt ? <span className="block">Done {formatDateTime(job.completedAt)}</span> : null}
                 </>
-              ) : null}
-            </Item>
-            <Item label="Estimator">{job.estimator ?? '—'}</Item>
-            <Item label="Work">
-              {job.startedAt ? `Started ${formatNyDateTime(job.startedAt)}` : 'Not started'}
-              {job.completedAt ? ` · completed ${formatNyDateTime(job.completedAt)}` : ''}
-            </Item>
-          </dl>
-        </Card>
+              ),
+            },
+          ]}
+        />
 
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
@@ -290,14 +321,6 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         </section>
       </main>
     </>
-  );
-}
-
-function BackLink() {
-  return (
-    <Link href="/jobs" className="inline-flex min-h-11 items-center rounded-xl px-2 font-semibold text-brand-800 hover:bg-brand-50">
-      ‹ All jobs
-    </Link>
   );
 }
 
