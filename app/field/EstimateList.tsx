@@ -42,10 +42,8 @@ import {
   StatusBadge,
   StatusBoard,
   SyncIndicator,
-  Tag,
   buttonClass,
   cx,
-  Ban,
   CloudOff,
   CloudUpload,
   FilePenLine,
@@ -58,9 +56,6 @@ import {
   X,
 } from '@/components/daymark';
 import { useLive } from './hooks';
-
-/** Two dock buttons side by side on a 390px phone: tighter padding so each label stays on one line. */
-const PAIR = 'gap-2 px-3! text-[18px]! whitespace-nowrap';
 
 const FILTER_NAMES: Record<Exclude<BoardFilter, 'all'>, string> = { drafts: 'drafts', sent: 'sent quotes', signed: 'signed quotes' };
 
@@ -166,8 +161,6 @@ export function EstimateList({
                 label="Show"
                 value={filter}
                 onChange={setFilter}
-                // Columns sized to their words, so DRAFTS and SIGNED fit a 390px phone with Sun+'s 3px edges.
-                className="grid-cols-[minmax(0,0.9fr)_minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,1.1fr)]!"
                 cells={[
                   { value: 'all', count: num(counts.all), label: 'All' },
                   { value: 'drafts', count: num(counts.drafts), label: 'Drafts' },
@@ -223,12 +216,12 @@ export function EstimateList({
       <Dock>
         {showRoofLookup ? (
           // A plain page load, so the saved Roof lookup page opens with no signal (public/sw.js).
-          <a href="/field/roof" className={buttonClass({ variant: 'secondary', size: 'lg', block: true }, cx('no-underline', PAIR))}>
+          <a href="/field/roof" className={buttonClass({ variant: 'secondary', size: 'lg', block: true }, 'no-underline')}>
             <Icon icon={Satellite} />
             Roof lookup
           </a>
         ) : null}
-        <Button variant="primary" size="lg" block icon={Plus} onClick={onNew} className={showRoofLookup ? PAIR : undefined}>
+        <Button variant="primary" size="lg" block icon={Plus} onClick={onNew}>
           New estimate
         </Button>
       </Dock>
@@ -347,13 +340,7 @@ function Row({ row, onOpen }: { row: EstimateRow; onOpen: (id: string) => void }
           {price}
         </span>
         <span className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {row.status === 'void' ? (
-            <Tag tone="draft" icon={Ban}>
-              Void
-            </Tag>
-          ) : (
-            <StatusBadge status={row.status} />
-          )}
+          <StatusBadge status={row.status} />
           <span className="min-w-0 text-[15.5px] font-semibold text-ink-2">{row.activity}</span>
           <SyncMark sync={row.sync} />
         </span>

@@ -96,8 +96,8 @@ describe('hazard always comes with an icon and a word', () => {
 });
 
 describe('one status vocabulary', () => {
-  it('has the seven quote statuses and the job statuses, each with an icon, a word and a tone', () => {
-    expect(QUOTE_STATUSES).toEqual(['draft', 'sent', 'viewed', 'signed', 'declined', 'expired', 'lost']);
+  it('has the eight quote statuses and the job statuses, each with an icon, a word and a tone', () => {
+    expect(QUOTE_STATUSES).toEqual(['draft', 'sent', 'viewed', 'signed', 'declined', 'expired', 'lost', 'void']);
     expect(JOB_BADGE_STATUSES).toHaveLength(7);
     const words = new Set<string>();
     for (const s of [...QUOTE_STATUSES, ...JOB_BADGE_STATUSES]) {
@@ -109,7 +109,7 @@ describe('one status vocabulary', () => {
       expect(out).toContain('<svg');
       expect(out).toContain(m.label);
     }
-    expect(words.size).toBe(14); // no word means two things
+    expect(words.size).toBe(15); // no word means two things
     expect(STATUS_META.signed.tone).toBe('signed'); // the only solid tag
   });
 

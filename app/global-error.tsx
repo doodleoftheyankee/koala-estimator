@@ -3,6 +3,7 @@
 // own <html>, the Daymark styles, fonts and theme. Try again reloads the page.
 import './globals.css';
 import { fontVariables } from './fonts';
+import { ThemeRestore } from '@/components/daymark/Theme';
 import { ErrorState } from '@/components/shell/StatePages';
 import { THEME_INIT_SCRIPT } from '@/lib/theme';
 
@@ -15,6 +16,7 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
       </head>
       <body className="min-h-dvh antialiased">
         <ErrorState error={error} retry={() => window.location.reload()} home={{ href: '/', label: 'Go to the start page' }} />
+        <ThemeRestore />
       </body>
     </html>
   );

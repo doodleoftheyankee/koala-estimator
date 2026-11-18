@@ -190,6 +190,9 @@ export function ChipGroup<T extends string>({
   );
 }
 
+/** Each board column's share of the width, from its label's length, so DRAFTS and SIGNED fit a phone. */
+export const boardColumns = (labels: readonly string[]) => labels.map((l) => `minmax(0, ${Math.max(l.length, 3) + 4}fr)`).join(' ');
+
 /** Status board: a plate of counts that filters the list and doubles as the day's readout. */
 export function StatusBoard<T extends string>({
   label,
@@ -210,7 +213,7 @@ export function StatusBoard<T extends string>({
       aria-label={label}
       onKeyDown={(e) => onRovingKeys(e)}
       className={cx('grid overflow-hidden rounded-plate border-solid border-[length:var(--bw)] border-edge bg-surface', className)}
-      style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: boardColumns(cells.map((c) => c.label)) }}
     >
       {cells.map((c, i) => {
         const on = c.value === value;
@@ -224,7 +227,7 @@ export function StatusBoard<T extends string>({
             onClick={() => onChange(c.value)}
             style={on ? CHOSEN_STYLE : undefined}
             className={cx(
-              'flex min-h-[76px] min-w-0 flex-col items-start justify-between gap-2 px-3 py-2.5 text-left transition-colors duration-[var(--t-quick)] focus-visible:-outline-offset-[6px]',
+              'flex min-h-[76px] min-w-0 flex-col items-start justify-between gap-2 px-2.5 py-2.5 text-left transition-colors duration-[var(--t-quick)] focus-visible:-outline-offset-[6px]',
               i > 0 && 'border-l-[length:var(--bw)] border-solid border-edge',
               !on && 'text-ink hover:bg-sunken',
             )}
@@ -254,6 +257,7 @@ export interface ReadoutOption<T extends string> {
 /**
  * Readout tiles: a radio group of big numbers. The chosen tile is hi-vis on a keel.
  * size: xl (56px gauges, two tiles across) or l (36px, for three narrow tiles such as quote options).
+ * compact: 14px padding and 11px sign labels, so "ATTIC FLOOR" stays beside its radio at 390px.
  */
 export function ReadoutTiles<T extends string>({
   label,
@@ -261,6 +265,7 @@ export function ReadoutTiles<T extends string>({
   options,
   onChange,
   size = 'xl',
+  compact = false,
   className,
 }: {
   label: string;
@@ -268,11 +273,17 @@ export function ReadoutTiles<T extends string>({
   options: ReadonlyArray<ReadoutOption<T>>;
   onChange: (v: T) => void;
   size?: 'xl' | 'l';
+  compact?: boolean;
   className?: string;
 }) {
   const anyOn = options.some((o) => o.value === value);
   return (
-    <div role="radiogroup" aria-label={label} onKeyDown={(e) => onRovingKeys(e)} className={cx('grid grid-cols-2 gap-3', className)}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      onKeyDown={(e) => onRovingKeys(e)}
+      className={cx('grid grid-cols-2 gap-3', compact && '[--sign-size:11px]', className)}
+    >
       {options.map((o, i) => {
         const on = o.value === value;
         return (
@@ -286,7 +297,8 @@ export function ReadoutTiles<T extends string>({
             onClick={() => onChange(o.value)}
             style={on ? { ...CHOSEN_STYLE, boxShadow: `${CHOSEN_STYLE.boxShadow}, var(--keel-go)` } : undefined}
             className={cx(
-              'flex min-w-0 flex-col items-start gap-2 rounded-plate p-4 text-left press transition-colors duration-[var(--t-quick)] disabled:opacity-60',
+              'flex min-w-0 flex-col items-start gap-2 rounded-plate text-left press transition-colors duration-[var(--t-quick)] disabled:opacity-60',
+              compact ? 'p-3.5' : 'p-4',
               !on && 'border-solid border-[length:var(--bw)] border-edge bg-surface text-ink hover:bg-sunken',
             )}
           >

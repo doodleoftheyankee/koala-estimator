@@ -82,12 +82,12 @@ import {
   SignLabel,
   Switch,
   SwitchTrack,
+  Pointer,
   TriangleAlert,
   X,
   type StepState,
 } from '@/components/daymark';
 import { NumberInput } from '@/components/NumberInput';
-import { Pointer } from './roofIcons';
 import { RoofReport } from './RoofReport';
 
 const OVERHANG_OPTIONS = OVERHANG_CHOICES.map((o) => ({
@@ -1314,43 +1314,6 @@ function ShareButtons({ data }: { data: TakeoffData }) {
         ) : null}
         {message?.text}
       </p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------------------------
-// The dock
-// ---------------------------------------------------------------------------------------------
-
-/**
- * The thumb dock for a takeoff screen: a 3px rule on top, a one-line note above the 64px action
- * (what it does, with a tick), or the reason it can't be used yet (with a warning sign). The sheet
- * keeps it at the bottom of its own scroll (sticky); the page fixes it above the tab bar.
- */
-export function TakeoffDock({ fixed = false, note, blocked, children }: { fixed?: boolean; note?: ReactNode; blocked?: ReactNode; children: ReactNode }) {
-  return (
-    <div
-      role="region"
-      aria-label="Actions"
-      className={cx('z-30 border-t-[length:var(--bw-x)] border-solid border-rule bg-surface px-4 pt-3', fixed ? 'shell-dock' : 'sticky bottom-0')}
-      style={fixed ? undefined : { paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
-    >
-      <div className="mx-auto max-w-2xl">
-        {blocked ? (
-          <p className="mb-2.5 flex items-start gap-2 text-[15.5px] leading-snug font-bold text-warn">
-            <Icon icon={TriangleAlert} size="s" className="mt-0.5" />
-            <span>{blocked}</span>
-          </p>
-        ) : note ? (
-          <p className="mb-2.5 flex items-start gap-2 text-[15.5px] leading-snug font-semibold text-ink-2">
-            <span className="mt-0.5 text-ok">
-              <Icon icon={Check} size="s" />
-            </span>
-            <span>{note}</span>
-          </p>
-        ) : null}
-        {children}
-      </div>
     </div>
   );
 }

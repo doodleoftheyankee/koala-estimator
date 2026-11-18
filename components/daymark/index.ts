@@ -22,5 +22,5 @@ export type { ToastInput } from './Toast';
 export { EmptyState, LoadingSteps, ProgressBar, Skeleton, SyncIndicator } from './States';
 export type { StepState, SyncState } from './States';
 export { Field, Input, Textarea, Select, Switch, SwitchTrack, SwitchRow, INPUT_CLASS } from './Form';
-export { Monogram, StepTrack } from './Brand';
-export { ThemeSwitcher, useTheme, setThemeChoice } from './Theme';
+export { Monogram, StepTrack, type StepBadge } from './Brand';
+export { ThemeSwitcher, ThemeRestore, useTheme, setThemeChoice } from './Theme';

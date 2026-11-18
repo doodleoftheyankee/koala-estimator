@@ -2,10 +2,9 @@
 // The "More" menu on an estimate row (UX-06): Open, the quote PDF, and Mark lost… in quiet red
 // text. Mark lost… opens a confirm sheet that says what will happen and asks why; nothing changes
 // until "Mark lost" is pressed there. The action and its rules are unchanged (./actions.ts).
-import { Ellipsis } from 'lucide-react';
 import Link from 'next/link';
 import { startTransition, useActionState, useEffect, useId, useRef, useState } from 'react';
-import { Banner, Button, cx, Download, Field, FileText, Icon, Sheet, Textarea, useToast, X } from '@/components/daymark';
+import { Banner, Button, cx, Download, Ellipsis, Field, FileText, Icon, Sheet, Textarea, useToast, X } from '@/components/daymark';
 import type { ActionResult } from '@/lib/admin/forms';
 import { markLost } from './actions';
 

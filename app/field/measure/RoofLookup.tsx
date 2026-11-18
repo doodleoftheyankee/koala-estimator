@@ -27,9 +27,9 @@ import {
 } from '@/lib/roof/lookup';
 import { roofLookupService, setAreaPick, useAreaPick, useHouseLookup } from '@/lib/offline/roofLookup';
 import { num } from '@/lib/format';
-import { Button, cx, Icon, IconButton, ReadoutTiles, Satellite, SignLabel, TriangleAlert, X } from '@/components/daymark';
+import { Button, cx, Dock, Icon, IconButton, ReadoutTiles, Satellite, SignLabel, TriangleAlert, X } from '@/components/daymark';
 import { useOnline } from '../hooks';
-import { sqftValue, TakeoffBody, TakeoffDock, useTakeoff } from './RoofTakeoff';
+import { sqftValue, TakeoffBody, useTakeoff } from './RoofTakeoff';
 
 /** The area form's limit on square feet. */
 const MAX_SQFT = 200_000;
@@ -235,11 +235,11 @@ export function RoofLookupSheet({
       </div>
 
       {result && use && t.picking === 'off' ? (
-        <TakeoffDock blocked={blocked} note={job === 'walls' ? 'Fills the wall run in Measure; you add the wall height.' : 'Fills Square feet and notes the source.'}>
+        <Dock position="sticky" blocked={blocked} note={job === 'walls' ? 'Fills the wall run in Measure; you add the wall height.' : 'Fills Square feet and notes the source.'}>
           <Button variant="primary" size="lg" block disabled={Boolean(blocked) || !('apply' in use)} onClick={() => 'apply' in use && !blocked && onApply(use.apply)}>
             {'apply' in use ? <UseLabel parts={use.parts} /> : 'Use'}
           </Button>
-        </TakeoffDock>
+        </Dock>
       ) : null}
     </div>
   );
@@ -262,7 +262,7 @@ function Numbers({ f, job, pick, onPick }: { f: RoofFigures; job: RoofJob; pick:
         value={pick}
         onChange={onPick}
         size={tileSize(floor, deck)}
-        className="[--sign-size:11px]"
+        compact
         options={[
           {
             value: 'floor',

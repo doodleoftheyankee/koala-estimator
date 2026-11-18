@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { fontVariables } from './fonts';
+import { ThemeRestore } from '@/components/daymark/Theme';
 import { ToastProvider } from '@/components/daymark/Toast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import { THEME_COLORS, THEME_INIT_SCRIPT } from '@/lib/theme';
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh antialiased">
         <ToastProvider>{children}</ToastProvider>
         <ServiceWorkerRegistrar />
+        <ThemeRestore />
       </body>
     </html>
   );

@@ -265,6 +265,9 @@
   --e-eave: #ffffff;
   --e-rake: #c58bff;
   --e-break: #ffe14d;
+  /* Flashing edges DIRECTION.md does not list; both are well above 4.5:1 on the casing. */
+  --e-step: #ff7ad0;
+  --e-headwall: #4cd07d;
   --face-badge: #0c0e10;
   --on-face-badge: #ffffff;
   /* Photo frames, lightboxes and the map key stay dark in every theme. */
@@ -390,6 +393,8 @@
   --color-e-eave: var(--e-eave);
   --color-e-rake: var(--e-rake);
   --color-e-break: var(--e-break);
+  --color-e-step: var(--e-step);
+  --color-e-headwall: var(--e-headwall);
   --color-face-badge: var(--face-badge);
   --color-on-face-badge: var(--on-face-badge);
 
@@ -652,7 +657,7 @@ input[type='number']::-webkit-outer-spin-button {
   html:has(.roof-report),
   body:has(> .roof-report) {
     background: #fff !important;
-    color: #0f172a;
+    color: var(--ink);
     /* The area sheet stops the page behind it from scrolling; paper must not be cut off by that. */
     overflow: visible !important;
     height: auto !important;
@@ -662,7 +667,7 @@ input[type='number']::-webkit-outer-spin-button {
     page: roof-report;
     font-size: 9pt;
     line-height: 1.3;
-    color: #0f172a;
+    color: var(--ink);
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

@@ -6,12 +6,11 @@
 // when it was sent, or its settings) or from the quote itself; nothing about a franchise is typed
 // in here. The franchise colour appears only in its logo tile, never behind text.
 import type { ReactNode } from 'react';
-import { Globe } from 'lucide-react';
 import { buttonClass, buttonStyle } from '@/components/daymark/Button';
 import { cx } from '@/components/daymark/cx';
 import { SignLabel } from '@/components/daymark/Gauge';
 import { StatusBadge } from '@/components/daymark/StatusBadge';
-import { Download, Icon, Mail, Phone, type LucideIcon } from '@/components/daymark/icons';
+import { Download, Globe, Icon, Mail, Phone, type LucideIcon } from '@/components/daymark/icons';
 import type { Tier } from '@/lib/pricing';
 import { DEFAULT_BRAND_COLOR, type Branding, type QuoteDocument } from '@/lib/quotes/model';
 import { initials, licenseLine, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';

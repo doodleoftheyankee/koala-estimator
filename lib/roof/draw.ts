@@ -10,8 +10,8 @@ import { EDGE_INFO } from './roofing';
  * meet contrast by themselves, because lawn and shingles vary, so every line is drawn on an ink
  * casing, the way roads are drawn on maps, and each colour stands out from the casing. The same
  * values as the --e-* tokens in app/globals.css (draw.test.ts checks); the screen and the printed
- * report both draw with these. Step and headwall flashing have no token yet: their colours are
- * the old pink and green, kept apart from the others.
+ * report both draw with these. Step and headwall flashing (not in DIRECTION.md) are --e-step and
+ * --e-headwall: the old pink and green, kept apart from the others.
  */
 export const MAP_COLORS = {
   /**

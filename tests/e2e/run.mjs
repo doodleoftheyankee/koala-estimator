@@ -46,7 +46,11 @@ await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE
 const page = await ctx.newPage();
 const logs = [];
 let roofNotFoundStep = false; // the lookup of an unknown address answers 404 on purpose
-page.on('console', (m) => m.type() === 'error' && !(roofNotFoundStep && m.location().url.endsWith('/api/roof')) && logs.push(`${m.text()} (${m.location().url})`));
+let offlineStep = false; // with no signal, the sync's pull of /api/estimates fails on purpose (caught)
+const expected = (m) =>
+  (roofNotFoundStep && m.location().url.endsWith('/api/roof')) ||
+  (offlineStep && m.location().url.endsWith('/api/estimates') && m.text().includes('ERR_INTERNET_DISCONNECTED'));
+page.on('console', (m) => m.type() === 'error' && !expected(m) && logs.push(`${m.text()} (${m.location().url})`));
 page.on('pageerror', (e) => logs.push('PAGEERROR ' + e.message));
 const step = (s) => console.log('•', s);
 
@@ -686,7 +690,7 @@ await roof.getByRole('button', { name: 'Close' }).click();
 await waitForDb(`select count(*) from roof_lookups where created_by = '${EST.id}' and status = 'failed' and error like 'not_found:%'`, '1', 'the failed lookup is logged with its reason');
 await lookUpAddress('5 No Roof Ln');
 await roof.getByRole('alert').waitFor({ timeout: 30000 });
-check((await roof.getByRole('alert').innerText()).trim() === 'Google has no roof data for this house. Measure it with 📐 Measure this area.', "no roof data, in this app's words (no image to tap, no photo steps)");
+check((await roof.getByRole('alert').innerText()).trim() === 'Google has no roof data for this house. Measure it by hand.', "no roof data, in this app's words (no image to tap, no photo steps)");
 await roof.getByRole('button', { name: 'Close' }).click();
 roofNotFoundStep = false;
 await lookUpAddress('7 Old Rd');
@@ -894,6 +898,7 @@ step('offline estimate');
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor();
 await ctx.setOffline(true);
+offlineStep = true;
 await page.reload();
 await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
 await page.getByText(/Offline/).first().waitFor();
@@ -924,6 +929,7 @@ await page.getByRole('button', { name: 'Back to estimates' }).click();
 await page.screenshot({ path: SHOTS + '09-offline-list.png' });
 console.log('  db before reconnect:', psql("select count(*) from estimates"));
 await ctx.setOffline(false);
+offlineStep = false;
 await page.evaluate(() => window.dispatchEvent(new Event('online')));
 await page.waitForTimeout(6000);
 console.log('  db after reconnect:', psql("select count(*) || ' estimates; ' || string_agg(c.last_name || ':' || e.priced_offline, ',') from estimates e join customers c on c.id=e.customer_id"));

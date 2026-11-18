@@ -16,12 +16,11 @@ import { estimateAddress } from '@/lib/roof/address';
 import type { RecentLookup } from '@/lib/roof/recent';
 import { newArea, newDraft } from '@/lib/sync/draft';
 import { num } from '@/lib/format';
-import { Banner, Button, Card, CloudOff, cx, Field, House, HousePlus, Icon, Input, LoaderCircle, Satellite, Search, SignLabel } from '@/components/daymark';
+import { Banner, Button, Card, CloudOff, cx, Dock, Field, House, HousePlus, Icon, Input, LoaderCircle, Pointer, Satellite, Search, SignLabel } from '@/components/daymark';
 import { PageHeader } from '@/components/shell';
 import { useOnline } from '../hooks';
-import { sqftValue, TakeoffBody, TakeoffDock, useTakeoff, type Takeoff } from '../measure/RoofTakeoff';
+import { sqftValue, TakeoffBody, useTakeoff, type Takeoff } from '../measure/RoofTakeoff';
 import { useRoofConfigured } from '../measure/RoofLookup';
-import { Pointer } from '../measure/roofIcons';
 
 const noSubscribe = () => () => undefined;
 /** The address from ?address= (trimmed, at most 200 characters), once on the phone. */
@@ -241,11 +240,11 @@ function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; pro
     }
   };
   return (
-    <TakeoffDock fixed blocked={error ?? reason} note={parsed ? `A new estimate for ${parsed.street}, ${parsed.city}, with an Attic area that already has these numbers.` : null}>
+    <Dock blocked={error ?? reason} note={parsed ? `A new estimate for ${parsed.street}, ${parsed.city}, with an Attic area that already has these numbers.` : null}>
       <Button variant="primary" size="lg" block icon={busy ? LoaderCircle : HousePlus} disabled={Boolean(reason) || busy || Boolean(t.state.running)} onClick={start}>
         {busy ? 'Starting…' : 'Start an estimate here'}
       </Button>
-    </TakeoffDock>
+    </Dock>
   );
 }
 

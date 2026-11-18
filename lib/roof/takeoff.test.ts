@@ -69,7 +69,7 @@ describe('fetchTakeoff', () => {
   it("says no roof data in this app's terms (Roof Takeoff's own text points to steps this app doesn't have)", async () => {
     const { svc } = service(() => json(404, { error: 'Google has no roof data for this spot. Tap the right roof on the image, or measure it from photos.' }));
     const e = await failure(fetchTakeoff('12 Elkton Rd', svc));
-    expect(e.message).toBe('Google has no roof data for this house. Measure it with 📐 Measure this area.');
+    expect(e.message).toBe('Google has no roof data for this house. Measure it by hand.');
     expect([e.status, e.code]).toEqual([404, 'not_found']);
   });
 

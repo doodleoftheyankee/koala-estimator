@@ -30,9 +30,8 @@ export const MIN_ZOOM = 16;
 export const MAX_ZOOM = 20;
 
 export const NOT_CONFIGURED_MESSAGE = "Satellite lookup isn't set up yet. Ask the office.";
-/** Where the estimator measures by hand instead (the button on the area). */
-export const MEASURE_BUTTON = '📐 Measure this area';
-export const NO_ROOF_MESSAGE = `Google has no roof data for this house. Measure it with ${MEASURE_BUTTON}.`;
+/** The estimator measures by hand instead: the "Measure by hand" step beside the message. */
+export const NO_ROOF_MESSAGE = 'Google has no roof data for this house. Measure it by hand.';
 
 /** Job types the lookup gives a number for: floor area (attic floor or roof deck) or wall run. */
 export const ROOF_LOOKUP_JOBS: ReadonlySet<JobType> = new Set<JobType>(['attic', 'crawlspace', 'garage', 'commercial', 'walls']);
@@ -230,7 +229,7 @@ export const riseFromDegrees = (deg: number) => 12 * Math.tan((deg * Math.PI) / 
 export function koalaWording(text: string): string {
   return text
     .replace(/Tap the right roof on the (?:image|photo)(?:, or measure it from photos)?\.?/gi, 'Wrong house? Tap the right roof under the photo.')
-    .replace(/measure (?:it|this one) from photos/gi, `measure it with ${MEASURE_BUTTON}`);
+    .replace(/measure (?:it|this one) from photos/gi, 'measure it by hand');
 }
 
 /**

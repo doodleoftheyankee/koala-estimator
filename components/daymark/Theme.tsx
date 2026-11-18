@@ -6,7 +6,7 @@
 //
 // The choice is stored in localStorage (lib/theme.ts), applied to <html> at once, and applied
 // before first paint on the next load by the inline script in app/layout.tsx.
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   applyThemeChoice,
   readThemeChoice,
@@ -79,6 +79,21 @@ export function setThemeChoice(choice: ThemeChoice) {
   applyThemeChoice(document.documentElement, choice);
   syncThemeColor(choice);
   notify();
+}
+
+/**
+ * Re-applies the stored choice once the page is running. The inline script in app/layout.tsx does
+ * this before first paint, but Next renders not-found and error pages on the client, where that
+ * script never runs; without this a Night or Sun+ phone would see those pages in Day.
+ */
+export function ThemeRestore() {
+  useEffect(() => {
+    const choice = readThemeChoice(storage());
+    if (document.documentElement.getAttribute('data-theme-choice') === choice) return;
+    applyThemeChoice(document.documentElement, choice);
+    syncThemeColor(choice);
+  }, []);
+  return null;
 }
 
 export function useTheme(): { choice: ThemeChoice; resolved: ResolvedTheme; setChoice: (c: ThemeChoice) => void } {

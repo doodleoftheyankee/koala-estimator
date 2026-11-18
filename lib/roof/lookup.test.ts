@@ -344,7 +344,7 @@ describe('compactTakeoff', () => {
       'Google has no roof data for this spot. Wrong house? Tap the right roof under the photo.',
     );
     expect(koalaWording('Odd outline. Tap the right roof on the photo')).toBe('Odd outline. Wrong house? Tap the right roof under the photo.');
-    expect(koalaWording('No faces, so measure this one from photos.')).toBe('No faces, so measure it with 📐 Measure this area.');
+    expect(koalaWording('No faces, so measure this one from photos.')).toBe('No faces, so measure it by hand.');
     expect(koalaWording('Lower-detail imagery. Check the pitch on site.')).toBe('Lower-detail imagery. Check the pitch on site.');
     const r = compactTakeoff(takeoffSchema.parse({ ...clone(fixture), warnings: ['Wrong building? Tap the right roof on the image.'] }));
     expect(r.warnings).toEqual(['Wrong building? Wrong house? Tap the right roof under the photo.']);
@@ -582,7 +582,7 @@ describe('words', () => {
 
   it('plain words for the estimator: no setup jargon, no steps this app does not have', () => {
     expect(NOT_CONFIGURED_MESSAGE).toBe("Satellite lookup isn't set up yet. Ask the office.");
-    expect(NO_ROOF_MESSAGE).toBe('Google has no roof data for this house. Measure it with 📐 Measure this area.');
+    expect(NO_ROOF_MESSAGE).toBe('Google has no roof data for this house. Measure it by hand.');
   });
 
   it('when a saved lookup was made', () => {

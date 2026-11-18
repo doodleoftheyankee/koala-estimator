@@ -1,6 +1,6 @@
 // Status tags: icon + word + fixed colour, never colour alone. ONE vocabulary for the whole app.
 //
-//   Quotes:  Draft · Sent · Viewed · Signed · Declined · Expired · Lost
+//   Quotes:  Draft · Sent · Viewed · Signed · Declined · Expired · Lost · Void
 //   Jobs:    To schedule · Scheduled · In progress · Done · Needs check · Verified · Cancelled
 //
 // Colours: grey = draft or closed out, blue = waiting on the customer, violet = the customer
@@ -63,7 +63,7 @@ export function Tag({ tone, icon, children, className, title }: { tone: TagTone;
   );
 }
 
-export const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'signed', 'declined', 'expired', 'lost'] as const;
+export const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'signed', 'declined', 'expired', 'lost', 'void'] as const;
 export type QuoteBadgeStatus = (typeof QUOTE_STATUSES)[number];
 
 export const JOB_BADGE_STATUSES = [
@@ -95,6 +95,7 @@ export const STATUS_META: Record<BadgeStatus, StatusMeta> = {
   declined: { label: 'Declined', icon: ThumbsDown, tone: 'bad', means: 'The customer said no' },
   expired: { label: 'Expired', icon: Clock, tone: 'draft', means: 'The price hold ran out' },
   lost: { label: 'Lost', icon: X, tone: 'bad', means: 'Marked lost by the office' },
+  void: { label: 'Void', icon: Ban, tone: 'draft', means: 'Withdrawn; kept for the record' },
   'job.to_schedule': { label: 'To schedule', icon: CalendarPlus, tone: 'warn', means: 'Signed, needs a date' },
   'job.scheduled': { label: 'Scheduled', icon: CalendarCheck, tone: 'info', means: 'Has a date and a crew' },
   'job.in_progress': { label: 'In progress', icon: Hammer, tone: 'line', means: 'The crew has started' },

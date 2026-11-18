@@ -267,6 +267,12 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
           address={address}
           onApply={(r) => applyRoof(lookingUpArea.id, r)}
           onClose={() => setLookingUp(null)}
+          // "Measure by hand" after a failed lookup opens Measure for this area straight away.
+          onMeasure={() => {
+            if (!draft.measurements[lookingUpArea.id]) setMeasurement(lookingUpArea.id, newMeasurement(lookingUpArea.jobType));
+            setLookingUp(null);
+            setMeasuring(lookingUpArea.id);
+          }}
         />
       ) : null}
 

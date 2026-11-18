@@ -16,14 +16,12 @@ import {
   DockSpacer,
   LoadingSteps,
   SignLabel,
+  StepTrack,
   SyncIndicator,
-  cx,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Icon,
   Lock,
-  TriangleAlert,
   type SyncState as IndicatorState,
 } from '@/components/daymark';
 import { useLive } from './hooks';
@@ -39,6 +37,8 @@ const STEPS = [
   { key: 'send', label: 'Send' },
 ] as const;
 type Step = (typeof STEPS)[number]['key'];
+const STEP_LABELS = STEPS.map((s) => s.label);
+const OPTIONS_STEP = STEPS.findIndex((s) => s.key === 'options');
 
 export type PricingResult = { ok: PricedEstimate; error: null } | { ok: null; error: string } | null;
 export type Update = (fn: (d: EstimateDraft) => EstimateDraft) => void;
@@ -227,7 +227,16 @@ export function EstimateEditor({
           </div>
           <SyncIndicator state={recordSyncState(record, online)} className="shrink-0" />
         </div>
-        <StepNav current={stepIndex} toExplain={toExplain} onStep={goTo} />
+        <StepTrack
+          label="Estimate steps"
+          className="mt-2.5"
+          steps={STEP_LABELS}
+          current={stepIndex}
+          onStep={(i) => goTo(STEPS[i]!.key)}
+          badges={toExplain > 0 ? { [OPTIONS_STEP]: { count: toExplain, label: `${toExplain} to explain` } } : undefined}
+          // Columns sized to their labels, so "1 Customer" fits a 390px phone at 15px.
+          columns="minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.1fr) minmax(0,0.8fr)"
+        />
       </header>
 
       <div className="space-y-3 px-4 py-4">
@@ -338,58 +347,4 @@ function recordSyncState(record: LocalEstimate, online: boolean): IndicatorState
     default:
       return online ? 'pending' : 'offline';
   }
-}
-
-/**
- * The four steps as a track you can tap: done steps are ink, the current one is ink with a ring,
- * the rest use the track colour. Options carries the count of changes still to explain.
- */
-function StepNav({ current, toExplain, onStep }: { current: number; toExplain: number; onStep: (k: Step) => void }) {
-  return (
-    <nav aria-label="Estimate steps" className="mt-2.5">
-      {/* Columns sized to their labels, so "1 Customer" fits a 390px phone at 15px. */}
-      <ol className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.8fr)] gap-1.5">
-        {STEPS.map((s, i) => {
-          const state = i < current ? 'done' : i === current ? 'current' : 'todo';
-          const explain = s.key === 'options' && toExplain > 0;
-          return (
-            <li key={s.key} className="min-w-0">
-              <button
-                type="button"
-                onClick={() => onStep(s.key)}
-                aria-current={state === 'current' ? 'step' : undefined}
-                className="relative block min-h-12 w-full rounded-control px-0.5 pt-1.5 pb-1 text-left focus-visible:outline-offset-0"
-              >
-                <span
-                  aria-hidden
-                  className={cx(
-                    'block h-[7px] rounded-full',
-                    state === 'todo' ? 'bg-track shadow-[inset_0_0_0_2px_var(--track-edge)]' : 'bg-ink',
-                    state === 'current' && 'outline-2 outline-offset-2 outline-ink outline-solid',
-                  )}
-                />
-                {explain ? (
-                  // Sits over the end of the bar, so the step's name keeps its room.
-                  <span
-                    aria-hidden
-                    className="absolute -top-1 right-0 inline-flex h-6 items-center gap-0.5 rounded-full border-[1.5px] border-solid border-warn bg-warn-fill px-1.5 font-num text-[15px] leading-none font-extrabold text-warn"
-                  >
-                    <Icon icon={TriangleAlert} size="xs" />
-                    {toExplain}
-                  </span>
-                ) : null}
-                <span className={cx('mt-2 block min-w-0 truncate text-[15px] leading-tight', state === 'todo' ? 'font-semibold text-ink-3' : 'font-extrabold text-ink')}>
-                  <span className="font-num [font-stretch:80%]">{i + 1}</span> {s.label}
-                  <span className="sr-only">
-                    {explain ? ` (${toExplain} to explain)` : ''}
-                    {state === 'done' ? ' (done)' : state === 'current' ? ' (current step)' : ''}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
-  );
 }

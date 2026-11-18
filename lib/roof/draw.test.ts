@@ -76,7 +76,7 @@ describe('map colours', () => {
 
   it('are the Daymark roof map tokens in app/globals.css', () => {
     expect(MAP_COLORS.casing).toBe(token('e-casing'));
-    for (const k of ['ridge', 'hip', 'valley', 'eave', 'rake', 'break'] as const) expect(edgeColor(k), k).toBe(token(`e-${k}`));
+    for (const k of ['ridge', 'hip', 'valley', 'eave', 'rake', 'break', 'step', 'headwall'] as const) expect(edgeColor(k), k).toBe(token(`e-${k}`));
     expect(MAP_COLORS.casing).toBe(token('face-badge'));
     expect(MAP_COLORS.light).toBe(token('on-face-badge'));
   });
