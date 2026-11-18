@@ -175,7 +175,7 @@ function CrewMembership({ memberId, name, isCrew, crews, current }: { memberId: 
   }
   return (
     <details className="mt-4 border-t border-slate-100 pt-3" open={current.size > 0}>
-      <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800">Crews{current.size ? ` (${current.size})` : ' (optional)'}</summary>
+      <summary className="flex min-h-12 cursor-pointer items-center py-2 text-sm font-semibold text-slate-800">Crews{current.size ? ` (${current.size})` : ' (optional)'}</summary>
       <div className="mt-2">{form}</div>
     </details>
   );

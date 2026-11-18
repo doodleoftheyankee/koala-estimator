@@ -229,10 +229,10 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <Alert tone="amber">
           <p className="font-semibold">Needs owner input ({todo.length})</p>
           <p className="mt-1">These are still seed placeholders. Pricing works, but it will not match how you quote until they are set.</p>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+          <ul className="mt-2 grid gap-x-3 sm:grid-cols-2">
             {todo.map((t) => (
               <li key={t.text}>
-                <a href={t.href} className="underline decoration-amber-400 underline-offset-2 hover:text-amber-950">
+                <a href={t.href} className="flex min-h-12 items-center underline decoration-amber-400 underline-offset-2 hover:text-amber-950">
                   {t.text}
                 </a>
               </li>
@@ -247,7 +247,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <ul className="flex gap-2 whitespace-nowrap">
           {SECTIONS.map((s) => (
             <li key={s.id}>
-              <a href={`#${s.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800">
+              <a href={`#${s.id}`} className="inline-flex min-h-12 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800">
                 {s.label}
               </a>
             </li>

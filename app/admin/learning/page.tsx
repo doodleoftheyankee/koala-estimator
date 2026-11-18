@@ -273,7 +273,7 @@ function LearningContent({ data, isOwner }: { data: Dashboard; isOwner: boolean 
             <li key={s.id}>
               <a
                 href={`#${s.id}`}
-                className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800"
+                className="inline-flex min-h-12 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800"
               >
                 {s.label}
                 {s.id === 'candidate' && data.candidate ? (

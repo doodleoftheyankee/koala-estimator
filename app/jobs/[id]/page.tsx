@@ -156,7 +156,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             </p>
             <ActionForm action={saveSchedule} readOnly={false} submitLabel="Save schedule">
               <input type="hidden" name="id" value={job.id} />
-              <div className="grid gap-3 sm:grid-cols-3">
+              {/* Crew on its own row; the date keeps room for a whole date (11/18/2026) at every width. */}
+              <div className="grid gap-3">
                 <Field label="Crew">
                   <Select name="crew_id" defaultValue={job.crewId ?? ''}>
                     <option value="">Unassigned</option>
@@ -168,10 +169,12 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                     ))}
                   </Select>
                 </Field>
-                <Field label="Start date">
-                  <Input type="date" name="scheduled_start" defaultValue={job.scheduledStart ?? ''} />
-                </Field>
-                <NumberField label="Days" name="scheduled_days" defaultValue={job.scheduledDays} required={false} />
+                <div className="grid grid-cols-[minmax(11.5rem,1fr)_minmax(5rem,7rem)] gap-3">
+                  <Field label="Start date">
+                    <Input type="date" name="scheduled_start" defaultValue={job.scheduledStart ?? ''} />
+                  </Field>
+                  <NumberField label="Days" name="scheduled_days" defaultValue={job.scheduledDays} required={false} />
+                </div>
               </div>
             </ActionForm>
           </Card>
@@ -186,7 +189,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                   <input type="hidden" name="id" value={job.id} />
                   <input type="hidden" name="status" value={t} />
                   {t === 'cancelled' ? (
-                    <label className="flex min-h-11 items-center gap-3 text-sm text-slate-700">
+                    <label className="flex min-h-12 items-center gap-3 text-sm text-slate-700">
                       <input type="checkbox" name="confirm" value="true" className="h-5 w-5" />
                       Yes, cancel this job (the crew stops seeing it)
                     </label>
@@ -420,7 +423,7 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
   return (
     <Card>
       <details>
-        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-slate-900">
             {row.areaName} · {row.label}
           </span>
@@ -468,7 +471,7 @@ function JobRowEditor({ jobId, actual }: { jobId: string; actual: OfficeActual |
   return (
     <Card>
       <details>
-        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-slate-900">Whole job: drive, days, crew size, other costs</span>
           <span className="flex items-center gap-2">
             <RowBadge actual={actual} />
