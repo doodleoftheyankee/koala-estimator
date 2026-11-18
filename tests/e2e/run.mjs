@@ -937,6 +937,17 @@ const op = await octx.newPage();
 op.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
 await op.goto(BASE + '/estimates');
 await op.screenshot({ path: SHOTS + '11-estimates.png', fullPage: true });
+{
+  // The office list shows the same headline price as the field app (the recommended option, else
+  // Better), and its figures add up exactly the rows they name.
+  const money = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+  const headline = Number(psql("select o.price from estimate_options o join estimates e on e.id = o.estimate_id join customers c on c.id = e.customer_id where c.last_name = 'Offline' and o.tier = coalesce(e.selected_tier, 'better')"));
+  const offlineRow = op.getByRole('row', { name: /Sam Offline/ });
+  check((await offlineRow.innerText()).includes(money(headline)), `the office list shows the recommended price ${money(headline)}, as the field app does`);
+  const signedSum = Number(psql("select sum(signed_price) from quotes where status = 'signed'"));
+  const figures = await op.getByRole('region', { name: 'Figures for this list' }).innerText();
+  check(figures.includes(money(signedSum)) && /1 quote, signed by the customer/.test(figures), `the Signed figure is the signed quotes' total, ${money(signedSum)}`);
+}
 await op.getByRole('link', { name: 'Roof lookup' }).click();
 await op.waitForURL(BASE + '/field/roof');
 await op.getByText(/by Eddie Estimator/).first().waitFor({ timeout: 15000 });
@@ -1044,6 +1055,23 @@ console.log('  run now:', runMsg.join(' | ').trim() || '(no message)');
 await ep.goto(BASE + '/admin/learning');
 console.log('  estimator on /admin/learning ends at:', new URL(ep.url()).pathname);
 check(new URL(ep.url()).pathname !== '/admin/learning', 'estimators cannot open the learning dashboard');
+
+step('office marks an estimate lost from its row menu');
+{
+  const lostId = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Offline'");
+  await op.goto(BASE + '/estimates');
+  await op.getByRole('button', { name: 'More for Sam Offline' }).click();
+  await op.getByRole('button', { name: 'Mark lost…' }).click();
+  const sheet = op.getByRole('dialog', { name: 'Mark this estimate lost?' });
+  await sheet.waitFor();
+  check(psql(`select status from estimates where id = '${lostId}'`) !== 'lost', 'nothing changes until the confirm step');
+  await sheet.getByLabel('Why was it lost?').fill('Went with a competitor');
+  await sheet.getByRole('button', { name: 'Mark lost', exact: true }).click();
+  await waitForDb(`select status || ':' || lost_reason from estimates where id = '${lostId}'`, 'lost:Went with a competitor', 'office marked the estimate lost from the row menu, with the reason');
+  await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost: Went with a competitor').waitFor({ timeout: 15000 });
+  check((await op.getByRole('button', { name: 'More for Sam Offline' }).count()) === 1 && (await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost', { exact: true }).count()) === 1, 'the row now says Lost');
+  await op.screenshot({ path: SHOTS + '21-estimate-lost.png', fullPage: true });
+}
 
 console.log('console errors:', logs.length ? logs : 'none');
 await browser.close();
