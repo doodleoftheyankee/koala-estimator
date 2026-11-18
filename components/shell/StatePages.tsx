@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { startTransition, useSyncExternalStore, type ReactNode } from 'react';
 import { buttonClass, Button } from '../daymark/Button';
 import { cx } from '../daymark/cx';
-import { ArrowLeft, CloudOff, Compass, Icon, RefreshCw, TriangleAlert, type LucideIcon } from '../daymark/icons';
+import { ArrowLeft, CloudOff, Compass, Icon, Lock, RefreshCw, TriangleAlert, type LucideIcon } from '../daymark/icons';
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb);
@@ -89,6 +89,30 @@ export function NotFoundState({
               {secondary.label}
             </Link>
           ) : null}
+        </>
+      }
+    >
+      <p>{hint}</p>
+    </StatePage>
+  );
+}
+
+/**
+ * A page the signed-in role cannot use (lib/server/auth.ts requireRole sends people here instead
+ * of quietly to their home page): says whose page it is and offers the way home.
+ */
+export function NoAccessState({ title, hint, primary }: { title: ReactNode; hint: ReactNode; primary: { href: string; label: string } }) {
+  return (
+    <StatePage
+      icon={Lock}
+      label="Not in your menu"
+      title={title}
+      actions={
+        <>
+          <Link href={primary.href} prefetch={false} className={buttonClass({ variant: 'main' })}>
+            {primary.label}
+          </Link>
+          <BackButton />
         </>
       }
     >

@@ -987,6 +987,7 @@ await est.addCookies([sessionCookie(EST)]);
 const ep = await est.newPage();
 await ep.goto(BASE + '/admin/pricing');
 console.log('  estimator on /admin/pricing ends at:', new URL(ep.url()).pathname);
+check((await ep.getByRole('heading', { name: 'This page is for the owner and the office' }).count()) === 1, 'an estimator on Pricing is told whose page it is, not sent home silently');
 
 
 // ---------------------------------------------------------------- Phase 2
@@ -1039,7 +1040,11 @@ console.log('  actuals:', psql(`select count(*) || ' rows; ' || coalesce(sum(act
 check(psql(`select count(*) from job_actuals where job_id = '${jobId}' and area_id is null and actual_days = 1 and actual_crew_size = 2`) === '1', 'whole-job actuals synced');
 await cpg.screenshot({ path: SHOTS + '17-crew-done.png', fullPage: true });
 await cpg.goto(BASE + '/field');
-check(new URL(cpg.url()).pathname === '/crew', 'crew is kept out of the priced field app');
+await cpg.getByRole('heading', { name: 'This page is for the owner, the office and estimators' }).waitFor();
+check(new URL(cpg.url()).pathname === '/no-access', 'crew is kept out of the priced field app, and told whose page it is');
+check(!/\$\s?\d/.test(await cpg.locator('body').innerText()), 'and sees no prices there');
+await cpg.getByRole('link', { name: 'Go to Jobs' }).click();
+await cpg.waitForURL(BASE + '/crew');
 
 step('office verifies the actuals');
 await op.goto(BASE + '/jobs/' + jobId);

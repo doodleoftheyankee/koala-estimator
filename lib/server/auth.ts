@@ -27,11 +27,14 @@ export const getSessionProfile = cache(async function getSessionProfile(): Promi
   return { userId: user.id, email: user.email ?? null, role: data.role as Role, fullName: data.full_name as string };
 });
 
-/** For pages: redirect to /login when signed out, or to / when the role is not allowed. */
+/**
+ * For pages: redirect to /login when signed out. When the role is not allowed, go to /no-access,
+ * which says whose page it is and links to the role's home (never a silent redirect, AUDIT §6).
+ */
 export async function requireRole(...roles: Role[]): Promise<SessionProfile> {
   const profile = await getSessionProfile();
   if (!profile) redirect('/login');
-  if (roles.length && !roles.includes(profile.role)) redirect('/');
+  if (roles.length && !roles.includes(profile.role)) redirect(`/no-access?for=${roles.join(',')}`);
   return profile;
 }
 
