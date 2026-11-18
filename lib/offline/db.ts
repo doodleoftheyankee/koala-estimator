@@ -1,7 +1,7 @@
 'use client';
 // On-device storage (IndexedDB via Dexie). Estimates live here first; the server is a sync target.
 import Dexie, { type Table } from 'dexie';
-import type { PricingBundle, Role } from '@/lib/pricing';
+import type { PricingBundle, Role, Tier } from '@/lib/pricing';
 import type { EstimateDraft } from '@/lib/sync/draft';
 
 export type SyncState =
@@ -28,6 +28,8 @@ export interface LocalEstimate {
   syncedAt: string | null;
   /** Price of the recommended option at last save, for the list view. */
   summaryPrice?: number | null;
+  /** The option summaryPrice belongs to (saved since the Daymark list; older saves lack it). */
+  summaryTier?: Tier | null;
 }
 
 /** A new estimate as this phone first stores it: not synced, nothing from the server yet. */
@@ -108,6 +110,8 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 export const META = {
   bundle: 'bundle',
   profile: 'profile',
+  /** When this phone last read the estimate list from the server (ISO), for "Synced 2 min ago". */
+  lastSync: 'lastSync',
 } as const;
 
 export async function getCachedBundle(): Promise<PricingBundle | null> {
@@ -126,6 +130,7 @@ export async function switchUser(profile: CachedProfile): Promise<void> {
     // Uploaded photos are safe on the server; ones still waiting to upload stay, like unsynced estimates.
     await db().photos.where('ownerId').equals(prev.userId).and((p) => p.state === 'uploaded').delete();
     await db().meta.delete(META.bundle);
+    await db().meta.delete(META.lastSync);
   }
   await setMeta(META.profile, profile);
 }

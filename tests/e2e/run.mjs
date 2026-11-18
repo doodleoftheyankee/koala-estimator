@@ -58,7 +58,7 @@ await page.waitForTimeout(1500);
 await page.screenshot({ path: SHOTS + '01-list.png' });
 
 step('create estimate');
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Pat');
 await page.getByLabel('Last name').fill('Lee');
 await page.getByLabel('Email').fill('pat@example.com');
@@ -322,7 +322,7 @@ const roofCalls = () => {
 const roofImageLoaded = () => page.waitForFunction(() => { const i = document.querySelector('[role=dialog] img'); return i && i.complete && i.naturalWidth === 1280; });
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor();
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Robin');
 await page.getByLabel('Last name').fill('Roof');
 await page.getByLabel('Street address').fill('12 Elkton Rd');
@@ -858,7 +858,7 @@ await page.screenshot({ path: SHOTS + '08a-roof-page-offline-375.png' });
 await page.setViewportSize(phone.viewport);
 await page.goto(BASE + '/field');
 await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
-await page.getByRole('button', { name: '+ New estimate' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
 await page.getByLabel('First name').fill('Sam');
 await page.getByLabel('Last name').fill('Offline');
 await page.getByLabel('Street address').fill('99 Crawl Ln');
