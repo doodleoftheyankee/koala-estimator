@@ -302,7 +302,8 @@ for (let i = 1; i <= 12; i++) await cp.mouse.move(box.x + 20 + i * 20, box.y + b
 await cp.mouse.up();
 await cp.getByRole('checkbox').check();
 await cp.getByRole('button', { name: /^Sign and accept/ }).click();
-await cp.getByText(/thank you|signed/i).first().waitFor({ timeout: 30000 });
+// The thank-you heading (the quote's terms also say "signed", so plain text would match too early).
+await cp.getByRole('heading', { name: /thank you/i }).waitFor({ timeout: 30000 });
 await cp.screenshot({ path: SHOTS + '07-signed.png', fullPage: true });
 
 step('db checks after signing');

@@ -163,8 +163,8 @@ const rovingIndex = (on: boolean, i: number, anyOn: boolean) => (on || (!anyOn &
 
 /**
  * The options as cards: stacked rows on phones (long names and the price line up), three across
- * from 640px. The chosen one gets the wash and an ink edge (CHOSEN_STYLE, set inline so no class
- * can remove the edge); the quote's recommended option carries an ink "Recommended" tag.
+ * from 640px. The chosen one gets the wash and an ink edge (CHOSEN_CARD_STYLE, set inline so no
+ * class can remove the edge); the quote's recommended option carries an ink "Recommended" tag.
  */
 function OptionCards({ options, value, recommendedTier, onChange }: { options: QuoteOptionView[]; value: Tier | null; recommendedTier: Tier | null; onChange: (t: Tier) => void }) {
   const anyOn = options.some((o) => o.tier === value);
