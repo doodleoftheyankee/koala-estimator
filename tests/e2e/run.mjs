@@ -304,6 +304,10 @@ const cp = await cust.newPage();
 cp.on('pageerror', (e) => logs.push('CUSTOMER PAGEERROR ' + e.message));
 await cp.goto(link);
 await cp.screenshot({ path: SHOTS + '06-customer-quote.png', fullPage: true });
+const signBar = cp.getByRole('complementary', { name: 'Your choice' });
+check(/better/i.test(await signBar.innerText()) && (await cp.getByRole('radio', { checked: true }).innerText()).includes((await signBar.innerText()).match(/\$[\d,]+/)?.[0] ?? '?'), 'the sign bar shows the recommended option and its price');
+await cp.getByRole('button', { name: 'Review and sign' }).click();
+check(await cp.waitForFunction(() => document.activeElement?.getAttribute('autocomplete') === 'name', null, { timeout: 5000 }).then(() => true, () => false), 'Review and sign takes the customer to the name field');
 await cp.getByLabel(/full name/i).fill('Pat Lee');
 const canvas = cp.locator('canvas');
 await canvas.scrollIntoViewIfNeeded();
@@ -313,8 +317,9 @@ await cp.mouse.down();
 for (let i = 1; i <= 12; i++) await cp.mouse.move(box.x + 20 + i * 20, box.y + box.height / 2 + (i % 2 ? -15 : 15));
 await cp.mouse.up();
 await cp.getByRole('checkbox').check();
-await cp.getByRole('button', { name: /sign/i }).last().click();
-await cp.getByText(/thank you|signed/i).first().waitFor({ timeout: 30000 });
+await cp.getByRole('button', { name: /^Sign and accept/ }).click();
+// The thank-you heading (the quote's terms also say "signed", so plain text would match too early).
+await cp.getByRole('heading', { name: /thank you/i }).waitFor({ timeout: 30000 });
 await cp.screenshot({ path: SHOTS + '07-signed.png', fullPage: true });
 
 step('db checks after signing');
