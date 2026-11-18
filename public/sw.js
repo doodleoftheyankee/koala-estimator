@@ -8,7 +8,9 @@
  *    has no /field shell (crews are redirected away), so an offline launch at /field (the
  *    manifest start_url) falls back to the cached /crew shell. Never the other way round: the
  *    /field shell can show prices, which crews must not see.
- *  - /_next/static/* and /icons/* : cache-first (file names are content-hashed).
+ *  - /_next/static/* and /icons/* : cache-first (file names are content-hashed). That includes the
+ *    self-hosted Daymark fonts (/_next/static/media/*.woff2): they are preloaded from each shell's
+ *    HTML and also picked out of the shell's stylesheets, so the offline app keeps its look.
  *  - /api/* and everything else: network only. Offline data lives in IndexedDB, not here.
  *  - The shells are per device, not per user. A shell the server refuses (redirect, 401, 403:
  *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
@@ -16,7 +18,7 @@
  *    a crew member never gets someone else's priced /field shell.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
@@ -34,6 +36,31 @@ function assetsIn(html) {
   return [...new Set(html.match(/\/_next\/static\/[^"'\s)\\]+/g) || [])];
 }
 
+/** Files a stylesheet points at with url(...) (fonts, images), as same-origin /_next/static paths. */
+function assetsInCss(css, cssPath) {
+  const out = new Set();
+  for (const m of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)) {
+    if (m[1].startsWith('data:')) continue;
+    const u = new URL(m[1], self.location.origin + cssPath);
+    if (u.origin === self.location.origin && u.pathname.startsWith('/_next/static/')) out.add(u.pathname);
+  }
+  return [...out];
+}
+
+/**
+ * Caches the given assets, then whatever their stylesheets use. refetch: fetch even when cached
+ * (the install-time precache does, as before); otherwise only what is missing.
+ */
+async function cacheAssets(urls, refetch = false) {
+  const staticCache = await caches.open(STATIC_CACHE);
+  const add = (url) => staticCache.match(url).then((hit) => (hit && !refetch ? hit : staticCache.add(url))).catch(() => undefined);
+  await Promise.all(urls.map(add));
+  for (const css of urls.filter((u) => u.endsWith('.css'))) {
+    const res = await staticCache.match(css);
+    if (res) await Promise.all(assetsInCss(await res.text(), css).map(add));
+  }
+}
+
 async function precacheShell(shellUrl) {
   const res = await fetch(shellUrl, { credentials: 'include', cache: 'no-store' });
   const cache = await caches.open(SHELL_CACHE);
@@ -41,12 +68,7 @@ async function precacheShell(shellUrl) {
   if (refused(res)) return cache.delete(shellUrl);
   if (!res.ok) return;
   await cache.put(shellUrl, res.clone());
-  const staticCache = await caches.open(STATIC_CACHE);
-  await Promise.all(
-    [...assetsIn(await res.text()), '/manifest.webmanifest', '/icons/icon-192.png'].map((url) =>
-      staticCache.add(url).catch(() => undefined),
-    ),
-  );
+  await cacheAssets([...assetsIn(await res.text()), '/manifest.webmanifest', '/icons/icon-192.png'], true);
 }
 
 function refused(res) {
@@ -109,10 +131,7 @@ async function shellNavigation(req, shell) {
       res
         .clone()
         .text()
-        .then(async (html) => {
-          const staticCache = await caches.open(STATIC_CACHE);
-          for (const a of assetsIn(html)) if (!(await staticCache.match(a))) staticCache.add(a).catch(() => undefined);
-        })
+        .then((html) => cacheAssets(assetsIn(html)))
         .catch(() => undefined);
     }
     return res;
