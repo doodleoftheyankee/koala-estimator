@@ -4,6 +4,7 @@
 /* eslint-disable jsx-a11y/alt-text */
 import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer';
 import type { Tier } from '@/lib/pricing';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { financingLine } from './email';
 import { DEFAULT_BRAND_COLOR, formatUsd, type QuoteDocument, type QuoteOptionDoc } from './model';
 
@@ -59,7 +60,7 @@ const s = StyleSheet.create({
 
 function formatDate(iso: string): string {
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: BUSINESS_TIME_ZONE });
 }
 
 function formatDateTime(iso: string): string {
@@ -70,7 +71,7 @@ function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     second: '2-digit',
-    timeZone: 'America/New_York',
+    timeZone: BUSINESS_TIME_ZONE,
     timeZoneName: 'short',
   });
 }

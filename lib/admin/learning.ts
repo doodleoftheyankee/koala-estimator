@@ -18,9 +18,10 @@ import {
 import type { AccuracyReport, BacktestMetrics, GateResult, WinRateBucket } from '@/lib/learning';
 import type { NightlySummary } from '@/lib/learning/nightly';
 import { optionalTextField, textField, uuidField } from './forms';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 
-/** Business dates and times are Newark, DE local time. */
-export const BUSINESS_TZ = 'America/New_York';
+/** Business dates and times are in the business time zone (one place: lib/format.ts). */
+export const BUSINESS_TZ = BUSINESS_TIME_ZONE;
 
 // ---------------------------------------------------------------------------
 // Coefficient kinds and scopes

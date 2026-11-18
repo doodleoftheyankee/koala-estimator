@@ -16,6 +16,7 @@ import {
   type WinModel,
 } from '@/lib/pricing';
 import { estimateAccuracy } from './accuracy';
+import { BUSINESS_TIME_ZONE as BUSINESS_TZ } from '@/lib/format';
 import { calibrate as realCalibrate } from './calibrate';
 import { deviationOutcome } from './deviation';
 import type { NightlySummary } from './nightly';
@@ -42,9 +43,6 @@ import { trainWinModel, winRateBuckets } from './winRate';
 
 /** A 'running' learning run older than this never finished (the function timed out or crashed). */
 export const STALE_RUN_MS = 15 * 60_000;
-/** Business dates (email subjects) are Newark, DE dates. */
-const BUSINESS_TZ = 'America/New_York';
-
 // ---------------------------------------------------------------------------
 // Row parsing (PostgREST returns numeric columns as numbers or strings)
 // ---------------------------------------------------------------------------

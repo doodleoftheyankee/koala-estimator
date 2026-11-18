@@ -5,6 +5,7 @@ import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Button, Card, Field, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { canMarkLost } from '@/lib/jobs/forms';
 import { ActionForm } from '../admin/pricing/ActionForm';
 import { markLost } from './actions';
@@ -74,7 +75,7 @@ function totalOf(r: Row, quote: NonNullable<Row['quotes']>[number] | undefined):
 }
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const when = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const when = new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TIME_ZONE, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;

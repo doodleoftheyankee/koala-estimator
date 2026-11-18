@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Alert, Card } from '@/components/ui';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { financingLine } from '@/lib/quotes/email';
 import { findQuoteByToken, isExpired, type PublicQuoteRow } from '@/lib/quotes/lookup';
 import { DEFAULT_BRAND_COLOR, formatUsd, type QuoteDocument } from '@/lib/quotes/model';
@@ -22,7 +23,7 @@ const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 
 function fmtDate(iso: string): string {
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: BUSINESS_TIME_ZONE });
 }
 
 function brandColor(doc: QuoteDocument): string {

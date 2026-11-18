@@ -2,6 +2,7 @@
 // Without RESEND_API_KEY, emails are logged instead of sent so local dev works.
 import { Resend } from 'resend';
 import { serverEnv } from '@/lib/env';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import type { Financing, Tier } from '@/lib/pricing';
 import { formatUsd, type QuoteDocument } from './model';
 
@@ -101,7 +102,7 @@ function firstName(doc: QuoteDocument): string {
 
 function formatDate(isoDate: string): string {
   const d = new Date(isoDate.length === 10 ? `${isoDate}T12:00:00Z` : isoDate);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: BUSINESS_TIME_ZONE });
 }
 
 function layout(doc: QuoteDocument, bodyHtml: string): string {

@@ -4,6 +4,7 @@ import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
 import {
@@ -522,7 +523,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
               <h3 className="font-semibold text-slate-900">Active set v{config.activeSet.version}</h3>
               <Badge tone="green">{config.activeSet.source}</Badge>
               {config.activeSet.activated_at ? (
-                <span className="text-sm text-slate-500">since {new Date(config.activeSet.activated_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}</span>
+                <span className="text-sm text-slate-500">since {new Date(config.activeSet.activated_at).toLocaleDateString('en-US', { timeZone: BUSINESS_TIME_ZONE })}</span>
               ) : null}
               {config.activeSet.notes ? <span className="w-full text-sm text-slate-600">{config.activeSet.notes}</span> : null}
             </div>

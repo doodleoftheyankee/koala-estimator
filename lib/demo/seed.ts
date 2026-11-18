@@ -4,6 +4,7 @@
 // through a temporary database function, or by scripts/demo-seed.ts). Deterministic for a seed.
 import { priceEstimate, type PricedEstimate, type PricingBundle, type Tier } from '@/lib/pricing';
 import { buildQuoteDocument } from '@/lib/quotes/model';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { newArea, newDraft, priceableAreas, toEstimateInput, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { buildSyncPayload } from '@/lib/sync/payload';
 import { DEMO_USER_IDS as DEMO } from './accounts';
@@ -241,7 +242,7 @@ function sqlFor(p: Planned): string {
   out.push(`update estimates set status = 'signed', selected_tier = ${s(p.signedTier)}, decided_at = ${ts(decided)} where id = ${est};`);
   const jobRef = `(select id from jobs where quote_id = ${s(quoteId)})`;
   const crew = `(select id from crews where name = 'Crew A')`;
-  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T12:00:00Z');
+  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: BUSINESS_TIME_ZONE }) + 'T12:00:00Z');
   if (p.stage === 'verified' || p.stage === 'awaiting') {
     const start = new Date(Math.min(decided.getTime() + between(5, 20) * DAY, NOW.getTime() - 2 * DAY));
     const done = new Date(Math.min(start.getTime() + Math.max(1, Math.ceil(option.crewDays)) * DAY * 0.8, NOW.getTime() - 0.5 * DAY));
