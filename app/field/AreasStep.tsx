@@ -125,7 +125,8 @@ export function AreasStep({
         const expanded = open === a.id;
         return (
           <Card key={a.id} id={`area-${a.id}`}>
-            <button type="button" className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setOpen(expanded ? null : a.id)} aria-expanded={expanded}>
+            {/* At least 48 px tall, the Daymark minimum, even when its summary fits on one line (release review C FLOW-11). */}
+            <button type="button" className="flex min-h-12 w-full items-center justify-between gap-2 text-left" onClick={() => setOpen(expanded ? null : a.id)} aria-expanded={expanded}>
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
                 <span className="block text-sm text-slate-600">

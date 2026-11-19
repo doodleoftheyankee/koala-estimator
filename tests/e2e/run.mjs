@@ -354,6 +354,8 @@ const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.
   check((await bp.locator('textarea[name="warranty_text"]').inputValue()) === 'Limited lifetime warranty', 'the warranty quotes print is "Limited lifetime warranty"');
   check((await bp.locator('[name="default_state"], [name="default_city"]').count()) === 0, 'no town or state to fill in (OD14)');
   check(/KN-\d{4}-0001-v1/.test(main) && main.includes('New estimates start in: Newark, DE'), 'it shows how quote numbers read and where new estimates start (the shop address)');
+  // Release review C FLOW-9: the number is a format example, never "the next quote" (always 0001).
+  check(!main.includes('The next quote this year reads like') && /Quote numbers read like KN-\d{4}-0001-v1: the number counts up with each quote/.test(main), 'quote numbering is shown as a format, not as "the next quote this year"');
   await bp.screenshot({ path: SHOTS + '05b-business-profile-optional.png', fullPage: true });
   await bp.goto(BASE + '/admin/pricing');
   check(!/Business profile:/.test(await bp.locator('main').innerText()), 'the Pricing page lists nothing about the business profile to fill in');
@@ -1880,6 +1882,50 @@ step('review B screens: a first-open estimate, Better hidden with no pick, Sun+ 
   check(dock.includes(bestPrice) && /best/i.test(dock), `the dock's headline is Best's ${bestPrice}: "${dock.replace(/\s+/g, ' ').slice(0, 60)}"`);
   await fp.screenshot({ path: FIXB + 'b4-best-recommended.png', fullPage: true });
   await fresh.close();
+
+  // Release review C FLOW-8, FLOW-11, FLOW-12 at 390 px: a five-digit price keeps the option's name
+  // whole in the dock, an area's header is a 48 px target, and a package's option cards say which
+  // area each line prices, as the customer's quote does.
+  {
+    const rc = await browser.newContext(phone);
+    await rc.addCookies([sessionCookie(EST)]);
+    const rp = await rc.newPage();
+    rp.on('pageerror', (e) => logs.push('REVIEWC PAGEERROR ' + e.message));
+    await rp.goto(BASE + '/field?new=1');
+    await rp.getByLabel('City').waitFor({ timeout: 20000 });
+    await rp.getByLabel('First name').fill('Dee');
+    await rp.getByLabel('Last name').fill('Dockwidth');
+    await rp.getByLabel('Street address').fill('5 Wide Price Way');
+    await rp.getByLabel('ZIP').fill('19711');
+    await rp.getByRole('button', { name: 'Next' }).click();
+    await rp.getByRole('button', { name: '+ Attic' }).click();
+    await rp.getByLabel('Square feet').fill('6000');
+    await rp.getByRole('button', { name: '+ Walls' }).click();
+    await rp.getByLabel('Square feet').fill('800');
+    const dockTier = async () => {
+      const dock = rp.getByRole('region', { name: 'Estimate actions' });
+      await dock.getByText(/^\$\d{2},\d{3}$/).first().waitFor({ timeout: 15000 });
+      const tier = dock.getByText(/^(Good|Better|Best)$/i).first();
+      return { text: (await dock.innerText()).replace(/\s+/g, ' '), fits: await tier.evaluate((el) => el.scrollWidth <= el.clientWidth), size: await tier.evaluate((el) => `${el.scrollWidth}/${el.clientWidth}`) };
+    };
+    const onAreas = await dockTier();
+    check(onAreas.fits && /BETTER/i.test(onAreas.text), `on Areas the dock shows the recommended option's name whole with a five-digit price: "${onAreas.text}" (scroll/client ${onAreas.size}; 59/54 "BETT…" before)`);
+    const small = await smallTargets(rp);
+    check(!small.some((t) => t.startsWith('Exterior walls')), `the walls area's header is a 48 px target (322x45 before): ${small.filter((t) => t.startsWith('Exterior walls')).join(' | ') || 'not listed'}`);
+    await rp.screenshot({ path: SHOTS + 'rc-areas-390.png', fullPage: true });
+    await rp.getByRole('button', { name: 'Next' }).click();
+    const good = rp.getByRole('group', { name: 'Good option' });
+    await good.waitFor({ timeout: 15000 });
+    const onOptions = await dockTier();
+    check(onOptions.fits && /BETTER/i.test(onOptions.text), `and on Options: "${onOptions.text}" (scroll/client ${onOptions.size})`);
+    const lines = await good.getByRole('list', { name: 'What the price is made of' }).getByRole('listitem').allInnerTexts();
+    check(
+      lines.some((l) => /^attic\b/i.test(l.trim())) && lines.some((l) => /^exterior walls\b/i.test(l.trim())),
+      `the Good card names the area of each line, as the quote does: ${lines.map((l) => l.replace(/\s+/g, ' ').trim()).join(' | ')}`,
+    );
+    await rp.screenshot({ path: SHOTS + 'rc-options-390.png', fullPage: true });
+    await rc.close();
+  }
 
   // flow-B11: the estimator's email link on the customer's quote page.
   const cq = await browser.newContext(phone);

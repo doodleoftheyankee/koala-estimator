@@ -373,10 +373,12 @@ export function EstimateEditor({
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <SignLabel size={11}>{summary ? 'Recommended' : 'Price'}</SignLabel>
-            <p className="mt-1 flex min-w-0 items-baseline gap-2">
+            {/* The option's name is never cut ("BETT…" beside a five-digit price at 390 px): it wraps
+                under the price if it ever cannot fit (release review C FLOW-8). */}
+            <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2">
               <span className="gauge-m text-[26px] text-ink">{summary ? formatMoney(summary.price, { cents: 'never' }) : '—'}</span>
               {summary ? (
-                <SignLabel size={11} tone="ink" className="truncate">
+                <SignLabel size={11} tone="ink" className="whitespace-nowrap">
                   {TIER_LABELS[summary.tier]}
                 </SignLabel>
               ) : (
@@ -390,7 +392,7 @@ export function EstimateEditor({
               icon={ChevronLeft}
               aria-label={`Previous step: ${prev.label}`}
               title={`Previous: ${prev.label}`}
-              className="w-16 shrink-0 px-0"
+              className="w-12 shrink-0 px-0"
               onClick={() => goTo(prev.key)}
             />
           ) : null}

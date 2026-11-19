@@ -99,7 +99,9 @@ function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: 
           </div>
           <ul className="mt-3 space-y-1 text-sm text-slate-600">
             <li>
-              The next quote this year reads like <span className="font-semibold text-slate-800">{counterQuoteNumber(prefix, businessYear(new Date()), 1, 1)}</span> (the number counts up).
+              {/* A format example, not the next number (release review C FLOW-9: it always read 0001). */}
+              Quote numbers read like <span className="font-semibold text-slate-800">{counterQuoteNumber(prefix, businessYear(new Date()), 1, 1)}</span>: the number counts up with each
+              quote and starts again at 0001 each year.
             </li>
             <li>
               New estimates start in:{' '}

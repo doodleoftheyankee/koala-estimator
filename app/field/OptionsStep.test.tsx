@@ -113,3 +113,26 @@ describe('flow-B12: "Change the price" opens that option\'s price editor', () =>
     expect(fixElementId({ step: 'options', tier: 'good' })).toBe('option-good');
   });
 });
+
+describe('release review C FLOW-12: in a package, each line on an option card names its area, as the quote does', () => {
+  /** The markup of the card's "What the price is made of" list. */
+  const lines = (html: string | null) => {
+    const start = html?.indexOf('aria-label="What the price is made of"') ?? -1;
+    return start < 0 ? '' : html!.slice(start, html!.indexOf('</ul>', start));
+  };
+
+  it('an attic and the exterior walls: the Good card says which line is which', () => {
+    const attic = seededArea({ id: AREA_ID, name: 'Attic' });
+    const walls = seededArea({ id: '00000000-0000-4000-8000-000000000002', name: 'Exterior walls', jobType: 'walls', sqft: 800 });
+    const html = render(draftWith(attic, { areas: [attic, walls] }));
+    const good = lines(card(html, 'Good'));
+    expect(good).toContain('>Attic<');
+    expect(good).toContain('>Exterior walls<');
+  });
+
+  it('one area: no area names (nothing to tell apart)', () => {
+    const good = lines(card(render(draftWith(seededArea({ id: AREA_ID, name: 'Attic' }))), 'Good'));
+    expect(good).not.toBe('');
+    expect(good).not.toContain('>Attic<');
+  });
+});

@@ -417,7 +417,11 @@ function OptionCard({
         <ul className="mt-3 space-y-1 text-sm" aria-label="What the price is made of">
           {o.customerItems.map((it, i) => (
             <li key={i} className="flex justify-between gap-3">
-              <span className={it.kind === 'work' ? 'text-slate-700' : 'text-slate-500'}>{it.description}</span>
+              <span className={it.kind === 'work' ? 'text-slate-700' : 'text-slate-500'}>
+                {/* In a package, the area each line prices, as the customer's quote names it (release review C FLOW-12). */}
+                {areaNames.size > 1 && it.areaName ? <span className="block text-xs font-semibold tracking-wide text-slate-500 uppercase">{it.areaName}</span> : null}
+                {it.description}
+              </span>
               <span className="shrink-0 font-medium text-slate-700 tabular-nums">{formatMoney(it.price, { cents: 'never' })}</span>
             </li>
           ))}
