@@ -534,6 +534,20 @@ describe('labels_match_work (review A F3): the area an item states is the area i
   });
 });
 
+describe('review A F4: a product with a quantity of 0 is not sold as work', () => {
+  const walls = area({ id: A1, jobType: 'walls', name: 'Walls', sqft: 1000, depthIn: 3.5 });
+  it('an item "to R-0" over 0 bags fails (product_not_installed); the same option with no item passes', () => {
+    const sold = option('good', 1500, { label: 'Dense-Pack Cellulose', lines: [insulation('cellulose', 0)], customerItems: [item('Blown Cellulose to R-0 (~0" added), 1,000 sq ft', 1500)] });
+    expect(kinds(checkLabelsMatchWork(quote([sold], [walls])))).toEqual(['labels_match_work:product_not_installed:good']);
+    const right = option('good', 1500, { lines: [insulation('cellulose', 31)], customerItems: [item('Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft', 1500)] });
+    expect(checkLabelsMatchWork(quote([right], [walls]))).toEqual([]);
+  });
+  it('a $0 work item fails (zero_work_item); a $0 price adjustment is never printed, and travel may be any amount', () => {
+    const zero = option('good', 1500, { customerItems: [item('Blown Cellulose to R-49 (~13.6" added), 1,000 sq ft', 0), item('Travel and setup', 1500, null, 'travel')] });
+    expect(kinds(checkFiniteAmounts(quote([zero])))).toEqual(['finite_amounts:zero_work_item:good']);
+  });
+});
+
 describe('cavity_not_overfilled (S1-F4, S1-F5, S1-F6, OD5): insulation fits the cavity', () => {
   it('a wall with no depth is a 2x4: 5.4 in of open-cell does not fit (overfilled_no_depth)', () => {
     const walls = area({ jobType: 'walls', sqft: 1000 });
@@ -737,6 +751,7 @@ describe('random quotes (lib/pricing/__fixtures__/random.ts)', () => {
     expect(prices.some((p) => Number.isInteger(p))).toBe(true);
     expect(quotes.some((q) => Object.values(q.input.lineOverrides ?? {}).some((l) => l.qty != null))).toBe(true);
     expect(quotes.some((q) => Object.values(q.input.lineOverrides ?? {}).some((l) => l.hours != null))).toBe(true);
+    expect(quotes.some((q) => Object.values(q.input.lineOverrides ?? {}).some((l) => l.qty === 0))).toBe(true);
     const crewIds = new Set(seededBundle.snapshot.crews.map((c) => c.id));
     expect(quotes.some((q) => q.input.crewId !== null && !crewIds.has(q.input.crewId))).toBe(true);
     expect(quotes.some((q) => q.selectedTier === null)).toBe(true);

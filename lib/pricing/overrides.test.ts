@@ -98,7 +98,7 @@ describe('line overrides change cost and price', () => {
     expect(good.lines.find((l) => l.key === FG_LABOR)!.hours).toBe(12.35);
   });
 
-  it('a zero override is valid (e.g. materials already on site)', () => {
+  it('a zero override is valid: the line keeps it (the option then installs none of it: review A F4)', () => {
     const good = tier(price(withLines({ [FG_MAT]: { qty: 0, reason: 'Customer supplied' } })), 'good');
     expect(good.lines.find((l) => l.key === FG_MAT)).toMatchObject({ qty: 0, cost: 0, isOverridden: true });
   });

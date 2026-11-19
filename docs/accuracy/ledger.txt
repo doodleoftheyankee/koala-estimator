@@ -569,3 +569,31 @@ RA-F9 An option never removes what is there to leave the area with less R. When 
     estimator requires (damaged, wet) is kept …", "a removal that ends above what is there is kept …";
     lib/accuracy/invariants.test.ts "options_step_up (review A F9): an option never leaves an area
     with less R than it has".
+
+RA-F4 A product with a quantity of 0 is not sold as work. A material quantity is what is installed
+    (R3, L23), so 0 installs nothing: the product gets no item, no words in the title or bullets
+    and no install hours (unless the estimator typed hours), with a product_zero warning; its lines
+    stay so the estimator can change them back in Details. An option left with no work at all is not
+    shown to the customer ("… it installs nothing. Change the quantity in Details to show it."), and
+    stays on the phone under "Not shown to the customer" (RA-F1). The phone no longer takes a material
+    quantity of 0 ("A quantity of 0 installs nothing. Enter the quantity to install; for material
+    already on site, change the price instead."); 0 hours is still taken.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, Good set to 0 bags: Good $1,500 "Dense-Pack Cellulose", item "Blown
+        Cellulose to R-0 (~0" added), 1,000 sq ft" $134 + $186 + $1,180 minimum -> Good not shown;
+        Better $2,520 and Best $5,280 as before.
+      Rim joist 200 sq ft, Best set to 0 board ft: the one option shown, Best $1,500 "Closed-Cell
+        Spray Foam to R-0 (~0" added)" -> Better $1,500 "Open-Cell Spray Foam to R-10 (~2.7"
+        added)" (Best not shown; Good repeats Better's price, OD6).
+      Attic 1,000 sq ft, 0 bags and 0 h on every option: a $0 "Blown Cellulose to R-0" item -> no
+        item; Better and Best are "Air Sealing".
+    Random quotes (the generator now draws a quantity or hours of 0 on 5% of line changes): labels_
+      match_work product_not_installed (new) 23 -> 0, finite_amounts zero_work_item (new) 3 -> 0;
+      quotes with no option shown 897 -> 899 (two quotes whose every option was emptied).
+    Owner decision: R3 (a quantity is what is installed), L15. The Phase 2 note "a zero override is
+    valid (e.g. materials already on site)" no longer holds under R3; material on site is a price
+    change.
+    Tests: "walls 2x4, Good dense-pack set to 0 bags: …", "0 bags and 0 hours on every option: no $0
+    work item …", "rim joist 200 sq ft, Best set to 0 board ft: …"; lib/field/lineOverrides.test.ts
+    "refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)";
+    lib/accuracy/invariants.test.ts "review A F4: a product with a quantity of 0 is not sold as work".

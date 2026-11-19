@@ -144,6 +144,14 @@ describe('buildLineOverride', () => {
     expect(buildLineOverride('qty', -1, 'reason')).toEqual({ ok: false, error: 'The number cannot be negative.' });
   });
 
+  it('refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)', () => {
+    expect(buildLineOverride('qty', 0, 'Counted on site')).toEqual({
+      ok: false,
+      error: 'A quantity of 0 installs nothing. Enter the quantity to install; for material already on site, change the price instead.',
+    });
+    expect(buildLineOverride('hours', 0, 'Customer does it').ok).toBe(true);
+  });
+
   it('needs a reason of at least 3 characters', () => {
     expect(buildLineOverride('qty', 70, '')).toEqual({ ok: false, error: 'Give a reason (at least 3 characters).' });
     expect(buildLineOverride('qty', 70, '  ab  ')).toEqual({ ok: false, error: 'Give a reason (at least 3 characters).' });

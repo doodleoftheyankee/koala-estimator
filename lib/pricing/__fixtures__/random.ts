@@ -7,9 +7,9 @@
 // every access level; existing insulation with and without a depth, its material named as the area
 // form names it, in lower case, or not at all; cavity depths and none; removal; target R-values
 // (below code included); drive times null, 0 and long; price overrides of up to 30% either way,
-// some with cents; line overrides (material quantities and hours, for one option or all); a crew id
-// that is not in the setup; the estimator's pick (or none); issue times across 2026 and the
-// quote's validity in days.
+// some with cents; line overrides (material quantities and hours, for one option or all, now and
+// then 0); a crew id that is not in the setup; the estimator's pick (or none); issue times across
+// 2026 and the quote's validity in days.
 import { EXISTING_MATERIALS } from '@/lib/pricing/rPerInch';
 
 /**
@@ -276,7 +276,8 @@ export function randomQuote(r: Rng, n: number, bundle: PricingBundle): RandomQuo
   if (wantsLines || wantsPrice) {
     // Every draw is made whether or not it is used, so one tier's decision never depends on another's.
     const howMany = chance(changes, 0.7) ? 1 : 2;
-    const lineDraws = [0, 1].map(() => ({ option: changes(), line: changes(), factor: between(changes, 0.5, 1.6), ownTier: chance(changes, 0.7) }));
+    // Now and then a quantity or hours of 0 (nothing installed, or the customer does the work: F4).
+    const lineDraws = [0, 1].map(() => ({ option: changes(), line: changes(), factor: chance(changes, 0.05) ? 0 : between(changes, 0.5, 1.6), ownTier: chance(changes, 0.7) }));
     const priceDraws = TIER_ORDER.map((tier) => ({ tier, wanted: chance(changes, 0.6), u: changes(), style: changes() }));
     const fallback = { option: changes(), u: changes(), style: changes() };
 

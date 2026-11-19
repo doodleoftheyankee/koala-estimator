@@ -103,3 +103,50 @@ describe('F9: an option never removes what is there to leave the area with less 
     expect(best.label).toBe('Remove, Air Seal + Cellulose');
   });
 });
+
+describe('F4: a product priced at 0 is not sold as work', () => {
+  const walls = area({ id: 'w1', jobType: 'walls', name: 'Walls', depthIn: 3.5 });
+  const zeroBags = estimate({ areas: [walls], lineOverrides: { [lineKey('w1', 'cellulose', 'material')]: { qty: 0, reason: 'Counted on site', tier: 'good' } } });
+
+  it('walls 2x4, Good dense-pack set to 0 bags: Good is not "Dense-Pack Cellulose … to R-0"; it is kept for the estimator but not shown to the customer', () => {
+    const good = tier(all(zeroBags), 'good');
+    // Before: label "Dense-Pack Cellulose", item "Blown Cellulose to R-0 (~0" added), 1,000 sq ft" $134, total $1,500.
+    expect(good.label).not.toBe('Dense-Pack Cellulose');
+    expect(good.bullets).toEqual([]);
+    expect(work(good)).toEqual([]);
+    // The line stays, so the estimator can change it back in Details.
+    expect(good.lines.find((l) => l.key === lineKey('w1', 'cellulose', 'material'))!.qty).toBe(0);
+    expect(good.lines.find((l) => l.key === lineKey('w1', 'cellulose', 'labor'))!.hours).toBe(0);
+    const r = shown(zeroBags);
+    expect(r.options.map((o) => o.tier)).toEqual(['better', 'best']);
+    expect(r.warnings.find((w) => w.code === 'product_zero')!.message).toBe('Walls: Good installs no blown cellulose (its quantity is 0).');
+    expect(r.warnings.find((w) => w.code === 'option_hidden' && w.tier === 'good')!.message).toBe(
+      'Good is not shown to the customer: it installs nothing. Change the quantity in Details to show it.',
+    );
+    expect(violations(zeroBags)).toEqual([]);
+  });
+
+  it('0 bags and 0 hours on every option: no $0 work item; the options that still air seal say only that', () => {
+    const a = area({ id: 'a1' });
+    const input = estimate({
+      areas: [a],
+      lineOverrides: {
+        [lineKey('a1', 'cellulose', 'material')]: { qty: 0, reason: 'Counted on site', tier: null },
+        [lineKey('a1', 'cellulose', 'labor')]: { hours: 0, reason: 'Crew estimate', tier: null },
+      },
+    });
+    const items = all(input).options.flatMap((o) => o.customerItems.filter((i) => i.kind === 'work'));
+    expect(items.filter((i) => i.price === 0)).toEqual([]);
+    expect(tier(all(input), 'better').label).toBe('Air Sealing');
+    expect(violations(input)).toEqual([]);
+  });
+
+  it('rim joist 200 sq ft, Best set to 0 board ft: no "Closed-Cell Spray Foam to R-0" for $1,500', () => {
+    const rim = area({ id: 'r1', jobType: 'rim_joist', name: 'Rim', sqft: 200 });
+    const input = estimate({ areas: [rim], lineOverrides: { [lineKey('r1', 'ccsf', 'material')]: { qty: 0, reason: 'Counted on site', tier: 'best' } } });
+    const r = shown(input);
+    for (const o of r.options) expect(work(o).join(' ')).not.toMatch(/R-0\b/);
+    expect(r.options.map((o) => o.tier)).not.toContain('best');
+    expect(violations(input)).toEqual([]);
+  });
+});

@@ -428,6 +428,8 @@ function areasNamed(text: string, areas: AreaInput[]): AreaInput[] {
  *    cavity", "fills the 3.5 in cavity") but a cavity it is about is left partly empty.
  *  - qty_below_stated_r: a work item states an R-value ("… to R-12.6 …") that the quantity priced
  *    for its area does not reach (the estimator's bag count, R3).
+ *  - product_not_installed: a work item states an R-value ("… to R-0 …") in an area where every
+ *    R-bearing line it could be about has a quantity of 0: nothing is installed (review A F4).
  *  - area_not_covered: a work item for a material priced by the square foot (batts, air sealing)
  *    states an area ("800 sq ft") that its quantity, the waste taken out, does not cover, or covers
  *    more than (review A F3; within 1%, and the rounding of the area as printed).
@@ -473,7 +475,10 @@ export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: 
       if (!a) continue;
       // What an item states it installs is what its quantity installs (R3).
       const stated = statedR(item.description);
-      if (stated !== null && insulationLines(o, a.id, snapshot).length > 0) {
+      const insulating = insulationLines(o, a.id, snapshot);
+      if (stated !== null && insulating.length > 0 && insulating.every((l) => !(l.qty > 0))) {
+        add('product_not_installed', a.id, `"${item.description}" but the quantity priced is 0`);
+      } else if (stated !== null && insulating.length > 0) {
         const r = finalR(o, a, snapshot, coefficients, { upperBound: true });
         if (r < stated - R_TOLERANCE) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
       }
@@ -550,7 +555,8 @@ export function checkCavityNotOverfilled({ input, priced, snapshot, coefficients
 /**
  * finite_amounts (audit "checked and correct"): no blank, infinite or negative amount anywhere in
  * an option: price, costs, hours, days, financing, every line and every customer item. A price
- * adjustment line (OD3) may be negative; nothing else may.
+ * adjustment line (OD3) may be negative; nothing else may. A work item printed at $0 is work sold
+ * for nothing (kind zero_work_item, review A F4).
  */
 export function checkFiniteAmounts({ priced }: Pick<PricedQuote, 'priced'>): Violation[] {
   const out: Violation[] = [];
@@ -571,6 +577,9 @@ export function checkFiniteAmounts({ priced }: Pick<PricedQuote, 'priced'>): Vio
     }
     for (const i of o.customerItems) {
       check(o.tier, i.areaId, `item "${i.description}"`, i.price, itemKind(i) === 'adjustment');
+      if (itemKind(i) === 'work' && Number.isFinite(i.price) && printedDollars(i.price) === 0) {
+        out.push({ invariant: 'finite_amounts', kind: 'zero_work_item', tier: o.tier, areaId: i.areaId, detail: `item "${i.description}" is $0` });
+      }
     }
   }
   return out;

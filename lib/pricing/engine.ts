@@ -133,10 +133,22 @@ export function stepUp(lower: Pick<PricedOption, 'lines' | 'price'>, higher: Pic
  * OD6. An option that does the same work as another is shown once, at the lower price (the lower
  * tier on a tie). Then, from the top down, an option is shown only when the next shown option up
  * costs more: an option that costs as much as one that does more is no choice for the customer.
- * Each option left out gets an 'option_hidden' warning. At least one option is always shown.
+ * Each option left out gets an 'option_hidden' warning. At least one option with work is always
+ * shown; an option the estimator emptied (a quantity of 0 on all its work) never is (F4).
  */
 function shownOptions(options: PricedOption[], warnings: PricingWarning[]): PricedOption[] {
   const hidden = new Set<Tier>();
+  // An option the estimator emptied (a quantity of 0 on all its work) sells nothing (F4).
+  for (const o of options) {
+    if (o.customerItems.some((i) => i.kind === 'work')) continue;
+    hidden.add(o.tier);
+    warnings.push({
+      code: 'option_hidden',
+      areaId: null,
+      tier: o.tier,
+      message: `${capitalize(o.tier)} is not shown to the customer: it installs nothing. Change the quantity in Details to show it.`,
+    });
+  }
   for (let i = 0; i < options.length; i++) {
     for (let j = i + 1; j < options.length; j++) {
       const a = options[i]!;
@@ -298,6 +310,8 @@ interface AreaWork {
   airSealing: boolean;
   /** The air sealing priced covers only part of the area (an estimator's quantity, F3). */
   airSealingPartial: boolean;
+  /** The estimator set a product's quantity to 0 here: nothing of it is installed (F4). */
+  zeroed: boolean;
 }
 
 function priceTier(
@@ -354,7 +368,7 @@ function priceTier(
         warnings.push(...trial);
       }
     }
-    const work: AreaWork = { area, tpl, removal, primary: null, airSealing: false, airSealingPartial: false };
+    const work: AreaWork = { area, tpl, removal, primary: null, airSealing: false, airSealingPartial: false, zeroed: false };
     works.push(work);
 
     if (removal) {
@@ -374,7 +388,12 @@ function priceTier(
     }
 
     if (primary === undefined) primary = priceProductScope(area, tpl, removal, s, k, access, crew, tier, warnings, ov);
-    if (primary) {
+    if (primary?.none) {
+      // A quantity of 0: nothing installed, so no item and no words for it; the lines stay so the
+      // estimator can change the quantity back in Details (F4).
+      lines.push(...primary.lines);
+      work.zeroed = true;
+    } else if (primary) {
       lines.push(...primary.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'primary', description: primary.description, cost: primary.cost });
       work.primary = { finalR: primary.finalR, fillsCavity: primary.fillsCavity, partial: primary.partial };
@@ -387,13 +406,18 @@ function priceTier(
     if (tpl.includeAirSealing && tpl.primaryProduct !== 'air_sealing') {
       const air = priceAirSealing(area, s, k, access, crew, ov, tier, warnings);
       lines.push(...air.lines);
-      groups.push({ areaId: area.id, areaName: area.name, scope: 'air_sealing', description: air.description, cost: air.cost });
-      work.airSealing = true;
-      work.airSealingPartial = air.partial;
+      if (air.none) work.zeroed = true;
+      else {
+        groups.push({ areaId: area.id, areaName: area.name, scope: 'air_sealing', description: air.description, cost: air.cost });
+        work.airSealing = true;
+        work.airSealingPartial = air.partial;
+      }
     }
   });
 
-  if (groups.length === 0) {
+  // An option the estimator emptied (a quantity of 0) is still priced, for the estimator only: it is
+  // not shown to the customer (shownOptions), and its lines can be changed back (F4).
+  if (groups.length === 0 && !works.some((w) => w.zeroed)) {
     warnings.push({
       code: 'tier_skipped',
       areaId: null,
@@ -641,7 +665,7 @@ function areaLabel(w: AreaWork, s: PricingSnapshot): string {
   if (w.removal) parts.push('Insulation Removal');
   if (w.airSealing) parts.push('Air Sealing');
   if (w.primary && w.tpl.primaryProduct !== 'air_sealing') parts.push(product(s, w.tpl.primaryProduct).label);
-  return parts.join(' + ');
+  return parts.length ? parts.join(' + ') : 'Nothing installed';
 }
 
 const REMOVAL_WORDS = /\bremov/i;
@@ -676,7 +700,7 @@ function priceProductScope(
   tier: Tier,
   warnings: PricingWarning[],
   ov: Record<string, LineOverride>,
-): { lines: PricedLine[]; description: string; cost: number; finalR: number | null; fillsCavity: boolean | null; partial: boolean } | null {
+): { lines: PricedLine[]; description: string; cost: number; finalR: number | null; fillsCavity: boolean | null; partial: boolean; none: boolean } | null {
   const code = tpl.primaryProduct;
   const p = product(s, code);
   if (code === 'air_sealing') return { ...priceAirSealing(area, s, k, access, crew, ov, tier, warnings), finalR: null, fillsCavity: null };
@@ -768,6 +792,13 @@ function priceProductScope(
     matLine = c.line;
     covered = c.covered;
   }
+  if (!(matLine.qty > 0)) {
+    // The estimator's quantity is 0: nothing is installed, so no install hours either (unless they
+    // typed hours), and the option says nothing of this product (F4).
+    warnings.push({ code: 'product_zero', areaId: area.id, tier, message: `${area.name}: ${capitalize(tier)} installs no ${p.label.toLowerCase()} (its quantity is 0).` });
+    const idle = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, setup + designQty * rate, crew, ov, 0);
+    return { lines: [matLine, idle], description: '', cost: matLine.cost + idle.cost, finalR: null, fillsCavity: null, partial: false, none: true };
+  }
   const partial = coversPart(covered, area.sqft);
   if (partial && fillsCavity) fillsCavity = false;
   const loose = mat.unit === 'bag' || mat.unit === 'board_ft';
@@ -818,7 +849,7 @@ function priceProductScope(
     description = `${p.label}, ${rLabel}, ${coverageText(covered, area.sqft)} sq ft`;
   }
 
-  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR, fillsCavity, partial };
+  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR, fillsCavity, partial, none: false };
 }
 
 /**
@@ -884,7 +915,7 @@ function priceAirSealing(
   ov: Record<string, LineOverride>,
   tier: Tier,
   warnings: PricingWarning[],
-): { lines: PricedLine[]; description: string; cost: number; partial: boolean } {
+): { lines: PricedLine[]; description: string; cost: number; partial: boolean; none: boolean } {
   const code: ProductCode = 'air_sealing';
   const designQty = area.sqft;
   const mat = material(s, code);
@@ -897,6 +928,7 @@ function priceAirSealing(
   let matCost = 0;
   let units = designQty;
   let covered = area.sqft;
+  let none = false;
   if (mat) {
     const c = sqftCoverage(area, materialLine(area.id, code, mat, mat.name, designQty, qty, ov), waste, tier, 'air sealing', warnings, false);
     const line = c.line;
@@ -904,14 +936,18 @@ function priceAirSealing(
     matCost = line.cost;
     units = pricedUnits(line, designQty, waste);
     lines.push(line);
+    none = !(line.qty > 0);
   }
-  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', setup + designQty * rate, crew, ov, setup + units * rate);
+  // A quantity of 0: no air sealing here, and no hours for it unless typed (F4).
+  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', setup + designQty * rate, crew, ov, none ? 0 : setup + units * rate);
   lines.push(labor);
+  if (none) warnings.push({ code: 'product_zero', areaId: area.id, tier, message: `${area.name}: ${capitalize(tier)} installs no air sealing (its quantity is 0).` });
   return {
     lines,
     description: `Air sealing of ${AIR_SEALING_WHERE[area.jobType]} (${coverageText(covered, area.sqft)} sq ft)`,
     cost: matCost + labor.cost,
     partial: coversPart(covered, area.sqft),
+    none,
   };
 }
 

@@ -48,7 +48,7 @@ export function OptionsStep({
   const options = priced?.ok?.options ?? [];
   // Options the customer is not shown (OD6) stay on this step, collapsed, with the reason: a price
   // or line change that hid one can be changed or removed here (review A F1, M2).
-  const hidden = useMemo(() => notShown(draft, bundle, priced?.ok?.options ?? []), [draft, bundle, priced]);
+  const hidden = useMemo(() => (priced?.ok ? notShown(draft, bundle, priced.ok.options) : []), [draft, bundle, priced]);
   const hiddenReason = (tier: Tier) =>
     priced?.ok?.warnings.find((w) => w.code === 'option_hidden' && w.tier === tier)?.message ?? 'This option is not shown to the customer.';
   // The same option the dock and the customer quote mark as recommended.
@@ -191,7 +191,7 @@ const byTier = (xs: PricedOption[]) => [...xs].sort((a, b) => TIER_ORDER.indexOf
  * showAll, less those shown. Never breaks the step: with no bundle or a pricing error, none.
  */
 function notShown(draft: EstimateDraft, bundle: PricingBundle | null, shown: PricedOption[]): PricedOption[] {
-  if (!bundle || shown.length === 0) return [];
+  if (!bundle) return [];
   try {
     const all = priceEstimate({ ...toEstimateInput(draft), areas: priceableAreas(draft) }, bundle.snapshot, bundle.coefficientSet, { showAll: true });
     const tiers = new Set(shown.map((o) => o.tier));

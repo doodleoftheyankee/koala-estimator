@@ -320,7 +320,9 @@ export interface PricingWarning {
      * An option's own removal (from its template, not required by the estimator) would leave the
      * area with less R than it has; the option keeps what is there instead (review A F9).
      */
-    | 'removal_kept';
+    | 'removal_kept'
+    /** An estimator's quantity of 0 for a product: the option installs none of it there (review A F4). */
+    | 'product_zero';
   areaId: string | null;
   tier: Tier | null;
   message: string;
