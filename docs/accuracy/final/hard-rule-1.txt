@@ -1,0 +1,76 @@
+HARD RULE 1 ON THE MERGED HEAD (claude/accuracy after both review B fix branches, Nov 19 2026)
+
+Quotes already sent or signed never change: their documents, PDFs and emails must render exactly as
+before. This repeats the quotes stage's proof (docs/accuracy/after-quotes/hard-rule-1.txt, "To repeat
+it") on the final code of the round: claude/accuracy c94ba45 (the code is the same as 763bc25; the
+commits after it add docs only).
+
+What was rendered
+  The same 77 stored production quotes from the same read-only export (scratchpad
+  accuracy/golden/live-quote-docs.json; manifest md5 2ca0d61ee3371b8dfa44c572dc8a9ca7, file md5
+  15914e91c59ace3fbfd9b0d8cae9ef91, 77 quotes), through the same scripts/accuracy/render-stored.ts and
+  render-run.mjs (unchanged since ca8a57b):
+    node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts <export> <out>
+  2,926 files per run:
+    PDFs, as text (pdftotext -layout): the quote PDF (77) and the signed PDF per option (231)   308
+    emails, subject + text and HTML: quote (77), signed confirmation (231), office notice (231) 1,078
+    the customer page as text, in every state: stored, open per option, signed per option,
+      superseded, declined, expired                                                              770
+    the same pages as markup (HTML)                                                              770
+
+1. Against the quotes stage's before set (scratchpad accuracy/quotes/render-before, rendered from
+   7c6b08c early on Nov 19), diff of every file:
+     PDFs 308 of 308 identical. Emails 1,078 of 1,078 identical.
+     Page text: 768 of 770 identical. The 2 others are page-stored.txt of the two quotes whose
+       links stopped working at 05:53 and 05:58 UTC on Nov 19 (73c7a4a8..., b7925437...), after
+       that set was rendered: their stored-state page is now the expired page, and each is
+       byte-identical to that quote's page-expired.txt in the before set. The clock moved; nothing
+       a document prints changed (the docs fixer found the same: docs/accuracy/after-fixb/
+       hard-rule-1.txt).
+     Page markup: 770 files; besides the same two expired pages, 250 differ only in two class
+       names, listed below; the rest are identical.
+
+2. Against the same before code rendered now (7c6b08c from git archive, with the render harness
+   copied in, same clock; byte-identical to the docs fixer's render of it):
+     PDFs 308/308, emails 1,078/1,078 and page text 770/770 identical: every word, price, date,
+       quote number, consent sentence and page break of every stored quote, in every state.
+     Page markup: 518 of 770 identical; 252 differ only in class names, and only these two:
+       - flow-B11 (48 px tap target): the estimator's email link in "Questions about this quote?"
+         gains "inline-flex min-h-12 items-center" (class="underline underline-offset-2" ->
+         class="inline-flex min-h-12 items-center underline underline-offset-2"). 30 files: the
+         3 stored quotes that name an estimator email, in each of their 10 page states.
+       - flow-B6 (placeholders never look typed): the sign form's name box placeholder class
+         "placeholder:text-ink-3" -> "placeholder:text-placeholder". 231 files: every open page
+         (77 quotes x 3 options). The new token is the same colour as text-ink-3 in Day and Night
+         and grey italic only in Sun+.
+       (9 open pages carry both.) With those two class strings put back, all 770 are
+       byte-identical (scripts/accuracy/hard-rule-1-diff.py).
+     These are the look of the customer page, not the quote: the same kind of difference as the
+     claude/daymark look the quotes stage set aside. Review B asked for both (flow-B11 named this
+     link; flow-B6 the placeholder colour).
+
+3. Against the live site's code (origin/main c0ae5f1; the quotes stage's render-live set):
+     The PDFs (unsigned and signed for each option) and the three emails of the 77 stored quotes:
+     1,386 files compared, 0 differences. A customer who signs an older quote after this ships gets
+     the signed PDF and emails the live site would make today.
+
+How the code keeps it (unchanged mechanism; see docs/accuracy/after-fixb/hard-rule-1.txt)
+  - A stored quote's company, license, phone, terms, warranty, consent sentence, number, dates,
+    items and prices are read from its own document (quotes.snapshot->document), never from the
+    settings. OD12/OD13's "Koala Insulation", "Limited lifetime warranty" and neutral terms, the
+    PLACEHOLDER rule and OD14's consent state apply only when a new quote is built.
+  - OD15 (flow-B4) moves the recommendation only for a quote being built; a stored document keeps
+    its recommendedTier, so the RECOMMENDED badge and "(recommended)" of every stored quote are as
+    sent (all 231 open pages, PDFs and emails above are identical in text).
+  - The accuracy migration's review B sections rewrite app_settings rows only where they still
+    equal the seed, and add price_approvals.loaded_cost; no quote, snapshot, PDF or e-sign record
+    is touched (tests/sql/41_owner_decisions.test.sql).
+
+To repeat it
+  1. Render the merged head: node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts
+     <export> <after>.
+  2. Render the before code: git archive 7c6b08c into a folder, copy scripts/accuracy/render-run.mjs,
+     render-stored.ts and stubs/ into it (7c6b08c predates them), link node_modules, and run the
+     same command there into <before>.
+  3. diff -r <before> <after>, and python3 -I scripts/accuracy/hard-rule-1-diff.py <before> <after>
+     to sort the differences (identical / class names only / other).
