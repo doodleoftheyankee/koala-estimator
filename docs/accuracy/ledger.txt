@@ -398,9 +398,11 @@ L8  The accept sentence, the thank-you page, the signed page's price, the signed
     subject and the body (L8)".
 
 L9  The headline is the recommended option everywhere: the office list, the phone's list, the
-    sync's model_total_price and the quote. Recommended = the option the estimator picked; when the
-    pick is not shown (OD6), the next option shown after it, else the nearest before; with no pick,
-    Better, else the first (lib/field/recommended.ts).
+    sync's model_total_price and the quote. Recommended = the option the estimator picked; with no
+    pick, Better, the implied pick (OD15). When that option is not shown (OD6), the option shown
+    that does the same work, else the nearest one shown above it, else the nearest below
+    (lib/field/recommended.ts; amended by RB-flow-B4: before it, a hidden pick went to the next
+    option shown after it, and with no pick a hidden Better went to the first option shown).
     Examples: office list, no pick, Good $2,375 / Better $4,095 / Best $6,920: $2,375 (the stored
       model price, no option named) -> $4,095 "Better". Live golden set: c6b22b65 (draft, no pick)
       $2,020 -> $2,730 Better; it is the only live estimate whose office headline moves.
@@ -872,3 +874,35 @@ No customer value (the phone, the checker, the generator):
     an option the customer is not shown was rightly hidden" (4 tests).
   Random quotes on the same quotes and checker, engine before -> after these fixes: seed 20261118
     331 -> 0 breaks, seed 7 637 -> 0, seed 99999 621 -> 0 (docs/accuracy/after-fixa/about.txt).
+
+=== Review B fixes and owner decisions OD12-OD16 ===
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier; owner decisions OD12-OD16 in docs/accuracy/spec/owner-decisions-2.txt). Entries from the
+screens branch (claude/accuracy-fixb-screens) are RB-flow-B<n>. Seeded pricing, easy access, 20 min
+drive unless stated.
+
+RB-flow-B4 (OD15, amends L9) With no pick, Better is the implied pick, exactly as when Better is
+    picked. When the recommended option is not shown (OD6), the recommendation moves to the option
+    shown that does the same work, else the nearest one shown above it, else the nearest below.
+    Before: with no pick and Better hidden, the first option shown (Good, the cheapest); a hidden
+    pick went to the next option shown after it. The engine marks the option kept for each option
+    it leaves out as the same work (PricedOption.sameWorkAs), so the phone, the sync and the quote
+    see the same-work step; the office list (stored tier and price only) takes the nearest-above
+    step, which named the same option in every golden and random quote checked.
+    Example (attic 1,386 sq ft at R-0, Best the same work as Better, Better raised to $7,538 above
+      Best's $6,070, no pick): dock, phone list, office list and the quote's RECOMMENDED badge
+      Good $4,195 -> Best $6,070; sync model_total_price Good's model price -> Best's. With Better
+      picked: Best $6,070 before and after.
+    Golden sets: 0 headlines change (synthetic 65, live 78; no estimate there has no pick with Good
+      and Best shown and Better not). Random quotes: 24 of 10,000 (seed 20261118), 50 of 20,000
+      (seed 7), 42 of 20,000 (seed 99999) change, all no pick, Good -> Best; no picked quote
+      changes. Every change with its reason: docs/accuracy/after-fixb/headline-changes.txt.
+    Sent and signed quotes keep their stored recommendedTier (hard rule 1).
+    Owner decision: OD15 (review B flow-B4).
+    Tests: lib/field/recommended.test.ts "OD15 (review B flow-B4): with no pick, Better is the
+    implied pick" (5 tests, 4 fail before the fix: "Better not shown, Good and Best shown: Best, as
+    when Better is picked (was Good, the cheapest)", "a pick that is not shown moves first to the
+    option shown that does the same work", "the engine says which option shown does the work of the
+    hidden Better", "the phone, the office list, the sync and the quote all recommend Best at $6,070
+    (was Good at $4,195)").

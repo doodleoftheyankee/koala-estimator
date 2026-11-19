@@ -88,7 +88,10 @@ export function priceEstimate(
     priced.push(option);
   }
 
-  const options = opts.showAll ? priced : shownOptions(priced, warnings);
+  // Which options the customer is shown (OD6). It also marks the option kept for each one left out
+  // as the same work (sameWorkAs), so a showAll option is the same object as its shown one.
+  const shown = shownOptions(priced, opts.showAll ? [] : warnings);
+  const options = opts.showAll ? priced : shown;
   // Good should cost less than better, better less than best. If the configured products and
   // costs say otherwise, the estimator needs to know before a customer sees it. (Shown options
   // always step up, so this only fires with showAll.)
@@ -159,6 +162,8 @@ function shownOptions(options: PricedOption[], warnings: PricingWarning[]): Pric
       if (hidden.has(a.tier) || hidden.has(b.tier) || workSignature(a) !== workSignature(b)) continue;
       const [drop, keep] = b.price >= a.price ? [b, a] : [a, b];
       hidden.add(drop.tier);
+      // A pick of the dropped option (or of one it stood for) is recommended this one, the same work (OD15).
+      keep.sameWorkAs = [...(keep.sameWorkAs ?? []), drop.tier, ...(drop.sameWorkAs ?? [])];
       const price =
         drop.price === keep.price ? '' : ` for ${drop.price > keep.price ? 'more' : 'less'} (${usd(drop.price)} against ${usd(keep.price)})`;
       warnings.push({

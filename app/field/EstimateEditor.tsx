@@ -109,8 +109,9 @@ export function EstimateEditor({
     }
   }, [priced, draft, bundle]);
 
-  // The headline price: the recommended option (the one chosen on Options, else Better, else the
-  // first), saved with its option so the list can say which one it is.
+  // The headline price: the recommended option (the one chosen on Options, else Better; when that
+  // one is not shown, the option doing the same work, else the nearest above, else below: OD15),
+  // saved with its option so the list can say which one it is.
   const summary = useMemo(() => {
     const opts = priced?.ok?.options ?? [];
     const rec = recommendedTier(opts, draft?.selectedTier);
