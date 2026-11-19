@@ -40,6 +40,8 @@
   --ink: #0c0e10;
   --ink-2: #31363b;
   --ink-3: #535a61;
+  /* placeholder text in a field: never the colour of a typed value (review B flow-B6) */
+  --placeholder: #535a61;
   --on-ink: #ffffff;
   --ink-accent: #d4f53c;
   --line: #d6d8d1;
@@ -92,6 +94,7 @@
     --ink: #f2f3ee;
     --ink-2: #c9cdd1;
     --ink-3: #a0a7ae;
+    --placeholder: #a0a7ae;
     --on-ink: #15171a;
     --ink-accent: #0b6e35;
     --line: #2b2f34;
@@ -140,6 +143,7 @@
     --ink: #f2f3ee;
     --ink-2: #c9cdd1;
     --ink-3: #a0a7ae;
+    --placeholder: #a0a7ae;
     --on-ink: #15171a;
     --ink-accent: #0b6e35;
     --line: #2b2f34;
@@ -187,6 +191,8 @@
     --ink: #000000;
     --ink-2: #000000;
     --ink-3: #000000;
+    /* grey (7.56:1 on white) and italic, so an empty field never reads as filled */
+    --placeholder: #4b5563;
     --line: #000000;
     --line-strong: #000000;
     --edge: #000000;
@@ -214,6 +220,7 @@
     --ink: #000000;
     --ink-2: #000000;
     --ink-3: #000000;
+    --placeholder: #4b5563;
     --on-ink: #ffffff;
     --ink-accent: #d4f53c;
   --ink-accent: #d4f53c;
@@ -353,6 +360,7 @@
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
+  --color-placeholder: var(--placeholder);
   --color-on-ink: var(--on-ink);
   --color-ink-accent: var(--ink-accent);
   --color-line: var(--line);
@@ -605,8 +613,19 @@
     color: var(--on-hivis);
   }
   ::placeholder {
-    color: var(--ink-3);
+    color: var(--placeholder);
     opacity: 1;
+  }
+  /* Sun+: everything else is pure black, so a placeholder is also set in italics (flow-B6). */
+  @media screen {
+    [data-theme='sun'] ::placeholder {
+      font-style: italic;
+    }
+  }
+  @media screen and (prefers-contrast: more) {
+    :root:not([data-theme]) ::placeholder {
+      font-style: italic;
+    }
   }
 }
 

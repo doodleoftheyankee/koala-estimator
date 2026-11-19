@@ -72,6 +72,10 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { name: 'Meta text on plates', fg: 'ink-3', bg: 'surface', min: 4.5 },
   { name: 'Meta text on the page', fg: 'ink-3', bg: 'canvas', min: 4.5 },
   { name: 'Meta text on wells', fg: 'ink-3', bg: 'sunken', min: 4.5 },
+  // A placeholder in a field (white plate, or a read-only well): readable, and in Sun+ grey and
+  // italic so an empty field never looks filled (review B flow-B6).
+  { name: 'Placeholders on plates', fg: 'placeholder', bg: 'surface', min: 4.5 },
+  { name: 'Placeholders on wells', fg: 'placeholder', bg: 'sunken', min: 4.5 },
   // Boundaries
   { name: 'Input and switch edges on plates', fg: 'line-strong', bg: 'surface', min: 3 },
   { name: 'Input and switch edges on the page', fg: 'line-strong', bg: 'canvas', min: 3 },

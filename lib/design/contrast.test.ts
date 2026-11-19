@@ -131,3 +131,27 @@ describe('WCAG contrast of every promised pair', () => {
     expect(r(SUN.ink!, SUN.hivis!)).toBe(16.93);
   });
 });
+
+describe('Placeholders look empty (review B flow-B6)', () => {
+  it('a placeholder is never the colour of typed text, in any theme (Sun+ made both #000000)', () => {
+    for (const theme of THEMES) {
+      const t = THEME_TOKENS[theme];
+      expect(t.placeholder, `${theme} --placeholder`).toMatch(/^#[0-9a-f]{6}$/);
+      expect(t.placeholder, `${theme}: placeholder and typed text`).not.toBe(t.ink);
+    }
+    // Day and Night keep the meta-text colour they had.
+    expect(DAY.placeholder).toBe(DAY['ink-3']);
+    expect(NIGHT.placeholder).toBe(NIGHT['ink-3']);
+  });
+
+  it('every placeholder rule uses --placeholder, and Sun+ sets placeholders in italics', () => {
+    expect(css).toMatch(/::placeholder\s*\{[^}]*color:\s*var\(--placeholder\)/);
+    expect(css).toMatch(/--color-placeholder:\s*var\(--placeholder\)/);
+    expect(css).toMatch(/\[data-theme='sun'\]\s+::placeholder\s*\{[^}]*font-style:\s*italic/);
+    expect(css).toMatch(/:root:not\(\[data-theme\]\)\s+::placeholder\s*\{[^}]*font-style:\s*italic/);
+    for (const file of ['components/daymark/Form.tsx', 'app/field/measure/ShapeEditor.tsx']) {
+      const src = readFileSync(join(import.meta.dirname, '../..', file), 'utf8');
+      expect(src, file).not.toMatch(/placeholder:text-(?!placeholder\b|base\b)/);
+    }
+  });
+});

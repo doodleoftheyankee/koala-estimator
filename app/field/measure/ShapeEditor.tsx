@@ -33,7 +33,7 @@ export function LengthInput({ label, value, onChange, placeholder = `e.g. 24'6"`
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={bad}
         className={cx(
-          'block min-h-12 w-full rounded-xl border px-3 text-lg text-slate-900 placeholder:text-base placeholder:text-slate-400 focus:outline-none focus:ring-2',
+          'block min-h-12 w-full rounded-xl border px-3 text-lg text-slate-900 placeholder:text-base placeholder:text-placeholder focus:outline-none focus:ring-2',
           bad ? 'border-red-500 bg-red-50 focus:ring-red-100' : 'border-slate-300 bg-white focus:border-brand-600 focus:ring-brand-100',
         )}
       />
