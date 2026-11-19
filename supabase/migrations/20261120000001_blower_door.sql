@@ -12,9 +12,11 @@
 --     of each kind counts. The CFM50 must match the reading and its exponent.
 --   * Who sees a reading is who sees its job or estimate: owner and office all; an estimator the
 --     readings of their own estimates; a crew member only the readings of their crew's jobs (and
---     the test-in taken on the estimate those jobs came from).
---   * sync_blower_door_test(): the phone's offline outbox. Idempotent on the mutation id and on
---     the reading's own id, so a reading sent twice is stored once.
+--     the test-in taken on the estimate those jobs came from), and only through
+--     blower_door_context(), which leaves out the air sealing price: crews never see prices.
+--   * sync_blower_door_test(): the phone's offline outbox, and the only way a reading gets in.
+--     Idempotent on the mutation id and on the reading's own id, so a reading sent twice is stored
+--     once. The program kept with a reading is the franchise's own (app_settings), by its key.
 --   * blower_door_context(): what the tool shows for a job or an estimate (who it is for and its
 --     saved readings), with the same access rules.
 --
@@ -147,7 +149,8 @@ for each row execute function tg_audit();
 -- -----------------------------------------------------------------------------
 -- SECURITY DEFINER so a crew member's check can look at jobs (which crews cannot read: revenue).
 
--- Can the caller see the readings of this job (or, with no job, of this estimate)?
+-- Can the caller see the readings of this job (or, with no job, of this estimate)? (A crew member
+-- reads them through blower_door_context only: see the read policy below.)
 create or replace function can_see_blower_door(p_job_id uuid, p_estimate_id uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select has_role('owner', 'office')
@@ -178,21 +181,26 @@ grant execute on function can_record_blower_door(uuid, uuid) to authenticated;
 
 alter table blower_door_tests enable row level security;
 
+-- Owner, office and estimators read the table; crews do not (a row carries the air sealing price
+-- and what the phone showed): they read their jobs' readings through blower_door_context(), which
+-- leaves the price out, as crew_job_view leaves out a job's revenue.
 drop policy if exists blower_door_tests_read on blower_door_tests;
 create policy blower_door_tests_read on blower_door_tests for select
-  using (can_see_blower_door(job_id, estimate_id));
+  using (not has_role('crew') and can_see_blower_door(job_id, estimate_id));
 
--- Direct inserts follow the same rules as the outbox below. No update or delete policies: a
--- reading stays as it was recorded.
+-- No insert, update or delete policies: a reading gets in only through sync_blower_door_test()
+-- (which dates it no later than now and keeps the franchise's own program), and stays as it was
+-- recorded. A direct insert could have dated a reading in the future, so it stayed the newest for
+-- good, with any program and rebate.
 drop policy if exists blower_door_tests_insert on blower_door_tests;
-create policy blower_door_tests_insert on blower_door_tests for insert
-  with check (recorded_by = auth.uid() and can_record_blower_door(job_id, estimate_id));
 
 -- -----------------------------------------------------------------------------
 -- The phone's outbox: store one reading. Idempotent on p_mutation_id and on the reading's id.
 --   p_test: {id, job_id, estimate_id, kind, cfm, pa, exponent, cfm50, program_key, program,
 --            air_sealing_cost, bas_audit, volume, occupants, stories, n_factor, result, recorded_at}
---   (job_id or estimate_id: a job's estimate comes from the job.)
+--   (job_id or estimate_id: a job's estimate comes from the job. The program sent is not kept:
+--   the program stored is the franchise's, from app_settings.blower_door by program_key, or none
+--   when the franchise has no program with that key.)
 --   Result: {status: 'applied', id, recorded_at}
 --           {status: 'waiting'}   the estimate has not synced from the phone yet: send again later
 --           {status: 'refused', error}   not the caller's job or estimate (any more)
@@ -202,7 +210,7 @@ create policy blower_door_tests_insert on blower_door_tests for insert
 create or replace function sync_blower_door_test(p_mutation_id uuid, p_test jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_prev jsonb; v_by uuid; v_result jsonb;
+  v_prev jsonb; v_by uuid; v_result jsonb; v_program jsonb;
   r blower_door_tests; v_cur blower_door_tests; v_est uuid; v_at timestamptz;
 begin
   if auth.uid() is null then raise exception 'not authenticated' using errcode = '28000'; end if;
@@ -257,11 +265,18 @@ begin
   -- When it was taken, as the phone says (never in the future).
   v_at := least(coalesce(r.recorded_at, now()), now());
 
+  -- The program as the franchise has it now (never the phone's copy, which anyone could make up).
+  select p into v_program
+    from app_settings s,
+         jsonb_array_elements(case when jsonb_typeof(s.value->'programs') = 'array' then s.value->'programs' else '[]'::jsonb end) p
+   where s.key = 'blower_door' and r.program_key is not null and p->>'key' = r.program_key
+   limit 1;
+
   begin
     insert into blower_door_tests (id, estimate_id, job_id, kind, cfm, pa, exponent, cfm50, program_key, program,
                                    air_sealing_cost, bas_audit, volume, occupants, stories, n_factor, result,
                                    recorded_by, recorded_at)
-    values (r.id, v_est, r.job_id, r.kind, r.cfm, r.pa, r.exponent, r.cfm50, r.program_key, r.program,
+    values (r.id, v_est, r.job_id, r.kind, r.cfm, r.pa, r.exponent, r.cfm50, r.program_key, v_program,
             r.air_sealing_cost, r.bas_audit, r.volume, r.occupants, r.stories, r.n_factor, r.result,
             auth.uid(), v_at)
     returning * into v_cur;
@@ -280,10 +295,11 @@ grant execute on function sync_blower_door_test(uuid, jsonb) to authenticated;
 -- -----------------------------------------------------------------------------
 -- What the tool shows for a job or an estimate: who it is for and the readings saved to it.
 -- Null when the caller may not see it. A job's readings include the test-in taken on its estimate.
+-- A crew member gets no air sealing price (null).
 -- -----------------------------------------------------------------------------
 create or replace function blower_door_context(p_job_id uuid, p_estimate_id uuid)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare v_job uuid; v_est uuid; v_label text; v_tests jsonb;
+declare v_job uuid; v_est uuid; v_label text; v_tests jsonb; v_prices boolean;
 begin
   if auth.uid() is null then raise exception 'not authenticated' using errcode = '28000'; end if;
   if (p_job_id is null) = (p_estimate_id is null) then
@@ -298,6 +314,8 @@ begin
     if not found or not can_see_blower_door(null, v_est) then return null; end if;
   end if;
 
+  v_prices := not has_role('crew');
+
   select nullif(trim(concat_ws(', ', nullif(trim(concat_ws(' ', c.first_name, c.last_name)), ''), nullif(p.street, ''), nullif(p.city, ''))), '')
     into v_label
     from estimates e join customers c on c.id = e.customer_id join properties p on p.id = e.property_id
@@ -306,7 +324,8 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', t.id, 'job_id', t.job_id, 'estimate_id', t.estimate_id, 'kind', t.kind,
            'cfm', t.cfm, 'pa', t.pa, 'exponent', t.exponent, 'cfm50', t.cfm50,
-           'program_key', t.program_key, 'program', t.program, 'air_sealing_cost', t.air_sealing_cost,
+           'program_key', t.program_key, 'program', t.program,
+           'air_sealing_cost', case when v_prices then t.air_sealing_cost end,
            'bas_audit', t.bas_audit, 'volume', t.volume, 'occupants', t.occupants, 'stories', t.stories,
            'n_factor', t.n_factor, 'recorded_by', t.recorded_by, 'recorded_by_name', pr.full_name,
            'recorded_at', t.recorded_at) order by t.recorded_at desc, t.created_at desc), '[]')
