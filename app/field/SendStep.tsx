@@ -19,7 +19,7 @@ type SendResult =
   | { kind: 'idle' }
   | { kind: 'busy'; msg: string }
   | { kind: 'done'; url: string; emailed: boolean; version: number }
-  | { kind: 'error'; msg: string; reasons?: string[]; profile?: boolean }
+  | { kind: 'error'; msg: string; reasons?: string[] }
   /** The server found changes from the model without a note (409 unacknowledged_flags). */
   | { kind: 'flags'; msg: string; flags: Array<{ key: string; message: string }> };
 
@@ -112,8 +112,6 @@ export function SendStep({
     settings: bundle?.snapshot.settings ?? null,
     approvals,
     pendingFlags: pendingFlags.length,
-    // The business profile's gaps, as the phone last downloaded them (the server checks again on send: L30).
-    profileGaps: bundle?.business?.gaps ?? [],
     online,
   });
   const canSend = !locked && checks.every((c) => c.ok) && record.syncState !== 'conflict';
@@ -174,8 +172,6 @@ export function SendStep({
         } else if (body.error === 'policy') {
           setResult({ kind: 'error', msg: 'This quote needs approval before it can be sent.', reasons: body.reasons });
           void reload();
-        } else if (body.error === 'setup_incomplete') {
-          setResult({ kind: 'error', msg: `Not sent. ${body.message ?? 'The business profile is not finished.'}`, profile: true });
         } else setResult({ kind: 'error', msg: body.message ?? body.error ?? 'Sending failed.' });
         return;
       }
@@ -261,15 +257,6 @@ export function SendStep({
       {result.kind === 'error' ? (
         <Alert tone="red">
           <p>{result.msg}</p>
-          {result.profile ? (
-            profile.role === 'owner' || profile.role === 'office' ? (
-              <a className="mt-1 inline-flex min-h-12 items-center font-semibold underline" href="/admin/business">
-                Open the business profile
-              </a>
-            ) : (
-              <p className="mt-1">Ask the owner or the office to finish the business profile.</p>
-            )
-          ) : null}
           {result.reasons?.length ? (
             <ul className="mt-1 list-disc pl-4">
               {result.reasons.map((r) => (

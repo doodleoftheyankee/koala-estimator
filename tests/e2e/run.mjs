@@ -67,7 +67,7 @@ await page.screenshot({ path: SHOTS + '01-list.png' });
 
 step('create estimate');
 await page.getByRole('button', { name: 'New estimate', exact: true }).click();
-// No town in the business profile yet: a new estimate starts in the shop address's town (L32).
+// A new estimate starts in the town and state of the shop address in the settings (L32, OD14).
 check((await page.getByLabel('City').inputValue()) === 'Newark' && (await page.getByLabel('State').inputValue()) === 'DE', 'a new estimate starts in the town of the shop address in the settings');
 await page.getByLabel('First name').fill('Pat');
 await page.getByLabel('Last name').fill('Lee');
@@ -319,29 +319,26 @@ const after = await page.locator('p.text-2xl').allTextContents();
 console.log('  prices after the change', after);
 check(after.every((p, i) => num(p) > num(prices[i])), 'more labor raises every option that has the line');
 
-step('send: not while the business profile has a gap (L30)');
+step('send: nothing about a business profile holds it back (OD12; review B flow-B1, review A DOC-3)');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.waitForTimeout(3500); // let auto-sync run
 await page.screenshot({ path: SHOTS + '05a-send-step.png', fullPage: true });
 console.log('  send checklist:', (await page.locator('body').innerText()).split('\n').filter((l) => l.trim()).slice(0, 40).join(' | '));
-// The seeded settings have a placeholder warranty and no license, phone or state.
-const GAPS = 'The business profile is not finished: add the license number, the office phone, the state and the warranty.';
-{
-  const item = page.locator('li[data-check="profile"]');
-  const text = await item.innerText();
-  check((await item.getAttribute('data-ok')) === 'no' && text.includes(GAPS), 'the Send checklist says the business profile is not finished, and what it needs');
-  check(text.includes('Ask the owner or the office to finish it.') && (await item.getByRole('button').count()) === 0, 'and tells the estimator who can finish it (no button an estimator cannot use)');
-}
-check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'Send waits for the profile');
+// The seeded settings have no license, phone or state (and production's still hold the PLACEHOLDER
+// warranty seed): no checklist item, sentence or link asks anyone to finish a business profile.
+check((await page.locator('li[data-check="profile"]').count()) === 0, 'the Send checklist has no business-profile item');
+check(!/business profile/i.test(await page.locator('main').innerText()), 'and nothing on the Send step mentions a business profile');
+check(await page.getByRole('button', { name: /Send quote to customer/ }).isEnabled(), 'Send is ready with the seeded settings, nothing filled in');
 const gateEst = psql("select id from estimates order by created_at desc limit 1");
 {
+  // The server goes straight past the settings to the price check (no 409 setup_incomplete).
   const res = await ctx.request.post(BASE + '/api/quotes', { data: { estimateId: gateEst, expectedPrices: {} } });
   const body = await res.json();
-  check(res.status() === 409 && body.error === 'setup_incomplete' && body.message === GAPS, `the server refuses to send it too: ${res.status()} ${body.error}`);
-  check(psql(`select count(*) from quotes where estimate_id = '${gateEst}'`) === '0', 'and no quote was made');
+  check(res.status() === 409 && body.error === 'pricing_changed', `the server does not refuse it for the settings (wrong expected prices on purpose): ${res.status()} ${body.error}`);
+  check(psql(`select count(*) from quotes where estimate_id = '${gateEst}'`) === '0', 'and no quote was made by that check');
 }
 
-step('the owner finishes the business profile (L30, L31)');
+step('the Business profile page is optional (OD12)');
 const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.test' };
 {
   const bctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -350,27 +347,17 @@ const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.
   bp.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
   bp.on('console', (m) => m.type() === 'error' && logs.push(`${m.text()} (${m.location().url})`));
   await bp.goto(BASE + '/admin/business');
-  check((await bp.getByText(GAPS, { exact: true }).count()) === 1, 'the Business profile page names the same gaps');
-  await bp.screenshot({ path: SHOTS + '05b-business-profile-gaps.png', fullPage: true });
-  await bp.getByLabel('License number').fill('HIC 77-0042');
-  await bp.getByLabel('Office phone').fill('(555) 010-0199');
-  await bp.getByLabel('State').fill('de');
-  await bp.getByLabel('Warranty').fill('Two years on workmanship. Materials carry the maker’s warranty.');
-  await bp.getByRole('button', { name: 'Save the business profile' }).click();
-  await bp.getByText(/Saved/).first().waitFor({ timeout: 15000 });
-  await bp.reload();
-  check((await bp.getByText('Everything a quote needs is filled in.').count()) === 1, 'once saved, everything a quote needs is filled in');
-  const preview = await bp.locator('main').innerText();
-  check(preview.includes('(ESIGN Act and Delaware UETA)') && /KN-\d{4}-0001-v1/.test(preview), 'the page shows the signing sentence with the state and how quote numbers read');
-  check(psql("select value #>> '{}' from app_settings where key = 'default_state'") === 'DE', 'the state is saved as its two capitals');
-  await bp.screenshot({ path: SHOTS + '05c-business-profile.png', fullPage: true });
+  const main = await bp.locator('main').innerText();
+  check(main.includes('Optional. Quotes go out without it') && !/not finished|no quote can be sent/i.test(main), 'the page says it is optional, and names no gap');
+  check((await bp.getByLabel('Company name').inputValue()) === 'Koala Insulation', 'the company quotes print is Koala Insulation');
+  check((await bp.getByLabel('Warranty').inputValue()) === 'Limited lifetime warranty', 'the warranty quotes print is "Limited lifetime warranty"');
+  check((await bp.getByLabel('State').count()) === 0 && (await bp.getByLabel('Town').count()) === 0, 'no town or state to fill in (OD14)');
+  check(/KN-\d{4}-0001-v1/.test(main) && main.includes('New estimates start in: Newark, DE'), 'it shows how quote numbers read and where new estimates start (the shop address)');
+  await bp.screenshot({ path: SHOTS + '05b-business-profile-optional.png', fullPage: true });
+  await bp.goto(BASE + '/admin/pricing');
+  check(!/Business profile:/.test(await bp.locator('main').innerText()), 'the Pricing page lists nothing about the business profile to fill in');
   await bctx.close();
 }
-// The phone learns the profile is finished with its next download (here: opening the app again).
-await page.reload();
-await page.getByRole('button', { name: /^4 Send/ }).click();
-await page.locator('li[data-check="profile"][data-ok="yes"]').getByText('Business profile finished').waitFor({ timeout: 15000 });
-check(true, 'the phone sees the finished profile with its next download');
 
 step('Send checklist: plain words, and a Fix button that goes to the item (L34)');
 {
@@ -539,7 +526,12 @@ await cp.screenshot({ path: SHOTS + '06-customer-quote.png', fullPage: true });
     psql(`select (snapshot->'document'->>'validUntil') = to_char(expires_at at time zone 'America/New_York', 'YYYY-MM-DD') from quotes where estimate_id = '${estId}'`) === 't',
     '"Valid until" is the business-zone date the link stops working',
   );
-  check((await cp.getByText(/\(ESIGN Act and Delaware UETA\)/).count()) === 1, 'the signing sentence names the state in the business profile');
+  check((await cp.getByText(/\(ESIGN Act and Delaware UETA\)/).count()) === 1, "the signing sentence names the property's state (OD14)");
+  // Built from the seeded settings (OD12, OD13): the brand, the warranty, nothing left blank.
+  const quoteText = await cp.locator('body').innerText();
+  check(quoteText.includes('Koala Insulation') && !/Koala Insulation of/.test(quoteText), 'the quote names Koala Insulation');
+  check(quoteText.includes('Limited lifetime warranty'), 'its warranty reads "Limited lifetime warranty"');
+  check(!/placeholder/i.test(quoteText) && !/\bLicen[sc]e\b/.test(quoteText) && !/\bCall\b/.test(quoteText), 'no PLACEHOLDER, no empty License line, no "Call" without a number');
   const accept = (await cp.getByText(/^You are accepting/).innerText()).trim();
   check(/ for \$[\d,]+\.$/.test(accept), `the accept sentence reads the price in whole dollars: "${accept}"`);
 }
@@ -803,7 +795,7 @@ check((await page.evaluate(() => window.__printedAs)) === 'Roof takeoff - 12 Elk
 await roof.getByRole('button', { name: /Copy summary/ }).click();
 await roof.getByText('Summary copied. Paste it into a note, text or email.').waitFor();
 const copied = await page.evaluate(() => navigator.clipboard.readText());
-check(copied.startsWith('Koala Insulation of Newark: roof takeoff\n12 Elkton Rd, Newark, DE 19711, USA\n'), 'Copy summary copies the takeoff as text');
+check(copied.startsWith('Koala Insulation: roof takeoff\n12 Elkton Rd, Newark, DE 19711, USA\n'), 'Copy summary copies the takeoff as text, under the brand (review B flow-B7)');
 check(
   copied.includes('Order with 15% waste: 27⅔ squares (83 bundles)') &&
     copied.includes('Low-slope roof (under 2/12, not shingles): 160 sq ft') &&

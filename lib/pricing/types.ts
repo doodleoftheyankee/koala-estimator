@@ -152,11 +152,11 @@ export interface PricingBundle {
   coefficientSet: CoefficientSet;
   winModel: WinModel | null;
   /**
-   * What the phone needs to know about the business profile (app/api/bundle, lib/quotes/profile.ts
-   * businessInfo): the gaps that stop a quote from being sent, and the town and state a new
-   * estimate starts in. Outside the pricing hash: it never changes a price.
+   * What the phone needs to know from the settings (app/api/bundle, lib/quotes/profile.ts
+   * businessInfo): the town and state a new estimate starts in. Outside the pricing hash: it never
+   * changes a price. (A bundle cached before OD12 may still carry `gaps`; nothing reads them.)
    */
-  business?: { gaps: string[]; newEstimate: { city: string; state: string } };
+  business?: { newEstimate: { city: string; state: string } };
   /** The ETag the bundle was served with (the pricing hash and the business info), for the next refresh. */
   etag?: string;
 }

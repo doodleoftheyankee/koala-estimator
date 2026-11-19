@@ -7,9 +7,9 @@ import { loadPricingBundle } from '@/lib/server/bundle';
 import { createClient } from '@/lib/supabase/server';
 
 // The pricing bundle the phone caches for offline pricing. Crew never receives it.
-// It also carries the business profile's gaps and the town new estimates start in (outside the
-// pricing hash, so a profile change never reprices anything); the ETag covers both, so the phone
-// picks up a finished profile even when no price changed.
+// It also carries the town new estimates start in (outside the pricing hash, so a settings change
+// never reprices anything); the ETag covers both, so the phone picks up a new shop address even
+// when no price changed. Nothing in it blocks a send (OD12: no business form to finish).
 export async function GET(request: NextRequest) {
   const { error } = await authorize('owner', 'office', 'estimator');
   if (error) return error;

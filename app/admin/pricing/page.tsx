@@ -274,21 +274,18 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
   const productByCode = new Map(config.products.map((p) => [p.code, p]));
   const jobTypeLabel = (jt: JobType) => config.jobTypes.find((j) => j.code === jt)?.label ?? humanize(jt);
 
-  const placeholderSettings = config.settings.filter((s) => isPlaceholder(s.description) || isPlaceholder(s.value));
+  // What every quote prints (branding, warranty, terms) is on the optional Business profile page.
+  // It never needs filling in (OD12: quotes say Koala Insulation and leave off what is not entered,
+  // and a PLACEHOLDER text is never printed), so it is not on this list of things to set.
+  const onProfilePage = (key: string) => key === 'branding' || key === 'warranty_text' || key === 'quote_terms';
+  const placeholderSettings = config.settings.filter((s) => !onProfilePage(s.key) && (isPlaceholder(s.description) || isPlaceholder(s.value)));
   const placeholderKeys = new Set(placeholderSettings.map((s) => s.key));
   const flaggedMaterials = config.materials.filter((m) => m.needs_owner_input);
   const flaggedCrews = config.crews.filter((c) => c.needs_owner_input);
-  // What every quote prints (branding, warranty, terms) is on the Business profile page.
-  const onProfilePage = (key: string) => key === 'branding' || key === 'warranty_text' || key === 'quote_terms';
   const todo = [
-    ...placeholderSettings.map((s) => ({
-      href: onProfilePage(s.key) ? '/admin/business' : '#business',
-      text: `${onProfilePage(s.key) ? 'Business profile' : 'Setting'}: ${SETTING_LABELS[s.key] ?? humanize(s.key)}`,
-    })),
+    ...placeholderSettings.map((s) => ({ href: '#business', text: `Setting: ${SETTING_LABELS[s.key] ?? humanize(s.key)}` })),
     ...flaggedMaterials.map((m) => ({ href: '#materials', text: `Material: ${m.name} (${productById.get(m.product_id)?.label ?? 'product'})` })),
     ...flaggedCrews.map((c) => ({ href: '#crews', text: `Crew: ${c.name}` })),
-    // Customers see the office phone on every quote and are told to call it when a quote is closed.
-    ...(objectFieldText(settingObject(map, 'branding'), 'phone').trim() ? [] : [{ href: '/admin/business', text: 'Business profile: office phone for customers' }]),
   ];
 
   const productOrder = (m: Material) => PRODUCTS.indexOf(productById.get(m.product_id)!.code);
@@ -361,15 +358,13 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
             <FinancingForm map={map} readOnly={readOnly} />
           </Card>
           <Card>
-            <h3 className="mb-3 font-semibold text-slate-900">
-              Business profile {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
-            </h3>
+            <h3 className="mb-3 font-semibold text-slate-900">Business profile</h3>
             <p className="text-sm text-slate-600">
               The company name, license, office phone, warranty and terms on every quote, and the prefix of its number, are on the{' '}
               <a href="/admin/business" className="font-semibold text-brand-800 underline">
                 Business profile
               </a>{' '}
-              page. A quote cannot be sent until they are filled in.
+              page. It is optional: quotes say Koala Insulation and leave off what is not filled in.
             </p>
           </Card>
         </div>

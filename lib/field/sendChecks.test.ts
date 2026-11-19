@@ -24,7 +24,7 @@ const price = (d: EstimateDraft): PricedOption[] => {
   return areas.length ? priceEstimate({ ...toEstimateInput(d), areas }, seededSnapshot, seededCoefficients).options : [];
 };
 function input(d: EstimateDraft, over: Partial<SendCheckInput> = {}): SendCheckInput {
-  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, profileGaps: [], online: true, ...over };
+  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, online: true, ...over };
 }
 const failing = (i: SendCheckInput) => sendChecks(i).filter((c) => !c.ok);
 
@@ -40,7 +40,6 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
       `${price(complete()).length} options priced`,
       'Prices within your limits',
       'Every change from the model is explained',
-      'Business profile finished',
       'Online',
     ]);
   });
@@ -132,18 +131,27 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     ]);
   });
 
-  it('changes from the model need a note; the business profile; offline', () => {
+  it('changes from the model need a note; offline', () => {
     const d = complete();
-    const est = failing(input(d, { pendingFlags: 2, profileGaps: ['the license number', 'the office phone'], online: false }));
+    const est = failing(input(d, { pendingFlags: 2, online: false }));
     expect(est.map((c) => [c.label, c.fix])).toEqual([
       ['2 changes from the model need a short note.', { label: 'Explain', target: { step: 'options' } }],
-      ['The business profile is not finished: add the license number and the office phone. Ask the owner or the office to finish it.', undefined],
       ['Offline. Sending needs a connection; your work is saved.', undefined],
     ]);
-    const owner = failing(input(d, { role: 'owner', profileGaps: ['the warranty'] }));
-    expect(owner.map((c) => [c.label, c.fix])).toEqual([
-      ['The business profile is not finished: add the warranty.', { label: 'Open the business profile', target: { step: 'business' } }],
-    ]);
+  });
+
+  // Owner decision OD12 (review A DOC-1, DOC-3; review B flow-B1): there is no business form to
+  // finish, so the checklist has no business-profile item for any role, and a phone whose cached
+  // bundle still carries the old gaps is not held back by them.
+  it('no business-profile item for any role: nothing about the profile stops a send (OD12)', () => {
+    for (const role of ['estimator', 'office', 'owner'] as const) {
+      const checks = sendChecks(input(complete(), { role }));
+      expect(checks.every((c) => c.ok), role).toBe(true);
+      expect(checks.map((c) => c.id), role).not.toContain('profile');
+      expect(checks.map((c) => c.label).join(' '), role).not.toMatch(/business profile/i);
+    }
+    const stale = { ...input(complete()), profileGaps: ['the license number'] } as SendCheckInput;
+    expect(sendChecks(stale).every((c) => c.ok)).toBe(true);
   });
 
   it('every failing item has a way on: a Fix, a Request approval, or it says who to ask', () => {
@@ -152,7 +160,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     d.areas.push({ ...newArea('rim_joist'), sqft: 0 }, { ...newArea('garage'), name: '', sqft: 300 });
     d.overrides = { good: { price: 100, reason: '' } };
     for (const role of ['estimator', 'office', 'owner'] as const) {
-      for (const c of failing(input(d, { role, pendingFlags: 1, profileGaps: ['the terms'] }))) {
+      for (const c of failing(input(d, { role, pendingFlags: 1 }))) {
         expect(c.fix || c.approval || /Ask the owner|Offline/.test(c.label), `${role}: ${c.label}`).toBeTruthy();
         expect(c.label).not.toMatch(/expected|Too small|Too big|Invalid|undefined|NaN/);
       }

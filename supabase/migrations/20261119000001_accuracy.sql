@@ -432,3 +432,27 @@ drop policy if exists price_approvals_decide on price_approvals;
 create policy price_approvals_decide on price_approvals for update
   using (has_role('owner', 'office') and status = 'pending' and requested_by <> auth.uid())
   with check (has_role('owner', 'office') and requested_by <> auth.uid() and (not below_floor or has_role('owner')));
+
+-- =============================================================================
+-- Review B, owner decisions OD12 and OD13 (docs/accuracy/spec/owner-decisions-2.txt): no business
+-- form to fill in. Every quote names "Koala Insulation", and the warranty line reads "Limited
+-- lifetime warranty". Only a value that is still exactly the seed is replaced (with the seed's
+-- PLACEHOLDER description); a value the owner saved is never overwritten, and a second run changes
+-- nothing. origin/main reads the same keys and prints the new words the same way.
+-- =============================================================================
+update app_settings
+   set value = value || '{"company": "Koala Insulation"}'::jsonb,
+       description = case when description = 'PLACEHOLDER — PDF branding' then 'Quote PDF branding' else description end
+ where key = 'branding'
+   and value = '{"company": "Koala Insulation of Newark", "license": null, "phone": null, "primary_color": null, "logo_path": null}'::jsonb;
+
+update app_settings
+   set value = to_jsonb('Quote valid for the period shown. A signed quote authorizes Koala Insulation to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.'::text),
+       description = case when description = 'Terms printed on every quote — PLACEHOLDER, owner to replace' then 'Terms printed on every quote' else description end
+ where key = 'quote_terms'
+   and value = to_jsonb('Quote valid for the period shown. A signed quote authorizes Koala Insulation of Newark to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.'::text);
+
+update app_settings
+   set value = to_jsonb('Limited lifetime warranty'::text)
+ where key = 'warranty_text'
+   and value = to_jsonb('Workmanship warranty — PLACEHOLDER, owner to replace.'::text);

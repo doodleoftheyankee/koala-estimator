@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { Alert, Badge, Card, Field, Textarea } from '@/components/ui';
 import { errorMessage } from '@/lib/admin/forms';
 import { BRANDING_FIELDS, objectFieldText, settingObject, toSettingsMap } from '@/lib/admin/settings';
-import { esignConsent, stateName } from '@/lib/quotes/consent';
-import { businessYear, counterQuoteNumber, QUOTE_PREFIX_PATTERN } from '@/lib/quotes/model';
-import { businessProfileGaps, newEstimateDefaults, PROFILE_FIELDS, profileGapsSentence, profileValue } from '@/lib/quotes/profile';
+import { businessYear, counterQuoteNumber } from '@/lib/quotes/model';
+import { newEstimateDefaults, PROFILE_FIELDS, quotePrefix, quoteSettingsForSend } from '@/lib/quotes/profile';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 import { ActionForm } from '../pricing/ActionForm';
@@ -14,16 +13,15 @@ import { TextField } from '../pricing/fields';
 
 export const metadata: Metadata = { title: 'Business profile' };
 
-// The business profile (L30-L32): what every quote prints about the franchise, the state its
-// signing sentence names, the town new estimates start in, and the prefix of its quote numbers.
-// A quote cannot be sent while a required field is missing (lib/quotes/profile.ts). The owner
-// edits it; the office sees it, and what is missing, read-only.
+// The business profile: an OPTIONAL owner page (owner decision OD12). Quotes go out without it:
+// they name "Koala Insulation", print "Limited lifetime warranty" and the default terms, and leave
+// off a license or office phone nobody entered. Here the owner may add those later. Nothing links
+// here from a warning and nothing asks anyone to fill it in. The owner edits it; the office reads it.
 
 const rowsSchema = z.array(z.object({ key: z.string(), value: z.unknown() }));
 
 const hintOf = (key: string) => PROFILE_FIELDS.find((f) => f.key === key)?.hint;
 const labelOf = (key: string, fallback: string) => PROFILE_FIELDS.find((f) => f.key === key)?.label ?? fallback;
-const requiredKey = (key: string) => PROFILE_FIELDS.find((f) => f.key === key)?.required ?? false;
 
 export default async function BusinessProfilePage() {
   const profile = await requireRole('owner', 'office');
@@ -55,22 +53,25 @@ export default async function BusinessProfilePage() {
 function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: unknown }>; readOnly: boolean }) {
   const map = toSettingsMap(rows);
   const brand = settingObject(map, 'branding');
-  const gaps = businessProfileGaps(rows);
-  const state = profileValue(rows, 'default_state').toUpperCase();
-  const prefix = profileValue(rows, 'quote_number_prefix');
+  // What quotes print today: what is saved, else the default (a PLACEHOLDER text counts as not saved).
+  const { settings } = quoteSettingsForSend(rows, null);
+  const prefix = quotePrefix(rows);
   const start = newEstimateDefaults(rows);
-  const text = (key: string) => profileValue(rows, key);
+  const shown: Record<string, string | null> = {
+    company: settings.branding.company,
+    license: settings.branding.license,
+    phone: settings.branding.phone,
+    email: settings.branding.email,
+    website: settings.branding.website,
+  };
+  const brandText = (key: string) => (key in shown ? (shown[key] ?? '') : objectFieldText(brand, key));
 
   return (
     <>
-      {gaps.length ? (
-        <Alert tone="amber">
-          <p className="font-semibold">{profileGapsSentence(gaps)}</p>
-          <p className="mt-1">Until then no quote can be sent, so a customer never sees a blank phone or a placeholder warranty.</p>
-        </Alert>
-      ) : (
-        <Alert tone="green">Everything a quote needs is filled in.</Alert>
-      )}
+      <p className="text-sm text-slate-600">
+        Optional. Quotes go out without it: they say {settings.branding.company}, and leave off anything not filled in here. Add an office phone or a license number when you want them on every
+        quote.
+      </p>
 
       <ActionForm action={saveSettings} readOnly={readOnly} submitLabel="Save the business profile">
         <Card>
@@ -83,7 +84,7 @@ function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: 
                 name={`branding.${f.key}`}
                 type={f.type}
                 required={f.key === 'company'}
-                defaultValue={objectFieldText(brand, f.key)}
+                defaultValue={brandText(f.key)}
                 placeholder={f.key === 'primary_color' ? '#0f766e' : undefined}
                 hint={f.key === 'primary_color' ? 'Hex color, e.g. #0f766e' : hintOf(`branding.${f.key}`)}
               />
@@ -92,33 +93,20 @@ function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: 
         </Card>
 
         <Card>
-          <h2 className="mb-3 font-semibold text-slate-900">Where you work</h2>
+          <h2 className="mb-3 font-semibold text-slate-900">Quote numbers</h2>
           <div className="grid gap-3 sm:grid-cols-3">
-            <TextField label="Town" name="default_city" defaultValue={text('default_city')} hint={hintOf('default_city')} />
-            <TextField label="State" name="default_state" defaultValue={state} required={requiredKey('default_state')} placeholder="PA" hint={hintOf('default_state')} />
-            <TextField
-              label="Quote number prefix"
-              name="quote_number_prefix"
-              defaultValue={prefix}
-              required={requiredKey('quote_number_prefix')}
-              hint={hintOf('quote_number_prefix')}
-            />
+            <TextField label="Quote number prefix" name="quote_number_prefix" defaultValue={prefix} required hint={hintOf('quote_number_prefix')} />
           </div>
           <ul className="mt-3 space-y-1 text-sm text-slate-600">
             <li>
-              New estimates start in:{' '}
-              <span className="font-semibold text-slate-800">{[start.city, start.state].filter(Boolean).join(', ') || 'no town (the estimator types it)'}</span>
+              The next quote this year reads like <span className="font-semibold text-slate-800">{counterQuoteNumber(prefix, businessYear(new Date()), 1, 1)}</span> (the number counts up).
             </li>
-            {QUOTE_PREFIX_PATTERN.test(prefix) ? (
-              <li>
-                The next quote this year reads like <span className="font-semibold text-slate-800">{counterQuoteNumber(prefix, businessYear(new Date()), 1, 1)}</span> (the number counts up).
-              </li>
-            ) : null}
-            {stateName(state) ? (
-              <li>
-                The signing sentence reads: <span className="text-slate-800">“{esignConsent(state)}”</span>
-              </li>
-            ) : null}
+            <li>
+              New estimates start in:{' '}
+              <span className="font-semibold text-slate-800">{[start.city, start.state].filter(Boolean).join(', ') || 'no town (the estimator types it)'}</span>, the town of the shop address on
+              the Pricing page.
+            </li>
+            <li>The signing sentence names the e-sign law of the property&rsquo;s state.</li>
           </ul>
         </Card>
 
@@ -126,10 +114,10 @@ function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: 
           <h2 className="mb-3 font-semibold text-slate-900">Warranty and terms</h2>
           <div className="grid gap-4">
             <Field label="Warranty" hint={hintOf('warranty_text')}>
-              <Textarea name="warranty_text" rows={5} required defaultValue={text('warranty_text')} />
+              <Textarea name="warranty_text" rows={3} required defaultValue={settings.warranty} />
             </Field>
             <Field label="Terms" hint={hintOf('quote_terms')}>
-              <Textarea name="quote_terms" rows={6} required defaultValue={text('quote_terms')} />
+              <Textarea name="quote_terms" rows={6} required defaultValue={settings.terms} />
             </Field>
           </div>
         </Card>

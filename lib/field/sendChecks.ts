@@ -2,10 +2,10 @@
 // in plain words, one item per problem, each with a Fix button that opens the right place (or a
 // Request approval for a price beyond the estimator's own range). It replaces the first schema
 // message ("Too small: expected number to be >0") with the area or field it is about. Pure; the
-// send route applies the same rules on the server (lib/pricing/policy, lib/quotes/profile).
+// send route applies the same rules on the server (lib/pricing/policy). Nothing about a business
+// profile is on it: there is no form to finish before sending (owner decision OD12).
 import { canSendQuote, type PolicyProblem, type PriceApproval, type PricedOption, type PricingSettings, type Role, type Tier } from '@/lib/pricing';
 import { latestByTier } from '@/lib/quotes/approvals';
-import { profileGapsSentence } from '@/lib/quotes/profile';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { areaSchema, draftSchema, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { JOB_TYPE_LABELS, num } from '@/lib/format';
@@ -43,8 +43,6 @@ export interface SendCheckInput {
   approvals?: readonly PriceApproval[];
   /** Changes from the model still without a note. */
   pendingFlags: number;
-  /** The business profile's gaps, as they read in a sentence ("the office phone"). */
-  profileGaps: readonly string[];
   online: boolean;
 }
 
@@ -52,7 +50,7 @@ const TIER_WORDS: Record<Tier, string> = { good: 'Good', better: 'Better', best:
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 export function sendChecks(input: SendCheckInput): SendCheck[] {
-  const { draft, options, role, settings, approvals = [], pendingFlags, profileGaps, online } = input;
+  const { draft, options, role, settings, approvals = [], pendingFlags, online } = input;
   const checks: SendCheck[] = [...customerChecks(draft), ...areaChecks(draft)];
 
   const priceable = draft.areas.filter((a) => areaSchema.safeParse(a).success);
@@ -83,15 +81,6 @@ export function sendChecks(input: SendCheckInput): SendCheck[] {
           fix: { label: 'Explain', target: { step: 'options' } },
         }
       : { id: 'flags', ok: true, label: 'Every change from the model is explained' },
-  );
-
-  const canFixProfile = role === 'owner' || role === 'office';
-  checks.push(
-    profileGaps.length
-      ? canFixProfile
-        ? { id: 'profile', ok: false, label: profileGapsSentence([...profileGaps]), fix: { label: 'Open the business profile', target: { step: 'business' } } }
-        : { id: 'profile', ok: false, label: `${profileGapsSentence([...profileGaps])} Ask the owner or the office to finish it.` }
-      : { id: 'profile', ok: true, label: 'Business profile finished' },
   );
 
   checks.push(online ? { id: 'online', ok: true, label: 'Online' } : { id: 'online', ok: false, label: 'Offline. Sending needs a connection; your work is saved.' });

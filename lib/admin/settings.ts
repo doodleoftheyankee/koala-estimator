@@ -1,7 +1,6 @@
 // Business settings (app_settings) as the admin UI sees them: labels, input kinds, and the
 // parser that turns a submitted form into jsonb values. Pure, so it is unit-tested.
 import { z } from 'zod';
-import { stateName } from '@/lib/quotes/consent';
 import { QUOTE_PREFIX_PATTERN } from '@/lib/quotes/model';
 import {
   booleanField,
@@ -80,10 +79,12 @@ export function marginPreview(overheadPct: number, netMarginPct: number): { gros
   };
 }
 
-/** The business profile's own settings (app/admin/business), besides the branding fields. */
+/**
+ * The optional business profile's own settings (app/admin/business), besides the branding fields.
+ * There is no town or state here: new estimates start in the shop address's town and state, and
+ * the signing sentence names the property's state (OD14).
+ */
 export const PROFILE_SETTINGS: ReadonlyArray<ScalarSetting> = [
-  { key: 'default_city', label: 'Town', kind: 'text' },
-  { key: 'default_state', label: 'State', kind: 'text' },
   { key: 'quote_number_prefix', label: 'Quote number prefix', kind: 'text' },
   { key: 'warranty_text', label: 'Warranty', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
   { key: 'quote_terms', label: 'Terms', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
@@ -128,11 +129,7 @@ const scalarSchemas: Record<string, z.ZodType<Json>> = {
   shop_address: textField('Shop address', 300),
   quote_terms: textField('Quote terms', 10_000),
   warranty_text: textField('Warranty', 10_000),
-  // The business profile (lib/quotes/profile.ts). A blank town is stored as "" (the shop address's town is used).
-  default_city: optionalTextField('Town', 60).transform((v) => v ?? ''),
-  default_state: textField('State', 2)
-    .transform((v) => v.toUpperCase())
-    .refine((v) => stateName(v) !== null, 'State must be a US state, two letters such as PA'),
+  // The optional business profile (lib/quotes/profile.ts).
   quote_number_prefix: textField('Quote number prefix', 6)
     .transform((v) => v.toUpperCase())
     .refine((v) => QUOTE_PREFIX_PATTERN.test(v), 'Quote number prefix must be 1 to 6 letters or digits'),
