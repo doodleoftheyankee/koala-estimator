@@ -2,6 +2,7 @@ import { OUTDATED_APP_ERROR } from '@/lib/sync/compat';
 import { newMeasurement } from '@/lib/measure/measure';
 import { describe, expect, it } from 'vitest';
 import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
+import { toRow, waitingTotal } from '@/lib/field/estimateList';
 import type { LocalEstimate } from './db';
 import { applySyncResult, mergeRemote, resolveConflict, syncBlocker, touch, UNSENT_CHANGE_DROPPED } from './syncCore';
 
@@ -154,5 +155,37 @@ describe('mergeRemote', () => {
   it('ignores malformed remote docs and unknown statuses', () => {
     expect(mergeRemote(undefined, remote({ doc: { nope: true } }), 'u1', 'm')).toBeNull();
     expect(mergeRemote(undefined, remote({ status: 'weird' }), 'u1', 'm')!.draft.status).toBe('draft');
+  });
+});
+
+describe('release review C FLOW-2: the row keeps its headline when the server copy replaces the phone copy', () => {
+  const remote = (over: Record<string, unknown> = {}) => {
+    const d = complete();
+    return { id: d.id, status: 'sent', rowVersion: 3, updatedAt: NOW, doc: d, ...over };
+  };
+  const sentLocal = () =>
+    record({ syncState: 'synced', draft: { ...complete(), status: 'sent', rowVersion: 3 }, summaryPrice: 3975, summaryTier: 'better' });
+  const now = new Date(NOW);
+
+  it("a status-only change from the server (sent -> viewed -> signed) keeps the row's price and the waiting total", () => {
+    const local = sentLocal();
+    expect(toRow(local, now).price).toBe(3975);
+    const viewed = mergeRemote(local, remote({ status: 'viewed' }), 'u1', 'm2')!;
+    expect(viewed).toMatchObject({ summaryPrice: 3975, summaryTier: 'better' });
+    const row = toRow(viewed, now);
+    expect(row.price).toBe(3975);
+    expect(row.priceLabel).toBe('Better');
+    expect(waitingTotal([row])).toEqual({ total: 3975, count: 1 });
+    const signed = mergeRemote(viewed, remote({ status: 'signed' }), 'u1', 'm3')!;
+    expect(signed).toMatchObject({ syncState: 'locked', summaryPrice: 3975, summaryTier: 'better' });
+    expect(toRow(signed, now).price).toBe(3975);
+  });
+
+  it("an estimate pulled from the server shows the server's headline (the signed price, or the recommended option)", () => {
+    const pulled = mergeRemote(undefined, remote({ status: 'signed', headline: { price: 5060, tier: 'better' } }), 'u1', 'm')!;
+    expect(toRow(pulled, now)).toMatchObject({ price: 5060, priceLabel: 'Better' });
+    // The server's headline wins over the phone's when the server moved on.
+    const moved = mergeRemote(sentLocal(), remote({ rowVersion: 4, headline: { price: 4100, tier: 'best' } }), 'u1', 'm')!;
+    expect(moved).toMatchObject({ summaryPrice: 4100, summaryTier: 'best' });
   });
 });

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authorize } from '@/lib/server/auth';
+import { remoteHeadline } from '@/lib/office/estimates';
 import { createClient } from '@/lib/supabase/server';
 import type { RemoteEstimate } from '@/lib/sync/protocol';
 
@@ -10,9 +11,12 @@ export async function GET() {
   const supabase = await createClient();
   let q = supabase
     .from('estimates')
-    .select('id, status, row_version, updated_at, client_doc')
+    // With what the office list reads for the headline (release review C FLOW-2).
+    .select('id, status, row_version, updated_at, client_doc, selected_tier, model_total_price, options:estimate_options(tier, price), quotes(status, signed_price)')
     .not('client_doc', 'is', null)
     .order('updated_at', { ascending: false })
+    .order('version', { referencedTable: 'quotes', ascending: false })
+    .limit(1, { referencedTable: 'quotes' })
     .limit(100);
   // Owner/office can see everything; on the phone they still only want their own work.
   if (profile.role !== 'estimator') q = q.eq('estimator_id', profile.userId);
@@ -24,6 +28,7 @@ export async function GET() {
     rowVersion: r.row_version as number,
     updatedAt: r.updated_at as string,
     doc: r.client_doc,
+    headline: remoteHeadline(r),
   }));
   return NextResponse.json({ estimates: rows });
 }

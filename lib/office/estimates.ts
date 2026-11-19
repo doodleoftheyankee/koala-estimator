@@ -102,6 +102,29 @@ export function headlinePrice(args: {
   return { price: isPrice(args.modelTotalPrice) ? args.modelTotalPrice : null, tier: null, signed: false };
 }
 
+/**
+ * The headline the phone's list shows for an estimate it pulls from the server (GET
+ * /api/estimates; release review C FLOW-2): headlinePrice from the same columns the office list
+ * reads, the signed price when the latest quote (or the estimate) is signed. Null with no price.
+ */
+export function remoteHeadline(row: {
+  status: string;
+  selected_tier: string | null;
+  model_total_price: number | string | null;
+  options?: ReadonlyArray<{ tier: string; price: number | string | null }> | null;
+  quotes?: ReadonlyArray<{ status: string; signed_price: number | string | null }> | null;
+}): { price: number; tier: Tier | null } | null {
+  const n = (v: number | string | null | undefined) => (v === null || v === undefined ? null : Number(v));
+  const q = row.quotes?.[0];
+  const head = headlinePrice({
+    selectedTier: row.selected_tier,
+    options: (row.options ?? []).map((o) => ({ tier: o.tier, price: n(o.price) })),
+    modelTotalPrice: n(row.model_total_price),
+    signedPrice: q?.status === 'signed' || row.status === 'signed' ? n(q?.signed_price) : null,
+  });
+  return head.price === null ? null : { price: head.price, tier: head.tier };
+}
+
 /** What the price is, in words under the number ("Better", "Signed, Best"). */
 export function priceLabel(p: HeadlinePrice): string | null {
   if (p.price === null) return null;

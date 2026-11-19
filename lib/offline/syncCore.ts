@@ -137,6 +137,10 @@ export function mergeRemote(
     serverRowVersion: null,
     updatedAt: remote.updatedAt,
     syncedAt: remote.updatedAt,
+    // The row's headline (OD1): the server's when it sends one, else the phone's own, so a status
+    // the server changed (viewed, signed) never drops the price (release review C FLOW-2).
+    summaryPrice: remote.headline ? remote.headline.price : (local?.summaryPrice ?? null),
+    summaryTier: remote.headline ? remote.headline.tier : (local?.summaryTier ?? null),
   };
 }
 
