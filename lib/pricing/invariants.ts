@@ -125,6 +125,12 @@ export const DEFAULT_WALL_CAVITY_IN = 3.5;
 const THICKNESS_TOLERANCE_IN = 0.05;
 /** Room for rounding an R-value (described to 0.1). */
 const R_TOLERANCE = 0.05;
+/**
+ * Floating-point noise only, not a rounding allowance: an R read back from a quantity can land a
+ * hair under the exact value (R-32.65 read as 32.649999999999995), which must not count as below
+ * the 0.05 rounding room (L23c). The rule stays: an item's R within 0.05 of what its quantity gives.
+ */
+const FLOAT_EPS = 1e-9;
 
 /**
  * The cavity the insulation has to fit in, in inches: the depth entered, or a 2x4 wall (3.5 in)
@@ -533,8 +539,7 @@ export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: 
         add('product_not_installed', a.id, `"${item.description}" but the quantity priced is 0`);
       } else if (stated !== null && insulating.length > 0) {
         const r = finalR(o, a, snapshot, coefficients, { upperBound: true });
-        // An explicit epsilon, so float noise at exactly the rounding step never decides (review A F11).
-        if (r < stated - R_TOLERANCE - 1e-9) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
+        if (r < stated - R_TOLERANCE - FLOAT_EPS) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
       }
       if (PROMISES_FULL_CAVITY.test(item.description)) {
         const left = roomLeft(o, a, snapshot, coefficients);

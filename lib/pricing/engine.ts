@@ -770,7 +770,7 @@ function priceProductScope(
       thickness = denseFill ? room! : addedR / p.rPerInch;
       if (room !== null && thickness > room) thickness = room;
       achievedR = existingR + thickness * p.rPerInch;
-      if (room !== null && achievedR < targetR - 1e-9) capped(`${cavity}${already} only fits R-${fmtR(floorR(achievedR))} of ${p.label.toLowerCase()}`);
+      if (room !== null && achievedR < targetR - 1e-9) capped(`${cavity}${already} only fits R-${fmtR(achievedR)} of ${p.label.toLowerCase()}`);
       designQty = mat.unit === 'board_ft' ? area.sqft * thickness : (area.sqft * thickness) / mat.coverageSqftIn!;
     } else {
       designQty = area.sqft;
@@ -834,10 +834,7 @@ function priceProductScope(
   // (the model's hours stay the model's). A changed number of hours still wins.
   const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, hoursFor(designQty), crew, ov, hoursFor(pricedUnits(matLine, designQty, waste)));
 
-  // A fill that fills the cavity states what the cavity holds, rounded down to 0.1: never more R
-  // than it holds (L23b; R-32.65 reads R-32.6, not R-32.7: review A F11).
-  const cavityR = loose && fillsCavity === true && room !== null;
-  const rLabel = `R-${fmtR(cavityR ? floorR(achievedR) : achievedR)}`;
+  const rLabel = `R-${fmtR(achievedR)}`;
   let description: string;
   if (mat.rValue && mat.thicknessIn) {
     const where = coverageText(covered, area.sqft);
@@ -1097,8 +1094,6 @@ const fmtSqft = (n: number) =>
   n > 0 && n < 1 ? n.toLocaleString('en-US', { maximumSignificantDigits: 2 }) : n.toLocaleString('en-US', { maximumFractionDigits: n < 10 ? 1 : 0 });
 const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const fmtR = (n: number) => round1(n).toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false });
-/** An R-value rounded down to 0.1: what a full cavity holds, never more (L23b, F11). */
-const floorR = (n: number) => Math.floor(n * 10 + 1e-6) / 10;
 /** Inches: up to two decimals, as a framing depth is written (3.5, 5.5, 7.25). */
 const fmtIn = (n: number) => (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2, useGrouping: false });
 const unitWord = (unit: string, qty: number) => (unit === 'bag' ? (qty === 1 ? 'bag' : 'bags') : unit === 'board_ft' ? 'board ft' : unit);

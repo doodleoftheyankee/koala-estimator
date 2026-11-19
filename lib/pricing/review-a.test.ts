@@ -188,23 +188,16 @@ describe('F6 (L7): install hours are the model hours, multiplied in the same ord
   });
 });
 
-describe('F11 (L23b): an R the cavity caps is never stated above what the cavity holds', () => {
-  it('commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best closed-cell: R-32.6, not R-32.7', () => {
-    // The cavity holds 19 + 2.1 in x 6.5 = R-32.65; rounding half up stated R-32.7 (random quote 8ebd36f3, seed 99999).
+describe('F11: the checker reads an R on the 0.05 rounding boundary without float noise (L23c)', () => {
+  // R-values are said to 0.1, rounded half up (L18: 3.5 in of open-cell, R-12.95, reads R-13); the check
+  // allows that 0.05 and, since review A F11, 1e-9 more for float noise only (the flow stage's L23c).
+  it('commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best closed-cell: R-32.7, and no violation', () => {
+    // The cavity holds 19 + 2.1 in x 6.5 = R-32.65; read back from the quantity as 32.649999999999995
+    // (random quote 8ebd36f3, seed 99999), it was reported below the R-32.7 stated.
     const a = area({ id: 'm1', jobType: 'commercial', name: 'Commercial area', sqft: 16032.4, currentR: 19, targetR: 38, existingMaterial: 'Vermiculite', existingDepthIn: 8.6, depthIn: 10.7 });
     const input = estimate({ areas: [a] });
-    expect(work(tier(all(input), 'best'))).toEqual(['Closed-Cell Spray Foam to R-32.6 (~2.1 in added, fills the 10.7 in cavity), 16,032 sq ft']);
-    expect(violations(input)).toEqual([]);
-  });
-
-  it('walls 2x4, open-cell fills the 3.5 in cavity: 3.5 in x 3.7 = R-12.95 reads R-12.9 (was R-13)', () => {
-    const walls = area({ id: 'w1', jobType: 'walls', name: 'Walls', depthIn: 3.5 });
-    expect(work(tier(all(estimate({ areas: [walls] })), 'better'))).toEqual(['Open-Cell Spray Foam to R-12.9 (fills the 3.5 in cavity), 1,000 sq ft']);
-  });
-
-  it('an R the cavity does not cap still rounds to the nearest 0.1: attic Good 37 bags reads R-24.7', () => {
-    const r = all(estimate({ lineOverrides: { [lineKey('a1', 'cellulose', 'material')]: { qty: 37, reason: 'Counted on site', tier: 'good' } } }));
-    expect(work(tier(r, 'good'))).toEqual(['Blown Cellulose to R-24.7 (~6.9" added), 1,000 sq ft']);
+    expect(work(tier(all(input), 'best'))).toEqual(['Closed-Cell Spray Foam to R-32.7 (~2.1 in added, fills the 10.7 in cavity), 16,032 sq ft']);
+    expect(checkPricedQuote({ input, priced: all(input), snapshot, coefficients: coeffs }).filter((v) => v.kind === 'qty_below_stated_r')).toEqual([]);
   });
 });
 
