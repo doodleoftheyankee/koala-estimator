@@ -175,7 +175,7 @@ L19 Insulation already in an area takes its room: its depth entered, else its R 
     takes room by the one table".
 
 L20 Dense-pack walls: a new material row "Cellulose bag, dense-pack walls (25 lb)", walls only, 122.5
-    sq ft x in per bag (Greenfiber SANCTUARY INS765: 35 sq ft of 2x4 wall per bag), at the current
+    sq ft x in per bag (Greenfiber SANCTUARY: 35.0 sq ft of 2x4 wall per bag at 16 in o.c.; RA-F13), at the current
     cellulose bag cost ($14), flagged Needs owner input. Dense-pack always fills the room left.
     Examples (seeded):
       Walls 1,000 sq ft, 2x4, Good: 19 -> 31 bags; $1,500 unchanged (the minimum), lines $820 + $190 +
@@ -676,3 +676,18 @@ RA-F2 Wall actuals no longer move attic prices (makes L21 true). The learning lo
     price with stays at 1.08", "20 attic jobs at 1.08 and 200 wall jobs at 1.30: attics stay at about
     1.08", "with no walls cell (a database before the accuracy migration) the shared cell still learns
     from every row".
+
+RA-F13 The dense-pack citation names one card (docs only; no value changes). L20 and the migration
+    comment cited "Greenfiber SANCTUARY (INS765)", mixing two products. The source is the SANCTUARY
+    card (Rev E, 01/23; read through a web search summary, since greenfiber.com is outside this
+    session's network): dry dense-pack sidewalls at 3.5 pcf, 2x4 (R-13 on the card): 35.0 sq ft per
+    bag at 16 in o.c., 33.8 at 24 in o.c.; 2x6: 22.3 and 21.6. 122.5 sq ft x in per bag is the 16 in
+    o.c. figure (35.0 x 3.5; 2x6: 22.3 x 5.5 = 122.65). INS765 / INS765LD is another product with its
+    own card.
+    At 24 in o.c. the figure is 118.3 (33.8 x 3.5): a 1,000 sq ft 2x4 wall would take 32 bags, not 31.
+    The engine states R-12.6 for a full 2x4 (3.5 in x 3.6, the one per-inch table, L24) where the card
+    says R-13; that follows L24 and understates, so it is kept.
+    Owner questions: price dense-pack at 16 in or 24 in o.c.; confirm the bag weight in the row name
+    ("25 lb"), which the card read here did not show. If 24 in o.c., a new additive migration sets
+    118.3 where the seeded 122.5 is untouched.
+    Owner decision: OD7 (the row stays flagged Needs owner input).

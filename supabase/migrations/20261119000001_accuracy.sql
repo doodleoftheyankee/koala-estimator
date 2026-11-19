@@ -37,10 +37,11 @@ alter table materials drop constraint if exists materials_default_is_general;
 alter table materials add constraint materials_default_is_general
   check (not is_default or (job_type is null and r_value is null));
 
--- Dense-pack wall cellulose (OD7, S1-F9). A wall is blown dense, so a 25 lb bag covers far less
--- than on an attic floor: Greenfiber SANCTUARY (INS765) bag chart, dense-pack 2x4 walls (3.5 in):
--- about 35 sq ft per bag = 122.5 sq ft x in per bag. Starts at the current cellulose bag cost.
--- Needs owner input: confirm the coverage and cost with your supplier.
+-- Dense-pack wall cellulose (OD7, S1-F9). A wall is blown dense, so a bag covers far less than on
+-- an attic floor: Greenfiber SANCTUARY card (Rev E, 01/23), dry dense-pack sidewalls at 3.5 pcf,
+-- 2x4 (3.5 in): 35.0 sq ft per bag at 16 in o.c. (33.8 at 24 in o.c.) = 122.5 sq ft x in per bag;
+-- 2x6: 22.3 (21.6). Not the INS765 card, another product. Starts at the current cellulose bag cost.
+-- Needs owner input: confirm the coverage, stud spacing, bag weight and cost with your supplier.
 insert into materials (product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, active, needs_owner_input, job_type)
 select p.id, 'Cellulose bag, dense-pack walls (25 lb)', 'bag', m.cost_per_unit, 122.5, false, true, true, 'walls'
   from products p
