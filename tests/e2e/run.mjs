@@ -1295,6 +1295,31 @@ step("Koala's database unreachable is not a sign-out (L36)");
   const api = await ctx.request.get(BASE + '/api/estimates');
   const body = await api.json();
   check(api.status() === 503 && body.error === 'unreachable' && /Can't reach Koala right now/.test(body.message), `APIs answer 503, not "signed out": ${api.status()} ${body.error}`);
+  {
+    // Release, blower door under the accuracy rules: the tool opens from the phone's copy and says
+    // Koala cannot be reached, never that the session expired or the estimate is not theirs.
+    const leeId = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Lee'");
+    const toolPath = `/field/blower-door?estimate=${leeId}`;
+    await page.goto(BASE + toolPath);
+    await page.getByRole('heading', { name: 'Blower door' }).waitFor({ timeout: 15000 });
+    await page.getByText("Can't reach Koala right now.").waitFor({ timeout: 20000 });
+    check(
+      new URL(page.url()).pathname === '/field/blower-door' && (await page.getByText('Your session expired.').count()) === 0 && (await page.getByText(/is not one you can save readings to/).count()) === 0,
+      "the blower door tool, opened while Koala's database is down, opens from the phone and says \"Can't reach Koala right now\", not \"Your session expired\" or \"not one you can save readings to\"",
+    );
+    const bd = await ctx.request.post(BASE + '/api/blower-door/tests', { data: { mutationId: '0f000000-0000-4000-8000-0000000000e2', test: {} } });
+    check(bd.status() === 503 && (await bd.json()).error === 'unreachable', `the blower door API answers 503 unreachable, not "Not signed in": ${bd.status()}`);
+    await page.screenshot({ path: SHOTS + '10e-blower-door-unreachable.png' });
+    const own = await ctx.newPage();
+    await own.goto(BASE + `/unreachable?next=${encodeURIComponent(toolPath)}`);
+    const offer = own.getByRole('link', { name: 'Open the blower door tool on this phone' });
+    await offer.waitFor({ timeout: 15000 });
+    check((await offer.getAttribute('href')) === toolPath && (await own.getByRole('link', { name: 'Open the estimates on this phone' }).count()) === 0, '/unreachable for the blower door tool offers the tool for the same estimate (was the estimates list)');
+    await own.close();
+    await page.goto(BASE + '/field');
+    await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
+    await page.getByText("Can't reach Koala right now.").waitFor({ timeout: 20000 });
+  }
   const uctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await uctx.addCookies([sessionCookie(OWNER)]);
   const up = await uctx.newPage();
@@ -1366,6 +1391,12 @@ step('blower door: the tool opens with no signal, converts, shows the tier and c
   check((await page.getByTestId('bd-ventilation').innerText()).startsWith('Ventilation OK: test-out is 1,495 CFM50 above the BAS of 1,796 (estimated).'), 'the ventilation check against the estimated BAS');
   await page.getByLabel('Air sealing price ($)').fill('$2,000');
   check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,500 AIR SEAL REBATE', 'the 75% cost cap below the tier lowers the rebate');
+  // Release, OD4: the price is whole dollars, as on the quote; cents are refused, not rounded away.
+  await page.getByLabel('Air sealing price ($)').fill('1999.50');
+  await page.getByText('Air sealing price: whole dollars, as on the quote (no cents).').waitFor();
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'a price with cents is refused (whole dollars, as on the quote) and caps nothing');
+  await page.getByLabel('Air sealing price ($)').fill('1999');
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,499 AIR SEAL REBATE', 'a capped rebate is whole dollars, never more than the program pays: $1,499 (was $1,499.25)');
   await page.getByLabel('Air sealing price ($)').fill('');
   await page.getByRole('button', { name: 'Copy summary' }).click();
   await page.getByRole('button', { name: 'Copied' }).waitFor();
@@ -1536,7 +1567,8 @@ step('crew starts the job on a phone');
 const cctx = await browser.newContext(phone);
 await cctx.addCookies([sessionCookie(CREW)]);
 const cpg = await cctx.newPage();
-cpg.on('console', (m) => m.type() === 'error' && logs.push('CREW ' + m.text()));
+// The same rule as the estimator's phone: only the failures a step causes on purpose are expected.
+cpg.on('console', (m) => m.type() === 'error' && !expected(m) && logs.push('CREW ' + m.text()));
 cpg.on('pageerror', (e) => logs.push('CREW PAGEERROR ' + e.message));
 await cpg.goto(BASE + '/crew');
 await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
@@ -1587,6 +1619,7 @@ step('blower door: the crew lead saves the test-out on the job with no signal');
   const crewContext = await cpg.evaluate(async (j) => (await fetch(`/api/blower-door/tests?job=${j}`)).json(), jobId);
   check(crewContext.tests.length === 1 && crewContext.tests.every((t) => t.air_sealing_cost === null), "the crew's copy of the readings carries no air sealing price");
   await cctx.setOffline(true);
+  offlineStep = true;
   await cpg.getByLabel('Fan flow (CFM)').fill('3325');
   await cpg.getByLabel('House pressure (Pa)').fill('50.8');
   check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — $2,000 AIR SEAL REBATE', "the crew sees the tier with the saved test-in, under the test-in's program");
@@ -1598,6 +1631,7 @@ step('blower door: the crew lead saves the test-out on the job with no signal');
   check((await cpg.getByText('On this phone', { exact: true }).count()) === 1, 'and is still there after a reload with no signal');
   await cpg.screenshot({ path: SHOTS + '17a-blower-door-job.png', fullPage: true });
   await cctx.setOffline(false);
+  offlineStep = false;
   await cpg.evaluate(() => window.dispatchEvent(new Event('online')));
   await waitForDb(
     `select count(*) || ':' || min(cfm50) || ':' || min(pa) || ':' || min(estimate_id::text) from blower_door_tests where job_id = '${jobId}' and kind = 'test_out'`,
@@ -1651,8 +1685,9 @@ step('blower door: the office job page shows the readings, the tier and the vent
 {
   await op.goto(BASE + '/jobs/' + jobId);
   await op.getByRole('heading', { name: 'Blower door test' }).waitFor();
-  // Assisted's 40% tier is $2,000; the estimator's $1,999 price caps it at 75%: $1,499.25 (BD-MATH-1).
-  check((await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,499.25 AIR SEAL REBATE'), "the office sees the tier and rebate, capped by the estimator's price");
+  // Assisted's 40% tier is $2,000; the estimator's $1,999 price caps it at 75%, floored to whole
+  // dollars (BD-MATH-1; release, OD4): $1,499 (was $1,499.25).
+  check((await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,499 AIR SEAL REBATE'), "the office sees the tier and rebate, capped by the estimator's price, in whole dollars");
   const figures = await op.getByRole('region', { name: 'Blower door figures' }).innerText();
   check(figures.includes('6,952 CFM50') && figures.includes('3,291 CFM50') && figures.includes('52.7%') && /Eddie Estimator/.test(figures) && /Carl Crew/.test(figures), 'both readings with who took them, and the reduction');
   check(figures.includes('(limited by 75% of $1,999)') && /Assisted/.test(figures), 'with the cap note and the program of each reading');
@@ -1873,6 +1908,24 @@ step('owner edits the rebate programs');
   await rebates.nth(0).fill('900');
   await op.getByRole('button', { name: 'Save rebate programs' }).click();
   await waitForDb("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'", '900', 'and puts the seeded amount back');
+  // Release, review B flow-B10: saving while Koala's database is down says so.
+  {
+    const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+    await op.getByText('Saved 2 programs. Phones get them the next time they sync.').waitFor({ timeout: 15000 });
+    unreachableStep = true;
+    await rest(true);
+    await rebates.nth(0).fill('925');
+    await op.getByRole('button', { name: 'Save rebate programs' }).click();
+    await op.getByText("Can't reach Koala right now. Nothing was saved.").first().waitFor({ timeout: 20000 });
+    check(
+      (await op.getByText('Only the owner can change the rebate programs.').count()) === 0,
+      "saving the rebate programs while Koala is down says \"Can't reach Koala right now. Nothing was saved.\", not \"Only the owner can change the rebate programs.\"",
+    );
+    await op.screenshot({ path: SHOTS + '22b-rebates-unreachable.png' });
+    await rest(false);
+    unreachableStep = false;
+    check(psql("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'") === '900', 'and nothing was saved');
+  }
 }
 
 console.log('console errors:', logs.length ? logs : 'none');
