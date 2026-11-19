@@ -654,6 +654,22 @@ describe('random quotes (lib/pricing/__fixtures__/random.ts)', () => {
     expect(randomQuotes(50, 1, seededBundle)).not.toEqual(quotes.slice(0, 50));
   });
 
+  it('draw the same areas, crews, drives, picks and dates whatever the engine returns (review A F7)', () => {
+    // Prices that change which options are shown and what each costs: a $5,000 minimum job collapses
+    // many options into one (OD6), and a higher margin moves every price.
+    const other = structuredClone(seededBundle);
+    other.snapshot.settings.minimumJobPrice = 5000;
+    other.snapshot.settings.targetMarginPct = 0.5;
+    const a = randomQuotes(1000, 20261118, seededBundle);
+    const b = randomQuotes(1000, 20261118, other);
+    const drawn = (q: (typeof a)[number]) => [q.id, q.input.areas, q.input.crewId, q.input.driveMinutesOneWay, q.selectedTier, q.issuedAt, q.validDays];
+    expect(b.map(drawn)).toEqual(a.map(drawn));
+    // Whether an estimator changed something is drawn the same way too; only the numbers differ.
+    const changed = (q: (typeof a)[number]) => Object.keys(q.input.overrides).length + Object.keys(q.input.lineOverrides ?? {}).length > 0;
+    expect(b.filter(changed).length).toBeGreaterThan(100);
+    expect(b.map(changed)).toEqual(a.map(changed));
+  });
+
   it('cover every edge the audit lists', () => {
     const areas = quotes.flatMap((q) => q.input.areas);
     const has = (f: (a: AreaInput) => boolean) => areas.some(f);

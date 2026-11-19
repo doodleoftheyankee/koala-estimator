@@ -1,5 +1,7 @@
 // Random quotes for the accuracy checks: thousands of estimates an estimator could really enter,
-// with every edge the audit found, from a seed (the same seed always gives the same quotes).
+// with every edge the audit found, from a seed. The same seed always draws the same areas, crews,
+// drives, picks and dates, whatever the engine or the prices (review A F7); the estimator's price
+// and line changes are drawn from each quote's own stream and start from the engine's numbers.
 //
 // Covers every job type; sizes from 0.3 sq ft up to the 200,000 sq ft cap (lib/sync/draft.ts);
 // every access level; existing insulation with and without a depth, its material named as the area
@@ -207,10 +209,12 @@ export function randomArea(r: Rng, i: number, jobType?: JobType): AreaInput {
 const YEAR_START = Date.UTC(2026, 0, 1);
 const YEAR_MS = Date.UTC(2027, 0, 1) - YEAR_START;
 
-/** A price an estimator might type: up to 30% either way, whole dollars, a round $5, or with cents. */
-function overridePrice(r: Rng, model: number): number {
-  const p = Math.max(1, model * (1 + between(r, -0.3, 0.3)));
-  const style = r();
+/**
+ * A price an estimator might type: up to 30% either way (from `u` in [0, 1)), whole dollars, a
+ * round $5, or with cents (from `style` in [0, 1)).
+ */
+function overridePrice(u: number, style: number, model: number): number {
+  const p = Math.max(1, model * (1 + (-0.3 + u * 0.6)));
   if (style < 0.3) {
     const cents = Math.round(p * 100) / 100;
     return Number.isInteger(cents) ? cents + 0.5 : cents; // with cents, like $4,321.50
@@ -219,7 +223,18 @@ function overridePrice(r: Rng, model: number): number {
   return Math.max(5, Math.round(p / 5) * 5);
 }
 
-/** Quote number `n` of a run. `bundle` is the pricing it is priced with (overrides start from its prices). */
+/** The tiers, in order, for the estimator's price changes (each tier draws its own numbers). */
+const TIER_ORDER: readonly Tier[] = ['good', 'better', 'best'];
+
+/**
+ * Quote number `n` of a run. `bundle` is the pricing it is priced with (overrides start from its prices).
+ *
+ * Everything but the estimator's changes is drawn from `r` in a fixed order and number of draws,
+ * whatever the engine returns, so the same seed draws the same quotes with any engine and any
+ * prices (review A F7). The changes (which option and line, the factor, which prices) come from a
+ * stream of the quote's own, seeded from `r`, with a fixed number of draws per tier and per line
+ * change; they are applied to whatever the engine returns for this quote.
+ */
 export function randomQuote(r: Rng, n: number, bundle: PricingBundle): RandomQuote {
   const id = randomUuid(r);
   const count = weighted(r, [
@@ -250,49 +265,58 @@ export function randomQuote(r: Rng, n: number, bundle: PricingBundle): RandomQuo
     ['better', 0.55],
     ['best', 0.15],
   ]);
+  const wantsLines = chance(r, 0.1);
+  const wantsPrice = chance(r, 0.15);
+  const changes = mulberry32(Math.floor(r() * 4294967296));
+  const issuedAt = new Date(YEAR_START + Math.floor(r() * (YEAR_MS / 1000)) * 1000).toISOString();
+  const validDays = chance(r, 0.8) ? bundle.snapshot.settings.quoteValidDays : pick(r, [7, 14, 45, 60]);
   const input: EstimateInput = { areas, crewId, driveMinutesOneWay, overrides: {}, lineOverrides: {} };
 
   // Estimator changes start from the model's own numbers.
-  const wantsLines = chance(r, 0.1);
-  const wantsPrice = chance(r, 0.15);
   if (wantsLines || wantsPrice) {
+    // Every draw is made whether or not it is used, so one tier's decision never depends on another's.
+    const howMany = chance(changes, 0.7) ? 1 : 2;
+    const lineDraws = [0, 1].map(() => ({ option: changes(), line: changes(), factor: between(changes, 0.5, 1.6), ownTier: chance(changes, 0.7) }));
+    const priceDraws = TIER_ORDER.map((tier) => ({ tier, wanted: chance(changes, 0.6), u: changes(), style: changes() }));
+    const fallback = { option: changes(), u: changes(), style: changes() };
+
     const model = priceEstimate(input, bundle.snapshot, bundle.coefficientSet);
     if (wantsLines && model.options.length) {
       const lineOverrides: Record<string, LineOverride> = {};
-      const howMany = chance(r, 0.7) ? 1 : 2;
-      for (let k = 0; k < howMany; k++) {
-        const option = pick(r, model.options);
+      for (const d of lineDraws.slice(0, howMany)) {
+        const option = model.options[Math.floor(d.option * model.options.length)]!;
         const lines = option.lines.filter((l) => l.key !== null && (l.kind === 'material' || l.kind === 'labor' || l.kind === 'removal'));
         if (!lines.length) continue;
-        const line = pick(r, lines);
-        const factor = between(r, 0.5, 1.6);
-        const tier = chance(r, 0.7) ? option.tier : null;
+        const line = lines[Math.floor(d.line * lines.length)]!;
+        const tier = d.ownTier ? option.tier : null;
         lineOverrides[line.key!] =
           line.kind === 'material'
-            ? { qty: line.unit === 'bag' ? Math.max(0, Math.round((line.modelQty ?? line.qty) * factor)) : round((line.modelQty ?? line.qty) * factor, 1), reason: 'Counted on site', tier }
-            : { hours: round((line.modelHours ?? line.qty) * factor, 2), reason: 'Crew estimate', tier };
+            ? { qty: line.unit === 'bag' ? Math.max(0, Math.round((line.modelQty ?? line.qty) * d.factor)) : round((line.modelQty ?? line.qty) * d.factor, 1), reason: 'Counted on site', tier }
+            : { hours: round((line.modelHours ?? line.qty) * d.factor, 2), reason: 'Crew estimate', tier };
       }
       input.lineOverrides = lineOverrides;
     }
     if (wantsPrice && model.options.length) {
       const overrides: Partial<Record<Tier, PriceOverride>> = {};
-      for (const o of model.options) {
-        if (chance(r, 0.6)) overrides[o.tier] = { price: overridePrice(r, o.price), reason: 'Matched the competing bid' };
+      for (const d of priceDraws) {
+        const o = model.options.find((x) => x.tier === d.tier);
+        if (o && d.wanted) overrides[o.tier] = { price: overridePrice(d.u, d.style, o.price), reason: 'Matched the competing bid' };
       }
       if (Object.keys(overrides).length === 0) {
-        const o = pick(r, model.options);
-        overrides[o.tier] = { price: overridePrice(r, o.price), reason: 'Matched the competing bid' };
+        const o = model.options[Math.floor(fallback.option * model.options.length)]!;
+        overrides[o.tier] = { price: overridePrice(fallback.u, fallback.style, o.price), reason: 'Matched the competing bid' };
       }
       input.overrides = overrides;
     }
   }
 
-  const issuedAt = new Date(YEAR_START + Math.floor(r() * (YEAR_MS / 1000)) * 1000).toISOString();
-  const validDays = chance(r, 0.8) ? bundle.snapshot.settings.quoteValidDays : pick(r, [7, 14, 45, 60]);
   return { id, input, selectedTier, issuedAt, validDays };
 }
 
-/** `count` quotes from `seed`, priced with `bundle`. The same seed and bundle always give the same quotes. */
+/**
+ * `count` quotes from `seed`, priced with `bundle`. The same seed always gives the same quotes apart
+ * from the estimator's changes, which start from the engine's numbers for the same bundle.
+ */
 export function randomQuotes(count: number, seed: number, bundle: PricingBundle): RandomQuote[] {
   const r = mulberry32(seed);
   return Array.from({ length: count }, (_, n) => randomQuote(r, n, bundle));

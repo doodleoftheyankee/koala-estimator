@@ -264,7 +264,8 @@ in a package whose 2x4 walls end at R-12.6 is removed. Tests: the checker's labe
 
 Checker (no customer value): labels_match_work also checks full_cavity_not_filled and
 qty_below_stated_r; a batt adds its rated R. The generator keeps the 2026-11-18 per-inch table so the
-seed draws the same quotes.
+seed draws the same quotes. (Review A F7: that held only while the engine showed the same options;
+see "Review A fixes" for the generator that draws the same quotes whatever the engine returns.)
 
 Live golden set (78 estimates, live rows plus the migration's rows): no shown option total changed
 (no live estimate has walls or a depth entered). 20 batt items now name the size priced, at the same

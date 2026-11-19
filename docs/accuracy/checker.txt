@@ -43,8 +43,11 @@ Keeping it true
   - Existing insulation is read with the one R-per-inch table (lib/pricing/rPerInch.ts); a material
     not in it is read at the highest R per inch, as the engine does. A sized material (a batt) adds its
     rated R and is as thick as its row says.
-  - The random generator keeps its own copy of the 2026-11-18 per-inch table, so the same seed always
-    draws the same quotes whatever the app's table says.
+  - The random generator keeps its own copy of the 2026-11-18 per-inch table, and draws everything but
+    the estimator's changes from the seed in a fixed order, so the same seed draws the same areas,
+    crews, drives, picks and dates whatever the app's table, the engine or the prices say (review A
+    F7). The estimator's price and line changes come from each quote's own stream and start from the
+    engine's numbers, so only their amounts follow the engine.
   - bundle-rows.sql and loadPricingBundle load the same materials: active, and the default, one for a
     job type (dense-pack walls) or a size (batts). The new columns are read through to_jsonb so the
     query also runs on a database without the accuracy migration.
