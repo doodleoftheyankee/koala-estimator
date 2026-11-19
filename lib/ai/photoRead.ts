@@ -9,7 +9,7 @@ import { ACCESS_HINTS } from '@/lib/format';
 import { EXISTING_MATERIALS, EXISTING_R_PER_INCH } from '@/lib/pricing/rPerInch';
 
 export const PHOTO_READ_MODEL = 'claude-opus-5-5';
-export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-19';
+export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-19b';
 /** Photos per read (the area's photo limit). */
 export const MAX_READ_PHOTOS = 6;
 /** Phones shrink each photo to ~1568px on the long edge for reading (the size the model works at). */
@@ -245,7 +245,7 @@ const JOB_WORDS: Record<JobType, string> = {
 };
 
 /** The system prompt. Kept free of per-request details so it stays identical between requests. */
-export const PHOTO_READ_SYSTEM = `You help insulation estimators at Koala Insulation of Newark, Delaware (IECC climate zone 4A) read photos of a space they are quoting. You see the estimator's phone photos of one area and report what you can actually see, so they can fill in the quote faster and catch problems early.
+export const PHOTO_READ_SYSTEM = `You help insulation estimators read photos of a space they are quoting. You see the estimator's phone photos of one area and report what you can actually see, so they can fill in the quote faster and catch problems early.
 
 Be accurate rather than complete. When something isn't visible or there is no basis for a number, use null (or "not_visible", "unclear", low confidence) instead of guessing. The estimator reviews every finding before it changes the quote.
 

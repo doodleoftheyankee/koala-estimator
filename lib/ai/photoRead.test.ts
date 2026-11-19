@@ -194,6 +194,11 @@ describe('prompt text and cost', () => {
     expect(notesFor(sanitizeRead(raw()))!.split('\n')[0]).toBe('From photo read:');
   });
 
+  it('names no franchise, town or climate zone (L38, S2-F18, hard rule 3)', () => {
+    for (const franchiseText of ['Newark', 'Delaware', 'Koala Insulation of', 'climate zone 4A']) expect(PHOTO_READ_SYSTEM).not.toContain(franchiseText);
+    expect(PHOTO_READ_SYSTEM.startsWith('You help insulation estimators read photos of a space they are quoting.')).toBe(true);
+  });
+
   it('tells the model the estimator\'s access scale', () => {
     expect(PHOTO_READ_SYSTEM).toContain('scuttle hatch, 3–4 ft clearance');
     expect(PHOTO_READ_SYSTEM).toContain('Never recommend removal when vermiculite or asbestos is suspected');

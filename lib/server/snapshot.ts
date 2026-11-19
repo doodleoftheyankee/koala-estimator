@@ -2,6 +2,7 @@
 // Pure (no I/O) so it can be tested; loadPricingBundle in bundle.ts does the queries.
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { PRIMARY_ASSEMBLY, pricedCodeRequirement } from '@/lib/admin/codes';
 import type {
   CoefficientSet,
   JobType,
@@ -134,14 +135,6 @@ const n = (v: number | string) => Number(v);
 const nn = (v: number | string | null) => (v === null ? null : Number(v));
 
 // Which assembly's code minimum drives the default target for each job type.
-const PRIMARY_ASSEMBLY: Record<string, string> = {
-  attic: 'ceiling',
-  walls: 'wood_frame_wall',
-  crawlspace: 'floor',
-  rim_joist: 'basement_wall',
-  garage: 'ceiling',
-  commercial: 'ceiling',
-};
 
 export function buildSnapshot(rows: SnapshotRows): { snapshot: PricingSnapshot; coefficientSet: CoefficientSet } {
   const settings = parseSettings(rows.settings);
@@ -172,10 +165,8 @@ export function buildSnapshot(rows: SnapshotRows): { snapshot: PricingSnapshot; 
       })),
     crews: rows.crews.map((c) => ({ id: c.id, name: c.name, size: c.size, blendedHourlyCost: n(c.blended_hourly_cost) })),
     defaultCrewId,
-    codeRequirements: Object.entries(PRIMARY_ASSEMBLY).flatMap(([jobType, assembly]) => {
-      const r =
-        rows.codeRequirements.find((c) => c.job_type === jobType && c.assembly === assembly) ??
-        rows.codeRequirements.find((c) => c.job_type === jobType);
+    codeRequirements: Object.keys(PRIMARY_ASSEMBLY).flatMap((jobType) => {
+      const r = pricedCodeRequirement(rows.codeRequirements, jobType);
       return r
         ? [{ jobType: jobType as PricingSnapshot['codeRequirements'][number]['jobType'], minR: n(r.min_r), edition: r.code_edition }]
         : [];

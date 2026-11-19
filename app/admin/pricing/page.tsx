@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { BUSINESS_TIME_ZONE } from '@/lib/format';
+import { BUSINESS_TIME_ZONE, formatMoney } from '@/lib/format';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
 import {
@@ -18,6 +18,7 @@ import {
   type SettingsMap,
 } from '@/lib/admin/settings';
 import { PRIMARY_PRODUCTS } from '@/lib/admin/pricingForms';
+import { codeEditionsSentence, pricedCodeRequirement } from '@/lib/admin/codes';
 import { ActionForm, ToggleInput } from './ActionForm';
 import { MarginPreview } from './MarginPreview';
 import { NumberField, SectionHeading, TextField } from './fields';
@@ -56,6 +57,9 @@ const schemas = {
       job_type: z.enum(JOB_TYPES).nullable(),
       r_value: numOrNull,
       thickness_in: numOrNull,
+      typical_min: numOrNull,
+      typical_max: numOrNull,
+      typical_source: strOrNull,
     }),
   ),
   crews: z.array(z.object({ id: str, name: str, size: num, blended_hourly_cost: num, active: z.boolean(), needs_owner_input: z.boolean() })),
@@ -109,7 +113,7 @@ async function loadConfig(db: Db) {
     db.from('products').select('id, code, label, unit, r_per_inch, is_r_bearing, active'),
     db
       .from('materials')
-      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input, job_type, r_value, thickness_in')
+      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input, job_type, r_value, thickness_in, typical_min, typical_max, typical_source')
       .eq('active', true),
     db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').order('name'),
     db
@@ -230,7 +234,14 @@ function MaterialCard({ m, title, productInactive, readOnly, note }: { m: Materi
           <Field label="Unit" hint="Set by the product">
             <Input value={unit} readOnly disabled aria-readonly="true" />
           </Field>
-          <NumberField label="Cost per unit" name="cost_per_unit" defaultValue={m.cost_per_unit} prefix="$" suffix={`/ ${unit}`} />
+          <NumberField
+            label="Cost per unit"
+            name="cost_per_unit"
+            defaultValue={m.cost_per_unit}
+            prefix="$"
+            suffix={`/ ${unit}`}
+            hint={m.typical_min !== null && m.typical_max !== null ? `Usual: ${formatMoney(m.typical_min)} to ${formatMoney(m.typical_max)} per ${unit}` : undefined}
+          />
         </div>
         {m.unit === 'bag' ? (
           <NumberField
@@ -245,6 +256,13 @@ function MaterialCard({ m, title, productInactive, readOnly, note }: { m: Materi
             }
           />
         ) : null}
+        {/* The usual range (L11): a cost far outside it is refused until "This cost is right" is ticked. */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <NumberField label="Usual cost, low" name="typical_min" defaultValue={m.typical_min} prefix="$" suffix={`/ ${unit}`} required={false} />
+          <NumberField label="Usual cost, high" name="typical_max" defaultValue={m.typical_max} prefix="$" suffix={`/ ${unit}`} required={false} />
+        </div>
+        <TextField label="Where the usual range comes from" name="typical_source" defaultValue={m.typical_source} />
+        <ToggleInput name="cost_confirmed" label="This cost is right" hint="Tick to save a cost far outside the usual range." defaultChecked={false} />
       </ActionForm>
     </Card>
   );
@@ -280,6 +298,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
     .filter((m) => !m.is_default && (m.job_type || m.r_value) && productById.has(m.product_id))
     .sort((a, b) => productOrder(a) - productOrder(b) || (a.job_type ?? '').localeCompare(b.job_type ?? '') || (a.r_value ?? 0) - (b.r_value ?? 0));
   const activeCrews = config.crews.filter((c) => c.active);
+  const editions = codeEditionsSentence(config.codes.filter((c) => c.is_default));
   const defaultCrewId = typeof map.default_crew_id === 'string' ? map.default_crew_id : null;
 
   return (
@@ -439,7 +458,8 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         </SectionHeading>
         {JOB_TYPES.map((jt) => {
           const rows = TIERS.map((t) => config.tiers.find((r) => r.job_type === jt && r.tier === t));
-          const codeMin = config.codes.find((c) => c.job_type === jt && c.is_default);
+          // The code minimum the engine prices this job type with (the crawlspace floor, not its walls).
+          const codeMin = pricedCodeRequirement(config.codes.filter((c) => c.is_default), jt);
           return (
             <Card key={jt}>
               <h3 className="mb-3 text-lg font-semibold text-slate-900">{jobTypeLabel(jt)}</h3>
@@ -504,12 +524,18 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
       {/* ------------------------------------------------------------ Code mins */}
       <section className="space-y-4">
         <SectionHeading id="code" title="Code minimums">
-          Minimum R-values by job type and assembly (IECC climate zone 4A).
+          Minimum R-values by job type and assembly. Quotes price each job type with its first assembly here (a crawlspace with its floor).
         </SectionHeading>
         <Alert tone="amber">
-          <strong>Owner to confirm:</strong> these were seeded from the <strong>2021 IECC</strong> (attic R-60). Delaware has used both the 2018
-          (attic R-49) and 2021 editions. Confirm which edition Newark and New Castle County enforce for your permits, then update the values and
-          edition below.
+          <strong>Owner to confirm:</strong>{' '}
+          {editions ? (
+            <>
+              these minimums come from <strong>{editions}</strong>.
+            </>
+          ) : (
+            'no code edition is entered yet.'
+          )}{' '}
+          Confirm which edition your local building department enforces for your permits, then update the values and edition below.
         </Alert>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {config.codes.map((c) => (

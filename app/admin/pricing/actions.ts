@@ -25,8 +25,10 @@ import {
 import { crossCheckSettings, parseSettingsForm, SETTING_LABELS, settingObject, toSettingsMap } from '@/lib/admin/settings';
 import {
   codeRequirementForm,
+  costOutsideRange,
   crewForm,
   materialForm,
+  materialRangeForm,
   newCrewForm,
   parseTierForm,
   productForm,
@@ -36,6 +38,8 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 type DbError = { code?: string; message: string } | null;
 
 const NOT_OWNER = 'Only the owner can change pricing.';
+/** A material's unit in a sentence ("per board ft"). */
+const UNIT_WORDS: Record<string, string> = { board_ft: 'board ft', bag: 'bag', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hour', each: 'each' };
 const PATH = '/admin/pricing';
 
 /** Throws on a Supabase error so restore steps fail loudly. */
@@ -171,21 +175,44 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
   if (!owner) return failure(NOT_OWNER);
   const { db } = owner;
 
-  const parsed = parseWith(materialForm, formToObject(fd));
+  const form = formToObject(fd);
+  const parsed = parseWith(materialForm, form);
   if (!parsed.ok) return failure(parsed.error);
   const input = parsed.data;
+  const rangeParsed = parseWith(materialRangeForm, form);
+  if (!rangeParsed.ok) return failure(rangeParsed.error);
+  const range = rangeParsed.data;
 
   const prev = await db
     .from('materials')
-    .select('id, name, unit, cost_per_unit, coverage_sqft_in, needs_owner_input')
+    .select('id, name, unit, cost_per_unit, coverage_sqft_in, needs_owner_input, typical_min, typical_max, typical_source')
     .eq('id', input.id)
     .maybeSingle();
   if (prev.error) return failure(prev.error.message);
   if (!prev.data) return failure('That material no longer exists. Reload the page.');
-  const before = prev.data as { name: string; unit: string; cost_per_unit: number | string; coverage_sqft_in: number | string | null; needs_owner_input: boolean };
+  const before = prev.data as {
+    name: string;
+    unit: string;
+    cost_per_unit: number | string;
+    coverage_sqft_in: number | string | null;
+    needs_owner_input: boolean;
+    typical_min: number | string | null;
+    typical_max: number | string | null;
+    typical_source: string | null;
+  };
 
   const isBag = before.unit === 'bag';
   if (isBag && input.coverage_sqft_in === null) return failure('Bag materials need a coverage (sq ft × inches per bag).');
+
+  // The usual range (L11): what the owner entered on the form, else the one stored. A cost far
+  // outside it is a typo or a price per something else, so it waits for "This cost is right".
+  const typical = {
+    min: range.typical_min ?? (before.typical_min === null ? null : Number(before.typical_min)),
+    max: range.typical_max ?? (before.typical_max === null ? null : Number(before.typical_max)),
+    source: range.typical_min !== null || range.typical_max !== null ? range.typical_source : (range.typical_source ?? before.typical_source),
+  };
+  const outside = costOutsideRange(input.cost_per_unit, typical, UNIT_WORDS[before.unit] ?? before.unit);
+  if (outside && !range.cost_confirmed) return failure(`Not saved. ${outside}`);
 
   const restore = async () => {
     must(
@@ -196,6 +223,9 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
           cost_per_unit: before.cost_per_unit,
           coverage_sqft_in: before.coverage_sqft_in,
           needs_owner_input: before.needs_owner_input,
+          typical_min: before.typical_min,
+          typical_max: before.typical_max,
+          typical_source: before.typical_source,
         })
         .eq('id', input.id),
     );
@@ -209,6 +239,9 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
       // Coverage only means something for bags; other units keep what they had.
       coverage_sqft_in: isBag ? input.coverage_sqft_in : before.coverage_sqft_in,
       needs_owner_input: false,
+      typical_min: typical.min,
+      typical_max: typical.max,
+      typical_source: typical.source,
     })
     .eq('id', input.id)
     .select('id');
