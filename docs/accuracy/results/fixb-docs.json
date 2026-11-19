@@ -1,0 +1,219 @@
+{
+  "stage": "fixb-docs",
+  "branch": "claude/accuracy-fixb-docs",
+  "base": "origin/claude/accuracy 001050c (review A fixes)",
+  "codeHeadCommit": "a6ca321",
+  "pushed": true,
+  "summary": "Review B, documents/server/database/security/Send checklist, and owner decisions OD12-OD14 in full. The documents were made safe before the gate went: defaults 'Koala Insulation', terms naming no town, 'Limited lifetime warranty'; any stored /placeholder/i text counts as unset; the consent sentence never throws (property state, else shop state, else the acts by name); a bad prefix falls back to KN. Then the business-profile gate is gone everywhere (route 409, checklist item, bundle gaps, SendStep branch and links, Pricing nags); /admin/business is an optional owner page. An additive conditional migration section replaces the seeded company, terms and warranty only where they are still exactly the seed (production's are). A test builds the quote, the real PDF, the emails and the page from the exact migration-seeded rows and from production's rows as they are today. Security: next= open redirect closed (and the repeated next= 500), price approvals bound to the loaded cost and written by the server only, the owner's queue drops stale requests and PATCH answers 409 for a signed estimate. Test databases now get production's grants. Hard rule 1: 2,926 stored-quote renders, 0 differences against the before code rendered the same day; against the quotes stage's stored before set only 4 clock-dependent files differ (two quotes expired between the renders; each equals its expired page). Hard rule 3: a parser-based scan finds no franchise text in app/, lib/, components/ beyond two documented exceptions.",
+  "commits": [
+    "d76a0b0 Owner decisions OD12-OD16 (round 2) copied to docs/accuracy/spec/owner-decisions-2.txt",
+    "fe27ed6 database-B1: next= stays on this site after dot segments resolve; a repeated next= no longer 500s /login",
+    "57de6fb OD12-OD14, DOC-1/2/3, database-B3 = flow-B1: documents safe, then the gate removed; migration + SQL tests; seeded-rows document test",
+    "2358bc8 flow-B7: no franchise name in the email sender, roof takeoff or utility list; hard rule 3 scan",
+    "09ab16c database-B2, B4, B5, B7; flow-B3, B14: approvals bound to cost, server-only writes, stale queue, production grants, e2e.sh db name",
+    "e8f02ec flow-B2, flow-B5, flow-B10: Send waits while unreachable, notes Fix, refused server actions say Koala is unreachable",
+    "24dc1d4 OD12: the signing page never says 'call our office' without a number; approvals' cost kept with a quote",
+    "21e774c Hard rule 1 after review B; 10,000 random quotes, every rule 0",
+    "a6ca321 e2e fixes for this branch's own new lines; docs/accuracy/after-fixb/docs evidence"
+  ],
+  "fixed": {
+    "OD12": {
+      "commit": "57de6fb, 2358bc8, 24dc1d4",
+      "what": "Every quote, PDF, email, customer page and roof takeoff says 'Koala Insulation'; nothing blocks or delays a send for the business profile (no 409 setup_incomplete, no 'profile' checklist item, no business.gaps in /api/bundle, no setup_incomplete branch or 'finish the business profile' text for any role, no Pricing nag); a license or phone nobody entered is left off; the signing page points to the office phone, else the estimator; /admin/business is optional and linked from no warning; /placeholder/i stored text is unset for warranty, terms and every branding field; code defaults (DEFAULT_COMPANY, DEFAULT_TERMS, lib/env.ts, lib/roof/roofing.ts COMPANY, .env.example) name no town; conditional migration for the seeded company and terms.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts (12)",
+        "app/field/SendStep.test.tsx (3)",
+        "lib/field/sendChecks.test.ts 'no business-profile item for any role'",
+        "lib/quotes/contact.test.ts (2)",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e 'send: nothing about a business profile holds it back', 'the Business profile page is optional'"
+      ]
+    },
+    "OD13": {
+      "commit": "57de6fb",
+      "what": "Warranty line exactly 'Limited lifetime warranty' (DEFAULT_WARRANTY; the stored seed 'Workmanship warranty — PLACEHOLDER, owner to replace.' replaced only when exactly equal).",
+      "tests": [
+        "tests/sql/41_owner_decisions.test.sql",
+        "lib/quotes/owner-decisions-2.test.ts seeded-rows and production-rows tests",
+        "e2e 'its warranty reads \"Limited lifetime warranty\"'"
+      ]
+    },
+    "OD14": {
+      "commit": "57de6fb",
+      "what": "New estimates take city and state as a pair from the shop address, else both blank; the consent sentence names the property's state, else the shop address's, else no state, and never throws; the business page has no town or state.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts OD14 and DOC-2 tests",
+        "lib/quotes/quotes-stage.test.ts L31, L32"
+      ]
+    },
+    "DOC-1": {
+      "commit": "57de6fb",
+      "what": "Resolved by OD12: the seeded company and terms are replaced by the migration where still the seed; no gate remains to pass them.",
+      "tests": [
+        "tests/sql/41_owner_decisions.test.sql"
+      ]
+    },
+    "DOC-2": {
+      "commit": "57de6fb",
+      "what": "newEstimateDefaults returns the shop address's town and state as a pair (OD14); 'Newark, PA' -> 'Newark, DE'.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts 'the shop address when it parses, else both blank …'"
+      ]
+    },
+    "DOC-3": {
+      "commit": "57de6fb",
+      "what": "Resolved by OD12: no 'Ask the owner or the office to finish' text or 'Open the business profile' link for any role.",
+      "tests": [
+        "app/field/SendStep.test.tsx (fails before for all three roles)"
+      ]
+    },
+    "database-B3 = flow-B1": {
+      "commit": "57de6fb",
+      "what": "Documents safe before deleting the gate: (a) placeholder = unset + 'Limited lifetime warranty', (b) consent never throws, (c) prefix falls back to KN, (d) phone-side gate removed with the server's.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts",
+        "e2e send with the seeded settings"
+      ]
+    },
+    "flow-B7": {
+      "commit": "2358bc8",
+      "what": "lib/env.ts default sender and .env.example 'Koala Insulation'; roof takeoff COMPANY 'Koala Insulation'; Customer step utility suggestions from this phone's estimates instead of a Delaware list; lib/franchise-text.test.ts scans literals (exceptions: LEGACY_ESIGN_CONSENT, STATE_NAMES).",
+      "tests": [
+        "lib/env.test.ts",
+        "lib/roof/roofing.test.ts",
+        "lib/field/utilities.test.ts",
+        "lib/franchise-text.test.ts",
+        "e2e roof summary"
+      ]
+    },
+    "database-B1": {
+      "commit": "fe27ed6",
+      "what": "safeNext takes unknown, refuses non-strings, and checks the resolved pathname for // or /\\; login page types next/error as string | string[].",
+      "tests": [
+        "lib/safeNext.test.ts (2 new)",
+        "lib/server/sessionState.test.ts",
+        "e2e /unreachable?next=/.//evil.example/x and /login?next=/a&next=/b"
+      ]
+    },
+    "database-B2": {
+      "commit": "09ab16c, 24dc1d4",
+      "what": "price_approvals.loaded_cost (additive, nullable, frozen by the guard trigger, written by the server); approvalCovers refuses when the cost rose or is missing, and a below-floor problem needs an owner approval given for a below-floor price; latestByTier skips requests asked at a lower cost so the phone offers Request approval again; the one-pending index includes the cost; quotes record each used approval's cost.",
+      "tests": [
+        "lib/pricing/support.test.ts (4 new)",
+        "lib/quotes/approvals.test.ts",
+        "lib/field/sendChecks.test.ts",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e 'the request keeps the loaded cost …'"
+      ]
+    },
+    "database-B4": {
+      "commit": "09ab16c",
+      "what": "revoke insert on price_approvals from authenticated; /api/approvals POST checks the role, prices the request, confirms can_edit_estimate and writes with the service role.",
+      "tests": [
+        "tests/sql/40_accuracy.test.sql L34 block",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e direct PostgREST insert refused"
+      ]
+    },
+    "flow-B3": {
+      "commit": "09ab16c",
+      "what": "isLiveRequest drops requests on signed/lost/void estimates or whose option price or cost moved (queue reads 200 rows); PATCH /api/approvals/[id] answers 409 {error:'signed'} via decisionRefusal.",
+      "tests": [
+        "lib/quotes/approvals.test.ts (4)",
+        "e2e PATCH on a signed estimate -> 409, queue empty"
+      ]
+    },
+    "database-B5": {
+      "commit": "09ab16c",
+      "what": "tests/sql/00_supabase_stub.sql sets production's default privileges (read from pg_default_acl); 01_grants.sql no longer re-grants; grant asserts before any re-run in 40_accuracy; e2e.sh checks grants after setup.",
+      "tests": [
+        "tests/sql/40_accuracy.test.sql first-run grant block (fails before)",
+        "scripts/e2e.sh grant check"
+      ]
+    },
+    "database-B7 = flow-B14": {
+      "commit": "09ab16c",
+      "what": "scripts/e2e.sh lower-cases E2E_DB_NAME and refuses names that are not [a-z_][a-z0-9_]*.",
+      "tests": [
+        "setup-only run with E2E_DB_NAME=koala_fixB_Check: exit 2 before, runs after (scratchpad fixb-docs/b7-before.log, b7-after.log)"
+      ]
+    },
+    "flow-B2": {
+      "commit": "e8f02ec",
+      "what": "sendChecks takes reachable; online but unreachable -> \"Can't reach Koala right now. Sending needs Koala; your work is saved.\"; Send and Request approval disabled; SendStep reads isReachable itself.",
+      "tests": [
+        "lib/field/sendChecks.test.ts",
+        "e2e Send checklist with REST down"
+      ]
+    },
+    "flow-B5": {
+      "commit": "e8f02ec",
+      "what": "CustomerField 'notes'; Textarea id customer-notes, maxLength 5000; focus effect handles text areas.",
+      "tests": [
+        "lib/field/sendChecks.test.ts 'notes too long: the Fix goes to the notes box'"
+      ]
+    },
+    "flow-B10": {
+      "commit": "e8f02ec",
+      "what": "lib/server/actionAuth.ts actionRefusal: \"Can't reach Koala right now. Nothing was saved.\" while unreachable, used by Pricing, Team, Insights, Jobs and mark-lost actions.",
+      "tests": [
+        "lib/server/actionAuth.test.ts (3)",
+        "e2e saving Pricing with REST down"
+      ]
+    },
+    "MISSED (database): /login repeated next= 500": {
+      "commit": "fe27ed6",
+      "what": "Covered by the B1 fix (safeNext of an array is '/').",
+      "tests": [
+        "lib/safeNext.test.ts",
+        "e2e /login?next=/a&next=/b -> 200"
+      ]
+    }
+  },
+  "notFixed": [
+    "database-B6 / OD16: no change by decision (quote numbers keep KN; a bad stored prefix now falls back to KN).",
+    "flow-B4, B6, B8, B9, B11, B12, B13: the screens fixer's (claude/accuracy-fixb-screens).",
+    "lib/field/fix.ts keeps the { step: 'business' } target and app/field/EstimateEditor.tsx its router.push('/admin/business') branch: nothing produces that target any more; left to keep the screens merge clean (the task allowed only 'notes' in fix.ts). Safe to delete after the merge.",
+    "app/field/FieldApp.tsx comment still says 'the business profile's town': FieldApp is the screens fixer's file (flow-B13); the behaviour is right (bundle business.newEstimate = shop address pair).",
+    "default_city / default_state rows saved by an owner are no longer read anywhere in the app (OD14 names only the property and shop address); the sync function's SQL fallback for an empty property state (default_state) is unchanged in the migration. lib/demo/seed.ts still reads default_state for demo quotes (lib/demo is out of scope).",
+    "package.json description still says 'Koala Insulation of Newark, DE' (not app code; not customer-visible).",
+    "The policy price_approvals_ask stays (it no longer has an effect without the insert grant); dropping it is not needed."
+  ],
+  "valueChanges": [
+    "RB-OD12a company: 'Koala Insulation of Newark' -> 'Koala Insulation' (quote email subject 'Your insulation quote from Koala Insulation of Newark (KN-2026-0001-v1)' -> '… from Koala Insulation (KN-2026-0001-v1)'; masthead, PDF header/footer).",
+    "RB-OD12b terms: 'A signed quote authorizes Koala Insulation of Newark to schedule the work.' -> 'A signed quote authorizes Koala Insulation to schedule the work.'",
+    "RB-OD13 warranty: 'Workmanship warranty — PLACEHOLDER, owner to replace.' / DEFAULT 'Workmanship warranty details are available from our office.' -> 'Limited lifetime warranty'.",
+    "RB-OD12c any PLACEHOLDER text is unset: license 'PLACEHOLDER' -> no license line; company 'PLACEHOLDER company' -> 'Koala Insulation'.",
+    "RB-OD12d no gate: POST /api/quotes on the seeded settings 409 setup_incomplete -> sent; checklist 'The business profile is not finished: …' / 'Business profile finished' -> no item; /admin/business 'not finished' / 'Everything a quote needs is filled in.' -> 'Optional. Quotes go out without it …'; Pricing card '… A quote cannot be sent until they are filled in.' -> '… It is optional …'; menu hint -> 'Optional: office phone, license, warranty and terms on quotes'.",
+    "RB-OD12e sign route: 'Please contact our office.' / '… or call our office.' -> 'please email Sam Rivera at sam@example.com' (or 'call (555) 010-0199' with an office phone).",
+    "RB-OD14a consent: no state -> '(ESIGN Act and the Uniform Electronic Transactions Act)' (was a 500 'Not a US state: '); property 'XX' with a Springfield, IL shop -> Illinois; Newark, DE property -> Delaware (unchanged).",
+    "RB-OD14b new estimate town/state: default_state PA + shop 'Newark, DE 19711': 'Newark, PA' -> 'Newark, DE'; 'Bear, DE' (profile) + Springfield shop -> 'Springfield, IL'; production unchanged (Newark, DE).",
+    "RB-B1c prefix '' -> number '-2026-0001-v1' -> 'KN-2026-0001-v1'.",
+    "RB-B7 sender 'Koala Insulation of Newark <onboarding@resend.dev>' -> 'Koala Insulation <onboarding@resend.dev>'; roof takeoff 'Koala Insulation of Newark: roof takeoff' -> 'Koala Insulation: roof takeoff'; utility suggestions fixed Delaware list -> this phone's own names.",
+    "RB-B2 (no price change) an approval no longer covers a price after its cost rose: Good $3,500 approved at $3,249.20, hours x4 -> $4,938.40: sent -> refused, Request approval again.",
+    "RB-FB2 Send checklist 'Online' -> \"Can't reach Koala right now. Sending needs Koala; your work is saved.\" while unreachable; RB-FB10 'Only the owner can change pricing.' -> \"Can't reach Koala right now. Nothing was saved.\" while unreachable.",
+    "No option price, item, quantity or headline changes in this branch (golden sets not re-priced here; violations unchanged at 0)."
+  ],
+  "checks": {
+    "typecheck": "pass (tsc --noEmit for the app and scripts/accuracy)",
+    "lint": "pass (eslint ., 0 problems)",
+    "vitest": "pass: 1,674 tests in 90 files (1,631 in 83 at 001050c). None skipped or deleted. Tests whose subject this round decided differently were rewritten to the decided behaviour and say so: quotes-stage L30 (the same live seed now sends), L31 (esignConsent('XX') no longer throws), L32 ('Bear, DE' -> shop pair), email.test 'falls back to defaults' (company), sendChecks 'business profile' item (gone; note and offline items kept), support.test approval fixture gains the cost every request now records and one problem object gains loadedCost.",
+    "testDb": "pass: tests/sql 10, 20, 30, 31, 40, 41 with the stub's production default privileges and no blanket re-grant. 41_owner_decisions covers both branches of each seed replacement, a second run, loaded_cost frozen, the same price at a higher cost, and the estimator's direct insert refused. Fail-before logs in the scratchpad (fixb-docs/fail-before-sql-41.log, fail-before-sql-b5.log, fail-before-base-sql-b2b4b5.log).",
+    "violations": "npm run accuracy:violations -- 10000 20261118: every rule 0 quotes / 0 violations, the same table as after-fixa (docs/accuracy/after-fixb/docs/violations-20261118.txt).",
+    "hardRule1": "docs/accuracy/after-fixb/hard-rule-1.txt: 2,926 files; 0 differences against 7c6b08c rendered the same day; against the quotes stage's stored before set 4 clock-dependent files (two quotes expired between the renders; each equals its expired page there); PDFs and emails vs origin/main c0ae5f1: 1,386 files, 0 differences.",
+    "e2e": "pass on a6ca321: 337 ok, console errors none (APP_PORT 3580, PGRST_PORT 3581, MOCK_PORT 54780, E2E_DB_NAME koala_fixb_docs; started only when no other e2e or next build ran). Each new run's build stopped once at the Next.js security-upgrade notice; the same command was retried once; nothing was upgraded and the notice's instructions were not followed. Two failed runs before that were on this branch's own new e2e lines (a label match on the business page found two fields; the roof report header expectation still said KOALA INSULATION OF NEWARK) and were fixed in the test. New checks: docs/accuracy/after-fixb/docs/e2e-fixb-docs-checks.txt (28 lines), screenshots in the same folder.",
+    "failBefore": "On the base commit (git archive 001050c in the scratchpad) with this branch's tests: owner-decisions-2 + SendStep 14 of 15 fail (fixb-docs/fail-before-base-od12.log); flow-B7 tests 3 of 3 fail, the scan naming 6 literals (fail-before-base-b7.log); the SQL tests fail at 'first run: signed-in users cannot write price requests (database-B4)'. In this worktree before each fix: safeNext 3 failures, policy cost tests 4, approvals/queue 6, sendChecks unreachable and notes 1 each, actionAuth module missing."
+  },
+  "migrations": [
+    "supabase/migrations/20261119000001_accuracy.sql, appended section 'Review B, owner decisions OD12 and OD13': branding replaced by {company 'Koala Insulation', rest as seeded} only where the whole value equals the seed, its description 'PLACEHOLDER — PDF branding' -> 'Quote PDF branding'; quote_terms only where exactly the seed, description -> 'Terms printed on every quote'; warranty_text only where exactly 'Workmanship warranty — PLACEHOLDER, owner to replace.'. Production holds every seed (read-only SELECT 2026-11-19), so it changes there on deploy.",
+    "Same file, appended section 'Review B, price approvals': price_approvals.loaded_cost numeric(12,2) nullable with a >= 0 check; price_approvals_one_pending recreated on (estimate_id, tier, price, coalesce(loaded_cost, -1)); tg_price_approval_guard freezes loaded_cost; revoke insert on price_approvals from authenticated. Re-runnable; origin/main never reads price_approvals."
+  ],
+  "ledger": "docs/accuracy/ledger.txt, section 'Review B fixes and owner decisions OD12-OD16': RB-OD12a-e, RB-OD13, RB-OD14a-b, RB-B1c, RB-B7, RB-B2, RB-B4, RB-B3, RB-B5, RB-B7db, and the staff-facing RB-FB2, RB-FB5, RB-FB10.",
+  "evidence": {
+    "hardRule1": "docs/accuracy/after-fixb/hard-rule-1.txt",
+    "violations": "docs/accuracy/after-fixb/docs/violations-20261118.txt",
+    "e2eChecks": "docs/accuracy/after-fixb/docs/e2e-fixb-docs-checks.txt",
+    "seededSettings": "lib/quotes/__fixtures__/seeded-quote-settings.json (scripts/accuracy/seeded-quote-settings.sh)",
+    "screenshots": "docs/accuracy/after-fixb/docs/*.png"
+  }
+}
