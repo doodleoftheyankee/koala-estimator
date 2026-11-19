@@ -204,7 +204,14 @@ describe('canSendQuote with line overrides', () => {
     expect(Math.abs(good.price - good.modelPrice) / good.modelPrice).toBeGreaterThan(0.1);
     const r = canSendQuote('estimator', far, settings);
     expect(r.ok).toBe(false);
-    expect(r.reasons).toEqual([expect.stringMatching(/^good: price is \d+\.\d% from the model price; estimators may change it up to 10%/)]);
+    // L34: the message names the price, the model price and what the estimator may quote alone (here
+    // nothing: with 88 bags no price within 10% of the model clears the floor margin).
+    const dollars = (n: number) => `$${n.toLocaleString('en-US')}`;
+    const off = Math.round((Math.abs(good.price - good.modelPrice) / good.modelPrice) * 100);
+    expect(r.reasons).toEqual([
+      `Good: ${dollars(good.price)} is ${off}% above the model price of ${dollars(good.modelPrice)}. With these changes no price you can quote on your own (within 10% of the model price) clears the 25% floor margin. Request approval to send ${dollars(good.price)}.`,
+    ]);
+    expect(r.problems[0]).toMatchObject({ tier: 'good', kind: 'over_limit', price: good.price, modelPrice: good.modelPrice, approver: 'office' });
     expect(canSendQuote('office', far, settings).ok).toBe(true);
     expect(canSendQuote('owner', far, settings).ok).toBe(true);
   });

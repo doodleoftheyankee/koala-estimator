@@ -132,9 +132,12 @@ function problemForPrice(role: Role, o: PricedOption, settings: PricingSettings)
   const name = TIER_WORDS[o.tier];
   const floor = floorPrice(o, settings);
   const range = role === 'estimator' ? estimatorRange(o, settings) : null;
-  const alone = range
-    ? ` You can quote ${dollars(range.min)} to ${dollars(range.max)} on your own (estimators may change it up to ${percent(settings.estimatorOverrideLimitPct)}).`
-    : '';
+  const alone =
+    role !== 'estimator'
+      ? ''
+      : range
+        ? ` You can quote ${dollars(range.min)} to ${dollars(range.max)} on your own (estimators may change it up to ${percent(settings.estimatorOverrideLimitPct)}).`
+        : ` With these changes no price you can quote on your own (within ${percent(settings.estimatorOverrideLimitPct)} of the model price) clears the ${percent(settings.floorMarginPct)} floor margin.`;
   const base = { tier: o.tier, price: o.price, modelPrice: o.modelPrice, floor, ...(range ? { range } : {}) };
   if (o.belowFloor && role !== 'owner') {
     return {
