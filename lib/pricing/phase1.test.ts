@@ -23,6 +23,7 @@ import {
 import { seededArea as area, seededCoefficients as coeffs, seededEstimate as estimate, seededSnapshot as snapshot } from './__fixtures__/seeded';
 import * as hand from './__fixtures__/seed';
 import { EXISTING_R_PER_INCH, existingRPerInch, existingThicknessIn } from './rPerInch';
+import { checkPricedQuote } from './invariants';
 
 const all = (input: EstimateInput, s: PricingSnapshot = snapshot) => priceEstimate(input, s, coeffs, { showAll: true });
 const shown = (input: EstimateInput, s: PricingSnapshot = snapshot) => priceEstimate(input, s, coeffs);
@@ -633,6 +634,34 @@ describe('L23b (R3): the R stated never exceeds what the cavity holds', () => {
     // 31 bags typed by hand read the same.
     const typed = tier(all(estimate({ areas: [walls()], lineOverrides: { [CEL]: { qty: 31, reason: 'x', tier: 'good' } } })), 'good');
     expect(work(typed)[0]!.description).toBe('Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft');
+  });
+});
+
+describe('L23c: a cavity-capped R on the 0.05 rounding boundary is read as the quantity gives it', () => {
+  // Random quote 8ebd36f3 at seed 99999 (20,000 quotes): 8.6 in of vermiculite (R-19) leaves 2.1 in
+  // of a 10.7 in cavity; 16,032.4 sq ft x 2.1 in = 33,668.04 board ft of closed-cell at R-6.5 per
+  // inch adds exactly R-13.65, so the area ends at R-32.65, which reads R-32.7 (R-values are said to
+  // 0.1, rounded half up, as 3.5 in of open-cell, R-12.95, reads R-13). The check read the same
+  // quantity as R-32.649999999999995 in floating point and reported R-32.7 as more than it installs.
+  const commercial = area({ jobType: 'commercial', name: 'Commercial area', sqft: 16032.4, currentR: 19, targetR: 38, existingMaterial: 'Vermiculite', existingDepthIn: 8.6, depthIn: 10.7, accessLevel: 'easy' });
+  const input = estimate({ areas: [commercial] });
+  const r = all(input);
+  const best = tier(r, 'best');
+
+  it('2.1 in of closed-cell foam on R-19 reads R-32.7, and the check agrees the quantity gives it', () => {
+    expect(work(best)[0]!.description).toBe('Closed-Cell Spray Foam to R-32.7 (~2.1 in added, fills the 10.7 in cavity), 16,032 sq ft');
+    expect(checkPricedQuote({ input, priced: r, snapshot, coefficients: coeffs }).filter((v) => v.kind === 'qty_below_stated_r')).toEqual([]);
+  });
+
+  it('a stated R more than the rounding above what the quantity gives is still caught', () => {
+    const tamper = (to: string) => ({
+      ...r,
+      options: r.options.map((o) => (o.tier !== 'best' ? o : { ...o, customerItems: o.customerItems.map((i) => (i.kind === 'work' ? { ...i, description: i.description.replace('R-32.7', to) } : i)) })),
+    });
+    for (const to of ['R-32.8', 'R-33']) {
+      const found = checkPricedQuote({ input, priced: tamper(to), snapshot, coefficients: coeffs }).filter((v) => v.kind === 'qty_below_stated_r');
+      expect(found, to).toHaveLength(1);
+    }
   });
 });
 
