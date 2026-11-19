@@ -618,7 +618,8 @@ L11 Each material has a usual cost range and where it comes from (materials.typi
       102 times more than the usual $0.06 to $0.24 (Starting range: half to twice the cost on file
       when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is
       right” to save it." Ticked: saved. (15.25 / 0.15, the middle of the range, is 102.) The e2e
-      step puts $0.12 back at its end.
+      step puts $0.12 back at its end. (Amended by RB-flow-B9: the distance is now measured from
+      the nearest edge, and a confirmed cost widens the stored range.)
     Owner decision: the record's default (half to twice the starting cost until real ranges are
     entered).
     Tests: lib/admin/pricingForms.test.ts "a cost 100 times the usual is caught, with the range and
@@ -906,3 +907,27 @@ RB-flow-B4 (OD15, amends L9) With no pick, Better is the implied pick, exactly a
     option shown that does the same work", "the engine says which option shown does the work of the
     hidden Better", "the phone, the office list, the sync and the quote all recommend Best at $6,070
     (was Good at $4,195)").
+
+RB-flow-B9 (amends L11; owner screen, no customer value) "This cost is right" sticks, and the
+    refusal says how far the cost is from the nearest edge of the usual range. Before: a confirmed
+    cost was saved but the stored range kept it outside, so every later save of the card (a name
+    change, or Save with nothing changed) was refused again until ticked again; and the distance
+    was measured from the middle of the range. Now a cost saved with "This cost is right" outside
+    the range widens the stored range to it (materials.typical_min / typical_max); "N times" is
+    used only from twice the edge, else a percentage.
+    Examples (open-cell, usual $0.06 to $0.24):
+      $0.30 ticked, then saved again unticked: refused every time -> saved; stored range $0.06 to
+        $0.24 -> $0.06 to $0.30.
+      $0.30: "is 2.0 times more than the usual $0.06 to $0.24" -> "is 25% above the usual high of
+        $0.24. The usual range is $0.06 to $0.24 (...)".
+      $0.05: "is 3.0 times less than the usual" -> "is 17% below the usual low of $0.06".
+      $15.25: "is 102 times more than the usual $0.06 to $0.24" -> "is 64 times the usual high of
+        $0.24"; $12: 80 -> 50 times; $0.01: "15 times less" -> "6.0 times less than the usual low
+        of $0.06".
+    No price, quantity or customer word changes. Review B flow-B9.
+    Tests: lib/admin/pricingForms.test.ts "says how far a cost is from the nearest edge: a
+    percentage, "N times" only from twice the edge (review B flow-B9)", "a cost the owner confirmed
+    widens the stored range to it, so the next save is not refused again (review B flow-B9)" (both
+    fail before the fix), "a cost 100 times the usual is caught, with the range and its source"
+    (its expected sentences updated to the new wording); e2e Pricing step "a confirmed $15.25
+    widens the stored usual range …", "saving the card again without ticking is not refused".

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseWith } from './forms';
-import { costOutsideRange, crewForm, materialForm, materialRangeForm, newCrewForm, parseTierForm, productForm, codeRequirementForm, PRIMARY_PRODUCTS } from './pricingForms';
+import { costOutsideRange, crewForm, rangeWithConfirmedCost, materialForm, materialRangeForm, newCrewForm, parseTierForm, productForm, codeRequirementForm, PRIMARY_PRODUCTS } from './pricingForms';
 
 const ID = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
 const ID2 = '1f14e45f-ceea-467f-a8f6-3b3a0c6c2b11';
@@ -84,12 +84,36 @@ describe('material cost ranges (L11, RF-13)', () => {
 
   it('a cost 100 times the usual is caught, with the range and its source', () => {
     // Open-cell foam is about $0.12 a board foot; $12 is a price per something else.
+    // Measured from the nearest edge of the range (review B flow-B9), not its middle ($0.15).
     expect(costOutsideRange(12, range, 'board ft')).toBe(
-      "$12 per board ft is 80 times more than the usual $0.06 to $0.24 (Starting range: half to twice the cost on file when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is right” to save it.",
+      "$12 per board ft is 50 times the usual high of $0.24. The usual range is $0.06 to $0.24 (Starting range: half to twice the cost on file when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is right” to save it.",
     );
-    expect(costOutsideRange(15.25, range, 'board ft')).toMatch(/^\$15\.25 per board ft is 102 times more than the usual \$0\.06 to \$0\.24 /);
-    expect(costOutsideRange(0.01, range, 'board ft')).toMatch(/^\$0\.01 per board ft is 15 times less than the usual \$0\.06 to \$0\.24 /);
-    expect(costOutsideRange(0.3, range, 'board ft')).toMatch(/^\$0\.30 per board ft is 2\.0 times more than the usual/);
+    expect(costOutsideRange(15.25, range, 'board ft')).toMatch(/^\$15\.25 per board ft is 64 times the usual high of \$0\.24\. The usual range is \$0\.06 to \$0\.24 /);
+    expect(costOutsideRange(0.01, range, 'board ft')).toMatch(/^\$0\.01 per board ft is 6\.0 times less than the usual low of \$0\.06\. The usual range is \$0\.06 to \$0\.24 /);
+  });
+
+  it('says how far a cost is from the nearest edge: a percentage, "N times" only from twice the edge (review B flow-B9)', () => {
+    // Before: "$0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24" (against the middle).
+    expect(costOutsideRange(0.3, range, 'board ft')).toMatch(/^\$0\.30 per board ft is 25% above the usual high of \$0\.24\. /);
+    // Before: "$0.05 ... is 3.0 times less than the usual".
+    expect(costOutsideRange(0.05, range, 'board ft')).toMatch(/^\$0\.05 per board ft is 17% below the usual low of \$0\.06\. /);
+    expect(costOutsideRange(0.47, range, 'board ft')).toMatch(/ is 96% above the usual high of \$0\.24\. /);
+    expect(costOutsideRange(0.48, range, 'board ft')).toMatch(/ is 2\.0 times the usual high of \$0\.24\. /);
+    expect(costOutsideRange(0.03, range, 'board ft')).toMatch(/ is 2\.0 times less than the usual low of \$0\.06\. /);
+    expect(costOutsideRange(0.2401, range, 'board ft')).toMatch(/ is just above the usual high of \$0\.24\. /);
+  });
+
+  it('a cost the owner confirmed widens the stored range to it, so the next save is not refused again (review B flow-B9)', () => {
+    // Before: the range stayed $0.06 to $0.24, so every later save of $0.30 was refused until ticked again.
+    const after = rangeWithConfirmedCost(range, 0.3, true);
+    expect(after).toEqual({ ...range, min: 0.06, max: 0.3 });
+    expect(costOutsideRange(0.3, after, 'board ft')).toBeNull();
+    expect(rangeWithConfirmedCost(range, 0.05, true)).toEqual({ ...range, min: 0.05, max: 0.24 });
+    // Not confirmed, inside the range, or no range: the range as it was.
+    expect(rangeWithConfirmedCost(range, 0.3, false)).toEqual(range);
+    expect(rangeWithConfirmedCost(range, 0.12, true)).toEqual(range);
+    const none = { min: null, max: null, source: null };
+    expect(rangeWithConfirmedCost(none, 0.3, true)).toEqual(none);
   });
 
   it('a cost inside the range, or a material with no range, is fine', () => {

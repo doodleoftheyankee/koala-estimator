@@ -26,6 +26,7 @@ import { crossCheckSettings, parseSettingsForm, SETTING_LABELS, settingObject, t
 import {
   codeRequirementForm,
   costOutsideRange,
+  rangeWithConfirmedCost,
   crewForm,
   materialForm,
   materialRangeForm,
@@ -213,6 +214,8 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
   };
   const outside = costOutsideRange(input.cost_per_unit, typical, UNIT_WORDS[before.unit] ?? before.unit);
   if (outside && !range.cost_confirmed) return failure(`Not saved. ${outside}`);
+  // A cost confirmed outside the range widens it, so the next save of the card is not refused again (review B flow-B9).
+  const stored = rangeWithConfirmedCost(typical, input.cost_per_unit, range.cost_confirmed);
 
   const restore = async () => {
     must(
@@ -239,9 +242,9 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
       // Coverage only means something for bags; other units keep what they had.
       coverage_sqft_in: isBag ? input.coverage_sqft_in : before.coverage_sqft_in,
       needs_owner_input: false,
-      typical_min: typical.min,
-      typical_max: typical.max,
-      typical_source: typical.source,
+      typical_min: stored.min,
+      typical_max: stored.max,
+      typical_source: stored.source,
     })
     .eq('id', input.id)
     .select('id');

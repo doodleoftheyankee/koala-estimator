@@ -1310,7 +1310,7 @@ await cost.fill('15.25');
 await cost.press('Tab');
 const form = cost.locator('xpath=ancestor::form[1]');
 await form.getByRole('button', { name: /save/i }).click();
-await form.getByText(/Not saved\. \$15\.25 per board ft is 102 times more than the usual \$0\.06 to \$0\.24 \(Starting range: half to twice/).waitFor({ timeout: 15000 });
+await form.getByText(/Not saved\. \$15\.25 per board ft is 64 times the usual high of \$0\.24\. The usual range is \$0\.06 to \$0\.24 \(Starting range: half to twice/).waitFor({ timeout: 15000 });
 check(ocsfCost() === ocsfBefore, `a cost 100 times the usual is refused, with the usual range and where it comes from (still ${ocsfBefore})`);
 await form.scrollIntoViewIfNeeded();
 await op.screenshot({ path: SHOTS + '12b-pricing-cost-range.png' });
@@ -1319,10 +1319,27 @@ await form.getByRole('button', { name: /save/i }).click();
 await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
 check(Number(ocsfCost()) === 15.25, 'with "This cost is right" ticked it is saved');
 console.log('  material audit:', psql("select count(*) from audit_log where table_name='materials' and action='UPDATE' and actor_id='11111111-1111-4111-8111-111111111111'"));
-await cost.fill(costWas);
-await form.getByRole('button', { name: /save/i }).click();
-await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+// Review B flow-B9: the confirmed cost widens the usual range, so the card saves again unticked.
+{
+  const ocsfRange = () => psql("select m.typical_min || ' ' || m.typical_max from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default").split(' ').map(Number);
+  const [lo, hi] = ocsfRange();
+  check(lo === 0.06 && hi === 15.25, `a confirmed $15.25 widens the stored usual range to $0.06 to $15.25 (was $0.06 to $0.24): ${lo} to ${hi}`);
+  await op.reload();
+  const again = op.getByLabel(/cost per unit/i).first().locator('xpath=ancestor::form[1]');
+  check((await again.getByRole('switch', { name: /This cost is right/ }).getAttribute('aria-checked')) === 'false', 'after a reload "This cost is right" is not ticked');
+  await again.getByRole('button', { name: /save/i }).click();
+  await again.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+  check((await again.getByText(/Not saved/).count()) === 0 && Number(ocsfCost()) === 15.25, 'saving the card again without ticking is not refused (it was, every time)');
+  // Put the usual range back with the cost.
+  await again.getByLabel('Usual cost, high').fill('0.24');
+}
+const cost2 = op.getByLabel(/cost per unit/i).first();
+const form2 = cost2.locator('xpath=ancestor::form[1]');
+await cost2.fill(costWas);
+await form2.getByRole('button', { name: /save/i }).click();
+await form2.getByText(/Saved/).first().waitFor({ timeout: 15000 });
 await waitForDb("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default", ocsfBefore, `the step puts the open-cell cost back (${ocsfBefore})`);
+await waitForDb("select m.typical_max::float8 from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default", '0.24', 'and its usual high back ($0.24)');
 // A change that would break pricing must be refused and rolled back.
 await op.goto(BASE + '/admin/team');
 await op.screenshot({ path: SHOTS + '13-team.png', fullPage: true });
