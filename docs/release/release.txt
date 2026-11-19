@@ -479,3 +479,34 @@ deployed; the go-live steps are in section 6.
                              docs/release/migrations.txt; the second run changes nothing (schema
                              5,617 lines, data 283, grants 149), all SQL tests pass on it, and the
                              blower door migration alone on main's schema passes its test.
+
+
+9. FINAL RECHECK OF THE REVIEW C FIXES (independent; head 999edd6, code unchanged since)
+------------------------------------------------------------------------------------------
+  An independent checker re-tested every review C fix against 93d9dbc (before) and 999edd6
+  (after), with the fixer's tests and its own probes.
+    Result            all 19 items hold (SEC-1, DOC-1, FLOW-7, DOC-2, CLAIM-1, FLOW-1, DOC-4,
+                      FLOW-2, FLOW-3, FLOW-4, DOC-5 with its two missed cases, FLOW-8, FLOW-9,
+                      FLOW-11, FLOW-12, CLAIM-3, CLAIM-4); no regressions.
+    Fail before       every new or changed test fails on 93d9dbc: 27 failures in 10 files, plus
+                      the SQL SEC-1 block; all pass on 999edd6. No test was deleted or skipped.
+    Checks            typecheck pass; lint 0 problems; vitest 104 files, 1,869 tests passed;
+                      test:db 7 files passed.
+    Hard rule 1       the 77 stored quotes render to 2,926 files on both commits, no difference.
+    Hard rule 2       read-only: production has applied migrations only up to 20261111060002,
+                      so the in-place edit of the unapplied blower door migration is safe.
+    DOC-5 sweep       1,413 PDF layouts: 0 pages end on a heading or a title bar on 999edd6
+                      (287 on 93d9dbc).
+  The checker's e2e run could not build (it stopped at the Next.js security-upgrade notice both
+  times), so the e2e was run again separately on 999edd6:
+    bash scripts/e2e.sh (APP_PORT=3680 PGRST_PORT=3681 MOCK_PORT=54880
+      E2E_DB_NAME=koala_final_e2e)   417 ok, 0 failed, console errors: none.
+  The build stopped once at the notice and the e2e's own build was the one retry; nothing was
+  upgraded and the notice was not followed. koala_final_e2e dropped afterwards.
+  Observations, not regressions:
+    a. Format-2 quotes' expired page now ends with the zone (" EST"); production has none.
+    b. NEXT_PUBLIC_BUSINESS_TIME_ZONE is read as process.env.NEXT_PUBLIC_BUSINESS_TIME_ZONE, so
+       Next.js writes the value into the phone bundle when it is set at build time (go-live
+       step 3 sets it before the build); unset, the phone falls back to New York.
+    c. The service-role client (public quote page, sign and send routes) keeps postgrest-js's
+       default retries (about 7 s on a 503). Outside FLOW-3's scope; noted for later.
