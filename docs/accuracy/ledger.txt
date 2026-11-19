@@ -495,3 +495,37 @@ One formatter: every quote surface (page, PDF, emails) formats money with lib/fo
 and dates with lib/format.ts (formatDateLong, formatDateTime, formatAuditTime, calendarDay); the
 quote's own formatUsd and the PDF's and emails' own date functions are gone. Output for a quote sent
 before is unchanged (the 2,926-file comparison above).
+
+=== Review A fixes (docs/accuracy/review/review-a.json; branch claude/accuracy-fixa) ===
+
+An independent review of the pricing engine and of quotes and documents (review A, at fdc3eaa),
+each finding checked by an adversarial verifier. One entry per fix that changes a price, title,
+bullet, item or quantity; fixes with no customer value (the checker, the generator, the phone) are
+listed at the end. Seeded pricing, easy access, 20 min drive unless stated. Random-quote counts are
+10,000 quotes at seed 20261118 drawn by the generator of RA-F7, so before and after are the same
+quotes. Tests are in lib/pricing/review-a.test.ts unless named otherwise.
+
+RA-F3 Batts and air sealing say the area their quantity covers (R3 closed for every unit, not only
+    bags and board feet). A quantity priced by the square foot covers quantity / waste; below the
+    area, the item says "N of M sq ft", and a bullet that says every leak is sealed goes when the
+    air sealing covers part of the area. Batts above the whole area are cut to the whole area (one
+    layer), with an override_capped warning, as a fill is cut to a full cavity (L23). Air sealing
+    above the area is not cut (knee walls, L7): the item says the sq ft priced.
+    Examples (seeded):
+      Crawlspace 800 sq ft, 2x6, Good batts set to 100 sq ft: "Fiberglass Batts to R-21 (5.5 in
+        thick), 800 sq ft" -> "…, 95 of 800 sq ft" (100 / 1.05); $1,500 unchanged.
+      The same, 1,600 sq ft of batts: priced 1,600 sq ft, item $3,902, Good $4,275 -> 840 sq ft (the
+        whole area), item $2,080, Good $2,270, with "Crawlspace: 1,600 sq ft of fiberglass batts is
+        more than the 800 sq ft area. Good is priced with 840 sq ft, the whole area."
+      Attic 1,000 sq ft, air sealing set to 500 sq ft on Better: "Air sealing of top plates,
+        penetrations and bypasses (1,000 sq ft)" -> "(500 of 1,000 sq ft)", $4,090 unchanged; Best
+        (showAll) loses "Full air sealing before new insulation".
+      Air sealing set to 1,500 sq ft (knee walls): "(1,000 sq ft)" -> "(1,500 sq ft)", $4,685 and
+        9.5 h unchanged (L7).
+    Random quotes: labels_match_work area_not_covered (new kind) 152 in 119 quotes -> 0.
+    Owner decision: R3 (review finding), L15.
+    Tests: "crawlspace 800 sq ft, Good batts set to 100 sq ft: "95 of 800 sq ft" …", "1,600 sq ft of
+    batts for an 800 sq ft area is cut to the whole area …", "attic 1,000 sq ft, air sealing set to
+    500 sq ft: "(500 of 1,000 sq ft)"", "air sealing set above the area (knee walls, L7) is not cut …";
+    lib/accuracy/invariants.test.ts "labels_match_work (review A F3): the area an item states is the
+    area its quantity covers".

@@ -175,6 +175,15 @@ function wasteOf(line: PricedLine, area: AreaInput, coefficients: CoefficientSet
   return 1;
 }
 
+/**
+ * The square feet a work item states it covers: "…, 800 sq ft" -> 800, "…, 95 of 800 sq ft" -> 95,
+ * "(1,000 sq ft)" -> 1000. Null when it states none.
+ */
+export function statedSqft(description: string): number | null {
+  const m = /(\d[\d,]*(?:\.\d+)?)(?: of \d[\d,]*(?:\.\d+)?)? sq ft/.exec(description);
+  return m ? Number(m[1]!.replace(/,/g, '')) : null;
+}
+
 /** The R-value a work item states ("… to R-38 …", "Fiberglass Batts, R-38, …"), if any. */
 export function statedR(description: string): number | null {
   const m = /\bR-(\d+(?:\.\d+)?)/.exec(description);
@@ -394,6 +403,9 @@ function areasNamed(text: string, areas: AreaInput[]): AreaInput[] {
  *    cavity", "fills the 3.5 in cavity") but a cavity it is about is left partly empty.
  *  - qty_below_stated_r: a work item states an R-value ("… to R-12.6 …") that the quantity priced
  *    for its area does not reach (the estimator's bag count, R3).
+ *  - area_not_covered: a work item for a material priced by the square foot (batts, air sealing)
+ *    states an area ("800 sq ft") that its quantity, the waste taken out, does not cover, or covers
+ *    more than (review A F3; within 1%, and the rounding of the area as printed).
  * Work items are about their own area.
  * A sentence is about the areas whose job type it names, else every area in the quote.
  */
@@ -444,9 +456,27 @@ export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: 
         const left = roomLeft(o, a, snapshot, coefficients);
         if (left !== null) add('full_cavity_not_filled', a.id, `"${item.description}" but ${fmt(left, 2)} in of the ${fmt(cavityDepth(a)!, 2)} in cavity is left empty`);
       }
+      const sqft = statedSqft(item.description);
+      const byTheFoot = sqftLines(o, a.id, item.description, snapshot);
+      if (sqft !== null && byTheFoot.length === 1) {
+        const covered = byTheFoot[0]!.qty / wasteOf(byTheFoot[0]!, a, coefficients);
+        const tolerance = Math.max(0.01 * Math.max(sqft, covered), sqft < 10 ? 0.051 : 0.51);
+        if (Math.abs(covered - sqft) > tolerance) add('area_not_covered', a.id, `"${item.description}" but the quantity priced covers ${fmt(covered, 1)} sq ft`);
+      }
     }
   }
   return out;
+}
+
+/**
+ * The material lines priced by the square foot that a work item describes: air sealing for an air
+ * sealing item, else the R-bearing ones (batts).
+ */
+function sqftLines(o: PricedOption, areaId: string, description: string, snapshot: PricingSnapshot): PricedLine[] {
+  const scope = workScope(description);
+  if (scope === 'removal') return [];
+  const lines = scope === 'air_sealing' ? o.lines.filter((l) => l.areaId === areaId && l.kind === 'material' && l.product === 'air_sealing') : insulationLines(o, areaId, snapshot);
+  return lines.filter((l) => l.unit === 'sqft');
 }
 
 /**

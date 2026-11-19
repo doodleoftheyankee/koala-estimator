@@ -294,8 +294,10 @@ interface AreaWork {
    * The template's own product added insulation; finalR is the R the area ends at (null: no R
    * product); fillsCavity says whether it fills the cavity (null: no cavity, or no R product).
    */
-  primary: { finalR: number | null; fillsCavity: boolean | null } | null;
+  primary: { finalR: number | null; fillsCavity: boolean | null; partial: boolean } | null;
   airSealing: boolean;
+  /** The air sealing priced covers only part of the area (an estimator's quantity, F3). */
+  airSealingPartial: boolean;
 }
 
 function priceTier(
@@ -332,7 +334,7 @@ function priceTier(
     const access = coeff(k, 'access_mult', { accessLevel: area.accessLevel });
     const hasExisting = area.currentR > 0 || !!area.existingMaterial;
     const removal = area.removalNeeded || (tpl.includeRemoval && hasExisting);
-    const work: AreaWork = { area, tpl, removal, primary: null, airSealing: false };
+    const work: AreaWork = { area, tpl, removal, primary: null, airSealing: false, airSealingPartial: false };
     works.push(work);
 
     if (removal) {
@@ -355,15 +357,19 @@ function priceTier(
     if (primary) {
       lines.push(...primary.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'primary', description: primary.description, cost: primary.cost });
-      work.primary = { finalR: primary.finalR, fillsCavity: primary.fillsCavity };
-      if (tpl.primaryProduct === 'air_sealing') work.airSealing = true;
+      work.primary = { finalR: primary.finalR, fillsCavity: primary.fillsCavity, partial: primary.partial };
+      if (tpl.primaryProduct === 'air_sealing') {
+        work.airSealing = true;
+        work.airSealingPartial = primary.partial;
+      }
     }
 
     if (tpl.includeAirSealing && tpl.primaryProduct !== 'air_sealing') {
-      const air = priceAirSealing(area, s, k, access, crew, ov);
+      const air = priceAirSealing(area, s, k, access, crew, ov, tier, warnings);
       lines.push(...air.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'air_sealing', description: air.description, cost: air.cost });
       work.airSealing = true;
+      work.airSealingPartial = air.partial;
     }
   });
 
@@ -580,7 +586,8 @@ const endsAt = (w: AreaWork): number => w.primary?.finalR ?? (w.removal ? 0 : w.
 
 function endsBelowCode(w: AreaWork, s: PricingSnapshot): boolean {
   const code = codeMinimumR(s, w.area.jobType);
-  return code !== null && endsAt(w) < code - 1e-9;
+  // Insulation over only part of the area leaves the rest where it was (F3).
+  return code !== null && (endsAt(w) < code - 1e-9 || (w.primary?.partial === true && w.area.currentR < code - 1e-9));
 }
 
 /** How a sentence names each kind of job ("your attic", "the walls"). */
@@ -621,6 +628,8 @@ const REMOVAL_WORDS = /\bremov/i;
 const SEALING_WORDS = /seal|leak|draft|penetration|bypass/i;
 const CODE_WORDS = /\bcode\b/i;
 const FULL_CAVITY_WORDS = /\b(full|whole|entire) cavit(y|ies)\b|\bfills? the cavit(y|ies)\b/i;
+/** A sentence that says every leak is sealed ("Full air sealing", "Every penetration sealed"). */
+const ALL_SEALED_WORDS = /\b(full|every|all|complete|whole)\b/i;
 
 function areaBullets(w: AreaWork, s: PricingSnapshot): string[] {
   let out = w.tpl.bullets;
@@ -629,8 +638,10 @@ function areaBullets(w: AreaWork, s: PricingSnapshot): string[] {
     out = out.filter((b) => (w.airSealing && SEALING_WORDS.test(b)) || (w.removal && REMOVAL_WORDS.test(b)));
   }
   if (!w.removal) out = out.filter((b) => !REMOVAL_WORDS.test(b));
-  if (belowCode(w, s) !== null) out = out.filter((b) => !CODE_WORDS.test(b));
+  if (belowCode(w, s) !== null || w.primary?.partial) out = out.filter((b) => !CODE_WORDS.test(b));
   if (w.primary?.fillsCavity !== true) out = out.filter((b) => !FULL_CAVITY_WORDS.test(b));
+  // Air sealing over part of the area does not seal every leak (F3).
+  if (w.airSealingPartial) out = out.filter((b) => !(SEALING_WORDS.test(b) && ALL_SEALED_WORDS.test(b)));
   return out;
 }
 
@@ -645,10 +656,10 @@ function priceProductScope(
   tier: Tier,
   warnings: PricingWarning[],
   ov: Record<string, LineOverride>,
-): { lines: PricedLine[]; description: string; cost: number; finalR: number | null; fillsCavity: boolean | null } | null {
+): { lines: PricedLine[]; description: string; cost: number; finalR: number | null; fillsCavity: boolean | null; partial: boolean } | null {
   const code = tpl.primaryProduct;
   const p = product(s, code);
-  if (code === 'air_sealing') return { ...priceAirSealing(area, s, k, access, crew, ov), finalR: null, fillsCavity: null };
+  if (code === 'air_sealing') return { ...priceAirSealing(area, s, k, access, crew, ov, tier, warnings), finalR: null, fillsCavity: null };
   if (code === 'removal') return null; // removal is handled as its own scope
   if (!p.isRBearing) throw new PricingConfigError(`${code} cannot be a primary insulation product`);
 
@@ -730,6 +741,15 @@ function priceProductScope(
   const rate = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
 
   let matLine = materialLine(area.id, code, mat, `${mat.name}`, designQty, modelQty, ov);
+  // A product sold by the square foot (batts) covers the quantity priced over the waste (F3).
+  let covered = area.sqft;
+  if (mat.unit === 'sqft') {
+    const c = sqftCoverage(area, matLine, waste, tier, p.label.toLowerCase(), warnings, true);
+    matLine = c.line;
+    covered = c.covered;
+  }
+  const partial = coversPart(covered, area.sqft);
+  if (partial && fillsCavity) fillsCavity = false;
   const loose = mat.unit === 'bag' || mat.unit === 'board_ft';
   if (loose && thickness !== null) {
     // An estimator's quantity: never more than a full cavity (cut, with a warning), and the item
@@ -762,10 +782,11 @@ function priceProductScope(
   const rLabel = `R-${fmtR(achievedR)}`;
   let description: string;
   if (mat.rValue && mat.thicknessIn) {
+    const where = coverageText(covered, area.sqft);
     description =
       existingR > 0
-        ? `${p.label} to ${rLabel} (R-${fmtR(mat.rValue)} batts, ${fmtIn(mat.thicknessIn)} in thick), ${fmtSqft(area.sqft)} sq ft`
-        : `${p.label} to ${rLabel} (${fmtIn(mat.thicknessIn)} in thick), ${fmtSqft(area.sqft)} sq ft`;
+        ? `${p.label} to ${rLabel} (R-${fmtR(mat.rValue)} batts, ${fmtIn(mat.thicknessIn)} in thick), ${where} sq ft`
+        : `${p.label} to ${rLabel} (${fmtIn(mat.thicknessIn)} in thick), ${where} sq ft`;
   } else if (thickness !== null && fillsCavity && depth !== null) {
     description =
       existingIn > 0
@@ -774,10 +795,48 @@ function priceProductScope(
   } else if (thickness !== null) {
     description = `${p.label} to ${rLabel} (~${fmtNum(round1(thickness))}" added), ${fmtSqft(area.sqft)} sq ft`;
   } else {
-    description = `${p.label}, ${rLabel}, ${fmtSqft(area.sqft)} sq ft`;
+    description = `${p.label}, ${rLabel}, ${coverageText(covered, area.sqft)} sq ft`;
   }
 
-  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR, fillsCavity };
+  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR, fillsCavity, partial };
+}
+
+/**
+ * The square feet a material sold by the square foot (batts, air sealing) covers: the quantity
+ * priced over the waste, which the item states (review A F3). With `cap` (batts: one layer), an
+ * estimator's quantity above the whole area is cut to the whole area (the model's quantity), with
+ * an override_capped warning, as a fill is cut to a full cavity (L23). Air sealing is not cut: knee
+ * walls and gaps can be more surface than the floor (L7), and the item states the sq ft priced.
+ */
+function sqftCoverage(
+  area: AreaInput,
+  line: PricedLine,
+  waste: number,
+  tier: Tier,
+  what: string,
+  warnings: PricingWarning[],
+  cap: boolean,
+): { line: PricedLine; covered: number } {
+  if (!line.isOverridden || !(waste > 0) || line.modelQty === null) return { line, covered: area.sqft };
+  if (cap && line.qty > line.modelQty) {
+    warnings.push({
+      code: 'override_capped',
+      areaId: area.id,
+      tier,
+      message: `${area.name}: ${fmtSqft(line.qty)} sq ft of ${what} is more than the ${fmtSqft(area.sqft)} sq ft area. ${capitalize(tier)} is priced with ${fmtSqft(line.modelQty)} sq ft, the whole area.`,
+    });
+    line = { ...line, qty: line.modelQty, cost: money(line.modelQty * (line.unitCost ?? 0)) };
+  }
+  return { line, covered: line.qty === line.modelQty ? area.sqft : line.qty / waste };
+}
+
+/** Covering visibly less than the whole area (F3). */
+const coversPart = (covered: number, sqft: number) => covered < sqft && fmtSqft(covered) !== fmtSqft(sqft);
+
+/** "800"; "95 of 800" when only part of the area is covered; "1,500" when more surface than the area is (F3). */
+function coverageText(covered: number, sqft: number): string {
+  if (coversPart(covered, sqft)) return `${fmtSqft(covered)} of ${fmtSqft(sqft)}`;
+  return fmtSqft(fmtSqft(covered) === fmtSqft(sqft) ? sqft : covered);
 }
 
 /** "the 3.5 in cavity", saying when a wall had no depth entered (a 2x4 wall, OD5). */
@@ -803,7 +862,9 @@ function priceAirSealing(
   access: number,
   crew: CrewConfig,
   ov: Record<string, LineOverride>,
-): { lines: PricedLine[]; description: string; cost: number } {
+  tier: Tier,
+  warnings: PricingWarning[],
+): { lines: PricedLine[]; description: string; cost: number; partial: boolean } {
   const code: ProductCode = 'air_sealing';
   const designQty = area.sqft;
   const mat = material(s, code);
@@ -815,8 +876,11 @@ function priceAirSealing(
   const lines: PricedLine[] = [];
   let matCost = 0;
   let units = designQty;
+  let covered = area.sqft;
   if (mat) {
-    const line = materialLine(area.id, code, mat, mat.name, designQty, qty, ov);
+    const c = sqftCoverage(area, materialLine(area.id, code, mat, mat.name, designQty, qty, ov), waste, tier, 'air sealing', warnings, false);
+    const line = c.line;
+    covered = c.covered;
     matCost = line.cost;
     units = pricedUnits(line, designQty, waste);
     lines.push(line);
@@ -825,8 +889,9 @@ function priceAirSealing(
   lines.push(labor);
   return {
     lines,
-    description: `Air sealing of ${AIR_SEALING_WHERE[area.jobType]} (${fmtSqft(area.sqft)} sq ft)`,
+    description: `Air sealing of ${AIR_SEALING_WHERE[area.jobType]} (${coverageText(covered, area.sqft)} sq ft)`,
     cost: matCost + labor.cost,
+    partial: coversPart(covered, area.sqft),
   };
 }
 

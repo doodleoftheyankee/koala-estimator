@@ -492,6 +492,33 @@ describe('labels_match_work (R3, R6): what an item says it installs is what is p
   });
 });
 
+describe('labels_match_work (review A F3): the area an item states is the area its quantity covers', () => {
+  const crawl = area({ id: A1, jobType: 'crawlspace', name: 'Crawlspace', sqft: 800, depthIn: 5.5 });
+  const r21 = snap.materials.find((m) => m.rValue === 21)!;
+  // 100 sq ft of batts priced at 1.05 waste covers 95 sq ft.
+  const batts = (qty: number) => line({ kind: 'material', areaId: A1, product: 'batts', materialId: r21.id, unit: 'sqft', qty, modelQty: 840, isOverridden: qty !== 840, description: r21.name });
+  it('100 sq ft of batts on an item that says 800 sq ft fails; "95 of 800 sq ft" passes', () => {
+    const wrong = option('good', 1500, { lines: [batts(100)], customerItems: [item('Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft', 1500)] });
+    expect(kinds(checkLabelsMatchWork(quote([wrong], [crawl])))).toEqual(['labels_match_work:area_not_covered:good']);
+    const right = option('good', 1500, { lines: [batts(100)], customerItems: [item('Fiberglass Batts to R-21 (5.5 in thick), 95 of 800 sq ft', 1500)] });
+    expect(checkLabelsMatchWork(quote([right], [crawl]))).toEqual([]);
+    const model = option('good', 2270, { lines: [batts(840)], customerItems: [item('Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft', 2270)] });
+    expect(checkLabelsMatchWork(quote([model], [crawl]))).toEqual([]);
+  });
+  it('1,600 sq ft of batts on an item that says 800 sq ft fails too', () => {
+    const more = option('good', 3900, { lines: [batts(1600)], customerItems: [item('Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft', 3900)] });
+    expect(kinds(checkLabelsMatchWork(quote([more], [crawl])))).toEqual(['labels_match_work:area_not_covered:good']);
+  });
+  it('500 sq ft of air sealing on an item that says (1,000 sq ft) fails; (500 of 1,000 sq ft) passes', () => {
+    const air = mat('air_sealing');
+    const sealing = line({ kind: 'material', areaId: A1, product: 'air_sealing', materialId: air.id, unit: 'sqft', qty: 500, modelQty: 1000, isOverridden: true, description: air.name });
+    const wrong = option('better', 3000, { lines: [sealing], customerItems: [item('Air sealing of top plates, penetrations and bypasses (1,000 sq ft)', 3000)] });
+    expect(kinds(checkLabelsMatchWork(quote([wrong])))).toEqual(['labels_match_work:area_not_covered:better']);
+    const right = option('better', 3000, { lines: [sealing], customerItems: [item('Air sealing of top plates, penetrations and bypasses (500 of 1,000 sq ft)', 3000)] });
+    expect(checkLabelsMatchWork(quote([right]))).toEqual([]);
+  });
+});
+
 describe('cavity_not_overfilled (S1-F4, S1-F5, S1-F6, OD5): insulation fits the cavity', () => {
   it('a wall with no depth is a 2x4: 5.4 in of open-cell does not fit (overfilled_no_depth)', () => {
     const walls = area({ jobType: 'walls', sqft: 1000 });
