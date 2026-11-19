@@ -55,7 +55,7 @@ export function ResultPlate({ e }: { e: Evaluation }) {
   const t = TONE[w.tone];
   const ticks = e.program ? e.program.tiers.map((x) => x.reductionPct) : [];
   return (
-    <section aria-label="Result" aria-live="polite" className={cx('rounded-plate border-solid border-[length:var(--bw-go)] p-4 text-center', t.plate)}>
+    <section aria-label="Result" className={cx('rounded-plate border-solid border-[length:var(--bw-go)] p-4 text-center', t.plate)}>
       <p className={cx('flex items-center justify-center gap-2 sign-label [--sign-size:13.5px]', t.badge)} data-testid="bd-badge">
         {t.icon ? <Icon icon={t.icon} size="s" /> : null}
         <span>{w.badge}</span>
@@ -216,7 +216,7 @@ export function TestCard(p: TestCardProps) {
           </div>
           {p.hint ? <p className="text-[15px] leading-snug font-medium text-ink-2">{p.hint}</p> : null}
           {p.result.reading ? (
-            <p className="flex flex-wrap items-baseline gap-x-2" aria-live="polite">
+            <p className="flex flex-wrap items-baseline gap-x-2">
               <span className="gauge-m text-[30px] text-ink" data-testid={`${id}-cfm50`}>
                 {cfmText(p.result.reading.cfm50)}
               </span>

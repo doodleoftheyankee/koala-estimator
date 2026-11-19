@@ -301,6 +301,7 @@ export function EstimateEditor({
             context={{ kind: 'estimate', id, label: street ? `${name}, ${street}` : name }}
             ownerId={profile.userId}
             hint="Test-in at the audit, saved to this estimate. The crew records the test-out on the job."
+            prefetch={record.serverRowVersion !== null}
           />
         ) : null}
         {step === 'send' ? (

@@ -11,7 +11,18 @@ import { cfmText } from '@/lib/blowerdoor';
 import { buttonClass, ChevronRight, Icon, SignLabel, Wind } from '@/components/daymark';
 import { useLive } from '../hooks';
 
-export function BlowerDoorLink({ context, ownerId, hint }: { context: BlowerDoorContext; ownerId: string; hint: string }) {
+export function BlowerDoorLink({
+  context,
+  ownerId,
+  hint,
+  prefetch = true,
+}: {
+  context: BlowerDoorContext;
+  ownerId: string;
+  hint: string;
+  /** Load the saved readings while there is signal (false: the estimate is not on the server yet). */
+  prefetch?: boolean;
+}) {
   const saved = useLive<LocalContext | undefined>(() => blowerDoorDb().contexts.get(formKey(ownerId, context)), [ownerId, context.kind, context.id], undefined);
   const local = useLive<LocalTest[]>(
     () =>
@@ -24,9 +35,9 @@ export function BlowerDoorLink({ context, ownerId, hint }: { context: BlowerDoor
     [],
   );
   useEffect(() => {
-    if (navigator.onLine) void fetchContext(context, ownerId);
+    if (prefetch && navigator.onLine) void fetchContext(context, ownerId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerId, context.kind, context.id]);
+  }, [ownerId, context.kind, context.id, prefetch]);
   const shown = mergeReadings(saved?.tests ?? [], local);
   const testIn = newestOf(shown, 'test_in');
   const testOut = newestOf(shown, 'test_out');
