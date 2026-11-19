@@ -1,0 +1,56 @@
+OWNER DECISIONS, ROUND 2 (made in chat by the owner on 2026-11-19; they replace any earlier
+wording about a business profile that must be filled in before sending)
+
+OD12  No business form to fill in.
+      The owner said: "i dont want to fill in all that info, it should just be koala insulation".
+      - Every quote, PDF, email, customer page and roof takeoff names the company "Koala Insulation".
+      - Nothing blocks or delays a send because the business profile is incomplete: remove the
+        409 setup_incomplete gate in app/api/quotes/route.ts, the 'profile' item in
+        lib/field/sendChecks.ts, business.gaps in /api/bundle, the setup_incomplete branch in
+        app/field/SendStep.tsx, and every banner, badge or link that asks someone to finish the
+        business profile (estimator, office and owner alike). businessProfileGaps may go.
+      - A detail nobody entered (license number, office phone) is left off entirely: never an
+        empty label, never "PLACEHOLDER", never "Call our office" without a number (point the
+        customer to the estimator's own email/phone instead).
+      - The /admin/business page may stay as an OPTIONAL owner page (to add a phone or license
+        later), but it is not required, not linked from any warning, and nothing nags about it.
+      - Stored seed values: an additive, conditional migration step changes the branding company
+        from exactly 'Koala Insulation of Newark' to 'Koala Insulation', and the seeded quote
+        terms that name Newark to neutral terms, ONLY where the stored value still equals the
+        seed. A value the owner saved is never overwritten. Code defaults (DEFAULT_COMPANY,
+        DEFAULT_TERMS, lib/env.ts quoteFromEmail fallback, lib/roof/roofing.ts COMPANY,
+        .env.example) say "Koala Insulation" and name no town.
+      - Any stored text value matching /placeholder/i is treated as unset (falls back to the
+        default), for warranty, terms and every branding field.
+
+OD13  Warranty.
+      The owner said: "they offer limited lifetime warranty".
+      - The warranty line reads exactly "Limited lifetime warranty". Do not invent any other
+        warranty terms, years or conditions.
+      - DEFAULT_WARRANTY = 'Limited lifetime warranty'; the conditional migration step replaces
+        the stored seed 'Workmanship warranty — PLACEHOLDER, owner to replace.' (only that exact
+        value) with "Limited lifetime warranty".
+
+OD14  Town, state and consent without a form.
+      - New estimates default city AND state as a PAIR from the shop address (app_settings
+        shop_address) when it parses; otherwise both blank. Never mix a town from one source
+        with a state from another (review A DOC-2).
+      - The e-sign consent sentence names the property's state when it is a real US state, else
+        the shop address's state, else a state-neutral sentence ("ESIGN Act and the Uniform
+        Electronic Transactions Act"). It never throws (production has no default_state row).
+
+OD15  Recommended option when Better is hidden and nothing was picked (review B flow-B4).
+      With no pick, Better is the implied pick, exactly as when Better is picked: if Better is
+      hidden (OD6), the recommendation moves to the option that is the same work (normally Best),
+      else the nearest option shown above Better, else the nearest below. This makes the
+      no-pick and picked cases agree. Any headline that changes must appear, with its reason,
+      in the before/after report.
+
+OD16  Quote numbers keep the 'KN' start the live site already prints on every quote
+      (KN-2026-0001-v1). No change (review B database-B6: no action).
+
+HARD RULES still apply: (1) sent or signed quotes never change: the documents, PDFs and emails
+of every quote already sent must render byte-identical before and after this round; (2)
+migrations are additive and origin/main keeps working on the same database; (3) no franchise
+text in code (no 'Newark', 'Delaware', '(302)', 'of Newark'); (4) offline-first; (5) no
+production writes (read-only SELECTs only).
