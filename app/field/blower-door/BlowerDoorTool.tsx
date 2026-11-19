@@ -16,12 +16,16 @@ import {
   capNote,
   emptyForm,
   evaluate,
+  KIND_LABELS,
+  nFactorHint,
   reviveForm,
   savedInputs,
+  savedProgramKey,
+  shownNumbers,
   sourceLine,
   STORIES,
   summaryText,
-  ventilationWords,
+  ventilationFor,
   type BlowerDoorForm,
   type Stories,
   type TestKind,
@@ -42,7 +46,7 @@ import {
   type LocalContext,
   type LocalForm,
 } from '@/lib/offline/blowerDoor';
-import { contextKey, mergeReadings, newestOf, newLocalTest, newReading, parseContextParams, type BlowerDoorContext, type LocalTest } from '@/lib/offline/blowerDoorCore';
+import { contextKey, mergeReadings, newestOf, newLocalTest, newReading, parseContextParams, unsentNotes, type BlowerDoorContext, type LocalTest } from '@/lib/offline/blowerDoorCore';
 import { num } from '@/lib/format';
 import {
   Banner,
@@ -231,19 +235,51 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
     schedule();
   }, [shown, houseFilled, context, crew, schedule]);
 
+  // Until someone picks a program here, the job's saved readings say which one (the estimator's
+  // choice at the test-in reaches the crew's test-out).
+  const shownTests = useMemo(() => shown.map((r) => r.test), [shown]);
+  const inheritedKey = context && form.programKey === null ? savedProgramKey(shownTests, settings) : null;
+  const inheritedFrom = inheritedKey ? (shown.find((r) => r.test.program_key === inheritedKey)?.test.kind ?? null) : null;
+  const programKey = form.programKey ?? inheritedKey;
   const e = useMemo(
-    () => evaluate({ form, settings, savedIn: savedIn ? asReading(savedIn.test) : null, savedOut: savedOut ? asReading(savedOut.test) : null }),
-    [form, settings, savedIn, savedOut],
+    () => evaluate({ form: { ...form, programKey }, settings, savedIn: savedIn ? asReading(savedIn.test) : null, savedOut: savedOut ? asReading(savedOut.test) : null }),
+    [form, programKey, settings, savedIn, savedOut],
   );
+  const nums = shownNumbers(e);
   const label = saved?.label ?? context?.label ?? null;
-  const summary = summaryText(e, settings, label);
+  const summary = summaryText(e, settings, label, unsentNotes([savedIn, savedOut]));
+  // The saved test-in names another program than the one in use: say so (the crew may have tapped).
+  const savedInProgram = savedIn?.test.program_key ? settings.programs.find((p) => p.key === savedIn.test.program_key) : undefined;
+  const programDiffers = Boolean(e.program && savedInProgram && savedInProgram.key !== e.program.key);
 
   // ------------------------------------------------------------------ saving a reading
+  // One save at a time: a double tap (gloves, a slow phone) stores one reading, not two. The
+  // button stays off until the saved reading is on screen.
+  const pendingSave = useRef<{ kind: TestKind; id: string } | null>(null);
+  const [savingKind, setSavingKind] = useState<TestKind | null>(null);
+  const settle = useCallback(() => {
+    pendingSave.current = null;
+    setSavingKind(null);
+  }, []);
+  useEffect(() => {
+    const p = pendingSave.current;
+    if (p && newestOf(shown, p.kind)?.test.id === p.id) settle();
+  }, [shown, settle]);
   const save = async (kind: TestKind) => {
-    if (!context) return;
+    if (!context || pendingSave.current) return;
     const test = newReading({ id: crypto.randomUUID(), kind, context, evaluation: e, program: e.program, form, recordedAt: new Date().toISOString(), includePrice: !crew });
     if (!test) return;
-    await queueTest(newLocalTest(test, context, profile.userId, profile.fullName, crypto.randomUUID()));
+    pendingSave.current = { kind, id: test.id };
+    setSavingKind(kind);
+    // Never stuck: the button comes back after a few seconds whatever happens.
+    setTimeout(() => pendingSave.current?.id === test.id && settle(), 5000);
+    try {
+      await queueTest(newLocalTest(test, context, profile.userId, profile.fullName, crypto.randomUUID()));
+    } catch (err) {
+      console.error('[blower door] could not keep the reading on this phone', err);
+      settle();
+      return;
+    }
     setRetake((r) => ({ ...r, [kind]: false }));
     schedule();
     void syncBlowerDoor(profile.userId).then(() => loadContext());
@@ -293,12 +329,9 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
   const back = context ? backLink(context, profile.role) : null;
   const where = context?.kind === 'estimate' ? 'estimate' : 'job';
   const capLabel = program?.costCapPct != null ? `Rebate after ${num(program.costCapPct, 2)}% cost cap` : null;
-  const vent = e.ventilation && e.bas.value !== null ? ventilationWords(e.ventilation, e.bas.value, e.bas, program) : null;
+  const vent = ventilationFor(e);
   const basNote = e.testOut.reading ? basMissingText(e.bas) : null;
-  const nHint =
-    settings.nFactor === 19
-      ? "N-factor 19 is BPI's Zone 2 example value (Zone 2 runs 17–20); match it to your audit software."
-      : `N-factor ${num(settings.nFactor, 2)} is your office's default; match it to your audit software.`;
+  const nHint = nFactorHint(settings.nFactor);
 
   return (
     <>
@@ -363,6 +396,14 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
             <p className="mt-2 text-[15px] leading-snug font-medium text-ink-2">
               {program.name}. {effectiveLine(program.effectiveDate)}
             </p>
+            {inheritedFrom ? (
+              <p className="mt-1 text-[15.5px] leading-snug font-bold text-ink" data-testid="bd-program-from">
+                Chosen when the {KIND_LABELS[inheritedFrom].toLowerCase()} was saved.
+              </p>
+            ) : null}
+            {programDiffers && savedInProgram ? (
+              <p className="mt-1 text-[15.5px] leading-snug font-bold text-warn">The test-in was saved under {savedInProgram.label}.</p>
+            ) : null}
           </section>
         ) : cached === null ? (
           <Banner tone="warn" title="The rebate programs are not on this phone yet." live={false}>
@@ -391,6 +432,8 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
           kind="test_in"
           saved={savedIn}
           result={e.testIn}
+          cfm50Text={nums.pre50}
+          saving={savingKind === 'test_in'}
           cfm={form.preCfm}
           pa={form.prePa}
           onCfm={(v) => set({ preCfm: v })}
@@ -406,6 +449,8 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
           kind="test_out"
           saved={savedOut}
           result={e.testOut}
+          cfm50Text={nums.post50}
+          saving={savingKind === 'test_out'}
           cfm={form.postCfm}
           pa={form.postPa}
           onCfm={(v) => set({ postCfm: v })}
@@ -463,7 +508,14 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
             <Segmented<Stories> label="Stories" value={form.stories} options={STORIES.map((s) => ({ value: s.value, label: s.label }))} onChange={(v) => set({ stories: v })} />
           </Field>
           <Field label="Zone N-factor" error={e.basErrors.nFactor} hint={nHint}>
-            <Input value={form.nFactor} onChange={(ev) => set({ nFactor: ev.target.value })} inputMode="decimal" autoComplete="off" className={GAUGE_INPUT} />
+            <Input
+              value={form.nFactor}
+              onChange={(ev) => set({ nFactor: ev.target.value })}
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder={`${num(settings.nFactor, 2)} (office default)`}
+              className={GAUGE_INPUT}
+            />
           </Field>
           <p className="text-[15px] leading-snug font-medium text-ink-2">
             BAS = the larger of (0.35 × volume ÷ 60) or (15 × occupants), times the N-factor, times the height correction.
@@ -478,9 +530,16 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
               <Field
                 label="Flow exponent (n)"
                 error={e.exponentError}
-                hint={`CFM50 = CFM × (50 ÷ Pa)^n. The default, ${num(settings.flowExponent, 3)}, is set by the office to match the ${settings.gauge}, so this matches the gauge's own @ Pressure result. Saved readings keep the exponent they were taken with.`}
+                hint={`CFM50 = CFM × (50 ÷ Pa)^n. The default, ${num(settings.flowExponent, 3)}, is set by the office to match the ${settings.gauge}, so this matches the gauge's own @ Pressure result. Leave it empty to use it. Saved readings keep the exponent they were taken with.`}
               >
-                <Input value={form.exponent} onChange={(ev) => set({ exponent: ev.target.value })} inputMode="decimal" autoComplete="off" className={GAUGE_INPUT} />
+                <Input
+                  value={form.exponent}
+                  onChange={(ev) => set({ exponent: ev.target.value })}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder={`${num(settings.flowExponent, 3)} (office default)`}
+                  className={GAUGE_INPUT}
+                />
               </Field>
             </div>
           </details>

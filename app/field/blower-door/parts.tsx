@@ -13,6 +13,7 @@ import {
   nextTierLine,
   paText,
   pctText,
+  shownNumbers,
   type Evaluation,
   type SavedTest,
   type TestKind,
@@ -109,7 +110,7 @@ function SavedTag({ local, online, where }: { local: LocalTest | null; online: b
       </Tag>
     );
   }
-  if (local.syncState === 'invalid') {
+  if (local.syncState === 'invalid' || local.syncState === 'refused') {
     return (
       <Tag tone="bad" icon={OctagonAlert}>
         Not saved
@@ -153,6 +154,10 @@ export interface TestCardProps {
   /** The reading shown as recorded (null: the typed fields). */
   saved: { test: SavedTest; local: LocalTest | null } | null;
   result: TestResult;
+  /** This test's CFM50 as shown (it agrees with the tier and ventilation decisions). */
+  cfm50Text: string | null;
+  /** Saving this test right now: the button is off, so a double tap saves once. */
+  saving: boolean;
   cfm: string;
   pa: string;
   onCfm: (v: string) => void;
@@ -186,7 +191,7 @@ export function TestCard(p: TestCardProps) {
         <div className="mt-3 space-y-2">
           <p className="flex flex-wrap items-baseline gap-x-2">
             <span className="gauge text-[56px] text-ink" data-testid={`${id}-cfm50`}>
-              {cfmText(p.saved.test.cfm50)}
+              {p.cfm50Text ?? cfmText(p.saved.test.cfm50)}
             </span>
             <SignLabel tone="ink">CFM50</SignLabel>
           </p>
@@ -198,9 +203,12 @@ export function TestCard(p: TestCardProps) {
             {p.saved.test.recorded_by_name ? ` by ${p.saved.test.recorded_by_name}` : ''}
           </p>
           {p.saved.local?.lastError && p.saved.local.syncState !== 'synced' ? (
-            <p className={cx('flex items-start gap-2 text-[15.5px] leading-snug font-bold', p.saved.local.syncState === 'invalid' ? 'text-bad' : 'text-warn')}>
-              <Icon icon={p.saved.local.syncState === 'invalid' ? OctagonAlert : TriangleAlert} size="s" className="mt-0.5" />
-              <span>{p.saved.local.lastError}</span>
+            <p className={cx('flex items-start gap-2 text-[15.5px] leading-snug font-bold', notSaved(p.saved.local) ? 'text-bad' : 'text-warn')}>
+              <Icon icon={notSaved(p.saved.local) ? OctagonAlert : TriangleAlert} size="s" className="mt-0.5" />
+              <span>
+                {p.saved.local.lastError}
+                {p.saved.local.syncState === 'refused' ? ' It is sent again at the next sync, in case the office gives it back.' : ''}
+              </span>
             </p>
           ) : null}
           {p.result.lowPressure ? <LowPressure /> : null}
@@ -218,7 +226,7 @@ export function TestCard(p: TestCardProps) {
           {p.result.reading ? (
             <p className="flex flex-wrap items-baseline gap-x-2">
               <span className="gauge-m text-[30px] text-ink" data-testid={`${id}-cfm50`}>
-                {cfmText(p.result.reading.cfm50)}
+                {p.cfm50Text ?? cfmText(p.result.reading.cfm50)}
               </span>
               <SignLabel tone="ink">CFM50</SignLabel>
             </p>
@@ -227,8 +235,14 @@ export function TestCard(p: TestCardProps) {
           {p.canSave || p.onCancelRetake ? (
             <div className="flex flex-wrap gap-2">
               {p.canSave ? (
-                <Button variant={p.result.reading ? p.saveVariant : 'secondary'} icon={Check} disabled={!p.result.reading} onClick={p.onSave} className="min-w-0 flex-1">
-                  Save {label.toLowerCase()}
+                <Button
+                  variant={p.result.reading ? p.saveVariant : 'secondary'}
+                  icon={Check}
+                  disabled={!p.result.reading || p.saving}
+                  onClick={p.onSave}
+                  className="min-w-0 flex-1"
+                >
+                  {p.saving ? 'Saving…' : `Save ${label.toLowerCase()}`}
                 </Button>
               ) : null}
               {p.onCancelRetake ? (
@@ -243,6 +257,9 @@ export function TestCard(p: TestCardProps) {
     </section>
   );
 }
+
+/** A reading the server did not take (for now, or for good). */
+const notSaved = (l: LocalTest) => l.syncState === 'invalid' || l.syncState === 'refused';
 
 function LowPressure() {
   return (
@@ -259,7 +276,8 @@ function LowPressure() {
 
 export function TierTable({ e }: { e: Evaluation }) {
   if (!e.program) return null;
-  const rows = e.tiers?.rows ?? e.program.tiers.map((tier) => ({ tier, limit: null as number | null, reached: false }));
+  const shown = shownNumbers(e).limits;
+  const rows = e.tiers ? e.tiers.rows.map((r, i) => ({ ...r, shown: shown[i] ?? null })) : e.program.tiers.map((tier) => ({ tier, shown: null as string | null, reached: false }));
   const line = nextTierLine(e.tiers, e.testOut.reading !== null);
   return (
     <section aria-labelledby="bd-tiers" className="plate p-4">
@@ -283,7 +301,7 @@ export function TierTable({ e }: { e: Evaluation }) {
                   {num(r.tier.reductionPct, 1)}%
                 </span>
               </td>
-              <td className={cx('gauge-m py-2.5 text-right text-[22px]', r.reached ? 'text-ink' : 'text-ink-2')}>{r.limit === null ? '—' : cfmText(r.limit)}</td>
+              <td className={cx('gauge-m py-2.5 text-right text-[22px]', r.reached ? 'text-ink' : 'text-ink-2')}>{r.shown ?? '—'}</td>
               <td className={cx('gauge-m py-2.5 pl-3 text-right text-[22px]', r.reached ? 'text-ink' : 'text-ink-2')}>{formatMoney(r.tier.rebate)}</td>
             </tr>
           ))}
@@ -295,17 +313,16 @@ export function TierTable({ e }: { e: Evaluation }) {
 }
 
 export function NumbersList({ e, capLabel }: { e: Evaluation; capLabel: string | null }) {
-  const pre = e.testIn.reading;
-  const post = e.testOut.reading;
+  const s = shownNumbers(e);
   const rows: Array<[string, string]> = [
-    ['Before CFM50', pre ? cfmText(pre.cfm50) : '—'],
-    ['After CFM50', post ? cfmText(post.cfm50) : '—'],
-    ['CFM50 removed', e.removed !== null ? cfmText(e.removed) : '—'],
+    ['Before CFM50', s.pre50 ?? '—'],
+    ['After CFM50', s.post50 ?? '—'],
+    ['CFM50 removed', s.removed ?? '—'],
     ['Reduction from raw gauge readings', e.rawReductionPct !== null ? pctText(e.rawReductionPct) : '—'],
   ];
   if (e.program) rows.push(['Rebate (tier)', e.rebate ? (e.tiers?.hit ? `${formatMoney(e.rebate.tierAmount)} (${num(e.tiers.hit.reductionPct, 1)}%)` : formatMoney(0)) : '—']);
   if (capLabel && e.rebate?.cap != null && e.tiers?.hit) rows.push([capLabel, formatMoney(e.rebate.amount)]);
-  if (e.bas.value !== null) rows.push(['BAS (minimum CFM50)', `${cfmText(e.bas.value)} (${e.bas.source === 'audit' ? 'from audit' : 'estimated'})`]);
+  if (e.bas.value !== null) rows.push(['BAS (minimum CFM50)', `${s.bas} (${e.bas.source === 'audit' ? 'from audit' : 'estimated'})`]);
   if (e.ach50Pre !== null) rows.push(['ACH50 before', achText(e.ach50Pre)]);
   if (e.ach50Post !== null) rows.push(['ACH50 after', achText(e.ach50Post)]);
   return (
