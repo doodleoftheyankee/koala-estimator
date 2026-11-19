@@ -8,7 +8,8 @@
 // for whoever helps. With no signal they say so, and that field work stays saved on the phone.
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { startTransition, useSyncExternalStore, type ReactNode } from 'react';
+import { startTransition, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { hasSavedCopy } from '@/lib/offline/phoneCopy';
 import { buttonClass, Button } from '../daymark/Button';
 import { cx } from '../daymark/cx';
 import { ArrowLeft, CloudOff, Compass, Icon, Lock, RefreshCw, TriangleAlert, type LucideIcon } from '../daymark/icons';
@@ -179,6 +180,31 @@ export function ErrorState({
  * the way back to the page (a same-site path), and offers the phone's own copy of the field or crew
  * app, which opens without Koala. Reads no data, so it works while the database is down.
  */
+/**
+ * The phone's own copy of the app, offered only once the browser is known to hold it (review B
+ * flow-B8). With none (first use, cleared site data), the link would lead back here, so the page
+ * says so instead. Nothing shows until the check is done.
+ */
+function PhoneAppLink({ href, label }: { href: string; label: string }) {
+  const [copy, setCopy] = useState<{ href: string; saved: boolean } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void hasSavedCopy(href).then((saved) => {
+      if (live) setCopy({ href, saved });
+    });
+    return () => {
+      live = false;
+    };
+  }, [href]);
+  if (copy?.href !== href) return null;
+  if (!copy.saved) return <p className="text-[17px] font-medium text-ink-2">This phone has no saved copy of the app yet; it needs Koala once.</p>;
+  return (
+    <a href={href} className={buttonClass({ variant: 'secondary' })}>
+      {label}
+    </a>
+  );
+}
+
 export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: { href: string; label: string } | null }) {
   return (
     <StatePage
@@ -191,11 +217,7 @@ export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: {
             <Icon icon={RefreshCw} size="s" />
             Try again
           </a>
-          {phoneApp ? (
-            <a href={phoneApp.href} className={buttonClass({ variant: 'secondary' })}>
-              {phoneApp.label}
-            </a>
-          ) : null}
+          {phoneApp ? <PhoneAppLink href={phoneApp.href} label={phoneApp.label} /> : null}
         </>
       }
     >
