@@ -185,7 +185,8 @@ export function ErrorState({
  * flow-B8). With none (first use, cleared site data), the link would lead back here, so the page
  * says so instead. Nothing shows until the check is done.
  */
-function PhoneAppLink({ href, copy: shell, label }: { href: string; copy?: string; label: string }) {
+/** quiet: say nothing when the phone has no saved copy (an app offered only as another way on). */
+function PhoneAppLink({ href, copy: shell, label, quiet = false }: { href: string; copy?: string; label: string; quiet?: boolean }) {
   const [copy, setCopy] = useState<{ href: string; saved: boolean } | null>(null);
   useEffect(() => {
     let live = true;
@@ -197,7 +198,7 @@ function PhoneAppLink({ href, copy: shell, label }: { href: string; copy?: strin
     };
   }, [href, shell]);
   if (copy?.href !== href) return null;
-  if (!copy.saved) return <p className="text-[17px] font-medium text-ink-2">This phone has no saved copy of the app yet; it needs Koala once.</p>;
+  if (!copy.saved) return quiet ? null : <p className="text-[17px] font-medium text-ink-2">This phone has no saved copy of the app yet; it needs Koala once.</p>;
   return (
     <a href={href} className={buttonClass({ variant: 'secondary' })}>
       {label}
@@ -205,7 +206,14 @@ function PhoneAppLink({ href, copy: shell, label }: { href: string; copy?: strin
   );
 }
 
-export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: { href: string; copy?: string; label: string } | null }) {
+type PhoneAppOffer = { href: string; copy?: string; label: string };
+
+/**
+ * /unreachable: Try again, the phone's copy of the app being opened, and for any other page
+ * (fallbacks, lib/offline/phoneCopy.ts fallbackAppsFor) the apps this phone has saved, plus Go back:
+ * in the home-screen app there is no browser back button (release review C FLOW-4).
+ */
+export function UnreachableState({ next, phoneApp, fallbacks = [] }: { next: string; phoneApp: PhoneAppOffer | null; fallbacks?: readonly PhoneAppOffer[] }) {
   return (
     <StatePage
       icon={CloudOff}
@@ -218,6 +226,10 @@ export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: {
             Try again
           </a>
           {phoneApp ? <PhoneAppLink href={phoneApp.href} copy={phoneApp.copy} label={phoneApp.label} /> : null}
+          {fallbacks.map((app) => (
+            <PhoneAppLink key={app.href} href={app.href} copy={app.copy} label={app.label} quiet />
+          ))}
+          <BackButton />
         </>
       }
     >

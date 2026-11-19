@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as phoneCopy from './phoneCopy';
 import { hasSavedCopy, phoneAppFor } from './phoneCopy';
 
 const store = (hit: string | null) => ({
@@ -48,5 +49,22 @@ describe('phoneAppFor (L36, review B flow-B8)', () => {
     expect(await hasSavedCopy('/field/blower-door', store('/field/blower-door'))).toBe(true);
     expect(await hasSavedCopy(JOB, store('/field/blower-door'))).toBe(true);
     expect(await hasSavedCopy('/field', store('/field/blower-door'))).toBe(false);
+  });
+});
+
+// Release review C FLOW-4: /unreachable for a page that is not one of the phone's apps (All my
+// estimates, Jobs, Pricing) offered only "Try again", which loops while Koala is down; in the
+// home-screen app there is no browser back button. It now also offers the phone's saved apps.
+describe('fallbackAppsFor (release review C FLOW-4)', () => {
+  const FIELD = { href: '/field', copy: '/field', label: 'Open the estimates on this phone' };
+  const CREW = { href: '/crew', copy: '/crew', label: 'Open the crew app on this phone' };
+  it("offers the field and crew apps for a page that is not one of the phone's apps", () => {
+    const fallbackAppsFor = (phoneCopy as Record<string, unknown>).fallbackAppsFor as ((next: string) => unknown) | undefined;
+    expect(fallbackAppsFor, 'fallbackAppsFor').toBeTypeOf('function');
+    for (const next of ['/estimates', '/jobs', '/admin/pricing', '/field/roof', '/']) expect(fallbackAppsFor!(next), next).toEqual([FIELD, CREW]);
+  });
+  it('offers nothing more for one of the apps: the app itself is offered (phoneAppFor)', () => {
+    const fallbackAppsFor = (phoneCopy as Record<string, unknown>).fallbackAppsFor as ((next: string) => unknown) | undefined;
+    for (const next of ['/field', '/field?e=1', '/crew?j=1', '/field/blower-door?job=1']) expect(fallbackAppsFor?.(next), next).toEqual([]);
   });
 });

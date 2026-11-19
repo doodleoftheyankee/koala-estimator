@@ -3,7 +3,7 @@
 // opens while the database is down. ?next= is only ever a path on this site (lib/safeNext).
 import type { Metadata } from 'next';
 import { UnreachableState } from '@/components/shell/StatePages';
-import { phoneAppFor } from '@/lib/offline/phoneCopy';
+import { fallbackAppsFor, phoneAppFor } from '@/lib/offline/phoneCopy';
 import { safeNext } from '@/lib/safeNext';
 
 export const metadata: Metadata = { title: 'Can’t reach Koala' };
@@ -12,5 +12,5 @@ export const dynamic = 'force-dynamic';
 export default async function UnreachablePage({ searchParams }: { searchParams: Promise<{ next?: string | string[] }> }) {
   const raw = (await searchParams).next;
   const next = safeNext(Array.isArray(raw) ? raw[0] : raw, '/');
-  return <UnreachableState next={next} phoneApp={phoneAppFor(next)} />;
+  return <UnreachableState next={next} phoneApp={phoneAppFor(next)} fallbacks={fallbackAppsFor(next)} />;
 }

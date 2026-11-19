@@ -29,6 +29,8 @@ export interface PhoneApp {
 }
 
 const BLOWER_DOOR = '/field/blower-door';
+const FIELD_APP: PhoneApp = { href: '/field', copy: '/field', label: 'Open the estimates on this phone' };
+const CREW_APP: PhoneApp = { href: '/crew', copy: '/crew', label: 'Open the crew app on this phone' };
 
 /**
  * The phone's own copy of the app the person was opening, which works without Koala. The blower
@@ -40,8 +42,18 @@ export function phoneAppFor(next: string): PhoneApp | null {
     return { href: next, copy: BLOWER_DOOR, label: 'Open the blower door tool on this phone' };
   }
   if (next === '/field' || next.startsWith('/field?') || (next.startsWith('/field/') && !next.startsWith('/field/roof'))) {
-    return { href: '/field', copy: '/field', label: 'Open the estimates on this phone' };
+    return { ...FIELD_APP };
   }
-  if (next === '/crew' || next.startsWith('/crew?') || next.startsWith('/crew/')) return { href: '/crew', copy: '/crew', label: 'Open the crew app on this phone' };
+  if (next === '/crew' || next.startsWith('/crew?') || next.startsWith('/crew/')) return { ...CREW_APP };
   return null;
+}
+
+/**
+ * For a page that is not one of the phone's apps (All my estimates, Jobs, Pricing, the Roof
+ * lookup), the apps that work without Koala: the field app and the crew app. /unreachable offers
+ * each only when this phone has it saved (flow-B8), so "Try again" is never the only way on
+ * (release review C FLOW-4). Nothing for one of the apps: that app itself is offered.
+ */
+export function fallbackAppsFor(next: string): PhoneApp[] {
+  return phoneAppFor(next) ? [] : [{ ...FIELD_APP }, { ...CREW_APP }];
 }

@@ -1335,6 +1335,20 @@ step("Koala's database unreachable is not a sign-out (L36)");
     await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
     await page.getByText("Can't reach Koala right now.").waitFor({ timeout: 20000 });
   }
+  {
+    // Release review C FLOW-4: "All my estimates" (/estimates) with the database down is no dead end
+    // on the phone: /unreachable offers the estimates saved on it (only "Try again" before, which
+    // loops while Koala is down, and the home-screen app has no back button).
+    await page.goto(BASE + '/estimates');
+    await page.waitForURL(/\/unreachable\?next=%2Festimates/);
+    const saved = page.getByRole('link', { name: 'Open the estimates on this phone' });
+    await saved.waitFor({ timeout: 15000 });
+    check((await saved.getAttribute('href')) === '/field', '/unreachable for All my estimates offers the estimates saved on this phone');
+    await saved.click();
+    await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
+    await page.getByText("Can't reach Koala right now.").waitFor({ timeout: 20000 });
+    check(new URL(page.url()).pathname === '/field', "and it opens the field app from the phone's copy");
+  }
   const uctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await uctx.addCookies([sessionCookie(OWNER)]);
   const up = await uctx.newPage();
