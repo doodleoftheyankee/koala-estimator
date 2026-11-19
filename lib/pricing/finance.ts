@@ -10,6 +10,15 @@ export function roundUpTo(n: number, step: number): number {
   return Math.ceil(n / step - 1e-9) * step;
 }
 
+/**
+ * The step customer prices round up to: the price rounding setting in whole dollars, never less
+ * than $1, so every customer price is whole dollars (OD4). A setting of 0 (or 0.5) prices to the
+ * dollar.
+ */
+export function priceStep(priceRounding: number): number {
+  return Number.isFinite(priceRounding) ? Math.max(1, Math.round(priceRounding)) : 1;
+}
+
 /** Standard amortized monthly payment. apr is a fraction (0.0999). */
 export function monthlyPayment(principal: number, apr: number, termMonths: number): number {
   if (termMonths <= 0) throw new RangeError('termMonths must be positive');
