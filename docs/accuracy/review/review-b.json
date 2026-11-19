@@ -1,0 +1,632 @@
+{
+  "summary": "Review the database, security, live-site compatibility and the screens of the finished accuracy round, and verify every finding",
+  "agentCount": 4,
+  "logs": [],
+  "result": [
+    {
+      "lens": "database",
+      "review": {
+        "lens": "Migration, database, security and compatibility with the live site: supabase/migrations/20261119000001_accuracy.sql, tests/sql, sync_upsert_estimate 'locked', price_approvals and quote_number_counters with their RLS, next_quote_number, /api/approvals and /api/approvals/[id], /api/quotes (approvals, counter, consent), ApprovalQueue, lib/server/auth.ts, proxy.ts x-koala-path, /unreachable, lib/server/snapshot.ts, /api/bundle. Reviewed claude/accuracy 587ce69 against origin/claude/daymark 9051b81 and origin/main c0ae5f1. Production (fznkewranivklezxhtsf) was only read, with SELECTs. Worktrees and scratch databases were removed afterwards. The probe outputs and logs are in /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/database (stack-probe.out, compat-main-with-mig-2.log, compat-main-baseline-2.log, branch-e2e-2.log, revb-probe.test.ts.txt, probe/stack-probe.mjs, safenext-probe.mjs, consent-probe.mts).",
+        "checkedOk": [
+          "PRODUCTION SHAPE: production's schema is the same as a local database built from origin/claude/daymark's migrations. Production lists only 5 migrations in its log, but the comparison still matched. I compared md5 hashes: columns of all 48 public tables and views (each hash equal); every constraint, index, policy and trigger, and every enum label (one hash each, all equal); and every public function body (pg_get_functiondef). sync_upsert_estimate is 8ecf43fe… on both, and is identical to phase2. tg_audit, can_edit_estimate, has_role, auth_role and log_event are also equal. Production runs PG 17.11; local runs 16.15.",
+          "Production rows the migration reads are the seed rows. There are 6 active default materials, one per product: cellulose $14.00/bag with coverage 200, and batts $0.75/sq ft. The active set is v1 'seed', with cellulose waste_factor 1.08 inside its 1.00-1.60 bounds. app_settings has no default_state, default_city or quote_number_prefix. On a production-shaped copy the migration adds exactly this: one dense-pack walls row ($14, 122.5), seven batt sizes at $0.75 (none is a default), the walls cell 1.08 [1.00,1.60] in the active set only, ranges from half to twice the cost on all 14 rows (ocsf 0.06-0.24, ccsf 0.235-0.94, cellulose 7-28, blown 19-76, batts 0.375-1.50, air sealing 0.05-0.20), and the prefix 'KN'.",
+          "RE-RUN: I ran the migration twice with psql --single-transaction on a daymark copy. Both runs exited 0. The materials row hash (including updated_at) and the coefficient count did not change. A partial state (only the cavity and quotes sections, then the full file) applies cleanly. A forced error at the end of the file leaves nothing behind: no new columns, no price_approvals table.",
+          "COMPATIBILITY: I re-ran origin/main's own e2e in a worktree of c0ae5f1 (npm ci; build retried once at the security notice, nothing upgraded). With only 20261119000001_accuracy.sql added: 225 ok, EXIT 0. Without it: 225 ok, EXIT 0, with identical ok lines apart from timestamps. The one console line (ERR_INTERNET_DISCONNECTED on /api/estimates in the offline step) showed up in my with-migration run but not in my baseline. The flow stage's baseline log has it, so it is a timing flake, not the migration.",
+          "main receiving 'locked': main's applySyncResult already has a 'locked' case (server doc, status signed, read-only). Main's /api/sync passes the RPC status through. Main's draft schema requires a 2-letter state, so the new null fallback for state is never reached through either app's /api/sync.",
+          "main's default-material lookup is active and is_default, and the migration's constraint keeps the new rows from ever being a default. main's findCoefficient picks the walls cell for cellulose walls at the same 1.08, so prices are equal. A phone still on main's engine that is given the new bundle takes the first material per product, and makeBundle sorts the general material first. main's nightly learning ran in its e2e with the walls cell present ('no coefficient moved').",
+          "A quote sent by main after the migration (from main's e2e database): number KN-2026-0C9721-v1 (main's hex scheme). It has no consent field, so the new code's consentFor returns the legacy sentence main showed. expires_at is sent_at + 30 days. Counter numbers (4 digits) can never equal main's 6-hex-digit numbers.",
+          "model_total_price: the branch now writes the recommended option's model price. main's office list reads it only as the last fallback after signed_price and the selected option's price.",
+          "next_quote_number is SECURITY DEFINER with search_path = public, pg_temp. Production's default ACL grants EXECUTE to anon and authenticated at creation, and the migration revokes it from public, anon and authenticated, leaving service_role. quote_number_counters likewise: RLS on, no policies, table owned by postgres, so the definer bypasses RLS. tg_price_approval_guard has a pinned search_path. Both new tables have RLS enabled.",
+          "RLS and API probes on a kept branch e2e stack (ports 3530/3531/54730). An estimator PATCHing their own request to approved updates 0 rows, and DELETE updates 0 rows. Crew reads none and an insert is refused (42501). Anon gets 'permission denied for table price_approvals', and anon calling next_quote_number gets 'permission denied'. An API insert forces requested_by to the caller and status to pending (the SQL test also covers another estimator, office below the floor, own request, frozen decisions). Routes: crew and owner POST /api/approvals 403; estimator GET queue 403; estimator PATCH 403; no session 401; malformed body 400.",
+          "x-koala-path: proxy.ts always overwrites it. A spoofed '/.//evil.example/x' header on /estimates during an outage still redirects to /unreachable?next=%2Festimates. The header only feeds next= and never decides access.",
+          "503 path: with REST down, crew GET /api/approvals returns 503 with no data, no session returns 401, and crew /admin/pricing goes to /unreachable (then /no-access once REST is back). /unreachable reads no data.",
+          "npm run test:db passes (10, 20, 30, 31 and 40). The vitest subset (lib/server, safeNext, approvals, support, syncCore, sendChecks) passes: 64 tests. The branch e2e (APP_PORT 3530) gives 319 ok with no console errors.",
+          "Claims I verified as true: 'origin/main's e2e passes with only the migration' (225 ok); 'runs twice with no change'; 'a saved range/prefix is kept on a re-run'; 'sync_upsert_estimate same signature, grants authenticated only' (production: postgres, authenticated, service_role, unchanged)."
+        ],
+        "findings": [
+          {
+            "id": "B1",
+            "severity": "high",
+            "confidence": "high",
+            "title": "Open redirect: /unreachable's 'Try again' sends people to another site for a next= with dot segments (and the same hole in /login, /auth/confirm, /auth/demo)",
+            "files": [
+              "lib/safeNext.ts",
+              "app/unreachable/page.tsx",
+              "components/shell/StatePages.tsx",
+              "lib/server/sessionState.ts",
+              "app/login/LoginForm.tsx",
+              "app/auth/confirm/route.ts",
+              "app/auth/demo/route.ts"
+            ],
+            "failureScenario": "An attacker sends staff the public link https://<koala>/unreachable?next=/.//evil.example/x, which shows 'Can't reach Koala right now'. Clicking 'Try again' opens evil.example, which can show a fake Koala sign-in page. safeNext only rejects input that starts with '//' or '/\\'. It then returns url.pathname after WHATWG normalisation, and normalising '/./', '/x/../' or '/%2e/' turns the path into '//evil.example/x'. The same value goes into LoginForm (router.replace(next) and the magic-link emailRedirectTo /auth/confirm?next=…, whose new URL(next, origin) resolves to https://evil.example/x) and into /auth/demo when demo mode is on. safeNext is unchanged from origin/main, so /login and /auth/confirm already have this hole on the live site. The new /unreachable page is a new public entry point, and the flow stage's claim 'next= same-site only' (flow.json L36, ledger L36) is not true. Expected: every next= ends on this site.",
+            "evidence": "Probe on the running branch stack (stack-probe.out): unreachable next=\"/.//evil.example/x\" -> Try again href=\"//evil.example/x\" -> browser goes to http://evil.example/x. Same result for \"/a/..//evil.example/x\" and \"/%2e//evil.example/x\". Only \"//evil.example/x\" -> \"/\" is caught (the one input the tests use). Plain node with the same function: safeNext('/.//evil.com') -> '//evil.com'; safeNext('/x/../\\\\evil.com') -> '//evil.com'. Also new URL('//evil.example/x','https://koala.example').href is 'https://evil.example/x'. diff of lib/safeNext.ts against origin/main: identical.",
+            "suggestedFix": "In safeNext, check the normalised result as well as the input: after parsing, return the fallback when url.pathname starts with '//' or '/\\'. Alternatively build the result as '/' + url.pathname.replace(/^\\/+/, ''). Add test cases '/.//evil.com', '/a/..//evil.com', '/%2e//evil.com', '/./\\\\evil.com' to lib/safeNext.test.ts and lib/server/sessionState.test.ts."
+          },
+          {
+            "id": "B2",
+            "severity": "high",
+            "confidence": "high",
+            "title": "An owner approval still covers a quote after line changes push its margin below the floor (to -41%); the approval is not bound to the cost",
+            "files": [
+              "lib/pricing/policy.ts",
+              "lib/pricing/engine.ts",
+              "app/api/quotes/route.ts",
+              "supabase/migrations/20261119000001_accuracy.sql"
+            ],
+            "failureScenario": "An approval is matched on tier, exact price, model price and decidedRole only (approvalCovers). The model price ignores line overrides: with line overrides, modelPrice is replaced by the pure-model price (engine.ts line 87). After the owner approves a price, the estimator can change line quantities or hours (with a reason and a deviation note, which they write themselves). That raises the job cost while the price and model price stay the same, so the old approval still covers the send. In addition, for a below_floor problem approvalCovers accepts any owner-decided approval and never checks a.belowFloor. So an approval the owner gave for an above-floor, over-the-limit request also covers a send that is now below the floor. Example (seed fixture): (A) the owner approves Good $3,500 at a 7.2% margin; labor hours are then quadrupled; the cost goes from $3,249 to $4,938, the margin to -41.1%, and the send is still allowed. (B) the owner approves Good $4,500 (over the limit, 27.8% margin, not below the floor); hours are tripled; the margin drops to 0.9%, below the 25% floor, and the send is still allowed. Expected: a quote below the floor goes out only at a margin the owner actually approved. flow.json says 'if pricing changes between the approval and the send, the estimator asks again', which does not hold for line changes.",
+            "evidence": "Scratch vitest in my worktree (saved as revb-probe.test.ts.txt), calling priceEstimate and canSendQuote exactly as /api/quotes line 142 does: 'A below-floor approval: owner approved 3500 model 5420 cost 3249.2 margin 7.2% problem below_floor | labor hours x4 -> price 3500 model 5420 cost 4938 margin -41.1% problem below_floor | send allowed with the old approval: true' and 'B over-limit approval: owner approved 4500 model 5420 cost 3249.2 margin 27.8% problem over_limit | labor hours x3 -> price 4500 model 5420 cost 4458 margin 0.9% problem below_floor | send allowed with the old approval: true'. The approval reuse tests (support.test.ts 'an approved price can be sent…') vary price, model price, tier, status and role, but not the cost.",
+            "suggestedFix": "Store the option's loaded cost (or its margin) on price_approvals, as an additive column; the server already has it in checkApprovalRequest's problem. In approvalCovers, require the current loadedCost to be no higher than the approved one, within a cent, so the margin is never lower than approved. For a below_floor problem, also require a.belowFloor. Add tests for line-override hours and quantities after an approval, and for an over_limit owner approval used on a below-floor option."
+          },
+          {
+            "id": "B3",
+            "severity": "high",
+            "confidence": "high",
+            "title": "Removing the business-profile gate on production's real settings makes every send fail (consent needs default_state, which production does not have) and would print the PLACEHOLDER warranty",
+            "files": [
+              "app/api/quotes/route.ts",
+              "lib/quotes/consent.ts",
+              "lib/quotes/profile.ts",
+              "lib/quotes/settings.ts",
+              "supabase/migrations/20261119000001_accuracy.sql"
+            ],
+            "failureScenario": "The owner decided that nothing blocks sending for missing profile details. Today only the L30 gate (businessProfileGaps -> 409 setup_incomplete) keeps two things from happening on production. (1) /api/quotes builds the consent with esignConsent(profileValue(settingRows, 'default_state')). Production's app_settings has no default_state; no migration seeds it, and with no profile form nobody will set it. esignConsent('') throws 'Not a US state: ', so with the gate removed every POST /api/quotes returns 500 and no quote can be sent. (2) Production's warranty_text value is 'Workmanship warranty — PLACEHOLDER, owner to replace.' (only the gate stops it). Without the gate it prints on the page, the PDF and the email, instead of 'Limited lifetime warranty'. (The seeded company name and terms 'Koala Insulation of Newark' are review A's DOC-1 and DOC-6, not repeated here. Phone and license are already left off when null in the PDF, email and /q, so that part is fine.)",
+            "evidence": "Production, read-only: select key from app_settings gives 21 keys, with no default_state, default_city or quote_number_prefix. warranty_text is the PLACEHOLDER value above; branding is {phone: null, license: null, company: 'Koala Insulation of Newark'}. consent-probe.mts, using the branch's lib/quotes/consent.ts with production's rows: 'THROWS: Not a US state: '. Call site: route.ts line 189, consent: esignConsent(profileValue(settingRows, 'default_state')).",
+            "suggestedFix": "When the gate is removed, give the consent a wording that does not need a state (for example ESIGN Act only), or take the state from a source production has (the property's state or shop_address), and never throw on a missing state. Make the warranty 'Limited lifetime warranty' when warranty_text is empty or holds a placeholder. Preferably also add a conditional, additive migration update that replaces the seeded warranty only where it still equals the seeded PLACEHOLDER text (hard rule 2). Add a send-route test with production's exact app_settings rows."
+          },
+          {
+            "id": "B4",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "Approval requests can be written straight to the database with a made-up model price and below_floor flag, and the owner's queue shows them as fact",
+            "files": [
+              "supabase/migrations/20261119000001_accuracy.sql",
+              "app/estimates/ApprovalQueue.tsx",
+              "app/api/approvals/route.ts"
+            ],
+            "failureScenario": "The price_approvals_ask policy lets an estimator INSERT through PostgREST (Supabase's anon key plus their session token). Only the role, requested_by, pending status and can_edit_estimate are checked. price, model_price and below_floor come from the caller, and the server's checks (checkApprovalRequest: price matches the server price, approval needed, which kind) are skipped. Example: an estimator posts {tier: good, price: 3500, model_price: 5420 (the true value), below_floor: false} for a price that is actually below the floor. The owner's queue shows 'Good: $3,500, 35% below the model price of $5,420' without the 'Below the floor margin' tag. If the owner approves, approvalCovers (below_floor plus owner) lets the below-floor price go out, although the owner was told it was above the floor. With a made-up model price the approval cannot be used, but it still puts misleading numbers in front of the decider. Expected: what the decider sees is computed by the server.",
+            "evidence": "stack-probe.out: 'estimator direct insert, made-up model price and below_floor=false: 201 [{\"price\":1001.00,\"model_price\":1000.00,\"below_floor\":false,\"status\":\"pending\",…}]' (the trigger reset status and requested_by, but kept model_price and below_floor). The owner's GET /api/approvals then lists it: {\"price\":1001,\"modelPrice\":1000,\"belowFloor\":false,\"status\":\"pending\",\"note\":\"probe\"}.",
+            "suggestedFix": "Make the server the only writer of what was asked. Either revoke INSERT on price_approvals from authenticated and insert from POST /api/approvals with the service role after checkApprovalRequest (requested_by = profile.userId), or insert through a SECURITY DEFINER RPC that prices the request. Alternatively, have the queue and PATCH recompute below_floor and the model price from the estimate before offering Approve."
+          },
+          {
+            "id": "B5",
+            "severity": "low",
+            "confidence": "high",
+            "title": "The test databases re-grant the counter to every signed-in user, so test:db and the e2e do not match production's grants",
+            "files": [
+              "tests/sql/01_grants.sql",
+              "scripts/test-db.sh",
+              "scripts/e2e.sh"
+            ],
+            "failureScenario": "01_grants.sql runs after all migrations and grants EXECUTE on all functions and ALL on all tables to authenticated. In every npm run test:db and scripts/e2e.sh stack, any signed-in user can call next_quote_number and use up quote numbers, and can select quote_number_counters (RLS returns nothing). Production is different: its default ACL applies at creation and the migration's revoke holds. The 40_accuracy test only passes because it re-runs the migration before checking the grants, and the e2e stack never checks them. A future migration that forgets the revoke would not be caught.",
+            "evidence": "On the kept branch e2e database: select has_function_privilege('authenticated','next_quote_number(int)','execute') returns t, and has_table_privilege('authenticated','quote_number_counters','select') returns t. Probe: owner POST /rest/v1/rpc/next_quote_number {year: 2026} returns 200 with 2, and the counter moved to 2.",
+            "suggestedFix": "Copy Supabase's real behaviour in the test stub: ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT … TO anon, authenticated, service_role in 00_supabase_stub.sql, before the migrations, and drop the after-the-fact grants in 01_grants.sql (keep the audit_log revoke). Then add a grant check to the e2e."
+          },
+          {
+            "id": "B6",
+            "severity": "low",
+            "confidence": "low",
+            "title": "Every franchise's database gets the 'KN' quote prefix, and under the new decision there is no form to change it",
+            "files": [
+              "supabase/migrations/20261119000001_accuracy.sql",
+              "lib/quotes/profile.ts"
+            ],
+            "failureScenario": "The migration seeds quote_number_prefix 'KN' ('the one quotes already carry'). Once the business profile form goes away (owner decision), each new franchise's quotes read KN-2026-0001-v1 and the app offers no way to change that. If 'KN' stands for this franchise (Koala Newark), it is franchise-specific text in code (hard rule 3). I could not confirm what KN stands for.",
+            "evidence": "Migration lines 125-127 insert ('quote_number_prefix', '\"KN\"'). quotes.json ownerQuestions: 'Quote number prefix KN, the one quotes already carry; each franchise sets its own on the Business profile page'. That page goes away under the new decision.",
+            "suggestedFix": "Owner call: either seed a neutral prefix for new databases (keeping 'KN' only where quotes already carry it, for example when there are rows in quotes), or keep one way to set the prefix."
+          },
+          {
+            "id": "B7",
+            "severity": "low",
+            "confidence": "high",
+            "title": "scripts/e2e.sh fails for an E2E_DB_NAME with capital letters",
+            "files": [
+              "scripts/e2e.sh"
+            ],
+            "failureScenario": "E2E_DB_NAME=koala_revB_db (the name this review was given): 'create database $DB_NAME' is unquoted, so Postgres creates koala_revb_db, but E2E_DB_URL keeps koala_revB_db. The run stops at once with exit 2.",
+            "evidence": "branch-e2e-1.log (first attempt): 'psql: error: connection to server on socket \"/tmp/kpg/.s.PGSQL.5499\" failed: FATAL:  database \"koala_revB_db\" does not exist', EXIT 2. With E2E_DB_NAME=koala_revb_db the same run gives 319 ok.",
+            "suggestedFix": "Quote the identifier in both psql commands (\"$DB_NAME\" inside double quotes in the SQL), or lowercase DB_NAME before building E2E_DB_URL."
+          }
+        ]
+      },
+      "verdicts": {
+        "verdicts": [
+          {
+            "id": "B1",
+            "verdict": "confirmed",
+            "severity": "high",
+            "reproduction": "My own worktree at 587ce69, my own stack (built with npx next build; the security notice appeared once and the build carried on; app on 3530, PostgREST on 3531, mock on 54730, database koala_revb_db). (1) Plain function: node --experimental-strip-types sn.mts printed \"/.//evil.example/x\" -> \"//evil.example/x\", \"/a/..//evil.example/x\" -> \"//evil.example/x\", \"/%2e//evil.example/x\" -> \"//evil.example/x\", \"/./\\\\evil.com\" -> \"//evil.com\", \"/%2e%2e//evil.com\" -> \"//evil.com\", and only \"//evil.com\" and \"/\\\\evil.com\" -> \"/\". new URL(result, 'https://koala.example/...') resolves each of them to https://evil.example/x. (2) Running page: curl /unreachable?next=%2F.%2F%2Fevil.example%2Fx returned <a href=\"//evil.example/x\" ...>Try again. (3) Playwright (b1.cjs, evil.example answered by a route stub): '\"/.//evil.example/x\" | page: Can't reach Koala right now | after Try again: http://evil.example/x | EVIL fake Koala sign-in'. The same happens for '/a/..//evil.example/x' and '/%2e//evil.example/x'. Only '//evil.example/x' ends on localhost. (4) /login?next=/.//evil.example/x renders LoginForm with next \"//evil.example/x\" in the RSC payload. LoginForm then calls router.replace(next) after the code is verified, and puts the same value in emailRedirectTo /auth/confirm?next=. /auth/confirm does NextResponse.redirect(new URL('//evil.example/x', origin)), which goes to https://evil.example/x. The e2e mock has no OTP verify endpoint, so I checked /auth/confirm and /auth/demo in the code only. git diff origin/main -- lib/safeNext.ts is empty, so /login and /auth/confirm on the live site have the same hole.",
+            "reasoning": "safeNext checks only the raw input for a leading '//' or '/\\'. It then returns the WHATWG-normalised pathname, and that normalisation turns dot segments into a leading '//'. No owner decision or hard rule makes this intended. The ledger and flow.json claim 'next= same-site only' / 'next=<same-site path>' is false. The new public /unreachable page is a fresh, zero-click-to-render entry point for phishing staff. I kept high rather than blocker: no token or session leaks, it is a redirect that helps phishing, and the live site already has it on /login.",
+            "fixSpec": "lib/safeNext.ts: accept `next: unknown` and return the fallback for anything that is not a string. After `new URL(next, HERE)`, also return the fallback when `url.pathname` starts with '//' or '/\\' (keep the origin check). Optionally collapse the result with '/' + url.pathname.replace(/^[\\/\\\\]+/, ''). No caller changes are needed: /unreachable, /login, /auth/confirm, /auth/demo and lib/server/sessionState.unreachableHref all go through it. Tests that fail before and pass after: lib/safeNext.test.ts, where safeNext of '/.//evil.com', '/a/..//evil.com', '/%2e//evil.com', '/%2e%2e//evil.com', '/./\\\\evil.com' and '/x/../\\\\evil.com' are each '/', and safeNext(['/a','/b']) is '/'. lib/server/sessionState.test.ts: unreachableHref('/.//evil.com') === '/unreachable?next=%2F'. Optionally add an e2e step: /unreachable?next=%2F.%2F%2Fevil.example%2Fx, where Try again has href '/'."
+          },
+          {
+            "id": "B2",
+            "verdict": "confirmed",
+            "severity": "high",
+            "reproduction": "In my worktree I copied the reviewer's probe to lib/pricing/zz-verify-b2.test.ts and ran npx vitest run lib/pricing/zz-verify-b2.test.ts --silent=false (the file was removed afterwards). It calls priceEstimate and canSendQuote(role, options, settings, approvals) the same way app/api/quotes/route.ts lines 139-140 do. Output: 'A below-floor approval: owner approved 3500 model 5420 cost 3249.2 margin 7.2% problem below_floor | labor hours x4 -> price 3500 model 5420 cost 4938 margin -41.1% problem below_floor | send allowed with the old approval: true' and 'B over-limit approval: owner approved 4500 model 5420 cost 3249.2 margin 27.8% problem over_limit | labor hours x3 -> price 4500 model 5420 cost 4458 margin 0.9% problem below_floor | send allowed with the old approval: true'. The code path is real. lib/sync/draft.ts lineOverrideSchema accepts hours (line 34) and the server prices the synced draft. engine.ts line 87 sets modelPrice to the pure-model price whenever there are line overrides. policy.ts lines 93-95: approvalCovers compares only status, tier, price and modelPrice, and for below_floor it checks decidedRole === 'owner' without looking at a.belowFloor. The only other gate is the deviation note (unacknowledgedFlags), which the estimator writes themselves.",
+            "reasoning": "The floor-margin rule (only the owner may send below the floor) breaks for a realistic sequence: approval first, then the estimator adjusts labor or quantities, then send. The owner approved a 7.2% margin and the customer gets a -41% job. In case B the owner never knew the price was below the floor at all. flow.json line 55 says 'if pricing changes between the approval and the send, the estimator asks again', and that does not hold for cost changes. No OD covers this. No existing test varies the cost (policy and support tests vary only price, model price, tier, status and role).",
+            "fixSpec": "1) Migration (additive, append to supabase/migrations/20261119000001_accuracy.sql or a new file): alter table price_approvals add column if not exists loaded_cost numeric(12,2). Leave it nullable so origin/main is unaffected, and add it to the guard trigger's frozen-field list. 2) lib/pricing/policy.ts: add loadedCost to the PolicyProblem base (o.loadedCost) and to PriceApproval. In approvalCovers, return false when a.loadedCost is null/undefined or p.loadedCost > a.loadedCost + 0.005, and for kind 'below_floor' also require a.belowFloor. 3) app/api/approvals/route.ts POST: insert loaded_cost: problem.loadedCost. lib/quotes/approvals.ts: APPROVAL_COLUMNS and approvalFromRow read loaded_cost. 4) lib/field/sendChecks.ts / latestByTier: treat an approval whose cost no longer covers as 'none', so the phone offers Request approval again. Tests that fail before and pass after, in lib/pricing/policy.test.ts: 'an owner approval does not cover the same price after a line-hours override raises the cost' (seed fixture Good $3,500, hours x4 -> canSendQuote(...).ok false, problem below_floor) and 'an owner over-limit approval (belowFloor false) does not cover a below-floor problem at the same price' (Good $4,500, hours x3 -> ok false). Keep the existing test that the same cost still passes."
+          },
+          {
+            "id": "B3",
+            "verdict": "confirmed",
+            "severity": "high",
+            "reproduction": "This step does not allow reading production, so I did not query it. I built a production-shaped database from tests/sql/00_supabase_stub.sql plus every file in supabase/migrations at 587ce69 (koala_revb_db) and exported app_settings to rows.json (22 keys). No migration on origin/main or the branch seeds default_state: grep default_state supabase/migrations/*.sql matches only the sync function's read at accuracy.sql:232. warranty_text is seeded in 20261020000002_phase1.sql:17 as 'Workmanship warranty — PLACEHOLDER, owner to replace.'. A scratch vitest (zz-b3.test.ts, removed afterwards) using the branch's consent.ts, profile.ts and settings.ts printed: 'keys 22 default_state= \"\"', 'gaps today: branding.license, branding.phone, default_state, warranty_text', 'consent THROWS: Not a US state: ', 'warranty on the document: \"Workmanship warranty — PLACEHOLDER, owner to replace.\"', 'company: Koala Insulation of Newark | license: null | phone: null'. The call site is app/api/quotes/route.ts line 189: consent: esignConsent(profileValue(settingRows, 'default_state')), with the comment 'The state is in the profile (no gaps above)'. The throw is inside the try, so with the gate removed POST /api/quotes answers 500. quoteSettingsFromRows passes warranty_text through untouched; only isGap in profile.ts filters PLACEHOLDER. License and phone are left off when null in pdf.tsx lines 120 and 132, email.ts lines 109-126 and /q parts.tsx, so that part is fine.",
+            "reasoning": "The new owner decision removes the profile gate, and this is exactly what the task asked to be reported. Today the consent sentence and the warranty depend on the gate. If the gate is removed as it stands, every send fails on a database like production's (estimators stuck, so high), and the PLACEHOLDER warranty prints on the page, the PDF and the email instead of 'Limited lifetime warranty'. Not a defect in today's gated behaviour, but a confirmed hazard for the decided change.",
+            "fixSpec": "lib/quotes/consent.ts: add a state-free sentence (for example esignConsent(null) -> '... (ESIGN Act) ...', or name the property's state from draft.property.state when it is a real state), and never throw on a missing or invalid state. In route.ts use that instead of profileValue(settingRows,'default_state'). lib/quotes/settings.ts: make DEFAULT_WARRANTY 'Limited lifetime warranty', and treat an empty warranty_text or one matching /placeholder/i as unset (use the default). Optionally add an additive migration: update app_settings set value = '\"Limited lifetime warranty\"' where key = 'warranty_text' and value #>> '{}' = 'Workmanship warranty — PLACEHOLDER, owner to replace.' (conditional, hard rule 2). When the gate (businessProfileGaps check, 409 setup_incomplete) is removed, keep these. Tests that fail before and pass after: a lib/quotes/settings.test.ts case where the seeded PLACEHOLDER warranty row gives 'Limited lifetime warranty'; a lib/quotes/consent.test.ts case where an empty state gives a sentence without throwing; and a send-route or e2e test on the exact migration-seeded app_settings (no default_state, PLACEHOLDER warranty, branding phone/license null) that sends successfully with no 'PLACEHOLDER' and no 'License'/'Call' line in the document, PDF text or email."
+          },
+          {
+            "id": "B4",
+            "verdict": "confirmed",
+            "severity": "medium",
+            "reproduction": "On my stack I inserted an estimate owned by the estimator (22222222-...) with SQL. Then, as the estimator (signed JWT, role authenticated, the same as the Supabase anon key plus the session token on production), I ran curl -X POST http://127.0.0.1:3531/price_approvals -d '{\"estimate_id\":\"eeeeeeee-...01\",\"tier\":\"good\",\"price\":1001,\"model_price\":1000,\"below_floor\":false,\"note\":\"probe\",\"status\":\"approved\",\"requested_by\":\"1111...owner\"}'. Result: HTTP 201 [{...\"price\":1001.00,\"model_price\":1000.00,\"below_floor\":false,\"status\":\"pending\",\"requested_by\":\"22222222-...\"}]. The trigger reset status and requested_by but kept the caller's model_price and below_floor. The owner's GET /api/approvals (app, owner cookie) returned {\"approvals\":[{\"price\":1001,\"modelPrice\":1000,\"belowFloor\":false,\"status\":\"pending\",\"note\":\"probe\"...}]} HTTP 200. The owner's PATCH /api/approvals/<id> {decision: approved} returned approved, decidedRole owner. The migration only revokes anon on price_approvals, and Supabase's default ACL grants INSERT to authenticated, so production allows the same insert.",
+            "reasoning": "The price_approvals_ask policy checks role, asker, pending and can_edit_estimate, but nothing about what is asked. The server's checkApprovalRequest is skipped entirely, so the owner's queue shows numbers the estimator typed. With the true model price and below_floor=false for a below-floor price, the owner sees no 'Below the floor margin' tag. If the owner approves, approvalCovers (below_floor + owner) lets the price go out. A made-up model price cannot be used to send, because approvalCovers matches the server's model price, so the harm is a misled decider and queue spam, not a direct bypass. Medium.",
+            "fixSpec": "Smallest: in the migration (additive), revoke insert on price_approvals from authenticated, and in app/api/approvals/route.ts POST write the row with createAdminClient() after checkApprovalRequest and the existing role check, setting requested_by = profile.userId explicitly (the guard trigger keeps working: auth.uid() is null for the service role). Also confirm can_edit_estimate in the route (checkApprovalRequest already reads the estimate through the user's RLS client, so a 404 covers it). Alternatively, add a SECURITY DEFINER RPC that prices the request. Test that fails before and passes after: in tests/sql/40_accuracy.test.sql, as the estimator (set local role authenticated + request.jwt.claims), insert into price_approvals raises insufficient_privilege. Keep the API-path e2e (Request approval -> owner approves -> sent) passing."
+          },
+          {
+            "id": "B5",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "I built the database exactly as scripts/e2e.sh does (stub, migrations, then tests/sql/01_grants.sql). psql: select has_function_privilege('authenticated','next_quote_number(int)','execute'), has_table_privilege('authenticated','quote_number_counters','select') returned t|t (anon returned f). As the estimator: curl -X POST http://127.0.0.1:3531/rpc/next_quote_number -d '{\"year\":2026}' returned '1 HTTP 200', then '2 HTTP 200', and the counter went from none to 2. GET /quote_number_counters returned [] HTTP 200, so the select grant is there and RLS hides the rows. Anon got 42501 'permission denied for function next_quote_number'. tests/sql/40_accuracy.test.sql re-runs the migration (\\i at line 164) right before its grant asserts (lines 170-172), and that is the only reason those asserts pass under test:db.",
+            "reasoning": "01_grants.sql runs 'grant execute on all functions / all on all tables to authenticated' after every migration and undoes the migration's revokes. Production applies Supabase's default ACL at creation and the revokes then hold. The test stacks therefore do not match production's grants, and a future migration that forgets a revoke would not be caught. Test fidelity only; nothing is wrong on production. Low.",
+            "fixSpec": "tests/sql/00_supabase_stub.sql: add ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role; ... ON SEQUENCES ...; ... GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role (as postgres, before the migrations), plus grant usage on schema public. Reduce tests/sql/01_grants.sql to the audit_log revoke, or drop the blanket grants and keep only what the stub cannot express. scripts/e2e.sh and scripts/test-db.sh need no other change. Tests that fail before and pass after: in 40_accuracy.test.sql, move or duplicate the grant asserts (not has_function_privilege('authenticated','next_quote_number(int)','execute'), not has_table_privilege('authenticated','quote_number_counters','select')) to before any \\i re-run, and add a psql grant check to scripts/e2e.sh after setup. Then re-run test:db and the e2e to confirm nothing else relied on the blanket grants."
+          },
+          {
+            "id": "B6",
+            "verdict": "plausible",
+            "severity": "low",
+            "reproduction": "In my migration-built database, select value from app_settings where key='quote_number_prefix' returns \"KN\" (accuracy.sql lines 125-127, insert ... on conflict do nothing). quotes.json ownerQuestions says each franchise sets its own on the Business profile page, and that page goes away under the new owner decision. I could not establish whether 'KN' stands for a franchise (for example Koala Newark): no doc says, and origin/main hard-codes 'KN-' in legacyQuoteNumber for every quote.",
+            "reasoning": "The behaviour is real: every database gets KN, and nothing will be able to change it once the form is gone. Whether it is a defect depends on an unknown fact. Hard rule 3 names 'Newark', 'Delaware', '(302)' and franchise names, and 'KN' is not clearly one of them. With the new generic 'Koala Insulation' branding, one shared prefix is consistent with the decision. Quote numbers come from a per-database counter, so they stay unique within a database whatever the prefix. This is an owner question, not a proven broken rule.",
+            "fixSpec": "Owner call, no code change unless the owner says KN is franchise-specific. If they do: change the migration's seed to a neutral prefix (for example 'Q') only for a database with no quotes yet: insert into app_settings select 'quote_number_prefix', case when exists (select 1 from quotes) then '\"KN\"' else '\"Q\"' end ... on conflict do nothing. Existing numbers keep their base via quoteNumberBase (hard rule 1). Add a test in tests/sql/40_accuracy.test.sql for both branches of the seed."
+          },
+          {
+            "id": "B7",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "In my worktree: APP_PORT=3530 PGRST_PORT=3531 MOCK_PORT=54730 E2E_DB_NAME=koala_revB_db bash scripts/e2e.sh gave 'NOTICE: database \"koala_revb_db\" does not exist, skipping' then 'psql: error: ... FATAL: database \"koala_revB_db\" does not exist', EXIT 2. Afterwards select datname from pg_database where datname ilike 'koala_revb%' returned koala_revb_db (created lower-cased; I dropped it later).",
+            "reasoning": "scripts/e2e.sh line 23 runs 'drop database if exists $DB_NAME' / 'create database $DB_NAME' unquoted, so Postgres folds the name to lower case, while E2E_DB_URL (line 20) keeps the mixed case. Any E2E_DB_NAME with capitals fails at once. Test tooling only.",
+            "fixSpec": "scripts/e2e.sh: quote the identifier, psql ... -c \"drop database if exists \\\"$DB_NAME\\\" with (force)\" -c \"create database \\\"$DB_NAME\\\"\", or normalise with DB_NAME=\"$(printf %s \"${E2E_DB_NAME:-koala_e2e}\" | tr '[:upper:]' '[:lower:]')\" before building E2E_DB_URL. Check: E2E_DB_NAME=koala_revB_db bash scripts/e2e.sh gets past database setup (exit 2 before, runs after)."
+          }
+        ],
+        "missed": [
+          "LOW (crash, pre-existing on origin/main, same function as B1): /login with a repeated next= returns 500. On my stack, curl -s -o /dev/null -w '%{http_code}' 'http://localhost:3530/login?next=/a&next=/b' printed 500, and next.log shows '⨯ TypeError: a.startsWith is not a function'. app/login/page.tsx line 21 destructures searchParams typed as next?: string, but Next passes string[] for a repeated key, and safeNext calls next.startsWith. origin/main's app/login/page.tsx line 39 does the same. /unreachable is safe because it takes raw[0]. Expected: the sign-in page opens with next='/'. Fix: make safeNext accept unknown and return the fallback for non-strings (the B1 fix covers it). Test: safeNext(['/a','/b']) === '/'."
+        ]
+      }
+    },
+    {
+      "lens": "flow",
+      "review": {
+        "lens": "The people using it, end to end, in the running app at 587ce69 (estimator on a 390 phone, owner on 1280 desktop and 390 phone, customer; Day, Night and Sun+). Stack: bash scripts/e2e.sh with E2E_KEEP=1 APP_PORT=3540 PGRST_PORT=3541 MOCK_PORT=54740 E2E_DB_NAME=koala_revb_flow (lowercase: see B14). The build stopped once at the security-upgrade notice and was retried once; nothing was upgraded. Then I drove it with Playwright scripts in /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/scripts and saved screenshots at deviceScaleFactor 1 in /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/shots. Theme screenshots: S1 Options, S2 Request approval, S3 Send with a failing item, S4 approval queue, S5/S5b Pricing ranges and refusal, S6 customer quote, S7 field app unreachable, S8 /unreachable. Each one is in day/night/sun, phone and/or desk. Afterwards the stack was stopped, database koala_revb_flow dropped and the worktree removed.",
+        "checkedOk": [
+          "The flow stage's e2e passes at 587ce69: 319 ok, 'console errors: none', stack kept (log /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/e2e-3.log). This matches flow.json. In the same worktree: npx vitest run gives 81 files and 1588 tests passed (matches the claim); npm run typecheck, npm run lint and npm run test:db pass ('All database tests passed.').",
+          "L34 Send checklist wording, as seen in the app: 'Add the customer's email to send the quote.', 'Add the city, the state (two letters) and a 5-digit ZIP code to the address.', 'Crawlspace has no size yet. It is not in the price.', 'Attic: the measurement isn't finished, so this area isn't priced. Pitch \"30\" would be 30/12…', 'The outline crosses itself…'. Fix buttons were followed: Add email focuses #customer-email; Add address focuses #customer-city (the first missing field); Add size focuses area-<id>-sqft on the Areas step; Finish measuring opens the Measure sheet. 'Too small: expected number to be >0' never appears.",
+          "L34 approvals end to end. Request approval stores the exact price and the model price (db good|5175|4140|pending|f). The owner queue reads 'Good: $5,175, 25% above the model price of $4,140 · Asked by Eddie Estimator · \"Steep 10/12 roof, two hatches\"'. After a decline with a note, the phone shows '$5,175 was declined: Too high for a plain attic; keep it within 10%.' and an 'Ask again' button, which adds a new pending row. Below the floor: 'Good: $2,235 is below the 5% floor margin; the lowest price it allows is $3,999 (model price $4,470). You can quote $4,023 to $4,917 on your own … Only the owner can approve $2,235.', and the queue tags it 'Below the floor margin'. After the owner approves, the phone shows 'Prices within your limits or approved', the quote is sent at $2,235, and quotes.snapshot.approvals = [{tier good, price 2235, modelPrice 4470, decidedRole owner}].",
+          "L35 through the API: POST /api/sync to the signed estimate (base version 2, and also the current version 11) answers 409 {status:'locked', rowVersion:11}. The office copy stays signed and unchanged. origin/main's lib/offline/syncCore.ts already has case 'locked', so the live phone reads the new answer.",
+          "L36 in the app. A phone with the service worker opens /field with REST down and shows the phone's estimates plus 'Can't reach Koala right now.'; the estimator is not signed out. An email edited while Koala is down stays on the phone ('Not synced') and reaches the server (kim.down@example.com) once REST is back; the banner then goes away. Owner pages /estimates, /admin/pricing, /admin/business, /jobs, /, /field/roof and /crew all go to /unreachable?next=<path>. /unreachable has no overflow and no small targets at 390 or 1280 in any theme. The customer quote page with the database down still gives a 500 with 'Your quote didn't load', as flow.json's notDone says.",
+          "L10 on Pricing: the field is labelled 'Target net margin (after overhead)'. The preview 'With 63% overhead, a 15% net margin is about a 48% gross margin: prices are 1.92 times the direct job cost.' matches engine.ts:438 (1.63/0.85 = 1.918). Live edits: 94 gives 96% and 27.17x; 0 gives 39% and 1.63x; 95 or a blank overhead gives the prompt to enter both values.",
+          "L11: $0.30 against a range of $0.06–$0.24 is refused with the range and its source. Ticking 'This cost is right' saves it. typical_min, typical_max and typical_source are stored. The cost was put back to $0.12.",
+          "L38: the code banner reads 'these minimums come from 2018 IECC (local) and company default. Confirm which edition your local building department enforces…' with no town. The field bundle has crawlspace minR 19, so the Areas step hint is R-19.",
+          "'Needs owner input (18)' on Pricing lists the dense-pack bag and all seven batt sizes (OD7, OD8).",
+          "L37 verified job (owner, desktop and 390 phone): no status buttons. The Status card says 'Its actuals are verified, so the status stays as it is. To change it, Unverify the actuals below first.' Unverify is shown to the owner.",
+          "Measuring sheet. '30 deg' reads as 30° = 6.93/12 (×1.155), giving 1,386 sq ft from 1,200. A bare '30' is refused with 'Use 30° (6.93/12)'. A broken measurement takes the area back to '0 sq ft, measuring not finished' (L26). A bow-tie outline says 'The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross.' and the area is not priced (L27).",
+          "Walls with no depth say 'the 3.5 in cavity (no depth entered: a 2x4 wall) only fits R-12.6 of blown cellulose (target R-20)'. A 2x6 wall with R-11 batts says 'the 5.5 in cavity, with 3.44 in already in it, only fits R-18.4' (OD5 behaviour shows on the phone).",
+          "Customer quote KN-2026-0002-v1 on the page and in the PDF: items $3,964 + Travel and setup $176 + Price adjustment $360 = Total $4,500. The negative case on the phone card: $4,296 + $174 − $2,235 = $2,235. 'Price holds until Dec 19, 2026' and the PDF's 'Valid until: December 19, 2026' both equal the business-zone date of expires_at (2026-12-19 05:08 UTC is Dec 19, 00:08 EST). The signed page, the reload ('Your quote was signed on November 19, 2026') and the signed PDF acceptance block (option, $4,500, signer, date and time with time zone, IP) are correct. The page has no overflow at 390 or 1280 in any theme.",
+          "One option left (rim joist 150 sq ft): Options says 'Better is not shown to the customer: it costs the same as Best ($1,500), the next option up.' (and the same for Good). Send says '1 option priced'.",
+          "Colours on the screens I checked come from Daymark tokens; the legacy slate/amber/emerald/red/brand classes are mapped to tokens in app/globals.css:430-490. No page-level horizontal overflow at 390. The only wide elements are intentional scroll containers (the Pricing section pills and the coefficient and actuals tables).",
+          "Hard rule 1: nothing in this flow changed a sent quote. Sending a new version and signing left the earlier snapshot and PDF intact, and the signed estimate refuses changes (locked)."
+        ],
+        "findings": [
+          {
+            "id": "B1",
+            "severity": "high",
+            "confidence": "high",
+            "title": "Removing the business-profile gate as the code stands would put PLACEHOLDER on quotes and make every send fail",
+            "files": [
+              "app/api/quotes/route.ts",
+              "lib/quotes/settings.ts",
+              "lib/quotes/consent.ts",
+              "lib/quotes/model.ts",
+              "supabase/migrations/20261020000002_phase1.sql",
+              "supabase/migrations/20261020000001_init.sql"
+            ],
+            "failureScenario": "The new owner decision: no profile form, and nothing blocks sending. If a fixer deletes the gate at route.ts:90-96 and does nothing else, then on a database with the seeded settings: (1) The warranty prints exactly as seeded: 'Workmanship warranty — PLACEHOLDER, owner to replace.' (phase1.sql:17; quoteSettingsFromRows only drops empty strings). (2) default_state is never seeded, so route.ts:189 esignConsent(profileValue(rows,'default_state')) throws 'Not a US state: ' and every send returns 500. (3) An empty or invalid quote_number_prefix gives the number '-2026-0001-v1'. (4) A branding.license or phone holding 'PLACEHOLDER…' passes straight into the masthead, PDF and email. Only the gate filters these values today. Expected: no PLACEHOLDER and no blank on any customer document; a missing state, license or phone is simply left off (or a state-neutral consent sentence is used).",
+            "evidence": "I ran a scratch vitest against the worktree (config /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/vt/vitest.config.mts, test gate.test.ts) with the migration-seeded rows. Output: WARRANTY ON QUOTE: \"Workmanship warranty — PLACEHOLDER, owner to replace.\" | COMPANY: Koala Insulation of Newark | LICENSE: null | PHONE: null | CONSENT: THROWS: Not a US state: | NUMBER with empty prefix: -2026-0001-v1 | PLACEHOLDER license/phone pass through: PLACEHOLDER | PLACEHOLDER — office phone. The e2e also says 'The seeded settings have a placeholder warranty and no license, phone or state' (tests/e2e/run.mjs:308). I did not read the live warranty_text: no step allowed a production read.",
+            "suggestedFix": "Before removing the gate, make the documents themselves safe. In quoteSettingsFromRows, treat any value matching /placeholder/i as unset. Default the warranty to 'Limited lifetime warranty' and the company to 'Koala Insulation'. Make esignConsent not throw: when there is no valid state, use a consent sentence without a state law. Fall back to a fixed prefix when quote_number_prefix is invalid. Add tests that render the page, PDF and email from the seeded rows and assert there is no 'PLACEHOLDER', no empty 'License', and that sending returns 201."
+          },
+          {
+            "id": "B2",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "While Koala is unreachable, the Send checklist still says 'Online' and 'Everything the quote needs is here', and Send stays enabled",
+            "files": [
+              "app/field/SendStep.tsx",
+              "lib/field/sendChecks.ts",
+              "app/field/EstimateEditor.tsx",
+              "lib/offline/sync.ts"
+            ],
+            "failureScenario": "The phone has signal but Koala's database is down (REST 503). The banner at the top says 'Can't reach Koala right now.' Below it, the checklist says '✓ Online' and 'Everything the quote needs is here.', and 'Send quote to customer' is enabled. Tapping it shows 'Saving and syncing…' for about 8 s, then 'Can't reach Koala right now. Your change is saved on this phone.' Expected: the online item uses reachability too, for example 'Can't reach Koala right now. Sending needs Koala; your work is saved.', and Send (and Request approval) stay disabled while it is unreachable. The online check uses navigator.onLine only; isReachable() from lib/offline/sync.ts is never passed to SendStep or sendChecks.",
+            "evidence": "Script down2.cjs (REST down via POST /__e2e/rest {down:true}) printed every item ok, including 'online ok=yes: Done: Online' and 'heading text: Everything the quote needs is here.', then 'send result after ms 8093 | banner: 2' and 'Can't reach Koala right now. Your change is saved on this phone.'; quotes for the estimate: 0. Screenshot: /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/shots/w6-send-tap-while-down-day-phone.png (banner and '✓ Online' visible together).",
+            "suggestedFix": "Subscribe SendStep to onReachChange/isReachable, the same way FieldApp does, and pass online && reachable to sendChecks. Give the unreachable case its own label, and disable the Send and approval buttons while it lasts."
+          },
+          {
+            "id": "B3",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "Owner's 'Needs you' approval queue keeps requests that no longer match the estimate, even after it is sent and signed",
+            "files": [
+              "app/estimates/ApprovalQueue.tsx",
+              "app/api/approvals/[id]/route.ts",
+              "app/api/quotes/route.ts"
+            ],
+            "failureScenario": "The estimator asks for Good at $5,175 and the request waits. The estimator then changes Good to $4,500 (inside their own range), sends the quote, and the customer signs it. The owner's /estimates page still shows 'NEEDS YOU · 1 price waiting for approval · Lee Measure · Good: $5,175, 25% above the model price of $4,140' with working Approve and Decline buttons. Nothing withdraws or expires a pending request when the price changes, when a quote is sent, or when the estimate is signed, and the PATCH route does not check the estimate's status. Expected: a request that no longer matches the estimate's current price, or whose estimate was sent or signed, leaves the queue (withdrawn), or at least says so.",
+            "evidence": "walk4.cjs: 'after send db: good|5175.00|declined / good|5175.00|pending' and 'OWNER QUEUE after send: Lee Measure | … Good: $5,175, 25% above the model price of $4,140 | … Approve | Decline'. After sign1.cjs signed that quote, floor2.cjs still printed 'OWNER QUEUE: Lee Measure | … Good: $5,175 … Approve | Decline | Flo Floor …'. Screenshot: /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/shots/w4-stale-queue-day-desk.png",
+            "suggestedFix": "On send, sign, or a price change of that tier, mark pending requests that the current price does not match as withdrawn (a new status, frozen like the others). In loadQueue, skip requests whose estimate is signed or whose tier price differs. In PATCH, refuse a decision on a signed estimate."
+          },
+          {
+            "id": "B4",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "When Better is hidden, the recommended option is Good if nothing was picked but Best if Better was picked, so the headline price drops",
+            "files": [
+              "lib/field/recommended.ts"
+            ],
+            "failureScenario": "Seeded attic of 1,386 sq ft at R-0 (Best is the same work as Better). With no pick, Better is the default recommendation at $6,030. The estimator raises Better to $7,538, so Better is hidden (it costs more than Best for the same work). The recommendation, the dock headline, the office list and the customer quote's RECOMMENDED badge all fall to Good at $4,140 (then $4,500), the cheapest option. If the estimator had tapped Better first, the same change makes Best ($5,270) recommended. recommendedTier sends a hidden pick to 'the next option shown after it' but falls back to options[0] when there is no pick, even though Better is shown to the estimator as 'Recommended (default)'. Expected: a hidden default Better behaves like a hidden picked Better (next shown option up, else the nearest below), so OD1's headline does not drop to the cheapest option. Related to review A F1 (the hide itself), but this is a different defect.",
+            "evidence": "dbg3b.cjs: Options showed 'Better is not shown to the customer: it is the same work as Best for more ($7,538 against $6,030)…' and the dock 'RECOMMENDED | $4,140 | GOOD'. Before the change it was '$6,030 | BETTER'. The customer quote shows 'GOOD | RECOMMENDED | $4,500'. one1.cjs with Better picked, then +5%: 'dock before: RECOMMENDED $5,270 BETTER', 'dock after: RECOMMENDED $5,270 BEST'. Scratch vitest: recommendedTier([good,best], null) -> {\"tier\":\"good\"}; recommendedTier([good,best], 'better') -> {\"tier\":\"best\"}.",
+            "suggestedFix": "In recommendedTier, when selectedTier is null, treat 'better' as the implied pick and apply the same next-up rule: options.find(better) ?? the first shown option ranked above better ?? the nearest one below. Add a test for an unpicked, hidden Better."
+          },
+          {
+            "id": "B5",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "The 'Shorten the notes' Fix goes to the First name field, not the notes",
+            "files": [
+              "lib/field/sendChecks.ts",
+              "lib/field/fix.ts",
+              "app/field/CustomerStep.tsx"
+            ],
+            "failureScenario": "Notes for the quote longer than 5,000 characters (draftSchema notes max 5000; the Textarea has no maxLength). The checklist says 'The notes for the quote are too long.' with the button 'Shorten the notes'. Tapping it opens the Customer step and focuses First name (#customer-firstName). The notes box is at y≈1177 on an 844-high phone screen, so it is out of view. Expected: the button scrolls to and focuses the notes. otherCheck (sendChecks.ts:178) targets field 'firstName' because CustomerField has no 'notes', and the Textarea has no id.",
+            "evidence": "walk2b.cjs: 'other ok=no: To do: The notes for the quote are too long. Shorten the notes' then 'notes fix focus: {\"id\":\"customer-firstName\",\"tag\":\"INPUT\",\"value\":\"Lee\"…}' and 'notes textarea top 1177.25 viewport h 844'. Screenshot: /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/shots/w2-notes-fix-day-phone.png",
+            "suggestedFix": "Add 'notes' to CustomerField, give the notes Textarea id='customer-notes', target it from otherCheck, and add maxLength={5000} to the Textarea."
+          },
+          {
+            "id": "B6",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "In Sun+ the placeholder text is pure black, so empty fields look filled ('0' sq ft, 'R-49', 'Optional')",
+            "files": [
+              "app/globals.css"
+            ],
+            "failureScenario": "Sun+ sets --ink-3 to #000000 (globals.css:189 and :216), and ::placeholder uses var(--ink-3) (globals.css:607-609). The placeholders are therefore the same black as typed text on a white field. On the Areas step, an empty Square feet shows '0' and an empty Target R shows 'R-49' as if entered; the approval reason shows 'Optional'. An estimator in direct sun can believe Target R is set to R-49, while the options actually price their tier defaults (Better: R-60). Expected: placeholders are visibly different from values in every theme, for example a lighter grey or italic in Sun+.",
+            "evidence": "Screenshot /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/shots/w14-placeholders-sun-phone.png: Square feet '0' and Target R 'R-49' in black. inputValue() of Square feet is '' and its placeholder is '0'. Also S2-send-request-approval-sun-phone.png: 'Optional' in black. In Day the same placeholders are grey (#535a61).",
+            "suggestedFix": "Give ::placeholder its own token that stays distinguishable in Sun+ (for example #6b7280 plus italic), or keep --ink-3 for secondary text and add --placeholder."
+          },
+          {
+            "id": "B7",
+            "severity": "medium",
+            "confidence": "high",
+            "title": "The 'Koala Insulation of Newark' company name is still hard-coded in the email sender and the roof takeoff, and flow.json's list of remaining franchise text omits both",
+            "files": [
+              "lib/env.ts",
+              "lib/roof/roofing.ts",
+              "app/field/measure/RoofReport.tsx",
+              "docs/accuracy/results/flow.json"
+            ],
+            "failureScenario": "(1) lib/env.ts:17: when QUOTE_FROM_EMAIL is not set, every quote email to a customer is sent from 'Koala Insulation of Newark <onboarding@resend.dev>'. That breaks hard rule 3 and the new decision that emails say 'Koala Insulation'. (2) lib/roof/roofing.ts:140 COMPANY = 'Koala Insulation of Newark' is printed on every roof takeoff report (RoofReport.tsx:87 and :208) and in the copied summary (roofing.ts:297), for every franchise's estimators. flow.json notDone lists only the CustomerStep utilities, DEFAULT_COMPANY with the default terms, and the demo seed, so these two are missing from the record of what is left.",
+            "evidence": "grep -rnE 'Newark|Koala Insulation of' app lib components public: lib/env.ts:17 quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>'; lib/roof/roofing.ts:140 export const COMPANY = 'Koala Insulation of Newark'; used at app/field/measure/RoofReport.tsx:87,208. Both are also on origin/main (pre-existing). grep of docs/accuracy finds no mention of roofing.ts or quoteFromEmail.",
+            "suggestedFix": "Take the sender display name from settings (or use 'Koala Insulation' per the new decision), keeping the address from the env. Pass the company name into RoofReport and the copy text from the bundle or settings instead of the constant. Add both to the franchise-text list."
+          },
+          {
+            "id": "B8",
+            "severity": "low",
+            "confidence": "high",
+            "title": "/unreachable offers 'Open the estimates on this phone' even when the phone has no saved copy, and the button loops back to /unreachable",
+            "files": [
+              "app/unreachable/page.tsx",
+              "public/sw.js"
+            ],
+            "failureScenario": "A phone or browser without the cached /field shell (first use, cleared site data, or a v10 install that ran while Koala was down, since precacheShell skips caching then) opens /field while the database is down. It is sent to /unreachable?next=%2Ffield, which offers 'Open the estimates on this phone'. Tapping it lands on the same page again. Expected: show that link only when a copy exists (for example, check caches.match('/field') on the client), or explain that there is no copy on this phone yet.",
+            "evidence": "down1.cjs with a fresh estimator context: 'fresh phone /field -> http://localhost:3540/unreachable?next=%2Ffield | … Open the estimates on this pho…' then 'after Open the estimates on this phone -> http://localhost:3540/unreachable?next=%2Ffield'.",
+            "suggestedFix": "Render the phone-app link from a small client component that checks caches.has/match for the shell. Otherwise say 'This phone has no saved copy yet; it needs Koala once.'"
+          },
+          {
+            "id": "B9",
+            "severity": "low",
+            "confidence": "high",
+            "title": "'This cost is right' does not stick: every later save of that material is refused again, and the size of the difference is overstated",
+            "files": [
+              "app/admin/pricing/actions.ts",
+              "lib/admin/pricingForms.ts"
+            ],
+            "failureScenario": "The owner ticks 'This cost is right' to save open-cell at $0.30 (usual $0.06–$0.24). It saves, but the stored range is unchanged. Later the owner saves the same card again with no change, for example after editing the name: it is refused 'Not saved. $0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24 …' until the box is ticked again, every time. The wording compares with the middle of the range ($0.15), so a cost 25% above the top of the range reads as '2.0 times more than the usual $0.06 to $0.24'.",
+            "evidence": "owner3.cjs: 'save 0.30 ticked: Saved. | db: 0.3000|0.0600|0.2400|Starting range…' then, after a reload, 'later save, no change: Not saved. $0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24 …'. The cost was restored to $0.12 afterwards.",
+            "suggestedFix": "When a cost outside the range is confirmed, widen the stored range to include it (or record the confirmed cost and skip the check while the cost is unchanged). Word the size against the nearest edge, for example '25% above the usual high of $0.24'."
+          },
+          {
+            "id": "B10",
+            "severity": "low",
+            "confidence": "high",
+            "title": "An owner saving Pricing while Koala is unreachable is told 'Only the owner can change pricing.'",
+            "files": [
+              "app/admin/pricing/actions.ts"
+            ],
+            "failureScenario": "Pricing is open in the owner's browser when the database stops answering. Saving a material shows, after about 7 s, 'Only the owner can change pricing.' The owner is the owner. ownerDb() reads getSessionProfile(), which returns null both for unreachable and for signed out. Expected: 'Can't reach Koala right now. Nothing was saved.' flow.json notDone acknowledges this (server actions), and it is confirmed here.",
+            "evidence": "down3.cjs (REST down after the page loaded): 'save settled after s 7' and 'pricing save while down: Only the owner can change pricing.'; the cost in the database stayed 0.1200.",
+            "suggestedFix": "In admin actions, use getSessionState() and return the UNREACHABLE_BODY message when its state is 'unreachable'."
+          },
+          {
+            "id": "B11",
+            "severity": "low",
+            "confidence": "high",
+            "title": "Tap targets under 48 px in the flow screens",
+            "files": [
+              "app/field/AreasStep.tsx",
+              "app/estimates/ApprovalQueue.tsx",
+              "app/q/[token]/parts.tsx"
+            ],
+            "failureScenario": "On a 390 phone: the inline 'Use 1,200' button inside 'Square feet don't match the measurement' is 71×21 px. The customer-name link in the owner's approval queue is about 107×24 px. The estimator email link on the customer quote is 100×20 px.",
+            "evidence": "use1.cjs: 'inline Use button box: 71x21'. owner1.cjs phone small targets: 'A 107x24 \"Lee Measure\"'. quote1.cjs phone small targets: 'A 100x20 \"est@koala.test\"'.",
+            "suggestedFix": "Give these links and buttons min-h-12, or use the Button component."
+          },
+          {
+            "id": "B12",
+            "severity": "low",
+            "confidence": "high",
+            "title": "Two Fix buttons stop short of the field to fix: 'Change the price' and 'Finish measuring'",
+            "files": [
+              "app/field/EstimateEditor.tsx",
+              "app/field/OptionsStep.tsx",
+              "app/field/AreasStep.tsx"
+            ],
+            "failureScenario": "'Change the price' on a price:<tier> item scrolls to the option card but does not open its price editor; focus stays on the page body, so the estimator must find and tap 'Change price'. 'Finish measuring' opens the Measure sheet with focus on the page body, not on the broken pitch or height field.",
+            "evidence": "walk3.cjs: 'Change the price -> { active: 'BODY' } card rect { top: 120, bottom: 723 } editing open? 0'. walk2.cjs: 'Finish measuring opens dialog: 1 focused: BODY'.",
+            "suggestedFix": "Let a Fix with tier open that card's price editor and focus 'Customer price'. Let 'Finish measuring' focus the first field with an error in the sheet."
+          },
+          {
+            "id": "B13",
+            "severity": "low",
+            "confidence": "medium",
+            "title": "An estimate started before the phone's first bundle download has a blank town and state",
+            "files": [
+              "app/field/FieldApp.tsx"
+            ],
+            "failureScenario": "On a phone opening /field for the first time, tapping New estimate straight away gives City '' and State ''. createEstimate reads getCachedBundle()?.business?.newEstimate, which does not exist yet. A moment later the same button gives Newark/DE. With the gate removed, the estimator must still type both, so nothing wrong reaches a customer, but the default is lost.",
+            "evidence": "walk1.cjs (New estimate tapped at once): 'city/state defaults:  ' (both empty). walk2.cjs (after waiting 2.5 s): 'town defaults after bundle: Newark DE'.",
+            "suggestedFix": "In createEstimate, await refreshBundle() (with a short timeout) when no bundle is cached, or fill in the town when the bundle arrives if the fields are still untouched."
+          },
+          {
+            "id": "B14",
+            "severity": "low",
+            "confidence": "high",
+            "title": "scripts/e2e.sh fails when E2E_DB_NAME has capital letters",
+            "files": [
+              "scripts/e2e.sh"
+            ],
+            "failureScenario": "With the requested E2E_DB_NAME=koala_revB_flow, the unquoted 'create database koala_revB_flow' creates koala_revb_flow, but E2E_DB_URL connects to 'koala_revB_flow'. The run stops before the build with 'FATAL: database \"koala_revB_flow\" does not exist', EXIT 2.",
+            "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/e2e-1.log: 'NOTICE: database \"koala_revb_flow\" does not exist, skipping / psql: error: … FATAL: database \"koala_revB_flow\" does not exist / EXIT 2'. The run succeeded with koala_revb_flow.",
+            "suggestedFix": "Quote the identifier in the drop and create statements (\"$DB_NAME\"), or lowercase DB_NAME before using it."
+          }
+        ]
+      },
+      "verdicts": {
+        "verdicts": [
+          {
+            "id": "B1",
+            "verdict": "confirmed",
+            "severity": "high",
+            "reproduction": "Worktree at 587ce69. I wrote my own scratch vitest with the rows the migrations seed: init.sql:1138 branding {company 'Koala Insulation of Newark', license null, phone null}; phase1.sql:15-17 shop_address, quote_terms, warranty_text; accuracy.sql:126 quote_number_prefix 'KN'. Command: npx vitest run --config /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/verify/vt/vitest.config.mts --silent=false (test file vt/b1.test.ts). Output: 'GAPS branding.license,branding.phone,default_state,warranty_text' | 'WARRANTY \"Workmanship warranty — PLACEHOLDER, owner to replace.\"' | 'COMPANY Koala Insulation of Newark | LICENSE null | PHONE null' | 'CONSENT THROWS Not a US state: ' | 'NUMBER seeded KN-2026-0001-v1' | 'NUMBER empty prefix -2026-0001-v1' | 'PH license/phone PLACEHOLDER | PLACEHOLDER — office phone'. route.ts:189 calls esignConsent(profileValue(rows,'default_state')) inside the try block, and the catch at :267-270 returns 500, so every send would fail. lib/quotes/quotes-stage.test.ts:232 itself calls this row set 'The live seed: a placeholder warranty, no phone, no license, no state.'",
+            "reasoning": "This is not a defect in today's behaviour: the gate at route.ts:90-96 filters these values. The new owner decision removes the gate, though, and the task asks for anything that would make that unsafe. I reproduced every part at unit level. The warranty passes through quoteSettingsFromRows unfiltered, because toText drops only empty strings. default_state is never seeded, and esignConsent throws on ''. A blank prefix gives '-2026-0001-v1'. Part (3) needs someone to blank the seeded 'KN', and part (4) needs someone to type PLACEHOLDER, so those two are hypothetical. Parts (1) and (2) happen on the seeded/live rows as soon as the gate goes. Two related points belong to review A, not here: the seeded company and terms still name 'Koala Insulation of Newark' (review-a DOC-1/DOC-6). Also, the phone has a second gate that must go with the server one: sendChecks 'profile', bundle business.gaps, and SendStep's setup_incomplete branch. Otherwise the phone keeps blocking sends.",
+            "fixSpec": "Make the documents safe before deleting the gate. (a) lib/quotes/settings.ts: in quoteSettingsFromRows, treat any text value matching /placeholder/i as unset, for the warranty, the terms and each branding field. Set DEFAULT_WARRANTY = 'Limited lifetime warranty'. Make the company 'Koala Insulation' per the new decision; coordinate with review-a DOC-1/DOC-6 on the stored company and terms. (b) lib/quotes/consent.ts: esignConsent(state?: string|null) returns a state-neutral sentence when stateName() is null (for example '(ESIGN Act and the Uniform Electronic Transactions Act)') and never throws. (c) app/api/quotes/route.ts: use a fixed fallback prefix when quote_number_prefix fails QUOTE_PREFIX_PATTERN, then delete lines 90-96. (d) lib/field/sendChecks.ts: drop the 'profile' item. app/api/bundle/route.ts: stop sending gaps. app/field/SendStep.tsx: drop the setup_incomplete branch. Tests that fail before and pass after: in lib/quotes/quotes-stage.test.ts, build the document, the PDF text and quoteEmail from the seeded rows, then assert there is no /placeholder/i, no 'License' with an empty value, warranty === 'Limited lifetime warranty', and that esignConsent('') does not throw. In the e2e, the 'send: not while the business profile has a gap' step becomes: POST /api/quotes with the seeded settings returns 200 and the quote page contains no 'PLACEHOLDER'."
+          },
+          {
+            "id": "B2",
+            "verdict": "confirmed",
+            "severity": "medium",
+            "reproduction": "Kept e2e stack (APP_PORT 3540, PGRST 3541, MOCK 54740, db koala_revb_flow). Script /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revB/flow/verify/s2.mjs makes a complete estimate (Dee Down, attic 1,000 sq ft), then POST /__e2e/rest {down:true} and edits the phone number to trigger a sync. Output: every item ok, including 'online ok=yes: Done: Online' and 'profile ok=yes'. Then 'B2 banner present: true | heading \"Everything the quote needs is here\": true', 'B2 send enabled while down: true', and after tapping Send: 'B2 after tap ms 7168 | Can't reach Koala right now. | ... | Can't reach Koala right now. Your change is saved on this phone.' Quotes for Dee Down: 0. Screenshot: verify/shots/b2-send-while-down.png.",
+            "reasoning": "In the code, sendChecks.ts:97 uses only the `online` prop. FieldApp computes `reachable` from isReachable/onReachChange (FieldApp.tsx:27) and uses it only for the banner. It never passes it to EstimateEditor or SendStep, so canSend stays true. No data is lost: the send fails with a clear message after about 7 s. The checklist still contradicts the banner, which makes it misleading wording rather than a block. No OD or hard rule intends this.",
+            "fixSpec": "FieldApp.tsx: pass `reachable` to EstimateEditor, then on to SendStep. Add `reachable: boolean` to SendCheckInput in lib/field/sendChecks.ts. The online item becomes: not online -> the current offline label; online but not reachable -> {id:'online', ok:false, label:\"Can't reach Koala right now. Sending needs Koala; your work is saved.\"}. Request approval should also be disabled while unreachable. Test: lib/field/sendChecks.test.ts with input reachable:false expects the online item ok=false with that label and not every check ok (fails today, because the field does not exist and the item is ok). Optionally an e2e step: with REST down, Send is disabled."
+          },
+          {
+            "id": "B3",
+            "verdict": "confirmed",
+            "severity": "medium",
+            "reproduction": "Script verify/s1.mjs on the kept stack. The estimator makes Lee Measure (attic 1,200), sets Good to $4,556 (25% over the $3,645 model) and requests approval. DB: 'good|4556.00|3645.00|pending'. The estimator then changes Good to $3,827 (within range) and sends: 'B3 sent at 3827 ... | db: good|4556.00|pending | quotes: 1'. The customer signs: 'B3 estimate status: signed'. The owner opens /estimates: 'B3 OWNER QUEUE present: 1 Lee Measure | 5 Oak St, Newark | Good: $4,556, 25% above the model price of $3,645 | Asked by Eddie Estimator ... | Approve | Decline'. PATCH /api/approvals/<id> {decision:'approved'} as the owner on the signed estimate: 'B3 PATCH approve on signed estimate: 200 {\"approval\":{...\"status\":\"approved\"...'. Screenshot: verify/shots/b3-stale-queue.png.",
+            "reasoning": "loadQueue (ApprovalQueue.tsx:46-56) filters only on status='pending'. The PATCH route never reads the estimate's status. Nothing in route.ts or the signing path withdraws pending requests. flow.json mentions approvals bound to the model price, but no decision says stale requests stay in the queue. Approving a stale one changes no quote: the estimate is signed and locked, and approvals bind the exact price. The harm is a 'Needs you' queue that never empties, and owners deciding requests that mean nothing. It also counts toward the 50-row limit.",
+            "fixSpec": "Smallest fix, no schema change. (1) In loadQueue, also select estimate:estimates(status) and the matching estimate_options price. Skip a request whose estimate is signed or lost, or whose current option price for that tier differs from the request price. Put this in a pure helper, e.g. isLiveRequest(row). (2) In app/api/approvals/[id]/route.ts, read the estimate's status and return 409 {error:'signed', message:'The customer already signed this quote.'} for a signed estimate (checkApprovalRequest already does this for POST). Optionally, later: an additive 'withdrawn' status set on send. Tests: a vitest on the helper (a signed estimate's pending request is dropped; a request whose price no longer matches is dropped), and a route or e2e check that PATCH on a signed estimate returns 409. Both fail today."
+          },
+          {
+            "id": "B4",
+            "verdict": "confirmed",
+            "severity": "medium",
+            "reproduction": "Scratch vitest verify/vt/b4.test.ts (seeded snapshot, attic 1,386 sq ft at R-0, 20 min drive). Output: 'B4 before good=4335 better=6325 | rec {\"tier\":\"better\",\"picked\":false}'. Better set to $7,906 (+25%): 'shown good=4335 best=6325 | warnings [\"Better is not shown to the customer: it is the same work as Best for more ($7,906 against $6,325)...\"]'. Then 'B4 no pick rec {\"tier\":\"good\",\"picked\":false} | picked better rec {\"tier\":\"best\",\"picked\":false}' and 'B4 quote recommendedTier (no pick) good'.",
+            "reasoning": "recommended.ts:30 falls back to options[0] when there is no pick, while a hidden picked tier goes to the next one shown. The ledger's L9 text does document 'with no pick, Better, else the first'. So this matches the written rule, but the rule contradicts itself. The phone shows Better as 'Recommended (default)', so a hidden default Better should behave like a hidden picked Better. Instead the customer quote marks the cheapest option, Good, and the headline drops ($6,325 -> $4,335 here). Prices are not wrong, so this is medium, not blocker. Review A's F10 noted that the default 'moves to Best or Good' but did not report the asymmetry. Sent quotes keep their snapshot recommendedTier, and route.ts:254 stores selected_tier, so a fix does not move them (hard rule 1).",
+            "fixSpec": "lib/field/recommended.ts: when no tier is picked, use 'better' as the implied pick. Return options.find(better) if it is shown, else the first shown option ranked above Better, else the nearest below, with picked:false. Keep options[0] only when none of those exist. Update the L9 ledger wording. Tests: in lib/field/recommended.test.ts (or quotes-stage.test.ts), recommendedTier([{tier:'good'},{tier:'best'}], null) must be 'best'; it fails today with 'good'. Re-run lib/office/estimates.test.ts, lib/sync/payload.test.ts and the before/after report, and expect explained headline changes for unpicked estimates whose Better is hidden. This needs the owner's OK, because it changes which option new quotes recommend."
+          },
+          {
+            "id": "B5",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "Unit (verify/vt/b5b9.test.ts): a draft with notes of 5,001 characters gives 'B5 other {\"id\":\"other\",\"ok\":false,\"label\":\"The notes for the quote are too long.\",\"fix\":{\"label\":\"Shorten the notes\",\"target\":{\"step\":\"customer\",\"field\":\"firstName\"}}} -> element customer-firstName'. In the app (s2.mjs): 'B5 other item: To do: | The notes for the quote are too long. | Shorten the notes', then after tapping it: 'B5 focus after Shorten the notes: {\"id\":\"customer-firstName\",\"tag\":\"INPUT\"} textarea top 1177.25 viewport h 844 | textarea maxlength attr: null'.",
+            "reasoning": "sendChecks.ts otherCheck targets field 'firstName', because CustomerField has no 'notes' and the Textarea (CustomerStep.tsx:77) has no id or maxLength. More than 5,000 characters of notes is rare, and the label names the problem correctly, so this is low.",
+            "fixSpec": "Add 'notes' to CustomerField in lib/field/fix.ts. Give the Textarea id='customer-notes' and maxLength={5000} in app/field/CustomerStep.tsx. Point otherCheck's notes branch at {step:'customer', field:'notes'}. fixElementId then returns 'customer-notes'. The focus effect in EstimateEditor focuses only HTMLInputElement, so extend it to HTMLTextAreaElement. Test: in lib/field/sendChecks.test.ts, notes of 'x'.repeat(5001) give fix.target.field === 'notes' and fixElementId(...) === 'customer-notes'. It fails today."
+          },
+          {
+            "id": "B6",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "Script verify/s3.mjs on the kept stack, Areas step with an empty attic. It reads getComputedStyle(input,'::placeholder').color. 'B6 day {\"sqft\":{\"value\":\"\",\"placeholder\":\"0\",\"placeholderColor\":\"rgb(83, 90, 97)\",\"textColor\":\"rgb(12, 14, 16)\"},\"targetR\":{...\"placeholder\":\"R-49\",\"placeholderColor\":\"rgb(83, 90, 97)\"...}}' and 'B6 sun {\"sqft\":{\"value\":\"\",\"placeholder\":\"0\",\"placeholderColor\":\"rgb(0, 0, 0)\",\"textColor\":\"rgb(0, 0, 0)\"},\"targetR\":{\"value\":\"\",\"placeholder\":\"R-49\",\"placeholderColor\":\"rgb(0, 0, 0)\",\"textColor\":\"rgb(0, 0, 0)\"}}'.",
+            "reasoning": "Placeholders are the same black as entered text in Sun+ (globals.css:189/216 --ink-3:#000, ::placeholder at :607). This is not a regression of claude/accuracy: `git diff origin/claude/daymark 587ce69 -- app/globals.css` is empty, and daymark has the same lines. Two things soften it: the Target R field's hint says 'Blank = tier default (code R-49)', and an empty square-feet value is flagged on the Send checklist. I rate it low, not medium.",
+            "fixSpec": "app/globals.css: add a --placeholder token, equal to --ink-3 in Day and Night. In both Sun+ blocks (the [data-theme='sun'] block and the prefers-contrast: more block), set it to a grey that still passes contrast against white (for example #4b5563), and add font-style: italic for ::placeholder under Sun+. Make ::placeholder use var(--placeholder). Test: an e2e or Playwright check that in data-theme='sun' the placeholder colour differs from the input text colour; it fails today (both rgb(0,0,0))."
+          },
+          {
+            "id": "B7",
+            "verdict": "confirmed",
+            "severity": "medium",
+            "reproduction": "`git show 587ce69:lib/env.ts` line 17: quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>'. lib/roof/roofing.ts:140 export const COMPANY = 'Koala Insulation of Newark', printed at app/field/measure/RoofReport.tsx:87 and :208, and in summaryText at roofing.ts:297. .env.example:12 also says QUOTE_FROM_EMAIL=\"Koala Insulation of Newark <quotes@yourdomain.com>\". Both are on origin/main too (lib/env.ts:17, roofing.ts:141). grep of docs/accuracy/results/*.json and ledger.txt finds no mention of roofing.ts COMPANY or quoteFromEmail; flow.json notDone's franchise-text item lists only CustomerStep utilities, DEFAULT_COMPANY with the default terms, and the demo seed.",
+            "reasoning": "This breaks hard rule 3 and conflicts with the new decision that emails say 'Koala Insulation'. The text existed before this branch and is Phase-4 scope, but flow.json's list of franchise text left in code misses both, so the record is incomplete. The env.ts fallback applies only when QUOTE_FROM_EMAIL is unset, which is unlikely in production. The example file still steers deployments to the Newark name, though. The roof takeoff text is shown to every franchise's estimators and goes into copied summaries.",
+            "fixSpec": "lib/env.ts: default sender 'Koala Insulation <onboarding@resend.dev>'; update .env.example to 'Koala Insulation <quotes@yourdomain.com>'. lib/roof/roofing.ts: COMPANY = 'Koala Insulation' (the brand, per the new decision), or pass the company in from the bundle or settings to RoofReport and summaryText. Add both to the franchise-text item in flow.json notDone or the ledger. Test: a vitest that scans app/, lib/ and components/ (excluding tests, lib/demo, and the documented utility list) for /Koala Insulation of|Newark|\\(302\\)/ in string literals and expects none, plus roofing.test.ts asserting summaryText starts with 'Koala Insulation: roof takeoff'. Both fail today."
+          },
+          {
+            "id": "B8",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s2.mjs with REST down, in a fresh estimator context (no service worker cache): 'B8 fresh phone /field -> http://localhost:3540/unreachable?next=%2Ffield', 'B8 link count 1', then 'B8 after Open the estimates on this phone -> http://localhost:3540/unreachable?next=%2Ffield'.",
+            "reasoning": "app/unreachable/page.tsx phoneAppFor() offers the link for any /field next, without knowing whether a cached shell exists. With no cached shell, sw.js shellNavigation redirects back to /unreachable (sw.js:149-151), or the server does when there is no service worker. The link loops. It only affects a first use or cleared data while the database is down, so low.",
+            "fixSpec": "Render the phone-app link from a small client component that checks `await caches.match('/field')` (or '/crew'), or asks the service worker. Show the link only when a copy exists. Otherwise show 'This phone has no saved copy of the app yet; it needs Koala once.' Test: a Playwright step in a fresh context with REST down expects no 'Open the estimates on this phone' link (fails today: count 1)."
+          },
+          {
+            "id": "B9",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s2.mjs (owner, /admin/pricing, open-cell): 'B9 0.30 unticked: Not saved. $0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24 (Starting range...)', ticked: 'B9 ticked saved; db: 0.3000|0.0600|0.2400'. After a reload, saving again with no change: 'B9 later save with no change: Not saved. $0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24 ...'. Restored: 'restored ocsf cost: 0.1200'. Unit (vt/b5b9.test.ts): costOutsideRange(0.25,...) -> '$0.25 per board ft is 1.7 times more than the usual $0.06 to $0.24'; costOutsideRange(0.05,...) -> '$0.05 per board ft is 3.0 times less than the usual $0.06 to $0.24'.",
+            "reasoning": "saveMaterial (actions.ts:209-215) checks the cost against the stored range on every save. The toggle defaults to off (page.tsx:265), and a confirmed cost does not widen the range. The wording measures against the midpoint ((min+max)/2), so $0.05, 17% under the low end, reads '3.0 times less'. This is a nuisance and misleading wording on an owner screen. Prices are not affected.",
+            "fixSpec": "app/admin/pricing/actions.ts: when cost_confirmed is true and the cost is outside the range, store typical_min = min(min, cost) and typical_max = max(max, cost). Alternatively, skip the check when the cost equals before.cost_per_unit. lib/admin/pricingForms.ts costOutsideRange: say the distance from the nearest edge ('25% above the usual high of $0.24', '17% below the usual low of $0.06'), and use 'N times' only when it is at least 2x the edge. Tests: in pricingForms.test.ts, costOutsideRange(0.30, {0.06,0.24}) contains '25% above'. Add an action test (or e2e) that after a ticked save of 0.30, saving 0.30 again without ticking succeeds. Both fail today."
+          },
+          {
+            "id": "B10",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s2.mjs: the owner has /admin/pricing open, then POST /__e2e/rest {down:true} and Save on the open-cell card: 'B10 save while down after s 8 : Only the owner can change pricing.' The cost was put back to 0.1200 afterwards.",
+            "reasoning": "ownerDb() (actions.ts:57-60) uses getSessionProfile(), which returns null both for 'unreachable' and for 'signed_out' (auth.ts:44-47), so NOT_OWNER is returned. flow.json notDone admits it ('server actions ... still answer their usual role message when the database is down'), so the record is accurate. Behaviour is still wrong for the owner. Nothing was saved, so low.",
+            "fixSpec": "In app/admin/pricing/actions.ts (and the other admin action files that use the same pattern), call getSessionState(). When state === 'unreachable', return failure(UNREACHABLE_BODY.message, e.g. \"Can't reach Koala right now. Nothing was saved.\"); return NOT_OWNER only for signed_out or a non-owner. Test: unit-test the helper with a mocked getSessionState returning {state:'unreachable'}; it should return the unreachable message. Fails today."
+          },
+          {
+            "id": "B11",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s1.mjs: 'B11 queue customer link box: {\"x\":297,\"y\":223.28,\"width\":107.125,\"height\":24}' (owner /estimates at 1280). On the signed customer quote at 390: 'B11 customer quote estimator email link box: {\"x\":93,\"y\":643.69,\"width\":99.61,\"height\":20}'. I did not re-measure the inline 'Use 1,200' button; per the code it is a bare <button className=\"font-semibold underline\"> inside an Alert (AreasStep.tsx:346).",
+            "reasoning": "The design system's minimum is 48 px (components/daymark/Button.tsx:13). The approval-queue link is new on this branch. The 'Use' button and the estimator email link already exist on origin/claude/daymark, and both are inline in a sentence. The customer card also has a separate 48 px email IconLink (parts.tsx:220). Minor.",
+            "fixSpec": "app/estimates/ApprovalQueue.tsx: give the customer Link `inline-flex min-h-12 items-center`. app/field/AreasStep.tsx: render 'Use {n}' with the Button component (size sm, 48 px) under the Alert text. app/q/[token]/parts.tsx:213: add `inline-flex min-h-12 items-center` to the estimator email link, or rely on the IconLink and drop the inline link. Test: the e2e small-target scan at 390 and 1280 reports none of the three (fails today with 107x24 and 100x20)."
+          },
+          {
+            "id": "B12",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s1.mjs: with the item 'Good: $4,556 is 25% above ... Request approval to send $4,556.' I tapped 'Change the price': 'B12 Change the price -> {\"active\":\"BODY#\",\"step\":\"3 Options (current step)\"} card {\"y\":120.6,\"height\":602.7} price editor open: 0'. For 'Finish measuring', fixElementId({step:'areas', open:'measure'}) returns 'area-<id>' (a section, fix.ts:34). The focus effect in EstimateEditor.tsx:188-199 focuses only an HTMLInputElement, and no measure sheet component autofocuses a field (grep of app/field/measure for autoFocus/.focus finds only PitchPhoto and RoofLookup dialogs). I did not re-run the broken-measurement walk.",
+            "reasoning": "Both Fix buttons open the right step or sheet but stop short of the control. The estimator has to find 'Change price' on the card, or the broken field in the sheet. Minor, and nothing in flow.json claims they open the editor.",
+            "fixSpec": "Add an optional `edit?: 'price'` to the options FixTarget. OptionsStep reads focus and opens that tier's price editor, then focuses its 'Customer price' input. For measure, pass the first failing field from measurementChecks (lib/field/measuring.ts) in the target, and have the Measure sheet focus it on open. Test: an e2e step expects document.activeElement to be the Good 'Customer price' input after tapping 'Change the price' (fails today: BODY)."
+          },
+          {
+            "id": "B13",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "s2.mjs, fresh estimator context (no IndexedDB bundle), opening the deep link /field?new=1: 'B13 fresh phone /field?new=1 city/state: \"\" \"\"'. On a phone that already has the bundle (s1.mjs), the same New estimate gives 'city/state Newark DE'.",
+            "reasoning": "FieldApp.tsx:56 reads getCachedBundle()?.business?.newEstimate. With ?new=1, createEstimate runs (line 68) before runSync (line 74) has fetched any bundle, so it is always blank on a first open. A quick tap on the button behaves the same way. The estimator types the town, and the Send checklist names a missing city or state, so nothing wrong reaches a customer.",
+            "fixSpec": "app/field/FieldApp.tsx createEstimate: when getCachedBundle() is empty and navigator.onLine, `await Promise.race([refreshBundle(), timeout(3000)])` before newDraft. Alternatively, fill city and state from the bundle when it arrives if both are still ''. Test: an e2e or Playwright step in a fresh context opening /field?new=1 expects City and State equal to the shop-address town (fails today: '' '')."
+          },
+          {
+            "id": "B14",
+            "verdict": "confirmed",
+            "severity": "low",
+            "reproduction": "APP_PORT=3540 PGRST_PORT=3541 MOCK_PORT=54740 E2E_DB_NAME=koala_revB_flow bash scripts/e2e.sh -> EXIT 2. Log verify/e2e-b14.log: 'NOTICE:  database \"koala_revb_flow\" does not exist, skipping' then 'psql: error: ... FATAL:  database \"koala_revB_flow\" does not exist'. Afterwards pg_database contains koala_revb_flow. The run then passes with E2E_DB_NAME=koala_revb_flow (319 ok, console errors none).",
+            "reasoning": "scripts/e2e.sh:23 interpolates $DB_NAME unquoted into SQL, so Postgres folds it to lower case. Line 20 builds E2E_DB_URL with the mixed-case name. This is a test-script problem only.",
+            "fixSpec": "scripts/e2e.sh: after line 19 add `DB_NAME=\"$(printf '%s' \"$DB_NAME\" | tr '[:upper:]' '[:lower:]')\"` and reject names that do not match ^[a-z_][a-z0-9_]*$. Alternatively, quote the identifier in both statements (\\\"$DB_NAME\\\"). Check: E2E_DB_NAME=koala_revB_flow runs past the database creation (fails today with EXIT 2)."
+          }
+        ],
+        "missed": [
+          "Rerun of the reviewer's baseline at 587ce69 (APP_PORT 3540, db koala_revb_flow): scripts/e2e.sh gives 319 ok and 'console errors: none' after one retry past the Next.js security-upgrade notice, which I did not follow. This matches flow.json.",
+          "I found no new defect in this lens beyond the 14. These variants are stronger forms of reported findings. (1) B3: PATCH /api/approvals/<id> succeeds with 200 and status 'approved' on an estimate the customer has already signed (s1.mjs output above). POST refuses signed estimates (lib/server/approvals.ts) but PATCH does not. (2) B13: the /field?new=1 deep link always starts a blank town and state on a phone's first open, because createEstimate runs before runSync, not only on a fast tap. (3) B7: .env.example:12 also seeds QUOTE_FROM_EMAIL with 'Koala Insulation of Newark'. (4) B1: the phone keeps its own copy of the profile gate (sendChecks 'profile' item, /api/bundle business.gaps, SendStep setup_incomplete). Removing only route.ts:90-96 would still block every send on the phone.",
+          "Checked and correct for gate removal: the PDF (pdf.tsx:120,132), the emails (email.ts:109,115,126,167-185) and the customer page (parts.tsx:55,64,193,228,325,360) leave out license and phone when they are null and never print an empty 'License'. Without a phone, the customer is pointed to the estimator's email. Price approvals RLS: below_floor comes from the client on a direct insert, but approvalCovers (policy.ts:95) requires decided_role 'owner' for a below-floor problem, and the trigger sets decided_role from auth_role(). A falsely flagged request approved by the office therefore cannot get a below-floor price sent. safeNext rejects '//', '/\\\\' and tab variants. proxy.ts always overwrites x-koala-path."
+        ]
+      }
+    }
+  ],
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Review"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "review:database",
+      "phaseIndex": 1,
+      "phaseTitle": "Review",
+      "agentId": "ab8b275c68d4d64bd",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1795064230431,
+      "queuedAt": 1795064230395,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Migration, database, security and compatibility with the li…",
+      "promptPreview": "PROJECT: Koala, an insulation estimating app (Next.js 16 App Router, React 19, Tailwind v4, TypeScript, Supabase with RLS, Dexie offline store, zod, vitest, Playwright e2e via scripts/e2e.sh), being made ready to sell to every franchise of the company.\n\nUNDER REVIEW: branch claude/accuracy at commit 587ce69 (git -C /home/user/koala-estimator fetch origin first), against origin/claude/daymark (9051…",
+      "promptFramed": true,
+      "lastProgressAt": 1795092802394,
+      "tokens": 377018,
+      "toolCalls": 150,
+      "durationMs": 28571962,
+      "resultPreview": "{\"lens\":\"Migration, database, security and compatibility with the live site: supabase/migrations/20261119000001_accuracy.sql, tests/sql, sync_upsert_estimate 'locked', price_approvals and quote_number_counters with their RLS, next_quote_number, /api/approvals and /api/approvals/[id], /api/quotes (approvals, counter, consent), ApprovalQueue, lib/server/auth.ts, proxy.ts x-koala-path, /unreachable, …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "review:flow",
+      "phaseIndex": 1,
+      "phaseTitle": "Review",
+      "agentId": "a339230b5b622fe2e",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1795064230432,
+      "queuedAt": 1795064230395,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "The people using it, end to end, in the running app at 587c…",
+      "promptPreview": "PROJECT: Koala, an insulation estimating app (Next.js 16 App Router, React 19, Tailwind v4, TypeScript, Supabase with RLS, Dexie offline store, zod, vitest, Playwright e2e via scripts/e2e.sh), being made ready to sell to every franchise of the company.\n\nUNDER REVIEW: branch claude/accuracy at commit 587ce69 (git -C /home/user/koala-estimator fetch origin first), against origin/claude/daymark (9051…",
+      "promptFramed": true,
+      "lastProgressAt": 1795066316211,
+      "tokens": 437418,
+      "toolCalls": 178,
+      "durationMs": 2085056,
+      "resultPreview": "{\"lens\":\"The people using it, end to end, in the running app at 587ce69 (estimator on a 390 phone, owner on 1280 desktop and 390 phone, customer; Day, Night and Sun+). Stack: bash scripts/e2e.sh with E2E_KEEP=1 APP_PORT=3540 PGRST_PORT=3541 MOCK_PORT=54740 E2E_DB_NAME=koala_revb_flow (lowercase: see B14). The build stopped once at the security-upgrade notice and was retried once; nothing was upgra…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "verify:flow",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a5f11a3fce5c11e71",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1795066316244,
+      "queuedAt": 1795066316220,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: Koala, an insulation estimating app (Next.js 16 App Router, React 19, Tailwind v4, TypeScript, Supabase with RLS, Dexie offline store, zod, vitest, Playwright e2e via scripts/e2e.sh), being made ready to sell to every franchise of the company.\n\nUNDER REVIEW: branch claude/accuracy at commit 587ce69 (git -C /home/user/koala-estimator fetch origin first), against origin/claude/daymark (9051…",
+      "promptFramed": true,
+      "lastProgressAt": 1795067158664,
+      "tokens": 267621,
+      "toolCalls": 93,
+      "durationMs": 842419,
+      "resultPreview": "{\"verdicts\":[{\"id\":\"B1\",\"verdict\":\"confirmed\",\"severity\":\"high\",\"reproduction\":\"Worktree at 587ce69. I wrote my own scratch vitest with the rows the migrations seed: init.sql:1138 branding {company 'Koala Insulation of Newark', license null, phone null}; phase1.sql:15-17 shop_address, quote_terms, warranty_text; accuracy.sql:126 quote_number_prefix 'KN'. Command: npx vitest run --config /tmp/claud…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "verify:database",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a3f862a5147417f92",
+      "model": "claude-opus-5-5",
+      "state": "done",
+      "startedAt": 1795092802410,
+      "queuedAt": 1795092802405,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "PROJECT: Koala, an insulation estimating app (Next.js 16 App Router, React 19, Tailwind v4, TypeScript, Supabase with RLS, Dexie offline store, zod, vitest, Playwright e2e via scripts/e2e.sh), being made ready to sell to every franchise of the company.\n\nUNDER REVIEW: branch claude/accuracy at commit 587ce69 (git -C /home/user/koala-estimator fetch origin first), against origin/claude/daymark (9051…",
+      "promptFramed": true,
+      "lastProgressAt": 1795093450565,
+      "tokens": 195498,
+      "toolCalls": 73,
+      "durationMs": 648153,
+      "resultPreview": "{\"verdicts\":[{\"id\":\"B1\",\"verdict\":\"confirmed\",\"severity\":\"high\",\"reproduction\":\"My own worktree at 587ce69, my own stack (built with npx next build; the security notice appeared once and the build carried on; app on 3530, PostgREST on 3531, mock on 54730, database koala_revb_db). (1) Plain function: node --experimental-strip-types sn.mts printed \\\"/.//evil.example/x\\\" -> \\\"//evil.example/x\\\", \\\"/a…"
+    }
+  ],
+  "totalTokens": 1277555,
+  "totalToolCalls": 494
+}
