@@ -45,12 +45,17 @@ export interface Violation {
   detail: string;
 }
 
-/** A priced quote as the checks read it. `coefficients` lets the cavity check take the waste out of a priced quantity. */
+/**
+ * A priced quote as the checks read it. `coefficients` lets the cavity check take the waste out of
+ * a priced quantity. `all` is the same quote priced with every option (priceEstimate showAll), so
+ * the checks can see what the customer is not shown (review A F8); without it that is not checked.
+ */
 export interface PricedQuote {
   input: EstimateInput;
   priced: PricedEstimate;
   snapshot: PricingSnapshot;
   coefficients?: CoefficientSet | null;
+  all?: PricedEstimate | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +367,54 @@ export function checkOptionsStepUp({ priced }: Pick<PricedQuote, 'priced'>): Vio
   return out;
 }
 
+const TIER_RANK: Record<string, number> = { good: 0, better: 1, best: 2 };
+
+/**
+ * options_step_up, kinds wrongly_hidden and none_shown (review A F8, OD6): an option priced but not
+ * shown to the customer is hidden for a reason the customer can see: it installs nothing (no work
+ * item); it does the same work (the same items, the same materials) as another option for as much
+ * or more (on a tie, the lower tier is the one kept); or the next option shown above it costs no
+ * more. Read from what the customer would read, not from the engine's own rule. And when any option
+ * has work, at least one is shown. Needs `all` (the showAll result).
+ */
+export function checkHiddenRightly({ priced, snapshot, all }: Pick<PricedQuote, 'priced' | 'snapshot' | 'all'>): Violation[] {
+  if (!all) return [];
+  const out: Violation[] = [];
+  const shown = shownOptions(priced);
+  const shownTiers = new Set(shown.map((o) => o.tier));
+  const hasWork = (o: PricedOption) => workItems(o).length > 0;
+  const work = (o: PricedOption) =>
+    [
+      ...workItems(o).map(workSignature),
+      ...o.lines.filter((l) => l.kind === 'material' && l.areaId !== null && !!snapshot.products.find((p) => p.code === l.product)?.isRBearing).map((l) => `${l.areaId}|${l.product}|${l.materialId}`),
+    ]
+      .sort()
+      .join('\n');
+  const rank = (o: PricedOption) => TIER_RANK[o.tier] ?? 3;
+  for (const o of all.options) {
+    if (shownTiers.has(o.tier) || !hasWork(o)) continue;
+    const price = printedDollars(o.price);
+    const duplicate = all.options.some(
+      (d) => d.tier !== o.tier && hasWork(d) && work(d) === work(o) && (printedDollars(d.price) < price || (printedDollars(d.price) === price && rank(d) < rank(o))),
+    );
+    const above = shown.filter((s) => rank(s) > rank(o)).sort((a, b) => rank(a) - rank(b))[0];
+    const noStepUp = above !== undefined && printedDollars(above.price) <= price;
+    if (!duplicate && !noStepUp) {
+      out.push({
+        invariant: 'options_step_up',
+        kind: 'wrongly_hidden',
+        tier: o.tier,
+        areaId: null,
+        detail: `${o.tier} (${dollarsText(o.price)}) is not shown, but no option does its work for less${above ? ` and ${above.tier} above it costs more (${dollarsText(above.price)})` : ''}`,
+      });
+    }
+  }
+  if (shown.length === 0 && all.options.some(hasWork)) {
+    out.push({ invariant: 'options_step_up', kind: 'none_shown', tier: null, areaId: null, detail: `no option is shown, though ${all.options.filter(hasWork).map((o) => o.tier).join(', ')} has work` });
+  }
+  return out;
+}
+
 /**
  * options_step_up, kind ends_below_existing (review A F9): an option that takes out the insulation
  * already in an area, when the estimator did not say it must go (removalNeeded), ends that area at
@@ -591,6 +644,7 @@ export function checkPricedQuote(q: PricedQuote): Violation[] {
     ...checkItemsAddUp(q),
     ...checkSameWorkSamePrice(q),
     ...checkOptionsStepUp(q),
+    ...checkHiddenRightly(q),
     ...checkEndsAtOrAbove(q),
     ...checkLabelsMatchWork(q),
     ...checkCavityNotOverfilled(q),

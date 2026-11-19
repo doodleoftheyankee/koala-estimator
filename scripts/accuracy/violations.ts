@@ -35,12 +35,14 @@ let noOptions = 0;
 for (const q of quotes) {
   let violations: Violation[];
   try {
-    // What the customer is shown (OD6), and every option priced (showAll) for the count.
+    // What the customer is shown (OD6), and every option priced (showAll).
     const priced = priceEstimate(q.input, bundle.snapshot, bundle.coefficientSet);
-    options += priceEstimate(q.input, bundle.snapshot, bundle.coefficientSet, { showAll: true }).options.length;
+    const all = priceEstimate(q.input, bundle.snapshot, bundle.coefficientSet, { showAll: true });
+    options += all.options.length;
     shown += shownOptions(priced).length;
     if (priced.options.length === 0) noOptions++;
-    violations = checkPricedQuote({ input: q.input, priced, snapshot: bundle.snapshot, coefficients: bundle.coefficientSet });
+    // `all` lets the checks see the options the customer is not shown (were they rightly hidden?).
+    violations = checkPricedQuote({ input: q.input, priced, snapshot: bundle.snapshot, coefficients: bundle.coefficientSet, all });
     if (priced.options.length) {
       const draft = sampleDraft({ id: q.id, input: q.input, selectedTier: q.selectedTier, createdAt: q.issuedAt });
       const doc = sampleQuote(draft, { ...priced, options: shownOptions(priced) }, q.issuedAt, q.validDays);

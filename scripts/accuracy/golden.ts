@@ -108,7 +108,8 @@ export function priceGolden(g: GoldenEstimate, bundle: PricingBundle): PricedGol
   try {
     const priced = priceEstimate(g.input, bundle.snapshot, bundle.coefficientSet);
     const shown = shownOptions(priced);
-    const violations = checkPricedQuote({ input: g.input, priced, snapshot: bundle.snapshot, coefficients: bundle.coefficientSet });
+    const all = priceEstimate(g.input, bundle.snapshot, bundle.coefficientSet, { showAll: true });
+    const violations = checkPricedQuote({ input: g.input, priced, snapshot: bundle.snapshot, coefficients: bundle.coefficientSet, all });
     const draft = sampleDraft({ id: g.id, input: g.input, selectedTier: g.selectedTier, createdAt: g.issuedAt });
     const headline = headlineInputFor(draft, priced, bundle);
     if (shown.length) {

@@ -24,6 +24,7 @@ import {
   checkCavityNotOverfilled,
   checkEndsAtOrAbove,
   checkFiniteAmounts,
+  checkHiddenRightly,
   checkItemsAddUp,
   checkLabelsMatchWork,
   checkOptionsStepUp,
@@ -418,6 +419,39 @@ describe('options_step_up (S1-F7, OD6): the options shown step up', () => {
   it('checks only what is shown: a hidden duplicate is not a violation', () => {
     const hidden = { ...work('best', 5160, 'Cellulose to R-60'), hidden: true } as PricedOption;
     expect(checkOptionsStepUp(quote([work('good', 3720, 'Cellulose to R-49'), work('better', 5160, 'Cellulose to R-60'), hidden]))).toEqual([]);
+  });
+});
+
+describe('options_step_up (review A F8): an option the customer is not shown was rightly hidden', () => {
+  const crawl = area({ id: A1, jobType: 'crawlspace', name: 'Crawlspace', sqft: 800 });
+  const work = (tier: Tier, price: number, description: string) => option(tier, price, { customerItems: [item(description, price), item('Travel and setup', 190, null, 'travel')] });
+  const good = work('good', 2270, 'Fiberglass Batts to R-19 (6.25 in thick), 800 sq ft');
+  const better = work('better', 2830, 'Fiberglass Batts to R-30 (10 in thick), 800 sq ft');
+  const best = work('best', 4660, 'Closed-Cell Spray Foam to R-30 (~4.6" added), 800 sq ft');
+  const hiding = (tier: Tier, options: PricedOption[], all: PricedOption[]) => ({
+    ...quote(options, [crawl]),
+    priced: { options, warnings: [{ code: 'option_hidden' as const, areaId: null, tier, message: `${tier} is not shown` }], crewId: 'crew' },
+    all: { options: all, warnings: [], crewId: 'crew' },
+  });
+  it('an R-30 batt option hidden as "the same work" as the R-19 one, below the next option up, is wrongly hidden', () => {
+    expect(kinds(checkHiddenRightly(hiding('better', [good, best], [good, better, best])))).toEqual(['options_step_up:wrongly_hidden:better']);
+  });
+  it('a duplicate at a higher price, an option priced at or above the next one up, and an empty option are rightly hidden', () => {
+    const repeat = work('better', 2400, 'Fiberglass Batts to R-19 (6.25 in thick), 800 sq ft');
+    expect(checkHiddenRightly(hiding('better', [good, best], [good, repeat, best]))).toEqual([]);
+    const dear = work('better', 4660, 'Fiberglass Batts to R-30 (10 in thick), 800 sq ft');
+    expect(checkHiddenRightly(hiding('better', [good, best], [good, dear, best]))).toEqual([]);
+    const empty = option('better', 1500, { customerItems: [item('Travel and setup', 190, null, 'travel'), item('Minimum job charge', 1310, null, 'minimum')] });
+    expect(checkHiddenRightly(hiding('better', [good, best], [good, empty, best]))).toEqual([]);
+  });
+  it('options with work, and none shown, fails (none_shown)', () => {
+    expect(kinds(checkHiddenRightly({ ...hiding('good', [], [good]), priced: { options: [], warnings: [], crewId: 'crew' } }))).toEqual([
+      'options_step_up:wrongly_hidden:good',
+      'options_step_up:none_shown:null',
+    ]);
+  });
+  it('with no showAll result to compare, there is nothing to check', () => {
+    expect(checkHiddenRightly(quote([good, best], [crawl]))).toEqual([]);
   });
 });
 
