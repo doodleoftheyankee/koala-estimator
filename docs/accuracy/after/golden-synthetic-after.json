@@ -1,0 +1,5692 @@
+{
+  "about": "The synthetic golden set priced on the final commit of Phase 1 (flow stage) with the seeded setup.",
+  "bundle": "5ecebe2c0f390417",
+  "counts": {
+    "estimates": 65,
+    "failing": {
+      "items_add_up": 0,
+      "same_work_same_price": 0,
+      "options_step_up": 0,
+      "labels_match_work": 0,
+      "cavity_not_overfilled": 0,
+      "finite_amounts": 0,
+      "same_price_text": 0,
+      "valid_until_is_expiry": 0
+    },
+    "violations": {
+      "items_add_up": 0,
+      "same_work_same_price": 0,
+      "options_step_up": 0,
+      "labels_match_work": 0,
+      "cavity_not_overfilled": 0,
+      "finite_amounts": 0,
+      "same_price_text": 0,
+      "valid_until_is_expiry": 0
+    }
+  },
+  "estimates": [
+    {
+      "key": "S1-F1",
+      "id": "59357ddc-5700-49b2-82f1-f20ab5fe7acf",
+      "title": "A price typed with cents: Good set to $4,321.50",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4322,
+          "modelPrice": 3130,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,300 sq ft",
+              "price": 2942
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": 1192
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4995,
+          "modelPrice": 4995,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,300 sq ft",
+              "price": 3735
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,300 sq ft)",
+              "price": 884
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 376
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 9285,
+          "modelPrice": 9285,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,300 sq ft)",
+              "price": 2946
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,300 sq ft",
+              "price": 4529
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,300 sq ft)",
+              "price": 884
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 926
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4995
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F2",
+      "id": "e197a658-bc40-46ce-83f2-0b6147418875",
+      "title": "Two garages and a crawlspace: items printed one by one",
+      "options": [
+        {
+          "tier": "better",
+          "price": 11260,
+          "modelPrice": 11260,
+          "label": "Better package",
+          "bullets": [
+            "Seamless coverage over living space",
+            "Moisture-resistant",
+            "Seals out drafts and pests"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Blown Fiberglass to R-30 (~12\" added), 1,002 sq ft",
+              "price": 2556
+            },
+            {
+              "kind": "work",
+              "areaName": "Garage 2",
+              "description": "Blown Fiberglass to R-30 (~12\" added), 2,526 sq ft",
+              "price": 6233
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 368 sq ft",
+              "price": 1911
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 21685,
+          "modelPrice": 21685,
+          "label": "Best package",
+          "bullets": [
+            "Seals and insulates; quieter, more comfortable rooms above",
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Open-Cell Spray Foam to R-30 (~8.1\" added), 1,002 sq ft",
+              "price": 5046
+            },
+            {
+              "kind": "work",
+              "areaName": "Garage 2",
+              "description": "Open-Cell Spray Foam to R-30 (~8.1\" added), 2,526 sq ft",
+              "price": 12415
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 368 sq ft",
+              "price": 1911
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (368 sq ft)",
+              "price": 274
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 2039
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 11260
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F3",
+      "id": "3c9bee9f-c691-425e-8e6b-630e8c64f54d",
+      "title": "Attic with old insulation out, plus walls: the same removal in every option",
+      "options": [
+        {
+          "tier": "good",
+          "price": 8715,
+          "modelPrice": 8715,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 2724
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 1,200 sq ft",
+              "price": 3469
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,400 sq ft",
+              "price": 1778
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 744
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 11970,
+          "modelPrice": 11970,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates",
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 2724
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,200 sq ft",
+              "price": 4191
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,400 sq ft",
+              "price": 3123
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1113
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 16080,
+          "modelPrice": 16080,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency",
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 2724
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,200 sq ft",
+              "price": 4191
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,400 sq ft",
+              "price": 7049
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1297
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 11970
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F4",
+      "id": "069e75bd-5c57-447f-8284-ac2c38be3837",
+      "title": "Walls 1,000 sq ft with no depth entered",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 1297
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 15
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2660,
+          "modelPrice": 2660,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 2288
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 5465,
+          "modelPrice": 5465,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,000 sq ft",
+              "price": 5092
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2660
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F5",
+      "id": "fbe3f93f-67ab-41a9-8d44-4a05af861aed",
+      "title": "Walls 800 sq ft (2x4) with 2 in of cellulose already in them",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-12.6 (~1.5 in added, fills the 3.5 in cavity), 800 sq ft",
+              "price": 917
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 395
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2295,
+          "modelPrice": 2295,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-16.8 (~1.5 in added, fills the 3.5 in cavity), 800 sq ft",
+              "price": 2109
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 186
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F6",
+      "id": "0f704107-0b89-4107-8492-af89fa96d1fd",
+      "title": "Crawlspace 800 sq ft, 2x6 floor, target R-38",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2575,
+          "modelPrice": 2575,
+          "label": "Fiberglass Batts",
+          "bullets": [
+            "Insulates the floor above the crawlspace"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft",
+              "price": 2201
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 7755,
+          "modelPrice": 7755,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Moisture-resistant",
+            "Seals out drafts and pests"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-35.8 (fills the 5.5 in cavity), 800 sq ft",
+              "price": 7196
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 8310,
+          "modelPrice": 8310,
+          "label": "Closed-Cell Foam + Air Sealing",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-35.8 (fills the 5.5 in cavity), 800 sq ft",
+              "price": 7196
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (800 sq ft)",
+              "price": 557
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 557
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 7755
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F7a",
+      "id": "cabbcc06-70b3-49fd-85bc-b00634f9e5af",
+      "title": "Attic 1,200 sq ft, no insulation: Best repeats Better",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3840,
+          "modelPrice": 3840,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 1,200 sq ft",
+              "price": 3469
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5570,
+          "modelPrice": 5570,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,200 sq ft",
+              "price": 4191
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5570
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F7b",
+      "id": "77844c83-76cb-429c-8f2d-c9c7ace05aec",
+      "title": "Attic at R-11, target R-30: \"to Code\" below code",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Blown Cellulose to R-30",
+          "bullets": [
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-30 (~5.3\" added), 1,000 sq ft",
+              "price": 1218
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 187
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 95
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2095,
+          "modelPrice": 2095,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-30 (~5.3\" added), 1,000 sq ft",
+              "price": 1218
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 5350,
+          "modelPrice": 5350,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-30 (~8.3\" added), 1,000 sq ft",
+              "price": 1824
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 556
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2095
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F7c",
+      "id": "f322aec8-ceff-4c5e-876e-44082655c634",
+      "title": "Crawlspace already at R-19: only air sealing is new in Best",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Air Sealing",
+          "bullets": [
+            "Every penetration sealed"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (900 sq ft)",
+              "price": 622
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 690
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F8",
+      "id": "af68c712-6255-4ca1-8063-ee7370c02103",
+      "title": "Sent at 9:30 PM business time (02:30 UTC the next day): Valid until",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2570,
+          "modelPrice": 2570,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10\" added), 1,100 sq ft",
+              "price": 2382
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4185,
+          "modelPrice": 4185,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.1\" added), 1,100 sq ft",
+              "price": 3059
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7850,
+          "modelPrice": 7850,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,100 sq ft)",
+              "price": 2503
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,100 sq ft",
+              "price": 3853
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 741
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4185
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F9",
+      "id": "494fe443-480c-45a5-8915-c1be3b40d26c",
+      "title": "Dense-pack walls 2,200 sq ft, 2x4, long drive",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3070,
+          "modelPrice": 3070,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 2,200 sq ft",
+              "price": 2687
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 383
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5940,
+          "modelPrice": 5940,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 2,200 sq ft",
+              "price": 4793
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1147
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 12490,
+          "modelPrice": 12490,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 2,200 sq ft",
+              "price": 10962
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1528
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5940
+      },
+      "violations": []
+    },
+    {
+      "key": "S1-F9b",
+      "id": "0663a40a-a809-4733-85cf-21c57e855b3f",
+      "title": "Dense-pack walls 1,400 sq ft, 2x6",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2900,
+          "modelPrice": 2900,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-19.8 (fills the 5.5 in cavity), 1,400 sq ft",
+              "price": 2687
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 213
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5345,
+          "modelPrice": 5345,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-20 (~5.4\" added), 1,400 sq ft",
+              "price": 4714
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 631
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7680,
+          "modelPrice": 7680,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,400 sq ft",
+              "price": 7049
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 631
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5345
+      },
+      "violations": []
+    },
+    {
+      "key": "R-walls-650",
+      "id": "faf282a0-92e7-41d6-85e6-24599a3435cb",
+      "title": "Walls 650 sq ft, difficult access",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 650 sq ft",
+              "price": 950
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 165
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 385
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2005,
+          "modelPrice": 2005,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 650 sq ft",
+              "price": 1680
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 325
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 3865,
+          "modelPrice": 3865,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 650 sq ft",
+              "price": 3541
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 324
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2005
+      },
+      "violations": []
+    },
+    {
+      "key": "R-walls-400-down",
+      "id": "7e8166a5-f8f7-4e37-86a3-5ba733176fac",
+      "title": "Walls 400 sq ft, Good 10% down",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1350,
+          "modelPrice": 1500,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 400 sq ft",
+              "price": 615
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 695
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": -150
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 400 sq ft",
+              "price": 1036
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 275
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2345,
+          "modelPrice": 2345,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 400 sq ft",
+              "price": 2157
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "R-walls-bags-up",
+      "id": "b70c0393-bb82-450f-8daf-c41f175a71b9",
+      "title": "Walls 1,000 sq ft, Good bag count +20%",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 1297
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 15
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2660,
+          "modelPrice": 2660,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 2288
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 5465,
+          "modelPrice": 5465,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,000 sq ft",
+              "price": 5092
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2660
+      },
+      "violations": []
+    },
+    {
+      "key": "R-wet-walls",
+      "id": "8ad5a1ae-f3ac-41ad-8b1f-96038e1ce999",
+      "title": "Wet walls 1,200 sq ft (2x4): old batts out",
+      "options": [
+        {
+          "tier": "good",
+          "price": 5480,
+          "modelPrice": 5480,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 3188
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,200 sq ft",
+              "price": 1551
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 741
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 6820,
+          "modelPrice": 6820,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 3188
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,200 sq ft",
+              "price": 2706
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 926
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 10185,
+          "modelPrice": 10185,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 3188
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,200 sq ft",
+              "price": 6071
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 926
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 6820
+      },
+      "violations": []
+    },
+    {
+      "key": "R-attic-walls-rim",
+      "id": "2948fa3f-203d-4454-803e-0cab8a109255",
+      "title": "Attic, walls 900 sq ft and a rim joist 160 sq ft",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4130,
+          "modelPrice": 4130,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity",
+            "Fills the rim joist bays"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 900 sq ft",
+              "price": 2079
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 900 sq ft",
+              "price": 1183
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Fiberglass Batts to R-11 (3.5 in thick), 160 sq ft",
+              "price": 493
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 375
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 6360,
+          "modelPrice": 6360,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates",
+            "Seals and insulates in one step",
+            "Excellent sound dampening",
+            "Seals the biggest air leak in most basements"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 900 sq ft",
+              "price": 2642
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (900 sq ft)",
+              "price": 622
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 900 sq ft",
+              "price": 2079
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Open-Cell Spray Foam to R-10 (~2.7\" added), 160 sq ft",
+              "price": 459
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 558
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 12170,
+          "modelPrice": 12170,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency",
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier",
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (900 sq ft)",
+              "price": 2060
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 900 sq ft",
+              "price": 3177
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (900 sq ft)",
+              "price": 622
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 900 sq ft",
+              "price": 4603
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 160 sq ft",
+              "price": 592
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1116
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 6360
+      },
+      "violations": []
+    },
+    {
+      "key": "R-L3",
+      "id": "8fdedd33-96d3-4788-8f71-1137a0f97a61",
+      "title": "Attic 900 sq ft at R-19, Better set to $3,000",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1800,
+          "modelPrice": 1800,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~8.3\" added), 900 sq ft",
+              "price": 1612
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3000,
+          "modelPrice": 3095,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~11.4\" added), 900 sq ft",
+              "price": 2153
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (900 sq ft)",
+              "price": 568
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": -95
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 6070,
+          "modelPrice": 6070,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (900 sq ft)",
+              "price": 1879
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 900 sq ft",
+              "price": 3063
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (900 sq ft)",
+              "price": 568
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3000
+      },
+      "violations": []
+    },
+    {
+      "key": "R-L6",
+      "id": "5e743590-2d2d-4395-8d87-8d76595b5295",
+      "title": "Attic 900 sq ft, Good set to $0.40",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2735,
+          "modelPrice": 2735,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 900 sq ft",
+              "price": 2549
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 186
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4005,
+          "modelPrice": 4005,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 900 sq ft",
+              "price": 3063
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (900 sq ft)",
+              "price": 568
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4005
+      },
+      "violations": []
+    },
+    {
+      "key": "R-L17",
+      "id": "395f4a82-45ee-4817-8265-cc72ae85e2c5",
+      "title": "Attic 0.3 sq ft",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 0.3 sq ft",
+              "price": 161
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (0.3 sq ft)",
+              "price": 33
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 186
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 1120
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "R-L19",
+      "id": "c189db84-2076-4ea9-83e4-d70dbbbf849b",
+      "title": "Walls 1,000 sq ft (2x4) full of R-11 batts",
+      "options": [],
+      "headline": null,
+      "violations": []
+    },
+    {
+      "key": "R-L20",
+      "id": "a6777ad4-27cd-48b9-8442-5479d4c86508",
+      "title": "Walls 1,000 sq ft (2x6), target R-13",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2090,
+          "modelPrice": 2090,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-19.8 (fills the 5.5 in cavity), 1,000 sq ft",
+              "price": 1901
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2525,
+          "modelPrice": 2525,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (~3.5\" added), 1,000 sq ft",
+              "price": 2155
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 370
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 3630,
+          "modelPrice": 3630,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-13 (~2\" added), 1,000 sq ft",
+              "price": 3260
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 370
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2525
+      },
+      "violations": []
+    },
+    {
+      "key": "R-rim-min",
+      "id": "102b7791-7af3-4c0b-8591-49e62c3076d4",
+      "title": "Rim joist 180 sq ft: every option at the minimum job price",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 180 sq ft",
+              "price": 641
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 670
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "R-rim-one-price",
+      "id": "07f2ba12-d363-4c70-8050-32689ba2f6bb",
+      "title": "Rim joist 220 sq ft: the estimator set all three to one price",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1800,
+          "modelPrice": 1500,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 220 sq ft",
+              "price": 739
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 186
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 575
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": 300
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1800
+      },
+      "violations": []
+    },
+    {
+      "key": "T01",
+      "id": "3d8bd18e-b268-4e58-87f0-566059cec81d",
+      "title": "Attic 1,500 sq ft, R-11",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3730,
+          "modelPrice": 3730,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,500 sq ft",
+              "price": 3359
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5870,
+          "modelPrice": 5870,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,500 sq ft",
+              "price": 4296
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,500 sq ft)",
+              "price": 1015
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 10535,
+          "modelPrice": 10535,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,500 sq ft)",
+              "price": 3389
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,500 sq ft",
+              "price": 5205
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,500 sq ft)",
+              "price": 1015
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 926
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5870
+      },
+      "violations": []
+    },
+    {
+      "key": "T02",
+      "id": "05b36c46-e03d-4c2d-8bb9-f94a28240de1",
+      "title": "Attic 2,200 sq ft, R-19, easy",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4085,
+          "modelPrice": 4085,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~8.3\" added), 2,200 sq ft",
+              "price": 3714
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 6945,
+          "modelPrice": 6945,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~11.4\" added), 2,200 sq ft",
+              "price": 5046
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (2,200 sq ft)",
+              "price": 1341
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 558
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 14430,
+          "modelPrice": 14430,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (2,200 sq ft)",
+              "price": 4496
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 2,200 sq ft",
+              "price": 7295
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (2,200 sq ft)",
+              "price": 1341
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1298
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 6945
+      },
+      "violations": []
+    },
+    {
+      "key": "T03",
+      "id": "77022ba0-a1df-4aaf-86b5-4f7509858c66",
+      "title": "Attic 850 sq ft, R-30, scuttle",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~5.3\" added), 850 sq ft",
+              "price": 1065
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 185
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 250
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2555,
+          "modelPrice": 2555,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~8.3\" added), 850 sq ft",
+              "price": 1591
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (850 sq ft)",
+              "price": 590
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 6120,
+          "modelPrice": 6120,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (850 sq ft)",
+              "price": 1949
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 850 sq ft",
+              "price": 3021
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (850 sq ft)",
+              "price": 590
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2555
+      },
+      "violations": []
+    },
+    {
+      "key": "T04",
+      "id": "2eb9ed9c-7590-46c9-8de3-ddf89456a7be",
+      "title": "Attic 1,800 sq ft, vermiculite out",
+      "options": [
+        {
+          "tier": "good",
+          "price": 11020,
+          "modelPrice": 11020,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,800 sq ft)",
+              "price": 4537
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 1,800 sq ft",
+              "price": 5370
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1113
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 13715,
+          "modelPrice": 13715,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,800 sq ft)",
+              "price": 4537
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,800 sq ft",
+              "price": 6522
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,800 sq ft)",
+              "price": 1357
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1299
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 13715
+      },
+      "violations": []
+    },
+    {
+      "key": "T05",
+      "id": "63220a7e-854b-48fb-8585-64e38552b224",
+      "title": "Attic 1,250 sq ft, rodent damage, removal",
+      "options": [
+        {
+          "tier": "good",
+          "price": 7165,
+          "modelPrice": 7165,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,250 sq ft)",
+              "price": 2835
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 1,250 sq ft",
+              "price": 3588
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 742
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 8990,
+          "modelPrice": 8990,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,250 sq ft)",
+              "price": 2835
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,250 sq ft",
+              "price": 4374
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,250 sq ft)",
+              "price": 852
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 929
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 8990
+      },
+      "violations": []
+    },
+    {
+      "key": "T06",
+      "id": "5e7bdb69-a24b-4b89-8e58-772bfa4981d6",
+      "title": "Attic 1,000 sq ft, R-38 already",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~3.1\" added), 1,000 sq ft",
+              "price": 767
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 545
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2435,
+          "modelPrice": 2435,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~6.1\" added), 1,000 sq ft",
+              "price": 1373
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2435
+      },
+      "violations": []
+    },
+    {
+      "key": "T07",
+      "id": "79ca87e8-a0f3-4de9-8578-e43efc20d123",
+      "title": "Walls 1,600 sq ft (2x4), empty",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2195,
+          "modelPrice": 2195,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,600 sq ft",
+              "price": 2006
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4100,
+          "modelPrice": 4100,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,600 sq ft",
+              "price": 3541
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 8585,
+          "modelPrice": 8585,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,600 sq ft",
+              "price": 8027
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 558
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "good",
+        "price": 2195
+      },
+      "violations": []
+    },
+    {
+      "key": "T08",
+      "id": "6febb62e-c6bb-4b42-83c4-4c4aa3112972",
+      "title": "Walls 900 sq ft (2x6), empty",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1970,
+          "modelPrice": 1970,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-19.8 (fills the 5.5 in cavity), 900 sq ft",
+              "price": 1783
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 187
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3475,
+          "modelPrice": 3475,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-20 (~5.4\" added), 900 sq ft",
+              "price": 3102
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 4975,
+          "modelPrice": 4975,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 900 sq ft",
+              "price": 4603
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3475
+      },
+      "violations": []
+    },
+    {
+      "key": "T09",
+      "id": "5e3c49d6-1131-40f8-8dd7-23124609727d",
+      "title": "Walls 2,400 sq ft, no depth entered",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3130,
+          "modelPrice": 3130,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 2,400 sq ft",
+              "price": 2941
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5770,
+          "modelPrice": 5770,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 2,400 sq ft",
+              "price": 5211
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 12680,
+          "modelPrice": 12680,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 2,400 sq ft",
+              "price": 11940
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5770
+      },
+      "violations": []
+    },
+    {
+      "key": "T10",
+      "id": "82cff08d-a510-42b1-84e5-e858004e802e",
+      "title": "Crawlspace 1,100 sq ft (2x8)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3375,
+          "modelPrice": 3375,
+          "label": "Fiberglass Batts",
+          "bullets": [
+            "Insulates the floor above the crawlspace"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 1,100 sq ft",
+              "price": 3001
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5685,
+          "modelPrice": 5685,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Moisture-resistant",
+            "Seals out drafts and pests"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 1,100 sq ft",
+              "price": 5313
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 6625,
+          "modelPrice": 6625,
+          "label": "Closed-Cell Foam + Air Sealing",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 1,100 sq ft",
+              "price": 5313
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5685
+      },
+      "violations": []
+    },
+    {
+      "key": "T11",
+      "id": "2f21e04a-d773-46bd-84b3-f69b2f2e03e6",
+      "title": "Crawlspace 600 sq ft, no depth",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2310,
+          "modelPrice": 2310,
+          "label": "Fiberglass Batts",
+          "bullets": [
+            "Insulates the floor above the crawlspace"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 600 sq ft",
+              "price": 1939
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3680,
+          "modelPrice": 3680,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Moisture-resistant",
+            "Seals out drafts and pests"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 600 sq ft",
+              "price": 3307
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 4215,
+          "modelPrice": 4215,
+          "label": "Closed-Cell Foam + Air Sealing",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 600 sq ft",
+              "price": 3307
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (600 sq ft)",
+              "price": 535
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3680
+      },
+      "violations": []
+    },
+    {
+      "key": "T12",
+      "id": "c5a330ca-c5ab-475d-8f64-fb505672a113",
+      "title": "Rim joist 140 sq ft",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 140 sq ft",
+              "price": 543
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 187
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 770
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "T13",
+      "id": "70530c5c-a768-4226-8627-54eea2a8fd27",
+      "title": "Rim joist 320 sq ft, R-11 batts already",
+      "options": [],
+      "headline": null,
+      "violations": []
+    },
+    {
+      "key": "T14",
+      "id": "9ebef66a-e88a-40e5-85b3-73f287e4f3bb",
+      "title": "Garage ceiling 480 sq ft",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Blown Fiberglass",
+          "bullets": [
+            "Seamless coverage over living space"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Blown Fiberglass to R-30 (~12\" added), 480 sq ft",
+              "price": 1302
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 10
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2895,
+          "modelPrice": 2895,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates; quieter, more comfortable rooms above"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Open-Cell Spray Foam to R-30 (~8.1\" added), 480 sq ft",
+              "price": 2522
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "T15",
+      "id": "e181c9b5-a34a-42e1-8095-dd9261a7a7ce",
+      "title": "Garage 650 sq ft (2x6 ceiling)",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Blown Fiberglass",
+          "bullets": [
+            "Seamless coverage over living space"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Blown Fiberglass to R-13.8 (fills the 5.5 in cavity), 650 sq ft",
+              "price": 882
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 430
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2705,
+          "modelPrice": 2705,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates; quieter, more comfortable rooms above"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Garage",
+              "description": "Open-Cell Spray Foam to R-20.4 (fills the 5.5 in cavity), 650 sq ft",
+              "price": 2333
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "T16",
+      "id": "69571bc2-1821-4a70-84d6-94cbb346cf79",
+      "title": "Commercial 6,000 sq ft",
+      "options": [
+        {
+          "tier": "good",
+          "price": 15520,
+          "modelPrice": 15520,
+          "label": "Blown Fiberglass",
+          "bullets": [
+            "Cost-effective code compliance"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Blown Fiberglass to R-30 (~12\" added), 6,000 sq ft",
+              "price": 14593
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 927
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 34450,
+          "modelPrice": 34450,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Air seal and insulate in one step"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Open-Cell Spray Foam to R-30 (~8.1\" added), 6,000 sq ft",
+              "price": 29214
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 5236
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 48535,
+          "modelPrice": 48535,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch; moisture and air barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Closed-Cell Spray Foam to R-30 (~4.6\" added), 6,000 sq ft",
+              "price": 44224
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 4311
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 34450
+      },
+      "violations": []
+    },
+    {
+      "key": "T17",
+      "id": "2d2d701e-0335-4050-8651-d5c9ee16e93f",
+      "title": "Commercial 14,500 sq ft, R-19 target",
+      "options": [
+        {
+          "tier": "good",
+          "price": 23315,
+          "modelPrice": 23315,
+          "label": "Blown Fiberglass",
+          "bullets": [],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Blown Fiberglass to R-19 (~7.6\" added), 14,500 sq ft",
+              "price": 22279
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1036
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 51075,
+          "modelPrice": 51075,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Air seal and insulate in one step"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Open-Cell Spray Foam to R-19 (~5.1\" added), 14,500 sq ft",
+              "price": 44607
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 6468
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 73270,
+          "modelPrice": 73270,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch; moisture and air barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 14,500 sq ft",
+              "price": 67581
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 5689
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 51075
+      },
+      "violations": []
+    },
+    {
+      "key": "T18",
+      "id": "ff5e79ca-4ef2-4405-8e74-dc16bdd7b922",
+      "title": "Attic 1,400 sq ft and rim joist 150 sq ft",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3975,
+          "modelPrice": 3975,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Fills the rim joist bays"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,400 sq ft",
+              "price": 3137
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Fiberglass Batts to R-11 (3.5 in thick), 150 sq ft",
+              "price": 467
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5955,
+          "modelPrice": 5955,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates",
+            "Seals the biggest air leak in most basements"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,400 sq ft",
+              "price": 4002
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,400 sq ft)",
+              "price": 950
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Open-Cell Spray Foam to R-10 (~2.7\" added), 150 sq ft",
+              "price": 442
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 561
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 10665,
+          "modelPrice": 10665,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency",
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,400 sq ft)",
+              "price": 3167
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,400 sq ft",
+              "price": 4868
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,400 sq ft)",
+              "price": 950
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 150 sq ft",
+              "price": 568
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1112
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5955
+      },
+      "violations": []
+    },
+    {
+      "key": "T19",
+      "id": "32cd3d7c-99b9-4a5c-8bac-fbc4f604f3cd",
+      "title": "Crawlspace 800 sq ft and rim joist 120 sq ft",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2960,
+          "modelPrice": 2960,
+          "label": "Good package",
+          "bullets": [
+            "Insulates the floor above the crawlspace",
+            "Fills the rim joist bays"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 800 sq ft",
+              "price": 2201
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Fiberglass Batts to R-11 (3.5 in thick), 120 sq ft",
+              "price": 387
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4685,
+          "modelPrice": 4685,
+          "label": "Better package",
+          "bullets": [
+            "Moisture-resistant",
+            "Seals out drafts and pests",
+            "Seals the biggest air leak in most basements"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 800 sq ft",
+              "price": 3919
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Open-Cell Spray Foam to R-10 (~2.7\" added), 120 sq ft",
+              "price": 394
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 5530,
+          "modelPrice": 5530,
+          "label": "Best package",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors",
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 800 sq ft",
+              "price": 3919
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (800 sq ft)",
+              "price": 557
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 120 sq ft",
+              "price": 494
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4685
+      },
+      "violations": []
+    },
+    {
+      "key": "T20",
+      "id": "3959bb5c-0f8b-4cda-89e0-456db5ad0432",
+      "title": "Attic 1,600 sq ft and walls 1,200 sq ft (2x4)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4760,
+          "modelPrice": 4760,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~8.3\" added), 1,600 sq ft",
+              "price": 2839
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,200 sq ft",
+              "price": 1551
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 370
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 8375,
+          "modelPrice": 8375,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates",
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~11.4\" added), 1,600 sq ft",
+              "price": 3847
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,600 sq ft)",
+              "price": 1081
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,200 sq ft",
+              "price": 2706
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 741
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 17790,
+          "modelPrice": 17790,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency",
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,600 sq ft)",
+              "price": 3610
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,600 sq ft",
+              "price": 5543
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,600 sq ft)",
+              "price": 1081
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,200 sq ft",
+              "price": 6071
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1485
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 8375
+      },
+      "violations": []
+    },
+    {
+      "key": "T21",
+      "id": "e0ec4414-0404-4d7c-8473-77551117b718",
+      "title": "Two attics (house and addition)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4610,
+          "modelPrice": 4610,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,300 sq ft",
+              "price": 2942
+            },
+            {
+              "kind": "work",
+              "areaName": "Addition attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 420 sq ft",
+              "price": 1297
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 371
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 7045,
+          "modelPrice": 7045,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,300 sq ft",
+              "price": 3735
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,300 sq ft)",
+              "price": 884
+            },
+            {
+              "kind": "work",
+              "areaName": "Addition attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 420 sq ft",
+              "price": 1559
+            },
+            {
+              "kind": "work",
+              "areaName": "Addition attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (420 sq ft)",
+              "price": 308
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 11340,
+          "modelPrice": 11340,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,300 sq ft)",
+              "price": 2946
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,300 sq ft",
+              "price": 4529
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,300 sq ft)",
+              "price": 884
+            },
+            {
+              "kind": "work",
+              "areaName": "Addition attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 420 sq ft",
+              "price": 1559
+            },
+            {
+              "kind": "work",
+              "areaName": "Addition attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (420 sq ft)",
+              "price": 308
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1114
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 7045
+      },
+      "violations": []
+    },
+    {
+      "key": "T22",
+      "id": "eea12cf2-4352-4ed7-8a57-85fce8b68784",
+      "title": "Whole house: attic, walls, crawlspace, rim joist",
+      "options": [
+        {
+          "tier": "good",
+          "price": 9000,
+          "modelPrice": 9000,
+          "label": "Good package",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Insulates the floor above the crawlspace",
+            "Fills the rim joist bays"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10\" added), 1,500 sq ft",
+              "price": 3177
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,700 sq ft",
+              "price": 2119
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 900 sq ft",
+              "price": 2467
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Fiberglass Batts to R-11 (3.5 in thick), 160 sq ft",
+              "price": 493
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 744
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 15020,
+          "modelPrice": 15020,
+          "label": "Better package",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates",
+            "Seals and insulates in one step",
+            "Excellent sound dampening",
+            "Moisture-resistant",
+            "Seals out drafts and pests",
+            "Seals the biggest air leak in most basements"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.1\" added), 1,500 sq ft",
+              "price": 4113
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,500 sq ft)",
+              "price": 1015
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,700 sq ft",
+              "price": 3749
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 900 sq ft",
+              "price": 4383
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Open-Cell Spray Foam to R-10 (~2.7\" added), 160 sq ft",
+              "price": 459
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1301
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 25760,
+          "modelPrice": 25760,
+          "label": "Best package",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency",
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier",
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors",
+            "Air, moisture and thermal barrier in one"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,500 sq ft)",
+              "price": 3389
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,500 sq ft",
+              "price": 5205
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,500 sq ft)",
+              "price": 1015
+            },
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,700 sq ft",
+              "price": 8516
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 900 sq ft",
+              "price": 4383
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (900 sq ft)",
+              "price": 622
+            },
+            {
+              "kind": "work",
+              "areaName": "Basement rim joist",
+              "description": "Closed-Cell Spray Foam to R-10 (~1.5\" added), 160 sq ft",
+              "price": 592
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 2038
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 15020
+      },
+      "violations": []
+    },
+    {
+      "key": "T23",
+      "id": "601be9c0-c197-4732-8848-222040db69fb",
+      "title": "Attic 1,000 sq ft, crew picked",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2465,
+          "modelPrice": 2465,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,000 sq ft",
+              "price": 2275
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3970,
+          "modelPrice": 3970,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,000 sq ft",
+              "price": 2908
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3970
+      },
+      "violations": []
+    },
+    {
+      "key": "T24",
+      "id": "6c2a9ce5-8eb8-4d3d-8408-0a439dfdaefb",
+      "title": "Attic 1,700 sq ft, Better 8% up with a reason",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3395,
+          "modelPrice": 3395,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~8.3\" added), 1,700 sq ft",
+              "price": 3021
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 5600,
+          "modelPrice": 5780,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~11.4\" added), 1,700 sq ft",
+              "price": 4074
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,700 sq ft)",
+              "price": 1146
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 560
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": -180
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 11970,
+          "modelPrice": 11970,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,700 sq ft)",
+              "price": 3832
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,700 sq ft",
+              "price": 5882
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,700 sq ft)",
+              "price": 1146
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 1110
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 5600
+      },
+      "violations": []
+    },
+    {
+      "key": "T25",
+      "id": "37d5f356-9fd6-4eb9-8321-00ab2a3450d7",
+      "title": "Walls 1,000 sq ft (2x4), labor hours +40% on Better",
+      "options": [
+        {
+          "tier": "good",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Dense-Pack Cellulose",
+          "bullets": [
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 1297
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 15
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 2135,
+          "modelPrice": 2660,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,000 sq ft",
+              "price": 1946
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 5465,
+          "modelPrice": 5465,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 1,000 sq ft",
+              "price": 5092
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 2135
+      },
+      "violations": []
+    },
+    {
+      "key": "E01",
+      "id": "e40b44db-aefa-4769-8ab8-c125ab859d7d",
+      "title": "Walls 9 sq ft (a patch)",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 9 sq ft",
+              "price": 245
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 1065
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "E02",
+      "id": "dbcf8dab-1b7c-4cc4-8d69-edc6568bc39d",
+      "title": "Attic 200,000 sq ft (the size cap)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 641295,
+          "modelPrice": 641295,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~13.6\" added), 200,000 sq ft",
+              "price": 552372
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 88923
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 968785,
+          "modelPrice": 968785,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 200,000 sq ft",
+              "price": 676344
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (200,000 sq ft)",
+              "price": 131008
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 161433
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 968785
+      },
+      "violations": []
+    },
+    {
+      "key": "E03",
+      "id": "a5103329-e1cf-49cb-86be-aa7b4dfc8b0e",
+      "title": "Commercial 200,000 sq ft, extreme access",
+      "options": [
+        {
+          "tier": "good",
+          "price": 595230,
+          "modelPrice": 595230,
+          "label": "Blown Fiberglass",
+          "bullets": [
+            "Cost-effective code compliance"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Blown Fiberglass to R-30 (~12\" added), 200,000 sq ft",
+              "price": 505779
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 89451
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 1884640,
+          "modelPrice": 1884640,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Air seal and insulate in one step"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Open-Cell Spray Foam to R-30 (~8.1\" added), 200,000 sq ft",
+              "price": 1163228
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 721412
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2251330,
+          "modelPrice": 2251330,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch; moisture and air barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Commercial area",
+              "description": "Closed-Cell Spray Foam to R-30 (~4.6\" added), 200,000 sq ft",
+              "price": 1634921
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 616409
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1884640
+      },
+      "violations": []
+    },
+    {
+      "key": "E04",
+      "id": "06b13739-f29f-48fb-82bc-9d050953ad1e",
+      "title": "No drive time entered",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2585,
+          "modelPrice": 2585,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,100 sq ft",
+              "price": 2497
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 88
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4105,
+          "modelPrice": 4105,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,100 sq ft",
+              "price": 3175
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 177
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7460,
+          "modelPrice": 7460,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,100 sq ft)",
+              "price": 2503
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,100 sq ft",
+              "price": 3853
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 351
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4105
+      },
+      "violations": []
+    },
+    {
+      "key": "E05",
+      "id": "80fee6a6-0240-4dea-80d2-ff26c057c59a",
+      "title": "Drive time 0 (next door)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2585,
+          "modelPrice": 2585,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,100 sq ft",
+              "price": 2497
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 88
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4105,
+          "modelPrice": 4105,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,100 sq ft",
+              "price": 3175
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 177
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7460,
+          "modelPrice": 7460,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,100 sq ft)",
+              "price": 2503
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,100 sq ft",
+              "price": 3853
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 351
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4105
+      },
+      "violations": []
+    },
+    {
+      "key": "E06",
+      "id": "a23582a4-6350-4fea-83ef-5bb45287b66c",
+      "title": "Drive time 600 min (the limit)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 4975,
+          "modelPrice": 4975,
+          "label": "Fiberglass Batts",
+          "bullets": [
+            "Insulates the floor above the crawlspace"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 700 sq ft",
+              "price": 1935
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 3040
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 9535,
+          "modelPrice": 9535,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Moisture-resistant",
+            "Seals out drafts and pests"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 700 sq ft",
+              "price": 3454
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 6081
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 10030,
+          "modelPrice": 10030,
+          "label": "Closed-Cell Foam + Air Sealing",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 700 sq ft",
+              "price": 3454
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (700 sq ft)",
+              "price": 491
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 6085
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 9535
+      },
+      "violations": []
+    },
+    {
+      "key": "E07",
+      "id": "5bc87d9e-c179-4510-81d5-3e4a86fd82f5",
+      "title": "A crew id that is not in the setup",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2685,
+          "modelPrice": 2685,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,100 sq ft",
+              "price": 2497
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 4300,
+          "modelPrice": 4300,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,100 sq ft",
+              "price": 3175
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7850,
+          "modelPrice": 7850,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,100 sq ft)",
+              "price": 2503
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,100 sq ft",
+              "price": 3853
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,100 sq ft)",
+              "price": 753
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 741
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4300
+      },
+      "violations": []
+    },
+    {
+      "key": "E08",
+      "id": "bdf1bf7d-7817-4685-8d1b-f68fdcc1b594",
+      "title": "Existing material in lower case, no depth",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Open-Cell Spray Foam",
+          "bullets": [
+            "Seals and insulates in one step",
+            "Excellent sound dampening"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Open-Cell Spray Foam to R-12.8 (~1.56 in added, fills the 3.5 in cavity), 900 sq ft",
+              "price": 1036
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 275
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 2615,
+          "modelPrice": 2615,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-17.1 (~1.56 in added, fills the 3.5 in cavity), 900 sq ft",
+              "price": 2426
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 189
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "E09",
+      "id": "e23494d9-6a28-4529-8c02-bd138d33e690",
+      "title": "Existing insulation with a depth but no R-value",
+      "options": [
+        {
+          "tier": "best",
+          "price": 1500,
+          "modelPrice": 1500,
+          "label": "Closed-Cell Spray Foam",
+          "bullets": [
+            "Highest R per inch",
+            "Adds wall rigidity and a moisture barrier"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Exterior walls",
+              "description": "Closed-Cell Spray Foam to R-3.3 (~0.5 in added, fills the 3.5 in cavity), 900 sq ft",
+              "price": 917
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 188
+            },
+            {
+              "kind": "minimum",
+              "areaName": "",
+              "description": "Minimum job charge",
+              "price": 395
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 1500
+      },
+      "violations": []
+    },
+    {
+      "key": "E10",
+      "id": "477f7ae0-b26c-4d5f-805f-b2bd571ae2fd",
+      "title": "Attic target above code (R-70)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 5240,
+          "modelPrice": 5240,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-70 (~19.4\" added), 1,200 sq ft",
+              "price": 4867
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 373
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 6245,
+          "modelPrice": 6245,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-70 (~19.4\" added), 1,200 sq ft",
+              "price": 4867
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 6245
+      },
+      "violations": []
+    },
+    {
+      "key": "E11",
+      "id": "3c05baa7-4e4a-4ca3-82aa-21a58d14f579",
+      "title": "Good 30% up with cents",
+      "options": [
+        {
+          "tier": "better",
+          "price": 4660,
+          "modelPrice": 4660,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,200 sq ft",
+              "price": 3469
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 372
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 8660,
+          "modelPrice": 8660,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,200 sq ft)",
+              "price": 2724
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,200 sq ft",
+              "price": 4191
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,200 sq ft)",
+              "price": 819
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 926
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 4660
+      },
+      "violations": []
+    },
+    {
+      "key": "E12",
+      "id": "356f4fc3-1274-4bca-8b56-8ccda64a3b5e",
+      "title": "Best 30% down",
+      "options": [
+        {
+          "tier": "good",
+          "price": 3105,
+          "modelPrice": 3105,
+          "label": "Fiberglass Batts",
+          "bullets": [
+            "Insulates the floor above the crawlspace"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Fiberglass Batts to R-19 (6.25 in thick), 1,000 sq ft",
+              "price": 2735
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 370
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 4200,
+          "modelPrice": 6095,
+          "label": "Closed-Cell Foam + Air Sealing",
+          "bullets": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 1,000 sq ft",
+              "price": 4848
+            },
+            {
+              "kind": "work",
+              "areaName": "Crawlspace",
+              "description": "Air sealing of the rim, penetrations and gaps in the floor above (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 559
+            },
+            {
+              "kind": "adjustment",
+              "areaName": "",
+              "description": "Price adjustment",
+              "price": -1895
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "best",
+        "price": 4200
+      },
+      "violations": []
+    },
+    {
+      "key": "E13",
+      "id": "54304c86-dc3a-49c5-8f4a-cd185ac80ce0",
+      "title": "Picked Good where Good is not offered (attic already at code)",
+      "options": [
+        {
+          "tier": "better",
+          "price": 1645,
+          "modelPrice": 1645,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~3.1\" added), 1,000 sq ft",
+              "price": 767
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 1645
+      },
+      "violations": []
+    },
+    {
+      "key": "E14",
+      "id": "955d7b1e-25e2-4bf3-8225-2c3dfe1488b2",
+      "title": "Sent at 6:59 PM business time on Dec 31 (UTC is already the new year)",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2465,
+          "modelPrice": 2465,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,000 sq ft",
+              "price": 2275
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3970,
+          "modelPrice": 3970,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,000 sq ft",
+              "price": 2908
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3970
+      },
+      "violations": []
+    },
+    {
+      "key": "E15",
+      "id": "59983883-aa26-44be-8762-de6d0efab4a6",
+      "title": "Sent on the night clocks go back",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2465,
+          "modelPrice": 2465,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,000 sq ft",
+              "price": 2275
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3970,
+          "modelPrice": 3970,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,000 sq ft",
+              "price": 2908
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3970
+      },
+      "violations": []
+    },
+    {
+      "key": "E16",
+      "id": "6ee97cd7-d12b-4956-8916-b0770761d31e",
+      "title": "Sent the night clocks go forward, valid 60 days",
+      "options": [
+        {
+          "tier": "good",
+          "price": 2465,
+          "modelPrice": 2465,
+          "label": "Blown Cellulose to Code",
+          "bullets": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-49 (~10.6\" added), 1,000 sq ft",
+              "price": 2275
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 190
+            }
+          ]
+        },
+        {
+          "tier": "better",
+          "price": 3970,
+          "modelPrice": 3970,
+          "label": "Air Seal + Blown Cellulose",
+          "bullets": [
+            "Seals the leaks that drive drafts and high bills",
+            "Dense cellulose blocks air movement",
+            "Eligible for most utility rebates"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~13.6\" added), 1,000 sq ft",
+              "price": 2908
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 374
+            }
+          ]
+        },
+        {
+          "tier": "best",
+          "price": 7225,
+          "modelPrice": 7225,
+          "label": "Remove, Air Seal + Cellulose",
+          "bullets": [
+            "Old, dirty or damaged insulation removed",
+            "Full air sealing before new insulation",
+            "Best comfort and efficiency"
+          ],
+          "items": [
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Remove and dispose of existing insulation (1,000 sq ft)",
+              "price": 2282
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Blown Cellulose to R-60 (~16.7\" added), 1,000 sq ft",
+              "price": 3515
+            },
+            {
+              "kind": "work",
+              "areaName": "Attic",
+              "description": "Air sealing of top plates, penetrations and bypasses (1,000 sq ft)",
+              "price": 688
+            },
+            {
+              "kind": "travel",
+              "areaName": "",
+              "description": "Travel and setup",
+              "price": 740
+            }
+          ]
+        }
+      ],
+      "headline": {
+        "tier": "better",
+        "price": 3970
+      },
+      "violations": []
+    }
+  ]
+}
