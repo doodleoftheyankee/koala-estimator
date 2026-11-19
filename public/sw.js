@@ -18,7 +18,7 @@
  *    a crew member never gets someone else's priced /field shell.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;

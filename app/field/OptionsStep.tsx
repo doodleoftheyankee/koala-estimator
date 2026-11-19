@@ -8,7 +8,7 @@ import { ackState, ackSummary, flagsForOption, isAcknowledged, setDeviationAck }
 import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, setPriceOverride, tiersWithLine } from '@/lib/field/lineOverrides';
 import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor, type PriceAdvice } from '@/lib/field/priceAdvice';
 import { recommendedTier } from '@/lib/field/recommended';
-import { formatDateTime, num, pct, TIER_LABELS, usd } from '@/lib/format';
+import { formatDateTime, formatMoney, num, pct, TIER_LABELS, usd } from '@/lib/format';
 import { Alert, Badge, Button, Card, Field, Input, Select, cx } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import { Icon, Star } from '@/components/daymark';
@@ -218,10 +218,14 @@ function OptionCard({
           </div>
         </div>
 
-        <ul className="mt-3 space-y-1 text-sm">
+        {/* What the customer's quote lists: each piece of work at its own price (the same in every
+            option), then travel and setup, any minimum job charge and any price change. They add up
+            to the price above. */}
+        <ul className="mt-3 space-y-1 text-sm" aria-label="What the price is made of">
           {o.customerItems.map((it, i) => (
             <li key={i} className="flex justify-between gap-3">
-              <span className="text-slate-700">{it.description}</span>
+              <span className={it.kind === 'work' ? 'text-slate-700' : 'text-slate-500'}>{it.description}</span>
+              <span className="shrink-0 font-medium text-slate-700 tabular-nums">{formatMoney(it.price, { cents: 'never' })}</span>
             </li>
           ))}
         </ul>
@@ -314,17 +318,19 @@ function OptionCard({
               label="Customer price"
               hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
             >
-              <NumberInput value={price} onValue={setPrice} />
+              <NumberInput value={price} onValue={setPrice} allowDecimal={false} />
             </Field>
+            {price !== null && price < 1 ? <p className="text-xs text-amber-800">Enter a price of $1 or more.</p> : null}
             <Field label="Reason (required)">
               <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. matched competitor quote" />
             </Field>
             <div className="flex gap-2">
               <Button
                 size="sm"
-                disabled={!price || price <= 0 || reason.trim().length < 3}
+                disabled={price === null || price < 1 || reason.trim().length < 3}
                 onClick={() => {
-                  onOverride({ price: price!, reason: reason.trim() });
+                  // Prices are whole dollars (the engine rounds the same way).
+                  onOverride({ price: Math.round(price!), reason: reason.trim() });
                   setEditing(false);
                 }}
               >

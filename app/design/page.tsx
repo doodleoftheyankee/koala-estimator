@@ -6,7 +6,7 @@ import type { Metadata } from 'next';
 import fixture from '@/lib/roof/__fixtures__/takeoff.json';
 import { feet, formatMoney, inches, num, TIER_LABELS } from '@/lib/format';
 import { monthlyPayment, priceEstimate } from '@/lib/pricing';
-import { coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
+import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { compactTakeoff, DEFAULT_OVERHANG_IN, defaultFaces, OVERHANG_CHOICES, pitchText, roofFigures, roundFt, roundSqft, takeoffSchema } from '@/lib/roof/lookup';
 import { requireRole } from '@/lib/server/auth';
 import { DesignSheet, type DesignSamples } from './DesignSheet';
@@ -16,7 +16,8 @@ export const metadata: Metadata = { title: 'Design system', robots: { index: fal
 function samples(): DesignSamples {
   const roof = compactTakeoff(takeoffSchema.parse(structuredClone(fixture)));
   const fig = roofFigures(roof, { overhangIn: DEFAULT_OVERHANG_IN, ...defaultFaces(roof, 'house') });
-  const priced = priceEstimate(estimate(), snapshot, coefficients);
+  // An attic with old insulation in place, so all three sample options step up (OD6).
+  const priced = priceEstimate(estimate({ areas: [area({ currentR: 19 })] }), snapshot, coefficients);
   const fin = snapshot.settings.financing;
   return {
     floor: num(roundSqft(fig.floorSqft)),

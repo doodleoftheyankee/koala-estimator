@@ -1,0 +1,137 @@
+ACCURACY LEDGER (Phase 1, rebuild of round 1)
+
+One entry per value change: id, what changed, a before -> after example with real numbers, the
+owner decision behind it, and the test that fails before the change and passes after.
+"Seeded" means the pricing every new database starts with (supabase/migrations), which equals the
+live rows; tests use it through lib/pricing/__fixtures__/migrationSeed.ts. "Hand fixture" is the
+hand-made test pricing in lib/pricing/__fixtures__/seed.ts. Drive is 20 min one way unless stated.
+
+=== Stage "money": the engine's money lines and option rules ===
+
+L1  Each item is priced from its own cost, the same in every option; the rest of the price is a
+    "Travel and setup" line.
+    Each work item = its cost x (1 + overhead) / (1 - target margin), rounded down to the dollar.
+    Travel and setup = the price the costs ask for minus the work items (drive, trips, the $5 rounding).
+    Example (seeded): attic 1,200 sq ft at R-19, old insulation removed.
+      Removal: Good $2,720.15 / Better $2,735.84 -> $2,483 in both.
+      Good: $2,720.15 + $3,664.85 -> $2,483 + $3,345 + Travel and setup $557.
+      Totals unchanged: Good $6,385, Better $8,010.
+    Owner decision: OD2.
+    Tests: lib/pricing/phase1.test.ts "the same removal costs the same in every option; travel and
+    setup is its own line", "the same insulation and air sealing cost the same in Better and Best",
+    property "the same work is the same price in every option, whatever the drive and the overrides".
+
+L2  The minimum job top-up is its own "Minimum job charge" line.
+    Example (seeded today): walls 1,000 sq ft, 2x4, Good: one item $1,500 -> $820 work + $190 travel
+      and setup + $490 minimum job charge = $1,500.
+    The record's example ($1,254 + $186 + $60) used the dense-pack wall bag (122.5 sq ft x in per
+      bag, 31 bags) that the insulation stage adds (L20). With that coverage the engine gives exactly
+      $1,254 + $186 + $60.
+    Owner decision: OD2.
+    Tests: phase1.test.ts "a job under the minimum shows its work, travel and the top-up to the
+    minimum", "with the dense-pack wall coverage of 122.5 sq ft x in per bag, the record example
+    reads $1,254 + $186 + $60".
+
+L3  An estimator's price is a "Price adjustment" line; items keep their prices.
+    Example (seeded): attic 900 sq ft at R-19, Better set to $3,000: items $2,373.44 + $626.56 ->
+      $2,153 + $568 + travel and setup $374 + price adjustment -$95 (model price $3,095).
+      A price raised by hand: attic 1,000, Good $3,100 -> adjustment +$105 over $2,995.
+    Owner decision: OD3.
+    Tests: phase1.test.ts "Better set to $3,000 keeps its items and shows the change", "a price
+    raised by hand shows a positive adjustment".
+
+L4  Printed whole-dollar items add up to the printed total.
+    The record's example (garages 1,002 + 2,526 + crawlspace 368, Better, $14,994 under $14,995)
+      came from a random quote whose other inputs are not in the record; at those sizes with plain
+      inputs the Better total is $10,865, so it cannot be re-run.
+    Example (seeded): garage 1,002 sq ft (difficult access) + crawlspace 368 sq ft, Best: printed
+      $6,154 + $2,072 + $283 = $8,509 under an $8,510 total -> $5,482 + $1,846 + $252 + travel
+      and setup $930 = $8,510.
+    Owner decision: OD4.
+    Tests: phase1.test.ts "printed items add up to the printed total (S1-F2)", property "every
+    customer line is whole dollars, only the adjustment can be negative, and the lines add up".
+
+L5  A price override rounds to whole dollars, and the price step is at least $1.
+    Examples:
+      Seeded attic 1,000 sq ft, Good set to $4,321.50: $4,321.50 -> $4,322 (adjustment +$1,327).
+      Deviation note, hand fixture Better set to $7,224.50: "you are quoting $7,224.50" -> "$7,225".
+      Price rounding set to 0 (seeded attic 1,000, Good): $2,990.92 -> $2,991.
+      Price advice (win model) with rounding 0, $1,000 loaded cost: $1,333.34 / $1,335.48 ->
+        $1,334 / $1,336, the same step as the engine.
+    Owner decision: OD4.
+    Tests: phase1.test.ts "a price change is whole dollars (S1-F1, OD4)", "the deviation note quotes
+    the whole-dollar price", "the price step is at least $1: a rounding of 0 prices to the dollar";
+    lib/learning/deviation.test.ts "quotes a price typed with cents in whole dollars, and says when
+    there is no reason" (was "formats cents and a missing reason", $5,560.50 over $4,815 before the
+    fixture change); lib/learning/winRate.test.ts "rounds up to whole dollars when rounding is off
+    (as the engine does, L5), and includes a ceiling off the step grid".
+
+L6  An override under $1 is ignored, with an override_too_low warning; Apply waits for $1 or more.
+    Example (seeded): attic 900 sq ft, Good $0.40: printed $0 -> $2,735 (the model price) plus
+      "Good price $0.40 is under $1, so it is not used. The price stays $2,735."
+    Owner decision: R7 (review finding), OD4.
+    Test: phase1.test.ts "a price under $1 is not used; the estimator is told (R7)".
+
+L7  Install labor is priced for the quantity priced (the model's hours stay the model's).
+    Hours priced = setup + (quantity / waste) x rate x access, only when the estimator changed the
+    quantity; an estimator's own hours still win.
+    Examples (hand fixture): Good blown fiberglass 58 -> 70 bags: labor 10 h -> 11.72 h priced
+      (+$68.80); learning estHours 18.88 -> 19.81 for 95 bags (attic 1,000, difficult, Better).
+      Seeded air sealing 1,000 -> 1,500 sq ft: 6.5 h -> 9.5 h.
+    Owner decision: S1-F3 / R3.
+    Tests: phase1.test.ts "more bags take more install hours; the model hours stay the model", "the
+    learning loop reads the hours priced for the estimator's bags", "an air-sealing quantity moves
+    the air-sealing labor the same way"; lib/learning/observations.test.ts "builds one observation
+    per area x product with a priced line and an actual" (estHours 18.88 -> 19.81);
+    lib/pricing/overrides.test.ts "a qty override on a material line" (direct cost +$456 -> +$524.80).
+
+L14 Duplicates and options that do not step up are not shown, with an option_hidden warning.
+    An option with the same work as another is shown once, at the lower price (the lower tier on a
+    tie); then from the top down an option is shown only when the next shown option up costs at
+    least $1 more. priceEstimate(input, snapshot, coeffs, { showAll: true }) returns every option.
+    Examples (seeded):
+      Attic 1,200 sq ft at R-0: Best $5,160 (same as Better) -> not shown, "Best is not shown to the
+        customer: it is the same work as Better."
+      Rim joist 150 sq ft, all three at the $1,500 minimum: Good, Better, Best shown -> Best only.
+      Attic 1,000, Good set to $4,500 above Better $4,390: Good shown -> not shown, "... Change its
+        price to show it."
+      Quote document: a picked option that is not shown is no longer marked recommended
+        ('best' -> 'better').
+    Owner decision: OD6.
+    Tests: phase1.test.ts "Best that repeats Better is not shown, and the estimator is told",
+    "options that all cost the same show only the one that does the most", "an option the estimator
+    priced above the next one up is hidden, and says how to show it", "of two options with the same
+    work, the cheaper one is shown"; lib/pricing/engine.test.ts "priceEstimate - tier order (OD6)";
+    engine.property.test.ts "OD6: the options shown step up ..."; lib/quotes/model.test.ts "never
+    recommends an option the quote does not carry (OD6)".
+
+L15 Titles and bullets come from the work actually priced.
+    Examples (seeded):
+      Attic at R-11, target R-30, Good: "Blown Cellulose to Code" -> "Blown Cellulose to R-30"; the
+        bullet "Brings your attic to current code R-value" is removed.
+      Attic at R-60, Better: "Air Seal + Blown Cellulose" -> "Air Sealing"; bullets -> only "Seals
+        the leaks that drive drafts and high bills".
+      Crawlspace 800 at R-19, Best: "Closed-Cell Foam + Air Sealing" -> "Air Sealing".
+      Attic with nothing to remove, Best (showAll): "Remove, Air Seal + Cellulose" -> "Air Sealing +
+        Blown Cellulose"; "Old, dirty or damaged insulation removed" dropped.
+      Package (attic at R-60 + walls), Good: the attic's two bullets are no longer listed.
+    Owner decision: S1-F7, R2.
+    Tests: phase1.test.ts "a target below code is not called \"to Code\"", "an option that only air
+    seals says so (R2, E2 and E3)", "\"Remove\" is said only when removal is priced", "a package only
+    carries bullets of areas with work in it (R2)".
+
+L16 Air-sealing words per job type.
+    Example (seeded): crawlspace 800 sq ft, Best: "Air sealing of top plates, penetrations and
+      bypasses (800 sq ft)" -> "Air sealing of the rim, penetrations and gaps in the floor above
+      (800 sq ft)". Attics keep their words. Walls, rim joists, garages and commercial jobs have their
+      own words, used only if the owner adds air sealing to one of their options.
+    Owner decision: S3-F20.
+    Test: phase1.test.ts "air sealing says where it is done (S3-F20)".
+
+L17 Areas under 10 sq ft keep one decimal.
+    Example (seeded): attic 0.3 sq ft: "0 sq ft" -> "0.3 sq ft" (12.4 sq ft still reads "12 sq ft").
+    Owner decision: S3-F23.
+    Test: phase1.test.ts "a tiny area never reads \"0 sq ft\" (S3-F23)".
+
+Test data only (no customer price): the hand fixture's cellulose bag $14 -> $22 so its Good ($5,420)
+stays below Better ($6,255) under OD6. Math tests price every option with showAll.

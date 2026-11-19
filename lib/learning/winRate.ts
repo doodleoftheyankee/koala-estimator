@@ -1,7 +1,7 @@
 // Win-probability model and price optimizer (PLAN.md §6.6). A weighted, L2-regularized
 // logistic regression on markup, job size, job type and lead source, fitted by IRLS, plus the
 // expected-profit scan shown next to the estimator's price. Pure: callers pass `now`.
-import { money, roundUpTo, type PricingSettings, type WinModel } from '@/lib/pricing';
+import { money, priceStep, roundUpTo, type PricingSettings, type WinModel } from '@/lib/pricing';
 import type { PricePoint, PriceRecommendation, WinFeatures, WinObservation, WinRateBucket } from './types';
 
 const P_MIN = 1e-6; // predictions are clamped to [P_MIN, 1 - P_MIN]
@@ -36,7 +36,8 @@ export function predictWin(model: WinModel, f: WinFeatures): number {
 
 /**
  * Scans margins from floorMarginPct to ceilingMarginPct (0.5-point steps), prices each as
- * roundUpTo(max(loadedCost / (1 - m), minimumJobPrice), priceRounding), and returns the point
+ * roundUpTo(max(loadedCost / (1 - m), minimumJobPrice), priceStep(priceRounding)) as the engine
+ * does (whole dollars, a step of at least $1), and returns the point
  * with the highest expected profit P(win) x (price - loadedCost), plus the whole curve.
  * Returns null when loadedCost <= 0.
  */
@@ -50,7 +51,7 @@ export function recommendPrice(
   const curve: PricePoint[] = [];
   const seen = new Set<number>();
   for (const m of marginGrid(settings.floorMarginPct, settings.ceilingMarginPct)) {
-    const price = roundUpTo(Math.max(loadedCost / (1 - m), settings.minimumJobPrice), settings.priceRounding);
+    const price = roundUpTo(Math.max(loadedCost / (1 - m), settings.minimumJobPrice), priceStep(settings.priceRounding));
     // The minimum job price and rounding make neighbouring margins land on the same price.
     if (!Number.isFinite(price) || seen.has(price)) continue;
     seen.add(price);

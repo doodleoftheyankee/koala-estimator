@@ -47,7 +47,7 @@ export const snapshot: PricingSnapshot = {
   materials: [
     { id: 'm-ocsf', productCode: 'ocsf', name: 'Open-cell set', unit: 'board_ft', costPerUnit: 0.45, coverageSqftIn: null },
     { id: 'm-ccsf', productCode: 'ccsf', name: 'Closed-cell set', unit: 'board_ft', costPerUnit: 1.0, coverageSqftIn: null },
-    { id: 'm-cel', productCode: 'cellulose', name: 'Cellulose bag', unit: 'bag', costPerUnit: 14, coverageSqftIn: 200 },
+    { id: 'm-cel', productCode: 'cellulose', name: 'Cellulose bag', unit: 'bag', costPerUnit: 22, coverageSqftIn: 200 },
     { id: 'm-fg', productCode: 'fiberglass_blown', name: 'Blown fiberglass bag', unit: 'bag', costPerUnit: 38, coverageSqftIn: 450 },
     { id: 'm-batt', productCode: 'batts', name: 'Batt', unit: 'sqft', costPerUnit: 0.75, coverageSqftIn: null },
     { id: 'm-air', productCode: 'air_sealing', name: 'Air sealing materials', unit: 'sqft', costPerUnit: 0.1, coverageSqftIn: null },

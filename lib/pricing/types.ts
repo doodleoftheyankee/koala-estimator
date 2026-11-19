@@ -38,7 +38,7 @@ export interface PricingSettings {
   floorMarginPct: number;
   ceilingMarginPct: number;
   minimumJobPrice: number;
-  priceRounding: number; // round customer price UP to this many dollars
+  priceRounding: number; // round customer price UP to this many dollars (at least $1: priceStep)
   productiveHoursPerDay: number; // per crew member
   vehicleCostPerTrip: number; // per crew-day
   disposalCostPerSqft: number;
@@ -223,9 +223,23 @@ export interface PricedLine {
   overrideReason: string | null;
 }
 
-/** What the customer sees: one row per area scope item, sell price allocated by cost share. */
+/**
+ * What a customer line is:
+ *  - work: one area scope item (removal, insulation, air sealing), priced from its own cost, so the
+ *    same work costs the same in every option (OD2);
+ *  - travel: "Travel and setup", the rest of the model price (drive, trips and rounding);
+ *  - minimum: "Minimum job charge", the top-up to the minimum job price;
+ *  - adjustment: "Price adjustment", the estimator's price change (OD3), plus or minus.
+ */
+export const CUSTOMER_ITEM_KINDS = ['work', 'travel', 'minimum', 'adjustment'] as const;
+export type CustomerItemKind = (typeof CUSTOMER_ITEM_KINDS)[number];
+
+/** What the customer sees. Whole dollars; the items of an option always add up to its price (OD4). */
 export interface CustomerItem {
+  kind: CustomerItemKind;
+  /** The area a work item belongs to; null for the job-level lines. */
   areaId: string | null;
+  /** The area's name; '' for the job-level lines. */
   areaName: string;
   description: string;
   price: number;
@@ -255,7 +269,7 @@ export interface PricedOption {
   modelPrice: number;
   /** Price after the estimator's line overrides, before any price override. */
   adjustedPrice: number;
-  /** Customer price: the price override if set, else adjustedPrice. */
+  /** Customer price, whole dollars: the price override (rounded to the dollar) if set, else adjustedPrice. */
   price: number;
   /** A customer-price override is set. */
   isOverridden: boolean;
@@ -276,13 +290,18 @@ export interface PricingWarning {
     | 'tier_skipped'
     | 'override_below_floor'
     | 'no_crew'
-    | 'tier_price_order';
+    | 'tier_price_order'
+    /** OD6: an option that duplicates another or does not step up is not shown to the customer. */
+    | 'option_hidden'
+    /** A price under $1 was typed; it is not used. */
+    | 'override_too_low';
   areaId: string | null;
   tier: Tier | null;
   message: string;
 }
 
 export interface PricedEstimate {
+  /** The options the customer is shown (OD6), in tier order; every priced option with showAll. */
   options: PricedOption[];
   warnings: PricingWarning[];
   crewId: string;

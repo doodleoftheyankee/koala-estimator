@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { lineKey, priceEstimate, type PricedOption } from '@/lib/pricing';
+import { lineKey, priceEstimate as priceShown, type PricedOption } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { observationsFromJob, winObservationFromQuote, type ActualRow, type JobForLearning, type QuoteOutcomeRow } from './observations';
 import type { QuoteSnapshotForLearning } from './types';
+
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 // 1,000 sq ft attic, difficult access, old insulation removed. Better = removal + cellulose + air sealing.
 const input = estimate({
@@ -57,7 +61,7 @@ describe('observationsFromJob', () => {
         modelQty: 90,
         estQty: 95, // the estimator's override, not the model's
         modelHours: 18.88,
-        estHours: 18.88,
+        estHours: 19.81, // the install hours priced for the estimator's 95 bags (L7); 18.88 before
         actualQty: 92,
         actualHours: 20,
       },
@@ -175,7 +179,7 @@ describe('observationsFromJob', () => {
 });
 
 describe('winObservationFromQuote', () => {
-  const options = priceEstimate(estimate(), snapshot, coefficients).options; // good 5420, better 4815, best 4815
+  const options = priceEstimate(estimate(), snapshot, coefficients).options; // good 5420, better 6255, best 6255
   const quote = (patch: Partial<QuoteOutcomeRow> = {}, snap: Partial<QuoteOutcomeRow['snapshot']> = {}): QuoteOutcomeRow => ({
     estimateId: 'est-1',
     won: true,
