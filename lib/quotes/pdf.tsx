@@ -63,17 +63,49 @@ const formatDate = (iso: string): string => formatDateLong(calendarDay(iso));
 
 /**
  * An option with more lines than this may run past one page, so it is allowed to break; any
- * shorter option is kept on one page (L39).
+ * shorter option is kept on one page (L39) when it fits one (KEEP_TOGETHER_MAX_HEIGHT).
  */
 export const KEEP_TOGETHER_MAX_LINES = 18;
+
+/** The height a page gives its content: letter (792 pt) less the top and bottom padding. */
+export const PAGE_CONTENT_HEIGHT = 792 - 36 - 48;
+
+/**
+ * The tallest option kept on one page, in points: a page's content height less a margin for the
+ * estimate below. react-pdf cannot place a block kept together that is taller than a page: it
+ * squeezes the whole page and the lines print over each other (review A DOC-4).
+ */
+export const KEEP_TOGETHER_MAX_HEIGHT = 640;
+
+/** Lines a text takes in a column that fits about `perLine` characters (on the high side: words wrap early). */
+const linesOf = (text: string, perLine: number) => Math.max(1, Math.ceil(text.length / perLine));
+
+/**
+ * About how tall an option block prints, in points, from its text and the styles above, erring
+ * high: about 20 characters a line in the Area column, 44 in Work, 78 for a bullet and 46 in the
+ * title, at 11 pt (13.2 pt a line; the title 13 pt bold, 15.6 pt a line).
+ */
+export function estimateOptionHeight(option: Pick<QuoteOptionDoc, 'tier' | 'label' | 'bullets' | 'items' | 'financing'>): number {
+  const LINE = 13.2;
+  const frame = 14 + 2 + 16; // margin above, border, body padding
+  const head = 16 + linesOf(`${TIER_NAMES[option.tier]}: ${option.label}`, 46) * 15.6;
+  const bullets = option.bullets.reduce((h, b) => h + linesOf(b, 78) * LINE + 2, 0);
+  const itemHead = 8 + 10.2 + 3 + 1;
+  const items = option.items.reduce((h, it) => h + Math.max(linesOf(it.areaName, 20), linesOf(it.description, 44)) * LINE + 8.5, 0);
+  const total = 6 + 16.8;
+  const financing = option.financing ? 4 + 2 * 11.4 : 0;
+  return frame + head + bullets + itemHead + items + total + financing;
+}
 
 /**
  * One option: its title bar, bullets, lines, total and financing. `keepTogether` (documents sent
  * from the accuracy round on, L39) keeps the whole block on one page, so an option's lines are
- * never split from its title or total; an option too long for a page still breaks.
+ * never split from its title or total; an option too long or too tall for a page still breaks,
+ * its title never left alone at the foot of a page.
  */
 export function OptionSection({ option, color, recommended, keepTogether = false }: { option: QuoteOptionDoc; color: string; recommended: boolean; keepTogether?: boolean }) {
-  const together = keepTogether && option.items.length + option.bullets.length <= KEEP_TOGETHER_MAX_LINES;
+  const together =
+    keepTogether && option.items.length + option.bullets.length <= KEEP_TOGETHER_MAX_LINES && estimateOptionHeight(option) <= KEEP_TOGETHER_MAX_HEIGHT;
   return (
     // No wrap prop at all unless kept together: react-pdf lays out an explicit `wrap={undefined}`
     // differently from none, and a document sent before must lay out exactly as it did (hard rule 1).

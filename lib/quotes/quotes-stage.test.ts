@@ -335,3 +335,61 @@ describe('L39: each option block on the PDF stays on one page (UX-01)', () => {
     expect(splitBefore, 'the lengths tried include ones where an option used to split').toBeGreaterThan(0);
   });
 });
+
+describe('L39 (review A DOC-4): an option taller than a page is never kept together', () => {
+  /** A quote of `areas` attics, each named with `nameLength` characters (the area form takes 80). */
+  function tallDoc(areas: number, nameLength: number): QuoteDocument {
+    const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, SPRINGFIELD);
+    d.customer = { ...d.customer, firstName: 'Robin', lastName: 'Vale', email: 'robin@example.com' };
+    d.property = { ...d.property, street: '9 Elm Ct', city: 'Springfield', state: 'IL', zip: '62701' };
+    d.areas = Array.from({ length: areas }, (_, i) => {
+      const name = `Attic ${i + 1} over the north bedroom wing and the garage, rear dormer and knee walls`.slice(0, nameLength);
+      return { ...newArea('attic'), name, sqft: 400 + 37 * i, currentR: 11 };
+    });
+    const priced = priceEstimate(toEstimateInput(d), snapshot, coefficients);
+    return buildQuoteDocument({
+      draft: d,
+      options: priced.options,
+      version: 1,
+      quoteNumber: 'AA-2026-0002-v1',
+      issuedAt: new Date('2026-10-20T12:00:00Z'),
+      validDays: 30,
+      branding: BRAND,
+      estimator: { name: 'Sam Rivera', email: 'sam@acme.example' },
+      terms: 'Terms as the franchise wrote them.',
+      warranty: 'Warranty as the franchise wrote it.',
+      consent: CONSENT_IL,
+    });
+  }
+
+  it('7 attics with 80-character names: react-pdf never squeezes an option into a page (it did, overlapping the first page)', async () => {
+    const doc = tallDoc(7, 80);
+    // Better has 18 lines or fewer, so it used to be kept together whatever its height.
+    expect(doc.options.some((o) => o.items.length + o.bullets.length <= 18)).toBe(true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const pages = pdfPages(await renderQuotePdf(doc));
+      const said = [...warn.mock.calls, ...error.mock.calls].map((c) => c.join(' '));
+      expect(said.filter((m) => /bigger than available page height/.test(m))).toEqual([]);
+      // Every option's title and total are printed, and the header reads in order on page 1.
+      expect(pages[0]).toMatch(/Prepared for[\s\S]*Robin Vale/i);
+      for (const name of ['Good', 'Better', 'Best'].filter((n) => doc.options.some((o) => o.tier === n.toLowerCase()))) {
+        expect(pages.some((p) => p.includes(`${name} total:`)), `${name} total printed`).toBe(true);
+      }
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('8 attics with 55-character names: no option is squeezed either', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await renderQuotePdf(tallDoc(8, 55));
+      expect(warn.mock.calls.map((c) => c.join(' ')).filter((m) => /bigger than available page height/.test(m))).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

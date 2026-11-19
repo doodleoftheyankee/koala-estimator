@@ -691,3 +691,22 @@ RA-F13 The dense-pack citation names one card (docs only; no value changes). L20
     ("25 lb"), which the card read here did not show. If 24 in o.c., a new additive migration sets
     118.3 where the seeded 122.5 is untouched.
     Owner decision: OD7 (the row stays flagged Needs owner input).
+
+RA-DOC-4 (L39) An option is kept on one page only when it fits one. L39 kept together any option
+    of 18 lines and bullets or fewer, whatever its height; when such a block was taller than a page,
+    react-pdf squeezed the whole first page and its lines printed over each other (the masthead,
+    "Prepared for", "Valid until" and the options). Now an option is kept together only when its
+    estimated height (lib/quotes/pdf.tsx estimateOptionHeight, erring high) is at most 640 pt of the
+    page's 708; a taller one breaks across pages as before L39, its title kept with what follows.
+    Example (an engine-priced quote of 7 attics named with 80 characters, within the form's limit):
+      Better, 15 lines and 1 bullet, kept together: page 1 squeezed and overlapping, 3 pages ->
+      Better runs from page 1 onto page 2, every line readable, 4 pages
+      (docs/accuracy/after-fixa/doc4-before-page1.png, doc4-after-page1.png, doc4-after-page2.png).
+      A quote of 3 attics with short names: unchanged, every option kept on one page.
+    No amount, item or text changes. A quote sent before the accuracy round still lays out as it
+    did (hard rule 1: it is never kept together).
+    Owner decision: UX-01.
+    Tests: lib/quotes/quotes-stage.test.ts "7 attics with 80-character names: react-pdf never squeezes
+    an option into a page …", "8 attics with 55-character names: no option is squeezed either"
+    (both render the real PDF and fail before the fix with react-pdf's "bigger than available page
+    height"); "no option starts on one page and ends on the next" still passes.
