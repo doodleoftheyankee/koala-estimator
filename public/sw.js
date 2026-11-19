@@ -17,11 +17,13 @@
  *  - /api/* and everything else: network only. Offline data lives in IndexedDB, not here.
  *  - The shells are per device, not per user. A shell the server refuses (redirect, 401, 403:
  *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
- *    and offline a /field launch opens the /crew shell when /crew was the last shell loaded, so
- *    a crew member never gets someone else's priced /field shell.
+ *    and offline a /field launch opens the /crew shell when /crew was the last role shell loaded,
+ *    so a crew member never gets someone else's priced /field shell. Only the role shells (/field
+ *    and /crew) count as "last": the tools every role opens (/field/blower-door) say nothing about
+ *    whose phone it is.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v6';
+const VERSION = 'v7';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
@@ -29,6 +31,8 @@ const STATIC_CACHE = `koala-static-${VERSION}`;
 const SHELLS = ['/field/roof', '/field/blower-door', '/field', '/crew'];
 // Offline only: which cached shell may stand in when a shell is missing (price-free shells only).
 const FALLBACK = { '/field': '/crew' };
+// The shells that say whose phone this is (the role's own app), for LAST_SHELL.
+const ROLE_SHELLS = ['/field', '/crew'];
 
 /** The shell a path belongs to ("/crew", "/field/x"), or null. */
 function shellFor(pathname) {
@@ -129,7 +133,7 @@ async function shellNavigation(req, shell) {
       await cache.delete(shell);
     } else if (res.ok) {
       cache.put(shell, res.clone());
-      cache.put(LAST_SHELL, new Response(shell));
+      if (ROLE_SHELLS.includes(shell)) cache.put(LAST_SHELL, new Response(shell));
       // Keep the shell's assets cached as deployments change them.
       res
         .clone()
