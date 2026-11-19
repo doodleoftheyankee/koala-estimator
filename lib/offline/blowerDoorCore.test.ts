@@ -3,6 +3,7 @@ import { SEEDED } from '@/lib/blowerdoor/__fixtures__/settings';
 import { emptyForm, evaluate, newTestSchema, parseBlowerDoorSettings, toCfm50, type BlowerDoorForm, type SavedTest } from '@/lib/blowerdoor';
 import {
   applyTestResult,
+  BLOWER_DOOR_UNREACHABLE,
   blowerDoorHref,
   contextKey,
   isUnsent,
@@ -12,6 +13,8 @@ import {
   newReading,
   parseContextParams,
   settledLocalIds,
+  signInHref,
+  testSyncAnswer,
   unsentNotes,
   type BlowerDoorContext,
   type LocalTest,
@@ -180,5 +183,34 @@ describe('review fixes', () => {
     expect(unsentNotes([newestOf(mergeReadings([], [invalid]), 'test_out')])).toEqual(['Note: the test-out was not saved to the office: The reading is outside what a gauge can show.']);
     const synced = { ...t, syncState: 'synced' as const };
     expect(unsentNotes([newestOf(mergeReadings([], [synced]), 'test_out')])).toEqual([]);
+  });
+});
+
+// Release, "blower door under the accuracy rules" (L36, review B flow-B10, database-B1).
+describe('Koala unreachable is not a sign-out, and the sign-in link keeps the job', () => {
+  const UNREACHABLE = { error: 'unreachable', message: "Can't reach Koala right now. Your work is saved. Try again in a minute." };
+
+  it("a 503 from Koala says \"Can't reach Koala right now\" and keeps the reading to send again (was \"The server answered 503\")", () => {
+    const a = testSyncAnswer(503, UNREACHABLE);
+    expect(a).toEqual({ status: 'error', error: "Can't reach Koala right now. The reading is saved on this phone; it is sent when Koala is back." });
+    expect(a).toEqual({ status: 'error', error: BLOWER_DOOR_UNREACHABLE });
+    const kept = applyTestResult(local('0d000000-0000-4000-8000-0000000000b1', 'test_out', '2026-11-19T15:00:00.000Z'), a as never, '2026-11-19T15:05:00.000Z');
+    expect(kept.syncState).toBe('error');
+    expect(isUnsent(kept)).toBe(true);
+    // The same for the page's 503 without a body (a proxy in between).
+    expect(testSyncAnswer(503, null)).toEqual({ status: 'error', error: BLOWER_DOOR_UNREACHABLE });
+  });
+
+  it('a 401 is a sign-out; a refusal and a stored reading are as the server says; anything else is retried', () => {
+    expect(testSyncAnswer(401, { error: 'Not signed in' })).toBe('signed-out');
+    expect(testSyncAnswer(200, { status: 'applied', id: JOB, recorded_at: '2026-11-19T15:00:00Z' })).toEqual({ status: 'applied', id: JOB, recorded_at: '2026-11-19T15:00:00Z' });
+    expect(testSyncAnswer(403, { status: 'refused', error: 'Not your job.' })).toEqual({ status: 'refused', error: 'Not your job.' });
+    expect(testSyncAnswer(500, { error: 'boom' })).toEqual({ status: 'error', error: 'The server answered 500. Will retry.' });
+  });
+
+  it('"Sign in again" comes back to the same job or estimate, through safeNext (was /field/blower-door, the plain calculator)', () => {
+    expect(signInHref(JOB_CTX)).toBe(`/login?next=${encodeURIComponent(`/field/blower-door?job=${JOB}&label=Pat+Lee%2C+12+Elkton+Rd`)}`);
+    expect(signInHref(EST_CTX)).toBe(`/login?next=${encodeURIComponent(`/field/blower-door?estimate=${EST}`)}`);
+    expect(signInHref(null)).toBe(`/login?next=${encodeURIComponent('/field/blower-door')}`);
   });
 });

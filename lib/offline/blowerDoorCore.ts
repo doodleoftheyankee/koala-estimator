@@ -2,6 +2,7 @@
 // tool was opened for, the reading the phone stores and sends, what a sync answer does to it, and
 // which readings the screen shows (the server's and the phone's own, never one twice).
 import { z } from 'zod';
+import { safeNext } from '@/lib/safeNext';
 import {
   KIND_LABELS,
   programSnapshot,
@@ -13,6 +14,7 @@ import {
   type Stories,
   type TestKind,
   type TestSyncResponse,
+  testSyncResponseSchema,
 } from '@/lib/blowerdoor';
 
 /** Where the readings go: a job (crew, office, owner) or an estimate (estimator). */
@@ -37,6 +39,29 @@ export function blowerDoorHref(c: BlowerDoorContext): string {
   const q = new URLSearchParams({ [c.kind]: c.id });
   if (c.label) q.set('label', c.label);
   return `/field/blower-door?${q.toString()}`;
+}
+
+/** What a reading says while Koala's database or sign-in service does not answer (L36). */
+export const BLOWER_DOOR_UNREACHABLE = "Can't reach Koala right now. The reading is saved on this phone; it is sent when Koala is back.";
+
+/**
+ * What the phone makes of the server's answer to one reading (POST /api/blower-door/tests). A 503
+ * is Koala's database or sign-in service not answering (L36): not a sign-out and not a refusal; the
+ * reading stays on the phone and is sent again on the next sync.
+ */
+export function testSyncAnswer(status: number, body: unknown): TestSyncResponse | 'signed-out' {
+  if (status === 401) return 'signed-out';
+  if (status === 503) return { status: 'error', error: BLOWER_DOOR_UNREACHABLE };
+  const parsed = testSyncResponseSchema.safeParse(body);
+  return parsed.success ? parsed.data : { status: 'error', error: `The server answered ${status}. Will retry.` };
+}
+
+/**
+ * The sign-in page, coming back to the tool for the same job or estimate afterwards (its typed form
+ * and readings are kept per job). next= is only ever a path on this site (lib/safeNext).
+ */
+export function signInHref(c: BlowerDoorContext | null): string {
+  return `/login?next=${encodeURIComponent(safeNext(c ? blowerDoorHref(c) : '/field/blower-door', '/field/blower-door'))}`;
 }
 
 export type LocalTestState =

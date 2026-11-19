@@ -16,7 +16,6 @@ import Dexie, { type Table } from 'dexie';
 import {
   contextResponseSchema,
   EMPTY_SETTINGS,
-  testSyncResponseSchema,
   type BlowerDoorForm,
   type BlowerDoorSettings,
   type ContextResponse,
@@ -28,7 +27,7 @@ import {
 import type { CachedProfile } from './db';
 
 export type { CachedProfile };
-import { applyTestResult, contextKey, isUnsent, settledLocalIds, type BlowerDoorContext, type LocalTest } from './blowerDoorCore';
+import { applyTestResult, contextKey, isUnsent, settledLocalIds, testSyncAnswer, type BlowerDoorContext, type LocalTest } from './blowerDoorCore';
 
 export interface CachedSettings extends SettingsResponse {
   fetchedAt: string;
@@ -102,6 +101,19 @@ const emit = () => listeners.forEach((fn) => fn());
 let running: Promise<SyncOutcome> | null = null;
 export const isBlowerDoorSyncing = () => running !== null;
 
+// Can Koala be reached? (L36) A 503 from Koala's own server means its database or sign-in service
+// is not answering: not a sign-out, and not this phone's signal. The tool says "Can't reach Koala
+// right now" while it lasts; readings stay on the phone and are sent when Koala answers again.
+let reachable = true;
+function noteResponse(res: Response) {
+  const r = res.status !== 503;
+  if (r === reachable) return;
+  reachable = r;
+  emit();
+}
+/** False after Koala's server answered 503 to the tool, until it answers again. */
+export const isBlowerDoorReachable = () => reachable;
+
 // ---------------------------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------------------------
@@ -122,6 +134,7 @@ export async function refreshBlowerDoorSettings(): Promise<CachedSettings | null
   const cached = await getCachedSettings();
   try {
     const res = await fetch('/api/blower-door/settings', { headers: cached ? { 'If-None-Match': `"${cached.hash}"` } : {}, cache: 'no-store' });
+    noteResponse(res);
     if (res.status === 304 && cached) {
       const fresh = { ...cached, fetchedAt: new Date().toISOString() };
       await blowerDoorDb().meta.put({ key: SETTINGS_KEY, value: fresh });
@@ -193,9 +206,8 @@ async function postTest(t: LocalTest): Promise<TestSyncResponse | 'signed-out'> 
   } catch {
     return { status: 'error', error: navigator.onLine ? 'Could not reach the server. Will retry.' : 'No signal. Saved on this phone; it syncs when you are back online.' };
   }
-  if (res.status === 401) return 'signed-out';
-  const parsed = testSyncResponseSchema.safeParse(await res.json().catch(() => null));
-  return parsed.success ? parsed.data : { status: 'error', error: `The server answered ${res.status}. Will retry.` };
+  noteResponse(res);
+  return testSyncAnswer(res.status, await res.json().catch(() => null));
 }
 
 export type SyncOutcome = 'done' | 'offline' | 'signed-out';
@@ -241,6 +253,7 @@ export async function fetchContext(c: BlowerDoorContext, ownerId: string): Promi
   } catch {
     return null;
   }
+  noteResponse(res);
   if (res.status === 401) return 'signed-out';
   if (res.status === 404 || res.status === 403) return 'not-found';
   if (!res.ok) return null;

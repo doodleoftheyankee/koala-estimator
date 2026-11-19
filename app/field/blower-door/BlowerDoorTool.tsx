@@ -35,10 +35,12 @@ import {
   fetchContext,
   formKey,
   getCachedSettings,
+  isBlowerDoorReachable,
   queueTest,
   refreshBlowerDoorSettings,
   saveForm,
   settingsOrEmpty,
+  subscribeBlowerDoorSync,
   switchBlowerDoorUser,
   syncBlowerDoor,
   type CachedProfile,
@@ -46,7 +48,7 @@ import {
   type LocalContext,
   type LocalForm,
 } from '@/lib/offline/blowerDoor';
-import { contextKey, mergeReadings, newestOf, newLocalTest, newReading, parseContextParams, unsentNotes, type BlowerDoorContext, type LocalTest } from '@/lib/offline/blowerDoorCore';
+import { contextKey, mergeReadings, newestOf, newLocalTest, newReading, parseContextParams, signInHref, unsentNotes, type BlowerDoorContext, type LocalTest } from '@/lib/offline/blowerDoorCore';
 import { num } from '@/lib/format';
 import {
   Banner,
@@ -128,6 +130,8 @@ function Tool({ profile, context }: { profile: CachedProfile; context: BlowerDoo
 
 function ToolBody({ profile, context, initial }: { profile: CachedProfile; context: BlowerDoorContext | null; initial: Loaded }) {
   const online = useOnline();
+  // Koala's own server answering 503 (L36): not a sign-out and not this phone's signal.
+  const reachable = useSyncExternalStore(subscribeBlowerDoorSync, isBlowerDoorReachable, () => true);
   const crew = profile.role === 'crew';
   const key = formKey(profile.userId, context);
   const cKey = contextKey(context);
@@ -361,13 +365,27 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
             {context ? 'The calculator works, and saved readings wait on this phone until you are back online.' : 'The calculator works with no signal.'}
           </Banner>
         ) : null}
+        {online && !reachable && contextState !== 'signed-out' ? (
+          <Banner
+            tone="warn"
+            title="Can't reach Koala right now."
+            live={false}
+            action={
+              <Button size="sm" onClick={() => void runSync()}>
+                Try again
+              </Button>
+            }
+          >
+            {context ? 'The calculator works, and saved readings wait on this phone until Koala is back.' : 'The calculator works without it.'}
+          </Banner>
+        ) : null}
         {contextState === 'not-found' ? (
           <Banner tone="bad" title={`This ${where} is not one you can save readings to.`}>
             It may have been reassigned. Readings saved here stay on this phone; ask the office.
           </Banner>
         ) : null}
         {contextState === 'signed-out' ? (
-          <Banner tone="bad" title="Your session expired." action={<ButtonLink href={`/login?next=${encodeURIComponent('/field/blower-door')}`} size="sm" prefetch={false}>Sign in again</ButtonLink>}>
+          <Banner tone="bad" title="Your session expired." action={<ButtonLink href={signInHref(context)} size="sm" prefetch={false}>Sign in again</ButtonLink>}>
             Your readings are saved on this phone. Sign in again to sync them.
           </Banner>
         ) : null}
