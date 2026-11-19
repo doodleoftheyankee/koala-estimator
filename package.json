@@ -8,12 +8,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/accuracy/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:db": "bash scripts/test-db.sh",
-    "bootstrap:owner": "node --experimental-strip-types scripts/create-user.ts"
+    "bootstrap:owner": "node --experimental-strip-types scripts/create-user.ts",
+    "accuracy:violations": "node scripts/accuracy/run.mjs scripts/accuracy/violations.ts"
   },
   "engines": {
     "node": ">=20"
