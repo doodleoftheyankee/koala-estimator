@@ -6,7 +6,7 @@ import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from '@
 import type { Tier } from '@/lib/pricing';
 import { calendarDay, formatAuditTime, formatDateLong } from '@/lib/format';
 import { financingLine } from './email';
-import { DEFAULT_BRAND_COLOR, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument, type QuoteOptionDoc } from './model';
+import { DEFAULT_BRAND_COLOR, documentTimeZone, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument, type QuoteOptionDoc } from './model';
 
 export interface PdfSignature {
   signerName: string;
@@ -58,8 +58,8 @@ const s = StyleSheet.create({
   footerRight: { position: 'absolute', bottom: 20, left: 40, right: 40, textAlign: 'right', fontSize: 8.5, color: '#64748b' },
 });
 
-/** "December 17, 2026" (lib/format.ts, the business zone; a stored calendar day reads as that day). */
-const formatDate = (iso: string): string => formatDateLong(calendarDay(iso));
+/** "December 17, 2026" (lib/format.ts, in the document's zone; a stored calendar day reads as that day). */
+const formatDate = (iso: string, tz: string): string => formatDateLong(calendarDay(iso), tz);
 
 /**
  * An option with more lines than this may run past one page, so it is allowed to break; any
@@ -153,6 +153,8 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
   const signedOption = signature ? doc.options.find((o) => o.tier === signature.tier) : undefined;
   // A quote sent before the accuracy round prints as it did then (hard rule 1).
   const legacy = isLegacyDocument(doc);
+  // Its dates and times read in the zone it was sent in (New York for a quote sent before that was kept).
+  const tz = documentTimeZone(doc);
 
   return (
     <Document title={`Quote ${doc.quoteNumber}`} author={b.company} subject="Insulation quote" creator={b.company} producer={b.company}>
@@ -167,8 +169,8 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
           <View>
             <Text style={s.quoteTitle}>{signature ? 'Signed Quote' : 'Quote'}</Text>
             <Text style={[s.small, s.right]}>No. {doc.quoteNumber}</Text>
-            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt)}</Text>
-            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil)}</Text>
+            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt, tz)}</Text>
+            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil, tz)}</Text>
           </View>
         </View>
 
@@ -227,7 +229,7 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
               </Text>
               <Image src={{ data: Buffer.from(signature.imagePng), format: 'png' }} style={s.sigImage} />
               <Text>Signed electronically by {signature.signerName}</Text>
-              <Text style={s.small}>Date: {formatAuditTime(signature.signedAt)}</Text>
+              <Text style={s.small}>Date: {formatAuditTime(signature.signedAt, tz)}</Text>
               <Text style={s.small}>IP address: {signature.ip ?? 'not recorded'}</Text>
             </>
           ) : (

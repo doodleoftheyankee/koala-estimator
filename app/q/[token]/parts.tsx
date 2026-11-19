@@ -13,7 +13,7 @@ import { StatusBadge } from '@/components/daymark/StatusBadge';
 import { Download, Globe, Icon, Mail, Phone, type LucideIcon } from '@/components/daymark/icons';
 import { formatPhone } from '@/lib/format';
 import type { Tier } from '@/lib/pricing';
-import { DEFAULT_BRAND_COLOR, type Branding, type QuoteDocument } from '@/lib/quotes/model';
+import { DEFAULT_BRAND_COLOR, documentTimeZone, type Branding, type QuoteDocument } from '@/lib/quotes/model';
 import { initials, licenseLine, longDate, price as wholeDollars, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
 
 /** The page column: one column on phones, the wide two-column grid from 1024px. */
@@ -110,7 +110,7 @@ export function QuoteIntro({ doc }: { doc: QuoteDocument }) {
       <address className="text-[17px] leading-snug font-medium text-ink-2 not-italic">
         {[doc.property.line1, doc.property.line2].filter(Boolean).join(', ')}
       </address>
-      <p className="mt-1 text-[15px] leading-snug font-medium text-ink-2">Issued {longDate(doc.issuedAt)}</p>
+      <p className="mt-1 text-[15px] leading-snug font-medium text-ink-2">Issued {longDate(doc.issuedAt, documentTimeZone(doc))}</p>
       <dl className="plate mt-5 grid grid-cols-2 overflow-hidden">
         <div className="min-w-0 px-3.5 py-3.5 sm:px-4">
           <dt>

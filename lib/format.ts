@@ -2,13 +2,35 @@
 // Formatting only. Nothing here rounds a value that a caller then stores or calculates with, and
 // the existing helpers (usd, pct, num, timeAgo) keep their exact output.
 //
-// Locale and time zone live here and nowhere else, so a franchise setting can replace them later.
-// Every date and time a person reads is in BUSINESS_TIME_ZONE, whatever the zone of the server or
-// the phone.
+// Locale and time zone live here and nowhere else. Every date and time a person reads is in
+// BUSINESS_TIME_ZONE, whatever the zone of the server or the phone, unless a caller passes the zone
+// a quote document was sent in (lib/quotes/model.ts documentTimeZone).
 
 export const LOCALE = 'en-US';
-/** The business time zone. Replace with the franchise's zone once that setting exists. */
-export const BUSINESS_TIME_ZONE = 'America/New_York';
+
+/**
+ * The zone every date printed in before the franchise's zone could be set (and so the zone of
+ * every quote sent without one stored in it: hard rule 1). The default business time zone.
+ */
+export const LEGACY_TIME_ZONE = 'America/New_York';
+
+/** The IANA zone name when Intl knows it ("America/Los_Angeles"), else null. Never throws. */
+export function validTimeZone(tz: unknown): string | null {
+  if (typeof tz !== 'string' || !tz.trim()) return null;
+  try {
+    return new Intl.DateTimeFormat(LOCALE, { timeZone: tz.trim() }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The business time zone: the deployment's NEXT_PUBLIC_BUSINESS_TIME_ZONE (an IANA name, set per
+ * franchise; built into the phone's copy of the app too), else LEGACY_TIME_ZONE, so a franchise that
+ * sets nothing reads exactly as before (release review C DOC-1, FLOW-7).
+ */
+export const BUSINESS_TIME_ZONE: string =
+  validTimeZone(typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_BUSINESS_TIME_ZONE : undefined) ?? LEGACY_TIME_ZONE;
 
 /** Shown for a missing or invalid value. */
 export const DASH = '—';
@@ -128,21 +150,55 @@ function toDate(at: DateInput): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-const fmtDate = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: 'short', day: 'numeric' });
-const fmtDateLong = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: 'long', day: 'numeric' });
-const fmtDayMonth = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, month: 'short', day: 'numeric' });
-const fmtTime = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, hour: 'numeric', minute: '2-digit' });
-const fmtYmd = new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
-const fmtAudit = new Intl.DateTimeFormat(LOCALE, {
-  timeZone: BUSINESS_TIME_ZONE,
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  second: '2-digit',
-  timeZoneName: 'short',
-});
+interface ZoneFormats {
+  date: Intl.DateTimeFormat;
+  dateLong: Intl.DateTimeFormat;
+  dayMonth: Intl.DateTimeFormat;
+  time: Intl.DateTimeFormat;
+  timeZoned: Intl.DateTimeFormat;
+  ymd: Intl.DateTimeFormat;
+  audit: Intl.DateTimeFormat;
+}
+
+const zoneFormats = new Map<string, ZoneFormats>();
+
+/** The formatters for a zone (BUSINESS_TIME_ZONE when none is given, or the one given is not a zone). */
+function formats(tz?: string): ZoneFormats {
+  const zone = tz === undefined || tz === BUSINESS_TIME_ZONE ? BUSINESS_TIME_ZONE : (validTimeZone(tz) ?? BUSINESS_TIME_ZONE);
+  let f = zoneFormats.get(zone);
+  if (!f) {
+    f = {
+      date: new Intl.DateTimeFormat(LOCALE, { timeZone: zone, year: 'numeric', month: 'short', day: 'numeric' }),
+      dateLong: new Intl.DateTimeFormat(LOCALE, { timeZone: zone, year: 'numeric', month: 'long', day: 'numeric' }),
+      dayMonth: new Intl.DateTimeFormat(LOCALE, { timeZone: zone, month: 'short', day: 'numeric' }),
+      time: new Intl.DateTimeFormat(LOCALE, { timeZone: zone, hour: 'numeric', minute: '2-digit' }),
+      timeZoned: new Intl.DateTimeFormat(LOCALE, { timeZone: zone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
+      ymd: new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }),
+      audit: new Intl.DateTimeFormat(LOCALE, {
+        timeZone: zone,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZoneName: 'short',
+      }),
+    };
+    zoneFormats.set(zone, f);
+  }
+  return f;
+}
+
+/**
+ * The zone's name for a sentence: "Eastern", "Pacific", "Mountain" (Intl's generic name without
+ * "Time"), for "All times on this page are Eastern".
+ */
+export function timeZoneWord(tz: string = BUSINESS_TIME_ZONE): string {
+  const zone = validTimeZone(tz) ?? BUSINESS_TIME_ZONE;
+  const name = new Intl.DateTimeFormat(LOCALE, { timeZone: zone, timeZoneName: 'longGeneric' }).formatToParts(new Date(0)).find((p) => p.type === 'timeZoneName')?.value ?? zone;
+  return name.replace(/ (Standard )?Time$/, '');
+}
 
 /**
  * A value that is either an instant or a calendar day stored without a time ("2026-12-17", such as
@@ -153,52 +209,62 @@ export function calendarDay(at: DateInput): DateInput {
   return typeof at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(at) ? `${at}T12:00:00Z` : at;
 }
 
+// Every formatter below reads in BUSINESS_TIME_ZONE, or in the zone `tz` when one is given (a quote
+// document prints in the zone it was sent in).
+
 /** "Nov 17, 2026". */
-export function formatDate(at: DateInput): string {
+export function formatDate(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? clean(fmtDate.format(d)) : DASH;
+  return d ? clean(formats(tz).date.format(d)) : DASH;
 }
 
 /** "November 17, 2026" (customer documents). */
-export function formatDateLong(at: DateInput): string {
+export function formatDateLong(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? clean(fmtDateLong.format(d)) : DASH;
+  return d ? clean(formats(tz).dateLong.format(d)) : DASH;
 }
 
 /** "Nov 17" (this year's dates in a list). */
-export function formatDayMonth(at: DateInput): string {
+export function formatDayMonth(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? clean(fmtDayMonth.format(d)) : DASH;
+  return d ? clean(formats(tz).dayMonth.format(d)) : DASH;
 }
 
 /** "7:41 PM". */
-export function formatTime(at: DateInput): string {
+export function formatTime(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? clean(fmtTime.format(d)) : DASH;
+  return d ? clean(formats(tz).time.format(d)) : DASH;
 }
 
-/** "Nov 17, 2026 · 7:41 PM": the one full date-and-time style. */
-export function formatDateTime(at: DateInput): string {
+/**
+ * "Nov 17, 2026 · 7:41 PM": the one full date-and-time style; with zoneName, "Nov 17, 2026 · 7:41
+ * PM EST" (a customer page, where the reader may be in another zone).
+ */
+export function formatDateTime(at: DateInput, tz?: string, opts: { zoneName?: boolean } = {}): string {
   const d = toDate(at);
-  return d ? `${clean(fmtDate.format(d))} · ${clean(fmtTime.format(d))}` : DASH;
+  if (!d) return DASH;
+  const f = formats(tz);
+  return `${clean(f.date.format(d))} · ${clean((opts.zoneName ? f.timeZoned : f.time).format(d))}`;
 }
 
 /** "Nov 17 · 7:41 PM" (lists, where the year is clear). */
-export function formatShortDateTime(at: DateInput): string {
+export function formatShortDateTime(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? `${clean(fmtDayMonth.format(d))} · ${clean(fmtTime.format(d))}` : DASH;
+  if (!d) return DASH;
+  const f = formats(tz);
+  return `${clean(f.dayMonth.format(d))} · ${clean(f.time.format(d))}`;
 }
 
 /** "November 17, 2026 at 7:41:07 PM EST": a signature's moment on a signed quote, to the second and with the zone. */
-export function formatAuditTime(at: DateInput): string {
+export function formatAuditTime(at: DateInput, tz?: string): string {
   const d = toDate(at);
-  return d ? fmtAudit.format(d) : DASH;
+  return d ? formats(tz).audit.format(d) : DASH;
 }
 
-/** The business-zone calendar date of an instant, YYYY-MM-DD. */
-export function businessDate(at: DateInput): string | null {
+/** The business-zone (or `tz`) calendar date of an instant, YYYY-MM-DD. */
+export function businessDate(at: DateInput, tz?: string): string | null {
   const d = toDate(at);
-  return d ? fmtYmd.format(d) : null;
+  return d ? formats(tz).ymd.format(d) : null;
 }
 
 /**

@@ -25,7 +25,7 @@ import type { EstimateDraft } from '@/lib/sync/draft';
 import { buildSyncPayload } from '@/lib/sync/payload';
 import { consentFor, esignConsent } from './consent';
 import { financingLine, officeSignedNotice, optionName, quoteEmail, signedConfirmationEmail } from './email';
-import { buildQuoteDocument, counterQuoteNumber, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument } from './model';
+import { buildQuoteDocument, counterQuoteNumber, documentTimeZone, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument } from './model';
 import { quoteSettingsFromRows } from './settings';
 
 export interface PriceSurface {
@@ -367,12 +367,14 @@ const dayNumber = (ymd: string) => Date.parse(`${ymd}T00:00:00Z`) / DAY;
  * violation per quote; the kind says which way it is off (day_after, day_before, days_off).
  */
 export function checkValidUntilIsExpiry(doc: QuoteDocument, expiresAt: Date | string): Violation[] {
-  const want = formatDateLong(expiresAt);
-  const page = longDate(doc.validUntil);
+  // In the zone the quote was sent in (release review C DOC-1; New York for one sent without it).
+  const tz = documentTimeZone(doc);
+  const want = formatDateLong(expiresAt, tz);
+  const page = longDate(doc.validUntil, tz);
   const mail = /valid until ([A-Z][a-z]+ \d{1,2}, \d{4})/.exec(quoteEmail(doc, 'https://example.com/q/x').text)?.[1] ?? '(not found)';
   if (page === want && mail === want) return [];
-  const printedDay = businessDate(doc.validUntil.length === 10 ? `${doc.validUntil}T12:00:00Z` : doc.validUntil);
-  const lastDay = businessDate(expiresAt);
+  const printedDay = businessDate(doc.validUntil.length === 10 ? `${doc.validUntil}T12:00:00Z` : doc.validUntil, tz);
+  const lastDay = businessDate(expiresAt, tz);
   const diff = printedDay && lastDay ? dayNumber(printedDay) - dayNumber(lastDay) : NaN;
   const kind = page === want ? 'email_differs' : diff === 1 ? 'day_after' : diff === -1 ? 'day_before' : 'days_off';
   return [

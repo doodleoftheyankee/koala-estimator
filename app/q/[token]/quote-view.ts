@@ -3,7 +3,7 @@
 // from a value the pricing engine already put in the quote. Tested in lib/quotes/quote-page.test.ts.
 import type { Financing, Tier } from '@/lib/pricing';
 import { calendarDay, formatDate, formatDateLong, formatDateTime, formatMoney, TIER_LABELS } from '@/lib/format';
-import { isLegacyDocument, quoteMoney, type Branding, type QuoteDocument, type QuoteOptionDoc } from '@/lib/quotes/model';
+import { documentTimeZone, isLegacyDocument, quoteMoney, type Branding, type QuoteDocument, type QuoteOptionDoc } from '@/lib/quotes/model';
 
 export const tierName = (tier: Tier): string => TIER_LABELS[tier];
 
@@ -16,18 +16,22 @@ export const price = quoteMoney;
  */
 export const priceExact = (n: number): string => formatMoney(n, { cents: 'always' });
 
-/** "Dec 18, 2026" (tiles). Date-only values ("2026-12-18") are read as that day. */
-export const shortDate = (iso: string): string => formatDate(calendarDay(iso));
+/**
+ * "Dec 18, 2026" (tiles). Date-only values ("2026-12-18") are read as that day. An instant reads in
+ * `tz`: pass the document's zone (documentTimeZone) for a quote's own dates.
+ */
+export const shortDate = (iso: string, tz?: string): string => formatDate(calendarDay(iso), tz);
 /** "December 18, 2026" (sentences). */
-export const longDate = (iso: string): string => formatDateLong(calendarDay(iso));
+export const longDate = (iso: string, tz?: string): string => formatDateLong(calendarDay(iso), tz);
 
 /**
  * When an expired quote's link stopped working, for its page (L13, OD11): the real date and time in
- * the business zone ("Dec 17, 2026 · 9:30 PM"). A quote sent before the accuracy round said its
- * printed "Valid until" date there and still does (hard rule 1).
+ * the zone the quote was sent in, with the zone's name ("Dec 17, 2026 · 9:30 PM EST"; release review
+ * C DOC-1). A quote sent before the accuracy round said its printed "Valid until" date there and
+ * still does (hard rule 1).
  */
-export const expiredOn = (doc: Pick<QuoteDocument, 'format' | 'validUntil'>, expiresAt: string): string =>
-  isLegacyDocument(doc) ? longDate(doc.validUntil) : formatDateTime(expiresAt);
+export const expiredOn = (doc: Pick<QuoteDocument, 'format' | 'validUntil' | 'timeZone'>, expiresAt: string): string =>
+  isLegacyDocument(doc) ? longDate(doc.validUntil, documentTimeZone(doc)) : formatDateTime(expiresAt, documentTimeZone(doc), { zoneName: true });
 
 /** A tel: link for a phone number as the franchise typed it. */
 export const telHref = (phone: string): string => `tel:${phone.replace(/[^\d+]/g, '')}`;

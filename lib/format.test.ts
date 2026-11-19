@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BUSINESS_TIME_ZONE,
   DASH,
@@ -166,5 +166,51 @@ describe('dates and times', () => {
     const now = Date.parse('2026-10-20T12:00:00Z');
     expect(relativeTime('2026-10-20T11:58:00Z', now)).toBe('2 min ago');
     expect(relativeTime(new Date('2026-10-20T12:00:30Z'), now)).toBe('just now');
+  });
+});
+
+describe("the franchise's time zone (release review C DOC-1, FLOW-7)", () => {
+  // 17:25 UTC on Nov 19 is 12:25 PM in New York and 9:25 AM in Los Angeles.
+  const sent = '2026-11-19T17:25:00Z';
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('reads every date and time in the zone the deployment sets (NEXT_PUBLIC_BUSINESS_TIME_ZONE)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_BUSINESS_TIME_ZONE', 'America/Los_Angeles');
+    vi.resetModules();
+    const f = await import('./format');
+    expect(f.BUSINESS_TIME_ZONE).toBe('America/Los_Angeles');
+    expect(f.formatShortDateTime(sent)).toBe('Nov 19 · 9:25 AM');
+    // Sent at 9:30 PM on Nov 19 in Los Angeles: that is Nov 19 there (Nov 20 in New York).
+    expect(f.businessDate('2026-11-20T05:30:00Z')).toBe('2026-11-19');
+    expect(f.formatAuditTime('2026-11-21T20:15:00Z')).toBe('November 21, 2026 at 12:15:00 PM PST');
+    // The jobs' "today" turns at the franchise's midnight too.
+    const dates = await import('@/lib/jobs/dates');
+    expect(dates.nyDate('2026-11-20T05:30:00Z')).toBe('2026-11-19');
+  });
+
+  it('keeps New York when nothing is set, or the value is not a zone, so this franchise reads as before', async () => {
+    expect(BUSINESS_TIME_ZONE).toBe('America/New_York');
+    expect(formatShortDateTime(sent)).toBe('Nov 19 · 12:25 PM');
+    vi.stubEnv('NEXT_PUBLIC_BUSINESS_TIME_ZONE', 'Pacific Time');
+    vi.resetModules();
+    const f = await import('./format');
+    expect(f.BUSINESS_TIME_ZONE).toBe('America/New_York');
+    expect(f.formatShortDateTime(sent)).toBe('Nov 19 · 12:25 PM');
+  });
+
+  it('formats in the zone a caller gives (a quote prints in the zone it was sent in), with its name where asked', async () => {
+    const f = await import('./format');
+    expect(f.formatDateLong('2026-11-20T05:30:00Z', 'America/Los_Angeles')).toBe('November 19, 2026');
+    expect(f.formatDateLong('2026-11-20T05:30:00Z')).toBe('November 20, 2026');
+    expect(f.formatDateTime('2026-12-20T05:30:00Z', 'America/Los_Angeles', { zoneName: true })).toBe('Dec 19, 2026 · 9:30 PM PST');
+    expect(f.formatDateTime('2026-12-20T05:30:00Z', undefined, { zoneName: true })).toBe('Dec 20, 2026 · 12:30 AM EST');
+    expect(f.formatAuditTime('2026-11-21T20:15:00Z', 'America/Los_Angeles')).toBe('November 21, 2026 at 12:15:00 PM PST');
+    // Not a zone: the business zone, never an error on a customer's page.
+    expect(f.formatDateLong('2026-11-20T05:30:00Z', 'Mars/Olympus')).toBe('November 20, 2026');
+    expect(f.timeZoneWord('America/New_York')).toBe('Eastern');
+    expect(f.timeZoneWord('America/Los_Angeles')).toBe('Pacific');
   });
 });

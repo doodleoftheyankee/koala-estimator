@@ -218,12 +218,12 @@ describe('L13: "Valid until" is the last day the link works (S1-F8, OD11, RF-11)
     expect(makeDoc({ issuedAt: '2026-11-18T17:00:00Z' }).validUntil).toBe('2026-12-18');
   });
 
-  it('the expired page says when the link really stopped: "Dec 17, 2026 · 9:30 PM"', async () => {
+  it('the expired page says when the link really stopped: "Dec 17, 2026 · 9:30 PM EST" (with its zone since release review C DOC-1)', async () => {
     const view = (await import('@/app/q/[token]/quote-view')) as Record<string, unknown>;
     expect(view.expiredOn, 'expiredOn').toBeTypeOf('function');
     const expiredOn = view.expiredOn as (doc: QuoteDocument, expiresAt: string) => string;
     const doc = makeDoc({ issuedAt: '2026-11-18T02:30:00Z' });
-    expect(expiredOn(doc, '2026-12-18T02:30:00.000Z')).toBe('Dec 17, 2026 · 9:30 PM');
+    expect(expiredOn(doc, '2026-12-18T02:30:00.000Z')).toBe('Dec 17, 2026 · 9:30 PM EST');
     // A quote sent before says the date it printed, as it did (hard rule 1).
     expect(expiredOn({ ...sentBefore(doc), validUntil: '2026-12-18' }, '2026-12-18T02:30:00.000Z')).toBe('December 18, 2026');
   });
@@ -393,5 +393,66 @@ describe('L39 (review A DOC-4): an option taller than a page is never kept toget
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('Release review C DOC-1: a quote prints in the zone it was sent in', () => {
+  // Sent at 9:30 PM on Nov 19 in Los Angeles (05:30 UTC on Nov 20) for 30 days: the link stops at
+  // 9:30 PM on Dec 19 in Los Angeles.
+  const SENT = '2026-11-20T05:30:00Z';
+  function docIn(timeZone?: string): QuoteDocument {
+    const base = makeDoc({ issuedAt: SENT });
+    const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, SPRINGFIELD);
+    d.customer = { ...d.customer, firstName: 'Robin', lastName: 'Vale', email: 'robin@example.com' };
+    d.property = { ...d.property, street: '9 Elm Ct', city: 'Springfield', state: 'IL', zip: '62701' };
+    d.areas = [{ ...newArea('attic'), sqft: 1000, currentR: 19 }];
+    const priced = priceEstimate(toEstimateInput(d), snapshot, coefficients);
+    return buildQuoteDocument({
+      draft: d,
+      options: priced.options,
+      version: 1,
+      quoteNumber: base.quoteNumber,
+      issuedAt: new Date(SENT),
+      validDays: 30,
+      branding: BRAND,
+      estimator: { name: 'Sam Rivera', email: 'sam@acme.example' },
+      terms: 'Terms as the franchise wrote them.',
+      warranty: 'Warranty as the franchise wrote it.',
+      consent: CONSENT_IL,
+      ...(timeZone ? { timeZone } : {}),
+    } as Parameters<typeof buildQuoteDocument>[0]);
+  }
+
+  it('quoteValidUntil gives the last day in the zone given: Dec 19 in Los Angeles (Dec 20 in New York)', async () => {
+    const { quoteValidUntil } = await import('./model');
+    expect(quoteValidUntil(new Date(SENT), 30, 'America/Los_Angeles').validUntil).toBe('2026-12-19');
+    expect(quoteValidUntil(new Date(SENT), 30).validUntil).toBe('2026-12-20');
+  });
+
+  it('the document keeps its zone, and its PDF, signed PDF and expired page read in it', async () => {
+    const doc = docIn('America/Los_Angeles');
+    expect(doc.timeZone).toBe('America/Los_Angeles');
+    expect(doc.validUntil).toBe('2026-12-19');
+    const pdf = pdfPages(await renderQuotePdf(doc)).join('\n');
+    expect(pdf).toContain('Date: November 19, 2026');
+    expect(pdf).toContain('Valid until: December 19, 2026');
+    const signed = pdfPages(await renderQuotePdf(doc, { ...SIGNATURE('better', 4780), signedAt: '2026-11-21T20:15:00.000Z' })).join('\n');
+    expect(signed).toContain('Date: November 21, 2026 at 12:15:00 PM PST');
+    const { expiredOn } = await import('@/app/q/[token]/quote-view');
+    expect(expiredOn(doc, '2026-12-20T05:30:00.000Z')).toBe('Dec 19, 2026 · 9:30 PM PST');
+  });
+
+  it('a document sent without a zone prints in New York, as every quote did (hard rule 1)', async () => {
+    const doc = docIn();
+    expect(doc.timeZone).toBe('America/New_York');
+    const noZone: Partial<QuoteDocument> = { ...doc };
+    delete noZone.timeZone;
+    const [withZone, without] = [pdfPages(await renderQuotePdf(doc)), pdfPages(await renderQuotePdf(noZone as QuoteDocument))];
+    expect(without).toEqual(withZone);
+    expect(without.join('\n')).toContain('Date: November 20, 2026');
+    const old = pdfPages(await renderQuotePdf(sentBefore(doc), { ...SIGNATURE('better', 4780), signedAt: '2026-11-21T20:15:00.000Z' })).join('\n');
+    expect(old).toContain('Date: November 21, 2026 at 3:15:00 PM EST');
+    const { expiredOn } = await import('@/app/q/[token]/quote-view');
+    expect(expiredOn({ ...sentBefore(doc), validUntil: '2026-12-20' }, '2026-12-20T05:30:00.000Z')).toBe('December 20, 2026');
   });
 });

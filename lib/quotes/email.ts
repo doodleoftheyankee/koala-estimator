@@ -4,7 +4,7 @@ import { Resend } from 'resend';
 import { serverEnv } from '@/lib/env';
 import { calendarDay, formatDateLong } from '@/lib/format';
 import type { Financing, Tier } from '@/lib/pricing';
-import { quoteMoney, sentenceMoney, type QuoteDocument } from './model';
+import { documentTimeZone, quoteMoney, sentenceMoney, type QuoteDocument } from './model';
 
 /** "As low as $X/mo for N months at Y% APR, subject to credit approval" (+ provider when set). */
 export function financingLine(f: Financing): string {
@@ -100,8 +100,8 @@ function firstName(doc: QuoteDocument): string {
   return doc.customer.name.split(/\s+/)[0] || 'there';
 }
 
-/** "December 17, 2026" (lib/format.ts, the business zone; a stored calendar day reads as that day). */
-const formatDate = (isoDate: string): string => formatDateLong(calendarDay(isoDate));
+/** "December 17, 2026" (lib/format.ts, in the document's zone; a stored calendar day reads as that day). */
+const formatDate = (isoDate: string, doc: Pick<QuoteDocument, 'timeZone'>): string => formatDateLong(calendarDay(isoDate), documentTimeZone(doc));
 
 function layout(doc: QuoteDocument, bodyHtml: string): string {
   const b = doc.branding;
@@ -141,7 +141,7 @@ export function quoteEmail(doc: QuoteDocument, url: string): EmailTemplate {
 <p>Thank you for having us out to ${escapeHtml(doc.property.line1)}. Your quote <strong>${escapeHtml(doc.quoteNumber)}</strong> is ready. You can review each option, pick the one that fits, and sign online.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:12px 0;">${optionRows}</table>
 ${button(doc, url, 'View and sign your quote')}
-<p style="font-size:14px;color:#475569;">This quote is valid until ${escapeHtml(formatDate(doc.validUntil))}. Questions? Reply to this email or contact ${escapeHtml(doc.estimator.name)}${doc.estimator.email ? ` at ${escapeHtml(doc.estimator.email)}` : ''}.</p>
+<p style="font-size:14px;color:#475569;">This quote is valid until ${escapeHtml(formatDate(doc.validUntil, doc))}. Questions? Reply to this email or contact ${escapeHtml(doc.estimator.name)}${doc.estimator.email ? ` at ${escapeHtml(doc.estimator.email)}` : ''}.</p>
 <p style="font-size:12px;color:#64748b;word-break:break-all;">If the button does not work, copy this link into your browser:<br>${escapeHtml(url)}</p>`,
   );
   const text = [
@@ -155,7 +155,7 @@ ${button(doc, url, 'View and sign your quote')}
     '',
     `View and sign your quote: ${url}`,
     '',
-    `This quote is valid until ${formatDate(doc.validUntil)}. Questions? Contact ${doc.estimator.name}${doc.estimator.email ? ` at ${doc.estimator.email}` : ''}.`,
+    `This quote is valid until ${formatDate(doc.validUntil, doc)}. Questions? Contact ${doc.estimator.name}${doc.estimator.email ? ` at ${doc.estimator.email}` : ''}.`,
     '',
     textFooter(doc),
   ].join('\n');

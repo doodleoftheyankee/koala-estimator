@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { approvalCovers, canSendQuote, priceEstimate, TIERS, type PriceApproval, type PricedOption, type Tier } from '@/lib/pricing';
 import { loadApprovals } from '@/lib/quotes/approvals';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
@@ -155,20 +156,23 @@ export async function POST(request: Request) {
     const version = (previous?.version ?? 0) + 1;
 
     const now = new Date();
+    // The zone the quote is sent in, kept with it: its number's year, its "Valid until" day and every
+    // date it prints (release review C DOC-1).
+    const timeZone = BUSINESS_TIME_ZONE;
     // The quote number (OD10): a new version keeps the estimate's number (a number sent before the
     // counter included); a first quote takes the next number of the business year from the counter.
     const base = previous?.quote_number ? quoteNumberBase(previous.quote_number) : null;
     let quoteNumber: string;
     if (base) quoteNumber = `${base}-v${version}`;
     else {
-      const year = businessYear(now);
+      const year = businessYear(now, timeZone);
       const { data: counter, error: counterErr } = await admin.rpc('next_quote_number', { year });
       if (counterErr || typeof counter !== 'number') throw new Error(`Numbering the quote failed: ${counterErr?.message ?? 'no number returned'}`);
       // A stored prefix that is not 1 to 6 capitals or digits falls back to KN (OD16), never '-2026-…'.
       quoteNumber = counterQuoteNumber(send.prefix, year, counter, version);
     }
 
-    const { expiresAt } = quoteValidUntil(now, settings.validDays);
+    const { expiresAt } = quoteValidUntil(now, settings.validDays, timeZone);
     const document = buildQuoteDocument({
       draft,
       options,
@@ -182,6 +186,7 @@ export async function POST(request: Request) {
       warranty: settings.warranty,
       // The sentence the customer signs under, stored with the quote (L31, OD14).
       consent: send.consent,
+      timeZone,
     });
 
     const pdf = await renderQuotePdf(document);

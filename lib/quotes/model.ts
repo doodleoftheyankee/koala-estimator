@@ -5,7 +5,7 @@
 // text never change, and it keeps printing the way it was printed when it was sent. `format` says
 // how: documents sent before the accuracy round (Nov 2026) have none and print exactly as they did;
 // format 2 prints every price in whole dollars, sentences included (OD4).
-import { businessDate, formatMoney } from '@/lib/format';
+import { BUSINESS_TIME_ZONE, businessDate, formatMoney, LEGACY_TIME_ZONE, validTimeZone } from '@/lib/format';
 import { recommendedTier } from '@/lib/field/recommended';
 import type { CustomerItemKind, Financing, PricedOption, Tier } from '@/lib/pricing';
 import type { EstimateDraft } from '@/lib/sync/draft';
@@ -49,6 +49,12 @@ export interface QuoteDocument {
    * before the accuracy round carry the UTC date instead, which can be a day late; it is kept.
    */
   validUntil: string;
+  /**
+   * The IANA time zone the quote was sent in (the business time zone then), which its dates and
+   * times print in (release review C DOC-1). Documents sent before it was stored have none and
+   * print in LEGACY_TIME_ZONE, as they always did (documentTimeZone).
+   */
+  timeZone?: string;
   branding: Branding;
   customer: { name: string; email: string | null; phone: string | null };
   property: { line1: string; line2: string };
@@ -70,6 +76,11 @@ export const DEFAULT_BRAND_COLOR = '#0f766e';
 
 /** The document format this code writes (see QuoteDocument.format). */
 export const DOCUMENT_FORMAT = 2;
+
+/** The zone a document's dates and times print in: its own, else the one every quote printed in before (hard rule 1). */
+export function documentTimeZone(doc: Pick<QuoteDocument, 'timeZone'>): string {
+  return validTimeZone(doc.timeZone) ?? LEGACY_TIME_ZONE;
+}
 
 /** True for a document sent before the accuracy round: it prints exactly as it did then (hard rule 1). */
 export function isLegacyDocument(doc: Pick<QuoteDocument, 'format'>): boolean {
@@ -105,9 +116,9 @@ export function legacyQuoteNumber(estimateId: string, version: number, issuedAt:
   return `KN-${issuedAt.getUTCFullYear()}-${estimateId.replace(/-/g, '').slice(0, 6).toUpperCase()}-v${version}`;
 }
 
-/** The year of an instant in the business time zone (a quote sent Jan 1 at 03:00 UTC is still last year's in New York). */
-export function businessYear(at: Date): number {
-  return Number(businessDate(at)!.slice(0, 4));
+/** The year of an instant in the business time zone, or `tz` (a quote sent Jan 1 at 03:00 UTC is still last year's in New York). */
+export function businessYear(at: Date, tz: string = BUSINESS_TIME_ZONE): number {
+  return Number(businessDate(at, tz)!.slice(0, 4));
 }
 
 /** A quote number from the counter (OD10): prefix, business year, the year's count and the version: "KN-2026-0001-v1". */
@@ -134,12 +145,12 @@ export const DEFAULT_QUOTE_PREFIX = 'KN';
 /**
  * When a quote's link stops working (issued + validDays x 24 h, stored as quotes.expires_at; the
  * link works up to and including that moment) and the "Valid until" date to print: the
- * business-zone date of that last moment. Sent 2026-11-18 at 02:30 UTC for 30 days: the link
- * stops at 2026-12-18 02:30 UTC, which is Dec 17 at 9:30 PM in the business zone, so Dec 17.
+ * business-zone (or `tz`) date of that last moment. Sent 2026-11-18 at 02:30 UTC for 30 days: the
+ * link stops at 2026-12-18 02:30 UTC, which is Dec 17 at 9:30 PM in New York, so Dec 17.
  */
-export function quoteValidUntil(issuedAt: Date, validDays: number): { expiresAt: Date; validUntil: string } {
+export function quoteValidUntil(issuedAt: Date, validDays: number, tz: string = BUSINESS_TIME_ZONE): { expiresAt: Date; validUntil: string } {
   const expiresAt = new Date(issuedAt.getTime() + validDays * 86_400_000);
-  return { expiresAt, validUntil: businessDate(expiresAt)! };
+  return { expiresAt, validUntil: businessDate(expiresAt, tz)! };
 }
 
 export function buildQuoteDocument(args: {
@@ -156,14 +167,18 @@ export function buildQuoteDocument(args: {
   warranty: string;
   /** The e-sign consent sentence for this quote (lib/quotes/consent.ts esignConsent). */
   consent: string;
+  /** The zone the quote is sent in, kept with it (default: the business time zone). */
+  timeZone?: string;
 }): QuoteDocument {
   const { draft, issuedAt } = args;
+  const timeZone = validTimeZone(args.timeZone) ?? BUSINESS_TIME_ZONE;
   return {
     format: DOCUMENT_FORMAT,
     quoteNumber: args.quoteNumber,
     version: args.version,
     issuedAt: issuedAt.toISOString(),
-    validUntil: quoteValidUntil(issuedAt, args.validDays).validUntil,
+    validUntil: quoteValidUntil(issuedAt, args.validDays, timeZone).validUntil,
+    timeZone,
     branding: args.branding,
     customer: {
       name: `${draft.customer.firstName} ${draft.customer.lastName}`.trim(),

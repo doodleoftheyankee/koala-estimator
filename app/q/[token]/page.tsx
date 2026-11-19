@@ -8,7 +8,7 @@ import { CircleCheck, Clock, Files, Lock } from '@/components/daymark/icons';
 import { consentFor } from '@/lib/quotes/consent';
 import { financingLine } from '@/lib/quotes/email';
 import { isExpired, type PublicQuoteRow } from '@/lib/quotes/lookup';
-import { isLegacyDocument } from '@/lib/quotes/model';
+import { documentTimeZone, isLegacyDocument } from '@/lib/quotes/model';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getQuote } from './data';
 import { ClosedState, ContactCard, NotesCard, OfficeContact, PdfLink, QuoteIntro, ReachUsAction, SignedSummary, TermsCard } from './parts';
@@ -74,7 +74,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
         action={<PdfLink href={pdfHref}>Download your signed quote (PDF)</PdfLink>}
         aside={contacts}
       >
-        <p>Your quote was signed{quote.signed_at ? ` on ${longDate(quote.signed_at)}` : ''}.</p>
+        <p>Your quote was signed{quote.signed_at ? ` on ${longDate(quote.signed_at, documentTimeZone(doc))}` : ''}.</p>
         {quote.signed_tier ? <SignedSummary tier={quote.signed_tier} label={opt?.label ?? null} price={signedPrice} cents={legacy} /> : null}
         <p>
           We will contact you shortly to schedule the work. Questions? <OfficeContact branding={doc.branding} estimator={doc.estimator} capital />.

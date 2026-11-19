@@ -53,6 +53,7 @@ import {
   plural,
   profileNameRowSchema,
   RUN_COLUMNS,
+  nightlyScheduleWords,
   runKindLabel,
   scopeLabel,
   scopeNamesFrom,
@@ -419,7 +420,7 @@ function Overview({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
           >
             {last ? <RunStatusBadge status={last.status} /> : <span className="text-slate-500">—</span>}
           </Stat>
-          <Stat label="Schedule" sub="Runs nightly at about 2:15 AM Eastern (3:15 AM while daylight saving time is on). All times on this page are Eastern.">
+          <Stat label="Schedule" sub={nightlyScheduleWords()}>
             Nightly
           </Stat>
         </div>

@@ -879,3 +879,19 @@ describe('formatting', () => {
     expect(formatDuration('bad', t)).toBeNull();
   });
 });
+
+describe('Insights words the nightly run in the business zone (release review C FLOW-7)', () => {
+  it('says the run time and the zone from the zone, word for word as before in New York', async () => {
+    const m = (await import('./learning')) as Record<string, unknown>;
+    expect(m.nightlyScheduleWords, 'nightlyScheduleWords').toBeTypeOf('function');
+    const words = m.nightlyScheduleWords as (tz?: string) => string;
+    expect(words('America/New_York')).toBe(
+      'Runs nightly at about 2:15 AM Eastern (3:15 AM while daylight saving time is on). All times on this page are Eastern.',
+    );
+    expect(words()).toBe(words('America/New_York'));
+    expect(words('America/Los_Angeles')).toBe(
+      'Runs nightly at about 11:15 PM Pacific (12:15 AM while daylight saving time is on). All times on this page are Pacific.',
+    );
+    expect(words('America/Phoenix')).toBe('Runs nightly at about 12:15 AM Mountain. All times on this page are Mountain.');
+  });
+});
