@@ -100,49 +100,133 @@ export function estimateOptionHeight(option: Pick<QuoteOptionDoc, 'tier' | 'labe
 /**
  * One option: its title bar, bullets, lines, total and financing. `keepTogether` (documents sent
  * from the accuracy round on, L39) keeps the whole block on one page, so an option's lines are
- * never split from its title or total; an option too long or too tall for a page still breaks,
- * its title never left alone at the foot of a page.
+ * never split from its title or total. An option too long or too tall for a page still breaks, and
+ * then (release review C DOC-5) its title bar moves with its first bullet, and the column header
+ * with its first line, so neither is ever left alone at the foot of a page. (react-pdf's
+ * minPresenceAhead does nothing for a first child, such as the title bar: it only breaks a page
+ * between siblings.) A document sent before lays out exactly as it did (hard rule 1).
  */
 export function OptionSection({ option, color, recommended, keepTogether = false }: { option: QuoteOptionDoc; color: string; recommended: boolean; keepTogether?: boolean }) {
   const together =
     keepTogether && option.items.length + option.bullets.length <= KEEP_TOGETHER_MAX_LINES && estimateOptionHeight(option) <= KEEP_TOGETHER_MAX_HEIGHT;
+  const head = (
+    <View style={[s.optionHead, { backgroundColor: color }]} wrap={false} minPresenceAhead={90}>
+      <Text style={s.optionTitle}>
+        {TIER_NAMES[option.tier]}: {option.label}
+      </Text>
+      {recommended ? <Text style={[s.badge, { color }]}>RECOMMENDED</Text> : null}
+    </View>
+  );
+  const bullet = (b: string, i: number) => (
+    <View key={i} style={s.bullet}>
+      <Text style={s.bulletDot}>{'•'}</Text>
+      <Text style={{ flex: 1 }}>{b}</Text>
+    </View>
+  );
+  const itemHead = (
+    <View style={s.itemHead} wrap={false}>
+      <Text style={[s.colArea, s.label]}>Area</Text>
+      <Text style={[s.colDesc, s.label]}>Work</Text>
+      <Text style={[s.colPrice, s.label]}>Price</Text>
+    </View>
+  );
+  const item = (it: QuoteOptionDoc['items'][number], i: number) => (
+    <View key={i} style={s.item} wrap={false}>
+      <Text style={s.colArea}>{it.areaName}</Text>
+      <Text style={s.colDesc}>{it.description}</Text>
+      <Text style={s.colPrice}>{quoteMoney(it.price)}</Text>
+    </View>
+  );
+  const totals = (
+    <>
+      <View style={s.total} wrap={false}>
+        <Text style={s.totalText}>
+          {TIER_NAMES[option.tier]} total: {quoteMoney(option.price)}
+        </Text>
+      </View>
+      {option.financing ? <Text style={s.financing}>{financingLine(option.financing)}</Text> : null}
+    </>
+  );
+
+  if (keepTogether && !together) {
+    // Breaks across pages: the title bar with the first bullet (or, with none, the column header
+    // and the first line), and the column header with the first line, each moved as one.
+    const [firstBullet, ...moreBullets] = option.bullets;
+    const [firstItem, ...moreItems] = option.items;
+    const headerAndFirst = (
+      <>
+        {itemHead}
+        {firstItem ? item(firstItem, 0) : null}
+      </>
+    );
+    return (
+      <View style={s.option}>
+        <View wrap={false}>
+          {head}
+          <View style={[s.optionBody, { paddingBottom: 0 }]}>{firstBullet !== undefined ? bullet(firstBullet, 0) : headerAndFirst}</View>
+        </View>
+        <View style={[s.optionBody, { paddingTop: 0 }]}>
+          {firstBullet !== undefined ? (
+            <>
+              {moreBullets.map((b, i) => bullet(b, i + 1))}
+              <View wrap={false}>{headerAndFirst}</View>
+            </>
+          ) : null}
+          {moreItems.map((it, i) => item(it, i + 1))}
+          {totals}
+        </View>
+      </View>
+    );
+  }
+
   return (
     // No wrap prop at all unless kept together: react-pdf lays out an explicit `wrap={undefined}`
     // differently from none, and a document sent before must lay out exactly as it did (hard rule 1).
     <View style={s.option} {...(together ? { wrap: false } : {})}>
-      <View style={[s.optionHead, { backgroundColor: color }]} wrap={false} minPresenceAhead={90}>
-        <Text style={s.optionTitle}>
-          {TIER_NAMES[option.tier]}: {option.label}
-        </Text>
-        {recommended ? <Text style={[s.badge, { color }]}>RECOMMENDED</Text> : null}
-      </View>
+      {head}
       <View style={s.optionBody}>
-        {option.bullets.map((b, i) => (
-          <View key={i} style={s.bullet}>
-            <Text style={s.bulletDot}>{'•'}</Text>
-            <Text style={{ flex: 1 }}>{b}</Text>
-          </View>
-        ))}
-        <View style={s.itemHead} wrap={false}>
-          <Text style={[s.colArea, s.label]}>Area</Text>
-          <Text style={[s.colDesc, s.label]}>Work</Text>
-          <Text style={[s.colPrice, s.label]}>Price</Text>
-        </View>
-        {option.items.map((it, i) => (
-          <View key={i} style={s.item} wrap={false}>
-            <Text style={s.colArea}>{it.areaName}</Text>
-            <Text style={s.colDesc}>{it.description}</Text>
-            <Text style={s.colPrice}>{quoteMoney(it.price)}</Text>
-          </View>
-        ))}
-        <View style={s.total} wrap={false}>
-          <Text style={s.totalText}>
-            {TIER_NAMES[option.tier]} total: {quoteMoney(option.price)}
-          </Text>
-        </View>
-        {option.financing ? <Text style={s.financing}>{financingLine(option.financing)}</Text> : null}
+        {option.bullets.map(bullet)}
+        {itemHead}
+        {option.items.map(item)}
+        {totals}
       </View>
     </View>
+  );
+}
+
+/**
+ * A notes, warranty or terms section. A document sent from the accuracy round on keeps a short one
+ * on one page, so its heading is never left alone at the foot of a page (release review C DOC-5);
+ * a long one keeps its heading with the first lines of its text. A document sent before lays out
+ * exactly as it did (hard rule 1).
+ */
+const SECTION_KEEP_MAX_CHARS = 900;
+function Section({ title, text, legacy }: { title: string; text: string; legacy: boolean }) {
+  if (legacy) {
+    return (
+      <View style={s.section}>
+        <Text style={s.sectionTitle}>{title}</Text>
+        <Text style={s.para}>{text}</Text>
+      </View>
+    );
+  }
+  if (text.length <= SECTION_KEEP_MAX_CHARS) {
+    return (
+      <View style={s.section} wrap={false}>
+        <Text style={s.sectionTitle}>{title}</Text>
+        <Text style={s.para}>{text}</Text>
+      </View>
+    );
+  }
+  // Too long to keep on one page: the heading is a child of the page, after the options, so
+  // minPresenceAhead keeps it with the first lines of the text.
+  return (
+    <>
+      <Text style={[s.sectionTitle, { marginTop: s.section.marginTop }]} minPresenceAhead={42}>
+        {title}
+      </Text>
+      <Text style={s.para}>{text}</Text>
+    </>
   );
 }
 
@@ -202,20 +286,9 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
           <OptionSection key={o.tier} option={o} color={color} recommended={o.tier === doc.recommendedTier} keepTogether={!legacy} />
         ))}
 
-        {doc.notes ? (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Notes</Text>
-            <Text style={s.para}>{doc.notes}</Text>
-          </View>
-        ) : null}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Warranty</Text>
-          <Text style={s.para}>{doc.warranty}</Text>
-        </View>
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Terms</Text>
-          <Text style={s.para}>{doc.terms}</Text>
-        </View>
+        {doc.notes ? <Section title="Notes" text={doc.notes} legacy={legacy} /> : null}
+        <Section title="Warranty" text={doc.warranty} legacy={legacy} />
+        <Section title="Terms" text={doc.terms} legacy={legacy} />
 
         <View style={s.sigBox} wrap={false}>
           <Text style={s.sectionTitle}>Acceptance</Text>

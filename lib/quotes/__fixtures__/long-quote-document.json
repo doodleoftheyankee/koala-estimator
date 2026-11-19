@@ -1,0 +1,266 @@
+{
+  "format": 2,
+  "quoteNumber": "KN-2026-0006-v1",
+  "version": 1,
+  "issuedAt": "2026-11-20T04:30:00.000Z",
+  "validUntil": "2026-12-19",
+  "branding": {
+    "company": "Koala Insulation",
+    "license": null,
+    "phone": null,
+    "email": null,
+    "website": null,
+    "primaryColor": "#0f766e",
+    "logoUrl": null
+  },
+  "customer": {
+    "name": "Bartholomew-Alexander Featherstonehaugh-Montgomery III",
+    "email": "customer@example.com",
+    "phone": "(555) 010-0100"
+  },
+  "property": {
+    "line1": "12345 Extraordinarily Long Street Name Boulevard, Unit 4B",
+    "line2": "Rancho Santa Margarita, CA 92688"
+  },
+  "estimator": {
+    "name": "Eddie Estimator",
+    "email": "eddie@example.com"
+  },
+  "options": [
+    {
+      "tier": "good",
+      "label": "Good package",
+      "bullets": [
+        "Brings your attic to current code R-value",
+        "Dense cellulose fills gaps and blocks air movement",
+        "Insulates the floor above the crawlspace",
+        "Installed from outside or inside with minimal disruption",
+        "Fills the full cavity"
+      ],
+      "items": [
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Blown Cellulose to R-49 (~10.6\" added), 1,450 sq ft",
+          "price": 3248
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Blown Cellulose to R-49 (~10.6\" added), 400 sq ft",
+          "price": 1038
+        },
+        {
+          "kind": "work",
+          "areaName": "Crawlspace under family room",
+          "description": "Fiberglass Batts to R-19 (6.25 in thick), 600 sq ft",
+          "price": 1788
+        },
+        {
+          "kind": "work",
+          "areaName": "Exterior walls, north side",
+          "description": "Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 900 sq ft",
+          "price": 1183
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Remove and dispose of existing insulation (300 sq ft)",
+          "price": 731
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Blown Cellulose to R-49 (~13.6\" added), 300 sq ft",
+          "price": 987
+        },
+        {
+          "kind": "travel",
+          "areaName": "",
+          "description": "Travel and setup",
+          "price": 1240
+        }
+      ],
+      "price": 10215,
+      "financing": null
+    },
+    {
+      "tier": "better",
+      "label": "Better package",
+      "bullets": [
+        "Seals the leaks that drive drafts and high bills",
+        "Dense cellulose blocks air movement",
+        "Eligible for most utility rebates",
+        "Moisture-resistant",
+        "Seals out drafts and pests",
+        "Seals and insulates in one step",
+        "Excellent sound dampening"
+      ],
+      "items": [
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Blown Cellulose to R-60 (~13.6\" added), 1,450 sq ft",
+          "price": 4149
+        },
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Air sealing of top plates, penetrations and bypasses (1,450 sq ft)",
+          "price": 983
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Blown Cellulose to R-60 (~13.6\" added), 400 sq ft",
+          "price": 1309
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Air sealing of top plates, penetrations and bypasses (400 sq ft)",
+          "price": 327
+        },
+        {
+          "kind": "work",
+          "areaName": "Crawlspace under family room",
+          "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 600 sq ft",
+          "price": 3131
+        },
+        {
+          "kind": "work",
+          "areaName": "Exterior walls, north side",
+          "description": "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 900 sq ft",
+          "price": 2079
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Remove and dispose of existing insulation (300 sq ft)",
+          "price": 731
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Blown Cellulose to R-60 (~16.7\" added), 300 sq ft",
+          "price": 1148
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Air sealing of top plates, penetrations and bypasses (300 sq ft)",
+          "price": 230
+        },
+        {
+          "kind": "travel",
+          "areaName": "",
+          "description": "Travel and setup",
+          "price": 2163
+        }
+      ],
+      "price": 16250,
+      "financing": null
+    },
+    {
+      "tier": "best",
+      "label": "Best package",
+      "bullets": [
+        "Old, dirty or damaged insulation removed",
+        "Full air sealing before new insulation",
+        "Best comfort and efficiency",
+        "Moisture-resistant",
+        "Every penetration sealed",
+        "Warmest floors",
+        "Highest R per inch",
+        "Adds wall rigidity and a moisture barrier"
+      ],
+      "items": [
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Remove and dispose of existing insulation (1,450 sq ft)",
+          "price": 3278
+        },
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Blown Cellulose to R-60 (~16.7\" added), 1,450 sq ft",
+          "price": 5049
+        },
+        {
+          "kind": "work",
+          "areaName": "Main house attic over the bedrooms and the hallway",
+          "description": "Air sealing of top plates, penetrations and bypasses (1,450 sq ft)",
+          "price": 983
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Remove and dispose of existing insulation (400 sq ft)",
+          "price": 1060
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Blown Cellulose to R-60 (~16.7\" added), 400 sq ft",
+          "price": 1553
+        },
+        {
+          "kind": "work",
+          "areaName": "Garage attic",
+          "description": "Air sealing of top plates, penetrations and bypasses (400 sq ft)",
+          "price": 327
+        },
+        {
+          "kind": "work",
+          "areaName": "Crawlspace under family room",
+          "description": "Closed-Cell Spray Foam to R-19 (~2.9\" added), 600 sq ft",
+          "price": 3131
+        },
+        {
+          "kind": "work",
+          "areaName": "Crawlspace under family room",
+          "description": "Air sealing of the rim, penetrations and gaps in the floor above (600 sq ft)",
+          "price": 474
+        },
+        {
+          "kind": "work",
+          "areaName": "Exterior walls, north side",
+          "description": "Closed-Cell Spray Foam to R-20 (~3.1\" added), 900 sq ft",
+          "price": 4603
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Remove and dispose of existing insulation (300 sq ft)",
+          "price": 731
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Blown Cellulose to R-60 (~16.7\" added), 300 sq ft",
+          "price": 1148
+        },
+        {
+          "kind": "work",
+          "areaName": "Bonus room knee walls",
+          "description": "Air sealing of top plates, penetrations and bypasses (300 sq ft)",
+          "price": 230
+        },
+        {
+          "kind": "travel",
+          "areaName": "",
+          "description": "Travel and setup",
+          "price": 3393
+        }
+      ],
+      "price": 25960,
+      "financing": null
+    }
+  ],
+  "recommendedTier": "better",
+  "notes": "We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done. We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done. We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done. We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done. We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done. We will need access to the attic hatch in the primary bedroom closet. Please move stored boxes away from the hatch the night before. The crew will lay drop cloths and clean up when done.",
+  "terms": "Quote valid for the period shown. A signed quote authorizes Koala Insulation to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.",
+  "warranty": "Limited lifetime warranty",
+  "consent": "I agree to sign this quote electronically. My electronic signature is the legal equivalent of my handwritten signature (ESIGN Act and California UETA). I accept the option and price I selected above and the terms of this quote."
+}

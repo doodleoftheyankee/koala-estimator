@@ -23,8 +23,10 @@ import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { recommendedTier } from '@/lib/field/recommended';
 import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
 import { officeSignedNotice, signedConfirmationEmail } from './email';
-import { buildQuoteDocument, type Branding, type QuoteDocument } from './model';
+import { buildQuoteDocument, DOCUMENT_FORMAT, type Branding, type QuoteDocument, type QuoteOptionDoc } from './model';
 import { renderQuotePdf } from './pdf';
+import longQuote from './__fixtures__/long-quote-document.json';
+import legacyPages from './__fixtures__/legacy-pdf-pages.json';
 
 vi.mock('server-only', () => ({}));
 
@@ -454,5 +456,69 @@ describe('Release review C DOC-1: a quote prints in the zone it was sent in', ()
     expect(old).toContain('Date: November 21, 2026 at 3:15:00 PM EST');
     const { expiredOn } = await import('@/app/q/[token]/quote-view');
     expect(expiredOn({ ...sentBefore(doc), validUntil: '2026-12-20' }, '2026-12-20T05:30:00.000Z')).toBe('December 20, 2026');
+  });
+});
+
+describe('Release review C DOC-5: nothing is left alone at the foot of a PDF page', () => {
+  const AREAS = ['Main house attic', 'Garage attic', 'Crawlspace', 'Basement rim joists', 'Exterior walls'];
+  const option = (tier: Tier, items: number, bullets: number): QuoteOptionDoc => {
+    const lines = Array.from({ length: items }, (_, i) => ({ kind: 'work' as const, areaName: AREAS[i % AREAS.length]!, description: `Blown-in fiberglass to R-49, air sealing and baffles, line ${i + 1}`, price: 500 + i }));
+    const label = `${tier[0]!.toUpperCase()}${tier.slice(1)} package`;
+    return { tier, label, bullets: Array.from({ length: bullets }, (_, i) => `Benefit number ${i + 1}: lower energy bills and a more comfortable home all year`), items: lines, price: lines.reduce((a, b) => a + b.price, 0), financing: null };
+  };
+  /** Good with `good` lines and 4 bullets, Better with `better` lines and `bullets` bullets, Best with 13 lines and 8 bullets. */
+  const sweepDoc = (good: number, better: number, bullets: number): QuoteDocument => ({
+    format: DOCUMENT_FORMAT,
+    quoteNumber: 'AA-2026-0003-v1',
+    version: 1,
+    issuedAt: '2026-11-19T17:00:00.000Z',
+    validUntil: '2026-12-19',
+    branding: { ...BRAND, license: null, phone: null, email: null },
+    customer: { name: 'Robin Vale', email: 'robin@example.com', phone: null },
+    property: { line1: '9 Elm Ct', line2: 'Springfield, IL 62701' },
+    estimator: { name: 'Sam Rivera', email: 'sam@acme.example' },
+    options: [option('good', good, 4), option('better', better, bullets), option('best', 13, 8)],
+    recommendedTier: 'better',
+    notes: null,
+    terms: 'Quote valid for the period shown.',
+    warranty: 'Limited lifetime warranty',
+    consent: CONSENT_IL,
+  });
+  const NAMES = { good: 'Good', better: 'Better', best: 'Best' } as const;
+  /** Every page but the last that ends (its footer aside) with a column header, an option's title or a section heading. */
+  const orphans = (pages: string[], doc: QuoteDocument): string[] => {
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const footer = new RegExp(`${esc(doc.branding.company)} \\| ${esc(doc.quoteNumber)}Page \\d+ of \\d+$`);
+    const ends = ['AREAWORKPRICE', 'Notes', 'Warranty', 'Terms', ...doc.options.flatMap((o) => [`${NAMES[o.tier]}: ${o.label}`, `${NAMES[o.tier]}: ${o.label}RECOMMENDED`])];
+    return pages.slice(0, -1).flatMap((p, i) => {
+      const body = p.replace(footer, '');
+      expect(body, 'the footer is stripped').not.toBe(p);
+      const hit = ends.find((e) => body.endsWith(e));
+      return hit ? [`page ${i + 1} ends with "${hit}"`] : [];
+    });
+  };
+
+  it('a long quote (five areas; Best with 13 two-line rows and 8 bullets) never ends a page with the column header', async () => {
+    const doc = longQuote as unknown as QuoteDocument;
+    expect(doc.format).toBe(DOCUMENT_FORMAT);
+    expect(orphans(pdfPages(await renderQuotePdf(doc)), doc)).toEqual([]);
+  });
+
+  it('no layout ends a page with a column header, an option title, "Warranty" or "Terms"', { timeout: 120_000 }, async () => {
+    const found: string[] = [];
+    for (const good of [2, 3, 4, 5, 6])
+      for (const better of [4, 6, 8, 9, 11, 12])
+        for (const bullets of [0, 3, 5, 7, 8]) {
+          const doc = sweepDoc(good, better, bullets);
+          for (const o of orphans(pdfPages(await renderQuotePdf(doc)), doc)) found.push(`Good ${good}, Better ${better} with ${bullets} bullets: ${o}`);
+        }
+    expect(found).toEqual([]);
+  });
+
+  it('a quote sent before the accuracy round lays out exactly as it did (hard rule 1)', async () => {
+    const docs: Record<string, QuoteDocument> = { long: longQuote as unknown as QuoteDocument, '2-9-0': sweepDoc(2, 9, 0), '3-12-7': sweepDoc(3, 12, 7), '5-12-8': sweepDoc(5, 12, 8) };
+    for (const [name, doc] of Object.entries(docs)) {
+      expect(pdfPages(await renderQuotePdf(sentBefore(doc))), name).toEqual((legacyPages as Record<string, string[]>)[name]);
+    }
   });
 });
