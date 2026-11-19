@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { priceEstimate, type PricedEstimate } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
@@ -69,7 +68,6 @@ export function EstimateEditor({
   const bundle = useLive(() => getCachedBundle(), [], null);
   const [draft, setDraft] = useState<EstimateDraft | null>(null);
   const [step, setStep] = useState<Step>('customer');
-  const router = useRouter();
   // Where the last Fix button from the Send checklist pointed (the step opens there).
   const [focus, setFocus] = useState<FixTarget | null>(null);
 
@@ -245,12 +243,8 @@ export function EstimateEditor({
     setStep(k);
     window.scrollTo(0, 0);
   };
-  /** A Fix button: open the step (or the Business profile page) at the item to fix. */
+  /** A Fix button: open the step at the item to fix. */
   const fix = (t: FixTarget) => {
-    if (t.step === 'business') {
-      router.push('/admin/business');
-      return;
-    }
     setFocus(t);
     setStep(t.step);
     window.scrollTo(0, 0);

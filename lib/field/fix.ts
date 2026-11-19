@@ -23,9 +23,7 @@ export type FixTarget =
     }
   | { step: 'areas'; areaId?: undefined; open?: undefined }
   /** Open the Options step, at one option when given; edit 'price' opens its price editor at Customer price (flow-B12). */
-  | { step: 'options'; tier?: Tier; edit?: 'price' }
-  /** The Business profile page (owner and office). */
-  | { step: 'business' };
+  | { step: 'options'; tier?: Tier; edit?: 'price' };
 
 export interface Fix {
   /** The button's words, e.g. "Finish measuring". */
@@ -42,7 +40,5 @@ export function fixElementId(t: FixTarget): string | null {
       return t.areaId ? (t.open === 'size' ? `area-${t.areaId}-sqft` : `area-${t.areaId}`) : 'add-area';
     case 'options':
       return t.tier ? (t.edit === 'price' ? `option-${t.tier}-price` : `option-${t.tier}`) : null;
-    case 'business':
-      return null;
   }
 }
