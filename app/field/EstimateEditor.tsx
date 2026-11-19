@@ -321,7 +321,16 @@ export function EstimateEditor({
           {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
           {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} focus={focus} /> : null}
           {step === 'options' ? (
-            <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
+            <OptionsStep
+              draft={draft}
+              update={update}
+              bundle={bundle}
+              priced={priced}
+              flags={flags}
+              profile={profile}
+              online={online}
+              editPrice={focus?.step === 'options' && focus.edit === 'price' ? (focus.tier ?? null) : null}
+            />
           ) : null}
         </fieldset>
         {step === 'send' ? (

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { priceEstimate, type AreaInput, type PricedEstimate } from '@/lib/pricing';
 import { seededArea, seededBundle } from '@/lib/pricing/__fixtures__/seeded';
 import { newDraft, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { fixElementId } from '@/lib/field/fix';
 import { OptionsStep } from './OptionsStep';
 
 const AREA_ID = '00000000-0000-4000-8000-000000000001';
@@ -16,9 +17,10 @@ function draftWith(area: AreaInput, patch: Partial<EstimateDraft> = {}): Estimat
 
 const priceOf = (draft: EstimateDraft): PricedEstimate => priceEstimate(toEstimateInput(draft), seededBundle.snapshot, seededBundle.coefficientSet);
 
-function render(draft: EstimateDraft): string {
+function render(draft: EstimateDraft, editPrice: 'good' | 'better' | 'best' | null = null): string {
   return renderToStaticMarkup(
     <OptionsStep
+      editPrice={editPrice}
       draft={draft}
       update={() => {}}
       bundle={seededBundle}
@@ -94,5 +96,20 @@ describe('F10 (OD1, OD6): the card the quote highlights says so, whichever optio
     expect(best).toContain('Recommended (your pick is not shown)');
     expect(best).not.toContain('(default)');
     expect(best).toContain('Highlighted on the quote');
+  });
+});
+
+describe('flow-B12: "Change the price" opens that option\'s price editor', () => {
+  it('with editPrice, the Good card opens with Customer price (the box EstimateEditor focuses, option-good-price)', () => {
+    const draft = draftWith(seededArea({ id: AREA_ID }), { overrides: { good: { price: 3500, reason: 'Two hatches' } } });
+    const good = card(render(draft, 'good'), 'Good')!;
+    expect(good).toContain('Customer price');
+    expect(good).toContain('id="option-good-price"');
+    expect(good).toContain('value="3500"');
+    // Other cards, and the step opened any other way, show no editor.
+    expect(card(render(draft, 'good'), 'Better')).not.toContain('Customer price');
+    expect(render(draft)).not.toContain('Customer price');
+    expect(fixElementId({ step: 'options', tier: 'good', edit: 'price' })).toBe('option-good-price');
+    expect(fixElementId({ step: 'options', tier: 'good' })).toBe('option-good');
   });
 });

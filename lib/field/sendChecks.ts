@@ -215,7 +215,7 @@ function problemCheck(p: PolicyProblem, latest: Partial<Record<Tier, PriceApprov
     id: `price:${tier}`,
     ok: false,
     label: p.message,
-    fix: { label: 'Change the price', target: { step: 'options', tier } },
+    fix: { label: 'Change the price', target: { step: 'options', tier, edit: 'price' } },
     approval: {
       tier,
       price: p.price!,

@@ -70,7 +70,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
         id: `area:${walls.id}`,
         ok: false,
         label: "Exterior walls: the measurement isn't finished, so this area isn't priced. Enter the average wall height.",
-        fix: { label: 'Finish measuring', target: { step: 'areas', areaId: walls.id, open: 'measure' } },
+        fix: { label: 'Finish measuring', target: { step: 'areas', areaId: walls.id, open: 'measure', field: 'wallHeight' } },
       },
     ]);
   });
@@ -105,7 +105,8 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     expect(rest).toEqual([]);
     expect(check!.id).toBe('price:good');
     expect(check!.label).toMatch(new RegExp(`^Good: \\$${asked.toLocaleString('en-US')} is 20% above the model price of \\$${good.modelPrice.toLocaleString('en-US')}\\. You can quote \\$[\\d,]+ to \\$[\\d,]+ on your own`));
-    expect(check!.fix).toEqual({ label: 'Change the price', target: { step: 'options', tier: 'good' } });
+    // The Fix opens Good's price editor at Customer price (review B flow-B12).
+    expect(check!.fix).toEqual({ label: 'Change the price', target: { step: 'options', tier: 'good', edit: 'price' } });
     expect(check!.approval).toMatchObject({ tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, approver: 'office', status: 'none' });
   });
 

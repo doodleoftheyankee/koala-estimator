@@ -428,6 +428,15 @@ let asked;
     `the checklist names the price, the model price and the range: "${said}"`,
   );
   check((await item.getByRole('button', { name: 'Change the price' }).count()) === 1, 'with a Fix that goes back to the price');
+  // Review B flow-B12: the Fix opens Good's price editor with the cursor in Customer price.
+  await item.getByRole('button', { name: 'Change the price' }).click();
+  await page.locator('#option-good-price').waitFor({ timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement?.id === 'option-good-price', null, { timeout: 5000 }).catch(() => undefined);
+  const focused = await page.evaluate(() => ({ id: document.activeElement?.id ?? '', tag: document.activeElement?.tagName ?? '', value: document.activeElement instanceof HTMLInputElement ? document.activeElement.value : '' }));
+  check(focused.id === 'option-good-price' && focused.value === String(asked), `"Change the price" opens Good's price editor with the cursor in Customer price (${focused.tag}#${focused.id} = ${focused.value}; was BODY)`);
+  await page.screenshot({ path: SHOTS + '05e0-change-the-price-focused.png' });
+  await page.getByRole('button', { name: /^4 Send/ }).click();
+  await item.waitFor();
   check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits');
   await item.getByLabel(/Why this price\?/).fill('Two hatches and baffles the model does not count');
   await item.getByRole('button', { name: 'Request approval' }).click();
@@ -883,6 +892,11 @@ await page.screenshot({ path: SHOTS + '03i-roof-walls-applied.png', fullPage: tr
   check((await page.getByText(unfinishedText).count()) === 1, 'and why it is not priced');
   await page.screenshot({ path: SHOTS + '03i2-walls-measuring-not-finished.png', fullPage: true });
   await page.getByRole('button', { name: 'Finish measuring' }).click();
+  // Review B flow-B12: the sheet opens with the cursor in the empty wall height.
+  await wallSheet.getByLabel('Average wall height').waitFor();
+  await page.waitForFunction(() => document.activeElement instanceof HTMLInputElement && document.activeElement.closest('[data-measure-field="wallHeight"]') !== null, null, { timeout: 5000 }).catch(() => undefined);
+  check(await page.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.closest('[data-measure-field="wallHeight"]') !== null), '"Finish measuring" puts the cursor in Average wall height (was the page body)');
+  await page.screenshot({ path: SHOTS + '03i3-finish-measuring-focused.png' });
   await wallSheet.getByLabel('Average wall height').fill('8');
   await wallSheet.getByRole('button', { name: 'Use 1,440 sq ft' }).click();
   check((await page.getByLabel('Square feet').inputValue()) === '1440' && (await page.getByText(unfinishedText).count()) === 0, '"Finish measuring" opens Measure; 8 ft again is 1,440 sq ft');

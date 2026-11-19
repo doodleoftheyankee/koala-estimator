@@ -36,7 +36,8 @@ describe('a broken measurement takes its size back (L26, RF-07, S2-F14)', () => 
         areaId: start.id,
         ok: false,
         label: "Exterior walls: the measurement isn't finished, so this area isn't priced. Enter the average wall height.",
-        fix: { label: 'Finish measuring', target: { step: 'areas', areaId: start.id, open: 'measure' } },
+        // The fix opens the Measure sheet at the empty height (review B flow-B12).
+        fix: { label: 'Finish measuring', target: { step: 'areas', areaId: start.id, open: 'measure', field: 'wallHeight' } },
       },
     ]);
 

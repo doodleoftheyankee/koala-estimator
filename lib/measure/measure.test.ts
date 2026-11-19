@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMeasurement, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, sqftAfterMeasurement, type Measurement } from './measure';
+import { computeMeasurement, firstUnfinishedField, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, sqftAfterMeasurement, type Measurement } from './measure';
 
 function m(patch: Partial<Measurement> = {}): Measurement {
   return { ...newMeasurement('attic'), shape: { kind: 'rect', dims: { A: '40', B: '30' } }, ...patch };
@@ -128,5 +128,28 @@ describe('measuredSqft / summary / schema', () => {
     const value = m({ shape: { kind: 'custom', dims: {}, custom: { points: [[0, 0], [10, 0], [0, 10]], closed: true, sides: ['10', '', ''] } } });
     expect(measurementSchema.parse(value)).toEqual(value);
     expect(measurementSchema.safeParse({ ...value, mode: 'roof' }).success).toBe(false);
+  });
+});
+
+describe('firstUnfinishedField (review B flow-B12): where "Finish measuring" puts the cursor', () => {
+  it('names the Measure sheet field of the first thing to finish, in the order the sheet checks them', () => {
+    // A cutout's problem comes first, as in unfinishedReason.
+    const cut = { ...newCutout('floor', 'c1'), shape: rect('3', '') };
+    expect(firstUnfinishedField(m({ cutouts: [cut] }))).toBe('cutout:c1');
+    expect(firstUnfinishedField(m({ shape: rect('40', '') }))).toBe('shape');
+    const roof = m({ mode: 'roofline' });
+    expect(firstUnfinishedField(roof)).toBe('pitch');
+    expect(firstUnfinishedField({ ...roof, pitch: '30/12' })).toBe('pitch'); // steeper than 24/12
+    expect(firstUnfinishedField({ ...roof, pitch: '6/12', twoSlope: true })).toBe('pitch2');
+    expect(firstUnfinishedField({ ...roof, pitch: '6/12', twoSlope: true, pitch2: '8/12', splitPct: '150' })).toBe('splitPct');
+    const walls = { ...newMeasurement('walls'), perimeter: '120', wallHeight: '' };
+    expect(firstUnfinishedField(walls)).toBe('wallHeight');
+    expect(firstUnfinishedField({ ...walls, perimeter: 'ten', wallHeight: '8' })).toBe('perimeter');
+    expect(firstUnfinishedField({ ...walls, perimeter: '', shape: rect('', '') })).toBe('shape');
+  });
+
+  it('is null for a finished measurement; cutouts larger than the area point at the first cutout', () => {
+    expect(firstUnfinishedField(m())).toBeNull();
+    expect(firstUnfinishedField(m({ cutouts: [{ ...newCutout('floor', 'c9'), shape: rect('50', '50') }] }))).toBe('cutout:c9');
   });
 });

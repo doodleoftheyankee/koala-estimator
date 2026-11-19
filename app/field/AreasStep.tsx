@@ -8,7 +8,7 @@ import { NumberInput } from '@/components/NumberInput';
 import { Button as DmButton, Ruler } from '@/components/daymark';
 import type { Update } from './EstimateEditor';
 import type { FixTarget } from '@/lib/field/fix';
-import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
+import { measuredSqft, measurementSummary, newMeasurement, type MeasureField, type Measurement } from '@/lib/measure/measure';
 import { measurementChecks, withMeasurement } from '@/lib/field/measuring';
 import { MeasureSheet } from './measure/MeasureSheet';
 import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
@@ -44,6 +44,8 @@ export function AreasStep({
   const focusArea = focus?.step === 'areas' && focus.areaId && draft.areas.some((a) => a.id === focus.areaId) ? focus : null;
   const [open, setOpen] = useState<string | null>(focusArea?.areaId ?? draft.areas.at(-1)?.id ?? null);
   const [measuring, setMeasuring] = useState<string | null>(focusArea?.open === 'measure' && draft.measurements[focusArea.areaId!] ? focusArea.areaId! : null);
+  // "Finish measuring" opens the sheet with the cursor in the part to finish (review B flow-B12).
+  const [measureField, setMeasureField] = useState<MeasureField | null>(focusArea?.open === 'measure' ? (focusArea.field ?? null) : null);
   const [lookingUp, setLookingUp] = useState<string | null>(null);
   const [roofDone, setRoofDone] = useState<{ areaId: string; text: string } | null>(null);
   const address = lookupAddress(draft.property);
@@ -68,9 +70,10 @@ export function AreasStep({
    */
   const setMeasurement = (id: string, m: Measurement) => update((d) => withMeasurement(d, id, m));
   const unfinished = new Map(measurementChecks(draft).map((c) => [c.areaId, c]));
-  const openMeasure = (id: string) => {
+  const openMeasure = (id: string, field: MeasureField | null = null) => {
     if (!draft.measurements[id]) setMeasurement(id, newMeasurement(draft.areas.find((a) => a.id === id)?.jobType ?? 'attic'));
     setRoofDone(null);
+    setMeasureField(field);
     setMeasuring(id);
   };
   const removeMeasurement = (id: string) =>
@@ -143,7 +146,7 @@ export function AreasStep({
                 {unfinished.has(a.id) ? (
                   <Alert tone="amber">
                     <span className="block">{unfinished.get(a.id)!.label}</span>
-                    <Button size="sm" variant="secondary" className="mt-2" onClick={() => openMeasure(a.id)}>
+                    <Button size="sm" variant="secondary" className="mt-2" onClick={() => openMeasure(a.id, fieldOf(unfinished.get(a.id)!.fix.target))}>
                       {unfinished.get(a.id)!.fix.label}
                     </Button>
                   </Alert>
@@ -267,6 +270,8 @@ export function AreasStep({
 
       {measuringArea && draft.measurements[measuringArea.id] ? (
         <MeasureSheet
+          key={measuringArea.id}
+          focusField={measureField}
           area={measuringArea}
           measurement={draft.measurements[measuringArea.id]!}
           onChange={(m) => setMeasurement(measuringArea.id, m)}
@@ -290,6 +295,7 @@ export function AreasStep({
           onMeasure={() => {
             if (!draft.measurements[lookingUpArea.id]) setMeasurement(lookingUpArea.id, newMeasurement(lookingUpArea.jobType));
             setLookingUp(null);
+            setMeasureField(null);
             setMeasuring(lookingUpArea.id);
           }}
         />
@@ -307,6 +313,11 @@ export function AreasStep({
       </Card>
     </>
   );
+}
+
+/** The Measure sheet part a "Finish measuring" fix names, if any. */
+function fieldOf(t: FixTarget): MeasureField | null {
+  return t.step === 'areas' && t.open === 'measure' ? (t.field ?? null) : null;
 }
 
 function without<T>(record: Record<string, T>, key: string): Record<string, T> {
