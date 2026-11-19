@@ -464,6 +464,31 @@ describe('the parts with no roof data', () => {
   });
 });
 
+describe('the parts with no roof data start switched off (L28, RF-15)', () => {
+  it('a carport Google has no roof faces for is left out until the estimator turns it on', () => {
+    const r = withCarport();
+    expect(defaultFaces(r, 'house')).toEqual({ excluded: [5], unmatchedOut: true });
+    // 9 Carport Ct in the e2e mock (this house): the attic floor was 2,230 sq ft with the carport counted.
+    const counted = roofFigures(r, { overhangIn: 12, excluded: [5], unmatchedOut: false });
+    const start = roofFigures(r, { overhangIn: 12, ...defaultFaces(r, 'house') });
+    expect(roundSqft(counted.floorSqft)).toBe(2230);
+    expect(roundSqft(start.floorSqft)).toBe(1990);
+    expect(start.unmatchedOut).toBe(true);
+    expect(roundSqft(start.excludedSqft - counted.excludedSqft)).toBe(270);
+    // The prep note says it was left out.
+    expect(noteLine(r, start, defaultFaces(r, 'house'), 'attic')).toMatch(/left out face 5 at 1\/12 and 270 sq ft with no roof data\)/);
+  });
+
+  it('a part too small to offer stays counted, as Roof Takeoff counts it; the wall run never uses it', () => {
+    const small = { ...result(), footprintM2: 400, unmatchedM2: 19 }; // under 5% of the footprint
+    expect(defaultFaces(small, 'house')).toEqual({ excluded: [5], unmatchedOut: false });
+    expect(defaultFaces({ ...result(), segments: [], unmatchedM2: 217 }, 'house').unmatchedOut).toBe(false);
+    const r = withCarport();
+    const walls = roofFigures(r, { overhangIn: 12, ...defaultFaces(r, 'house') });
+    expect(walls.wallRunFt).toBe(roofFigures(r, choices(12, [5])).wallRunFt);
+  });
+});
+
 describe('what each area uses', () => {
   it('attic and commercial areas choose attic floor or roof deck; the rest have one number', () => {
     expect(roofJob('attic')).toBe('attic');
@@ -526,8 +551,13 @@ describe('check on site', () => {
     expect(checkOnSite(box, f(box), 'attic', true)).toEqual([]);
     expect(checkOnSite({ ...base, segments: [] }, f(base), 'attic', true)).toEqual(['Google has no roof faces for this house, so no faces can be left out.']);
     const carport = { ...withCarport(), precision: 'ROOFTOP', warnings: [] };
+    // Counted (turned on): say how to leave it out.
     expect(checkOnSite(carport, f(carport), 'attic', true)).toEqual(["270 sq ft of the outline has no roof data (a carport or flat part?). Turn it off below if it isn't over the attic."]);
-    expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
+    expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it off below if it isn't part of the garage\.$/);
+    // Left out (how it starts, L28): say so, and how to count it.
+    const out = (r: RoofResult) => roofFigures(r, choices(12, [], true));
+    expect(checkOnSite(carport, out(carport), 'attic', true)).toEqual(['270 sq ft of the outline has no roof data (a carport or flat part?). It is left out. Turn it on below if it is over the attic.']);
+    expect(checkOnSite(carport, out(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
     expect(checkOnSite(carport, f(carport), 'walls', true)).toEqual([]);
   });
 

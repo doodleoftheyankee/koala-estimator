@@ -401,6 +401,8 @@ export interface RoofFigures {
   /** How many faces are kept. */
   facesKept: number;
   overhangIn: number;
+  /** The parts with no roof data are left out (the choice the figures were worked out with). */
+  unmatchedOut: boolean;
 }
 
 /** The estimator's numbers for a result: exact (unrounded) feet and square feet. */
@@ -426,6 +428,7 @@ export function roofFigures(r: RoofResult, c: RoofChoices): RoofFigures {
     unmatchedSqft: r.unmatchedM2 * SQFT_PER_M2,
     facesKept: kept.length,
     overhangIn: c.overhangIn,
+    unmatchedOut: c.unmatchedOut,
   };
 }
 
@@ -495,11 +498,17 @@ export function startPick(measurement: Pick<Measurement, 'mode'> | undefined): R
 export const faceGroup = (job: RoofJob): FaceGroup => (job === 'garage' ? 'garage' : 'house');
 
 /**
- * The starting face choices: Roof Takeoff's own (attic.excluded) for the house; for a garage every
- * face starts off, as do the parts with no roof data, so the number is only what the estimator turns on.
+ * The starting face choices. For the house: the faces Roof Takeoff leaves out (attic.excluded), and
+ * the parts with no roof data (a carport, a flat bit) left out whenever the switch for them is
+ * offered (L28), so they count only when the estimator turns them on; a part too small to offer
+ * stays counted, as Roof Takeoff counts it. For a garage every face starts off, as do the parts
+ * with no roof data, so the number is only what the estimator turns on.
  */
-export function defaultFaces(r: Pick<RoofResult, 'segments' | 'defaultExcluded'>, group: FaceGroup): Pick<RoofChoices, 'excluded' | 'unmatchedOut'> {
-  return group === 'garage' ? { excluded: r.segments.map((s) => s.n), unmatchedOut: true } : { excluded: [...r.defaultExcluded], unmatchedOut: false };
+export function defaultFaces(
+  r: Pick<RoofResult, 'segments' | 'defaultExcluded' | 'unmatchedM2' | 'footprintM2'>,
+  group: FaceGroup,
+): Pick<RoofChoices, 'excluded' | 'unmatchedOut'> {
+  return group === 'garage' ? { excluded: r.segments.map((s) => s.n), unmatchedOut: true } : { excluded: [...r.defaultExcluded], unmatchedOut: showUnmatched(r) };
 }
 
 /** What each kind of area calls the number, and what the face switches mean for it. */
@@ -548,7 +557,16 @@ export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirm
   if (!r.segments.length) out.push('Google has no roof faces for this house, so no faces can be left out.');
   if (showUnmatched(r) && job !== 'walls') {
     const what = `${comma(roundSqft(f.unmatchedSqft))} sq ft of the outline has no roof data (a carport or flat part?).`;
-    out.push(paper ? what : job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
+    const space = JOB_WORDS[job].space;
+    const turn =
+      job === 'garage'
+        ? f.unmatchedOut
+          ? 'Turn it on below if it is part of the garage.'
+          : "Turn it off below if it isn't part of the garage."
+        : f.unmatchedOut
+          ? `It is left out. Turn it on below if it is over the ${space}.`
+          : `Turn it off below if it isn't over the ${space}.`;
+    out.push(paper ? what : `${what} ${turn}`);
   }
   // Roof Takeoff says "Lower-detail imagery. Check the pitch on site." for the same blurry photo: once is enough.
   const theirs = r.quality === 'LOW' ? r.warnings.filter((w) => !/^lower-detail imagery\b/i.test(w)) : r.warnings;

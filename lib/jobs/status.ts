@@ -17,10 +17,13 @@ export function isJobStatus(s: unknown): s is JobStatus {
 }
 
 /**
- * Moves the database accepts from `from` for this role (mirrors crew_set_job_status; the
- * database is the authority, this only decides which buttons to show).
+ * The status buttons to show: the moves the database accepts from `from` for this role (mirrors
+ * crew_set_job_status; the database is the authority). A job with verified actuals offers none
+ * (L37): verified rows are locked and feed learning, so the job stays completed until the owner
+ * unverifies them.
  */
-export function allowedTransitions(from: JobStatus, role: Role): JobStatus[] {
+export function allowedTransitions(from: JobStatus, role: Role, verifiedCount = 0): JobStatus[] {
+  if (verifiedCount > 0) return [];
   const staff = role === 'owner' || role === 'office';
   const out: JobStatus[] = [];
   if (from === 'scheduled') out.push('in_progress');
@@ -29,6 +32,12 @@ export function allowedTransitions(from: JobStatus, role: Role): JobStatus[] {
   if (staff && from !== 'cancelled') out.push('cancelled');
   return role === 'estimator' ? [] : out;
 }
+
+/** What the Status card says on a job with verified actuals, by who is looking (only the owner can Unverify). */
+export const VERIFIED_STATUS_TEXT: Record<'owner' | 'office', string> = {
+  owner: 'Its actuals are verified, so the status stays as it is. To change it, Unverify the actuals below first.',
+  office: 'Its actuals are verified, so the status stays as it is. Only the owner can Unverify them.',
+};
 
 // ---------------------------------------------------------------------------
 // Office grouping
