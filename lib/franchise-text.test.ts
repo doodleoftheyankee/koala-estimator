@@ -60,6 +60,26 @@ describe('hard rule 3: no franchise text in code', () => {
   it('reads the code it means to (a sanity check of the scan itself)', () => {
     expect(files.length).toBeGreaterThan(200);
     expect(files).toContain(path.join('lib', 'quotes', 'settings.ts'));
+    // The blower door code is scanned like every other file (release: blower door under the
+    // accuracy rules): the tool, its words and settings, the phone's store, the APIs, the office
+    // card and the Rebate programs page.
+    for (const f of [
+      'app/field/blower-door/BlowerDoorTool.tsx',
+      'app/field/blower-door/parts.tsx',
+      'app/field/blower-door/BlowerDoorLink.tsx',
+      'app/admin/rebates/RebatesEditor.tsx',
+      'app/admin/rebates/page.tsx',
+      'app/admin/rebates/actions.ts',
+      'app/api/blower-door/settings/route.ts',
+      'app/api/blower-door/tests/route.ts',
+      'app/jobs/[id]/BlowerDoorCard.tsx',
+      'lib/blowerdoor/words.ts',
+      'lib/blowerdoor/settings.ts',
+      'lib/offline/blowerDoor.ts',
+      'lib/offline/blowerDoorCore.ts',
+    ]) {
+      expect(files, f).toContain(path.join(...f.split('/')));
+    }
     expect(files.some((f) => f.startsWith(path.join('lib', 'demo')))).toBe(false);
     // It would catch one: the old default company is a literal like any other.
     expect(FRANCHISE.test("export const DEFAULT_COMPANY = 'Koala Insulation of Newark';")).toBe(true);

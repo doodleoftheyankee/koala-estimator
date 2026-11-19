@@ -31,6 +31,13 @@ describe('the blower door code', () => {
     for (const f of code) expect(readFileSync(f, 'utf8').includes(word), relative(ROOT, f)).toBe(false);
   });
 
+  // Release, "blower door under the accuracy rules" (OD12, OD13): the tool, its copied summary, the
+  // office card and the Rebate programs page name no company and no franchise, show no PLACEHOLDER
+  // text and never send anyone to the business profile. Nothing needed changing: this keeps it so.
+  it.each(['Koala Insulation', 'PLACEHOLDER', 'Placeholder', 'Business profile', 'business profile', '/admin/business', 'warranty', 'Newark', '(302)'])('never says %s', (word) => {
+    for (const f of code) expect(readFileSync(f, 'utf8').includes(word), relative(ROOT, f)).toBe(false);
+  });
+
   it('never types a dollar amount', () => {
     for (const f of code) {
       const text = readFileSync(f, 'utf8');
