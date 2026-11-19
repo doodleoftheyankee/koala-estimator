@@ -3,7 +3,7 @@
 // from a value the pricing engine already put in the quote. Tested in lib/quotes/quote-page.test.ts.
 import type { Financing, Tier } from '@/lib/pricing';
 import { formatDate, formatDateLong, formatMoney, TIER_LABELS } from '@/lib/format';
-import type { Branding } from '@/lib/quotes/model';
+import type { Branding, QuoteOptionDoc } from '@/lib/quotes/model';
 
 export const tierName = (tier: Tier): string => TIER_LABELS[tier];
 
@@ -52,7 +52,8 @@ export interface QuoteOptionView {
   tier: Tier;
   label: string;
   bullets: string[];
-  items: Array<{ areaName: string; description: string; price: number }>;
+  /** The quote's lines; job-level ones (travel, minimum, adjustment) have no area name. */
+  items: QuoteOptionDoc['items'];
   price: number;
   /** Present only when the quote carries financing for this option. */
   financing: { monthly: string; termMonths: number; line: string } | null;

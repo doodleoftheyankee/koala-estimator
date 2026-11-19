@@ -3,10 +3,14 @@
 // overrides) and price (the customer price override, else adjustedPrice).
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { priceEstimate } from './engine';
+import { priceEstimate as priceShown } from './engine';
+import { money } from './finance';
 import { canSendQuote } from './policy';
 import { ACCESS_LEVELS, JOB_TYPES, lineKey, type EstimateInput, type LineOverride, type PricedEstimate, type Tier } from './types';
 import { area, coefficients, estimate, snapshot } from './__fixtures__/seed';
+
+// Pricing math: every priced option, including those the customer is not shown (OD6).
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const price = (input: EstimateInput) => priceEstimate(input, snapshot, coefficients);
 const tier = (r: PricedEstimate, t: Tier) => {
@@ -47,7 +51,9 @@ describe('line overrides change cost and price', () => {
     const mat = good.lines.find((l) => l.key === FG_MAT)!;
     expect(mat).toMatchObject({ qty: 70, cost: 2660, modelQty: 58, modelCost: 2204, designQty: 53.33, isOverridden: true, overrideReason: 'Deep joist bays' });
     expect(good.materialCost).toBe(2660);
-    expect(good.directCost).toBe(tier(plain, 'good').directCost + 456);
+    // 12 more bags ($456) and the install labor for them: 10 h -> 11.72 h, +$68.80 (L7).
+    expect(good.directCost).toBe(money(tier(plain, 'good').directCost + 456 + 68.8));
+    expect(good.lines.find((l) => l.key === FG_LABOR)).toMatchObject({ hours: 11.72, modelHours: 10, isOverridden: false });
     expect(good.modelPrice).toBe(5420);
     expect(good.adjustedPrice).toBeGreaterThan(5420);
     expect(good.price).toBe(good.adjustedPrice);

@@ -1,8 +1,11 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { priceEstimate } from './engine';
+import { priceEstimate as priceShown, stepUp, workSignature } from './engine';
 import { ACCESS_LEVELS, JOB_TYPES, type AreaInput, type EstimateInput, type PricedEstimate } from './types';
 import { coefficients, snapshot } from './__fixtures__/seed';
+
+// Pricing math: every priced option, including those the customer is not shown (OD6).
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const areaArb: fc.Arbitrary<AreaInput> = fc.record({
   id: fc.uuid(),
@@ -66,6 +69,32 @@ describe('pricing invariants (property-based)', () => {
           const cents = o.customerItems.reduce((a, b) => a + Math.round(b.price * 100), 0);
           expect(cents).toBe(Math.round(o.price * 100));
         }
+      }),
+    );
+  });
+
+  it('OD6: the options shown step up, each one different work for at least $1 more, and every one left out is explained', () => {
+    const withPrices = fc.record({
+      input: estimateArb,
+      prices: fc.array(fc.option(fc.integer({ min: 500, max: 30000 }), { nil: null }), { minLength: 3, maxLength: 3 }),
+    });
+    fc.assert(
+      fc.property(withPrices, ({ input, prices }) => {
+        const overrides = Object.fromEntries(
+          (['good', 'better', 'best'] as const).flatMap((t, i) => (prices[i] === null ? [] : [[t, { price: prices[i]!, reason: 'typed' }]])),
+        );
+        const typed = { ...input, overrides };
+        const every = priceEstimate(typed, snapshot, coefficients);
+        const shown = priceShown(typed, snapshot, coefficients);
+        for (let i = 1; i < shown.options.length; i++) {
+          expect(stepUp(shown.options[i - 1]!, shown.options[i]!)).toBe(true);
+          expect(shown.options[i]!.price).toBeGreaterThanOrEqual(shown.options[i - 1]!.price + 1);
+        }
+        expect(new Set(shown.options.map(workSignature)).size).toBe(shown.options.length);
+        const hidden = every.options.filter((o) => !shown.options.some((s) => s.tier === o.tier)).map((o) => o.tier);
+        expect(shown.warnings.filter((w) => w.code === 'option_hidden').map((w) => w.tier).sort()).toEqual([...hidden].sort());
+        expect(shown.options.length > 0).toBe(every.options.length > 0);
+        expect(shown.warnings.some((w) => w.code === 'tier_price_order')).toBe(false);
       }),
     );
   });

@@ -262,10 +262,12 @@ function ChosenDetail({ option }: { option: QuoteOptionView }) {
             {option.items.map((it, i) => (
               <tr key={i} className="align-top">
                 <td className="py-3 pr-2 pl-4 sm:pl-5">
-                  <SignLabel size={11} tone="ink-3">
-                    {it.areaName}
-                  </SignLabel>
-                  <span className="mt-1 block text-[16px] leading-snug font-semibold text-ink">{it.description}</span>
+                  {it.areaName ? (
+                    <SignLabel size={11} tone="ink-3">
+                      {it.areaName}
+                    </SignLabel>
+                  ) : null}
+                  <span className={cx('block text-[16px] leading-snug font-semibold text-ink', it.areaName && 'mt-1')}>{it.description}</span>
                 </td>
                 <td className="gauge-m py-3 pr-4 pl-2 text-right text-[20px] whitespace-nowrap text-ink sm:pr-5">{price(it.price)}</td>
               </tr>

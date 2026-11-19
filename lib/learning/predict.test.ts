@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { priceEstimate } from '@/lib/pricing';
+import { priceEstimate as priceShown } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { findStored, predictHours, predictQty, toCoefficientSet } from './predict';
 import type { Observation, StoredCoefficient } from './types';
 import { seedActive } from './__fixtures__/synthetic';
+
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const obs = (o: Partial<Observation> = {}): Observation => ({
   jobId: 'j1',

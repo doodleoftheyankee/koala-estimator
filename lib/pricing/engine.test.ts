@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { priceEstimate, validateSnapshot } from './engine';
+import { priceEstimate as priceShown, validateSnapshot } from './engine';
 import { PricingConfigError, type PricedOption, type PricingSnapshot } from './types';
 import { area, coefficients, estimate, snapshot } from './__fixtures__/seed';
+
+// Pricing math: every priced option, including those the customer is not shown (OD6).
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const tier = (opts: PricedOption[], t: PricedOption['tier']) => {
   const o = opts.find((x) => x.tier === t);
@@ -168,7 +171,9 @@ describe('priceEstimate — scope rules', () => {
     );
     const good = tier(r.options, 'good');
     expect(good.label).toBe('Good package');
-    expect(new Set(good.customerItems.map((i) => i.areaId))).toEqual(new Set(['a1', 'a2']));
+    // Work items per area; the job-level line (travel and setup, L1) belongs to no area.
+    expect(new Set(good.customerItems.filter((i) => i.kind === 'work').map((i) => i.areaId))).toEqual(new Set(['a1', 'a2']));
+    expect(good.customerItems.filter((i) => i.kind !== 'work').map((i) => [i.kind, i.areaId])).toEqual([['travel', null]]);
   });
 
   it('uses the chosen crew and rounds crew days to half days', () => {
@@ -220,6 +225,34 @@ describe('priceEstimate — tier order', () => {
     expect(r.warnings.some((w) => w.code === 'tier_price_order' && w.tier === 'better')).toBe(true);
     const cheap = { ...snapshot, materials: snapshot.materials.map((m) => (m.productCode === 'fiberglass_blown' ? { ...m, costPerUnit: 5 } : m)) };
     expect(priceEstimate(estimate(), cheap, coefficients).warnings.some((w) => w.code === 'tier_price_order')).toBe(false);
+  });
+});
+
+describe('priceEstimate — tier order (OD6)', () => {
+  it('shows only options that step up; Best that repeats Better is left out', () => {
+    // R-0 attic: Best's removal has nothing to remove, so Best is Better again.
+    const r = priceShown(estimate(), snapshot, coefficients);
+    expect(r.options.map((o) => [o.tier, o.price])).toEqual([
+      ['good', 5420],
+      ['better', 6255],
+    ]);
+    expect(r.warnings.filter((w) => w.code === 'option_hidden').map((w) => w.tier)).toEqual(['best']);
+  });
+
+  it('a lower option that costs more is left out with a warning, not shown with one', () => {
+    const pricey = { ...snapshot, materials: snapshot.materials.map((m) => (m.productCode === 'fiberglass_blown' ? { ...m, costPerUnit: 200 } : m)) };
+    const r = priceShown(estimate(), pricey, coefficients);
+    expect(r.options.map((o) => o.tier)).toEqual(['better']);
+    expect(r.warnings.filter((w) => w.code === 'option_hidden').map((w) => w.tier)).toEqual(['best', 'good']);
+    expect(r.warnings.some((w) => w.code === 'tier_price_order')).toBe(false);
+  });
+
+  it('showAll returns every priced option at the same prices', () => {
+    const shown = priceShown(estimate(), snapshot, coefficients);
+    const every = priceEstimate(estimate(), snapshot, coefficients);
+    expect(every.options.map((o) => o.tier)).toEqual(['good', 'better', 'best']);
+    for (const o of shown.options) expect(every.options.find((x) => x.tier === o.tier)).toEqual(o);
+    expect(every.warnings.some((w) => w.code === 'option_hidden')).toBe(false);
   });
 });
 

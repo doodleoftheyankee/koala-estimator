@@ -9,9 +9,10 @@ describe('quote document', () => {
   const d = newDraft(new Date('2026-10-20T12:00:00Z'));
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
-  d.areas = [{ ...newArea('attic'), sqft: 1000 }];
+  // Old insulation in place (R-19), so Best removes it and all three options step up (OD6).
+  d.areas = [{ ...newArea('attic'), sqft: 1000, currentR: 19 }];
   const priced = priceEstimate(toEstimateInput(d), snapshot, coefficients);
-  const doc = buildQuoteDocument({
+  const docArgs = () => ({
     draft: d,
     options: priced.options,
     version: 2,
@@ -22,11 +23,29 @@ describe('quote document', () => {
     terms: 'T',
     warranty: 'W',
   });
+  const doc = buildQuoteDocument(docArgs());
 
   it('carries options and customer items but never costs', () => {
     expect(doc.options.map((o) => o.tier)).toEqual(['good', 'better', 'best']);
     const json = JSON.stringify(doc);
     for (const secret of ['loadedCost', 'directCost', 'marginPct', 'costPerUnit', 'unitCost']) expect(json).not.toContain(secret);
+  });
+
+  it('carries each line with its kind; the lines add up to the option price (L1, L4)', () => {
+    for (const o of doc.options) {
+      expect(o.items.reduce((a, i) => a + i.price, 0)).toBe(o.price);
+      expect(o.items.filter((i) => i.kind === 'work').every((i) => i.areaName === 'Attic')).toBe(true);
+      expect(o.items.filter((i) => i.kind !== 'work')).toEqual([expect.objectContaining({ kind: 'travel', areaName: '', description: 'Travel and setup' })]);
+    }
+  });
+
+  it('never recommends an option the quote does not carry (OD6)', () => {
+    const r0 = { ...d, areas: [{ ...d.areas[0]!, currentR: 0 }], selectedTier: 'best' as const }; // Best repeats Better here
+    const shown = priceEstimate(toEstimateInput(r0), snapshot, coefficients).options;
+    expect(shown.map((o) => o.tier)).toEqual(['good', 'better']);
+    const picked = buildQuoteDocument({ ...docArgs(), draft: r0, options: shown });
+    expect(picked.recommendedTier).toBe('better'); // before: 'best', an option not on the quote
+    expect(buildQuoteDocument({ ...docArgs(), draft: { ...r0, selectedTier: 'good' }, options: shown }).recommendedTier).toBe('good');
   });
 
   it('computes validity, number and recommended tier', () => {

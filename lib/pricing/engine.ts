@@ -121,7 +121,7 @@ export function stepUp(lower: Pick<PricedOption, 'lines' | 'price'>, higher: Pic
  * OD6. An option that does the same work as another is shown once, at the lower price (the lower
  * tier on a tie). Then, from the top down, an option is shown only when the next shown option up
  * costs more: an option that costs as much as one that does more is no choice for the customer.
- * Each option left out gets an 'option_hidden' warning. The top option is always shown.
+ * Each option left out gets an 'option_hidden' warning. At least one option is always shown.
  */
 function shownOptions(options: PricedOption[], warnings: PricingWarning[]): PricedOption[] {
   const hidden = new Set<Tier>();

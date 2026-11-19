@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { lineKey, priceEstimate, type PricedLine } from '@/lib/pricing';
+import { lineKey, priceEstimate as priceShown, type PricedLine } from '@/lib/pricing';
 import { area, coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { draftSchema, newArea, newDraft, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import {
@@ -15,6 +15,10 @@ import {
   tiersWithLine,
   unitLabel,
 } from './lineOverrides';
+
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;

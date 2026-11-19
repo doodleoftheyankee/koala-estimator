@@ -1,6 +1,6 @@
 // The customer-facing quote document. Built once at send time, frozen into quotes.snapshot,
 // and rendered by both the PDF and the public signing page. Contains no costs or margins.
-import type { Financing, PricedOption, Tier } from '@/lib/pricing';
+import type { CustomerItemKind, Financing, PricedOption, Tier } from '@/lib/pricing';
 import type { EstimateDraft } from '@/lib/sync/draft';
 
 export interface Branding {
@@ -17,7 +17,12 @@ export interface QuoteOptionDoc {
   tier: Tier;
   label: string;
   bullets: string[];
-  items: Array<{ areaName: string; description: string; price: number }>;
+  /**
+   * Whole dollars that add up to `price`. kind says what a line is (work, travel, minimum,
+   * adjustment); quotes sent before it existed have none, and every line there is work.
+   * Job-level lines have areaName ''.
+   */
+  items: Array<{ kind?: CustomerItemKind; areaName: string; description: string; price: number }>;
   price: number;
   financing: Financing | null;
 }
@@ -77,11 +82,15 @@ export function buildQuoteDocument(args: {
       tier: o.tier,
       label: o.label,
       bullets: o.bullets,
-      items: o.customerItems.map((i) => ({ areaName: i.areaName, description: i.description, price: i.price })),
+      items: o.customerItems.map((i) => ({ kind: i.kind, areaName: i.areaName, description: i.description, price: i.price })),
       price: o.price,
       financing: o.financing,
     })),
-    recommendedTier: draft.selectedTier ?? (args.options.some((o) => o.tier === 'better') ? 'better' : null),
+    // Only an option the quote carries can be recommended: a picked option that is not shown (OD6)
+    // falls back to Better, as an estimate with no pick does.
+    recommendedTier:
+      (args.options.some((o) => o.tier === draft.selectedTier) ? draft.selectedTier : null) ??
+      (args.options.some((o) => o.tier === 'better') ? 'better' : null),
     notes: draft.notes?.trim() || null,
     terms: args.terms,
     warranty: args.warranty,

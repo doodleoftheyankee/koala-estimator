@@ -34,7 +34,8 @@ function makeDoc(branding: Branding = BRAND): QuoteDocument {
   const d = newDraft(new Date('2026-10-20T12:00:00Z'));
   d.customer = { ...d.customer, firstName: 'Robin', lastName: 'Vale', email: 'robin@example.com' };
   d.property = { ...d.property, street: '9 Elm Ct', city: 'Springfield', state: 'IL', zip: '62701' };
-  d.areas = [{ ...newArea('attic'), sqft: 1000 }];
+  // Old insulation in place (R-19), so Best removes it and all three options step up (OD6).
+  d.areas = [{ ...newArea('attic'), sqft: 1000, currentR: 19 }];
   const priced = priceEstimate(toEstimateInput(d), snapshot, coefficients);
   return buildQuoteDocument({
     draft: d,
@@ -127,6 +128,20 @@ describe('quote page figures come from the quote, formatted as before', () => {
     expect(initials('')).toBe('');
     expect(licenseLine({ license: 'HIC 77-0042' })).toBe('License HIC 77-0042');
     expect(licenseLine({ license: null })).toBeNull();
+  });
+
+  it('the travel line and a price change read as job lines, with no empty area label (L1, L3)', () => {
+    const doc = makeDoc();
+    const better = doc.options.find((o) => o.tier === 'better')!;
+    const adjusted = { ...better, price: better.price - 95, items: [...better.items, { kind: 'adjustment' as const, areaName: '', description: 'Price adjustment', price: -95 }] };
+    const out = form({ ...doc, options: doc.options.map((o) => (o.tier === 'better' ? adjusted : o)) }, { tier: 'better' });
+    const rows = [...out.matchAll(/<tr class="align-top">([\s\S]*?)<\/tr>/g)].map((m) => m[1]!.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|'));
+    const travel = better.items.find((i) => i.kind === 'travel')!;
+    expect(rows).toContain(`|Travel and setup|${price(travel.price)}|`);
+    expect(rows).toContain('|Price adjustment|-$95|');
+    expect(rows.filter((r) => r.startsWith('|Attic|'))).toHaveLength(better.items.filter((i) => i.kind === 'work').length);
+    // No empty area label above a job line.
+    expect(out).not.toMatch(/<span class="sign-label[^"]*"[^>]*><\/span>/);
   });
 
   it('every dollar figure on the open quote is a value from the quote', () => {

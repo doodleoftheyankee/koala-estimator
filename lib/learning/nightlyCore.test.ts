@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it, vi } from 'vitest';
-import { priceEstimate, type EstimateInput, type PricedOption, type Tier, type WinModel } from '@/lib/pricing';
+import { priceEstimate as priceShown, type EstimateInput, type PricedOption, type Tier, type WinModel } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { seedActive } from './__fixtures__/synthetic';
 import { computeDeviationFlags, deviationOutcome } from './deviation';
@@ -41,6 +41,10 @@ import {
 import type { JobForLearning, QuoteOutcomeRow } from './observations';
 import { DEFAULT_LEARNING_SETTINGS } from './settings';
 import type { CalibrationResult, CandidateCoefficient, GateResult, LearningSettings } from './types';
+
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const NOW = new Date('2026-10-21T07:15:00Z'); // 3:15 AM Eastern on Oct 21
 const DAY = 86_400_000;
