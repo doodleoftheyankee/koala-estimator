@@ -1065,3 +1065,24 @@ RB-B5 (test fidelity, no app value) The test databases get production's grants (
 RB-B7db (tooling) scripts/e2e.sh lower-cases E2E_DB_NAME and refuses a name that is not letters,
     digits and _ (review B database-B7 = flow-B14). E2E_DB_NAME=koala_fixB_Check: exit 2 ('database
     "koala_fixB_Check" does not exist') -> runs on koala_fixb_check.
+
+Staff-facing words (no quote value changes):
+  RB-FB2 The Send checklist uses Koala's reachability, not only the signal (review B flow-B2). With
+    signal but Koala's database not answering (REST 503, the banner "Can't reach Koala right now."):
+    "✓ Online" and "Everything the quote needs is here." with Send enabled -> "Can't reach Koala right
+    now. Sending needs Koala; your work is saved." (to do), Send and Request approval disabled. No
+    signal still reads "Offline. Sending needs a connection; your work is saved." SendStep reads
+    lib/offline/sync isReachable itself (no new props through FieldApp or EstimateEditor).
+    Tests: lib/field/sendChecks.test.ts "signal but Koala unreachable: the online item says so …";
+    e2e "the Send checklist says Koala cannot be reached, not \"Online\"", "and Send waits while Koala
+    cannot be reached".
+  RB-FB5 "Shorten the notes" goes to the notes box (review B flow-B5): target customer/firstName ->
+    customer/notes (#customer-notes); the notes box gets maxLength 5,000 (the draft's own limit) and
+    the Fix focus also focuses a text area. Test: lib/field/sendChecks.test.ts "notes too long: the
+    Fix goes to the notes box".
+  RB-FB10 A server action refused while Koala cannot be reached says so (review B flow-B10): saving
+    Pricing as the owner with the database down, "Only the owner can change pricing." -> "Can't reach
+    Koala right now. Nothing was saved." The same for Team, Insights (learning), Jobs and marking an
+    estimate lost (lib/server/actionAuth.ts actionRefusal; signed out or another role keep the
+    action's own words). Tests: lib/server/actionAuth.test.ts (3 tests); e2e "saving Pricing while
+    Koala is down says …".

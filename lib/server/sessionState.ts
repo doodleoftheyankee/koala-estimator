@@ -32,6 +32,9 @@ export function unreachableHref(next: string | null | undefined): string {
   return `/unreachable?next=${encodeURIComponent(safeNext(next, '/'))}`;
 }
 
+/** What a server action answers while Koala cannot be reached (it saved nothing): review B flow-B10. */
+export const UNREACHABLE_NOT_SAVED = "Can't reach Koala right now. Nothing was saved.";
+
 /** What an API answers (status 503) while the database cannot be reached. */
 export const UNREACHABLE_BODY = { error: 'unreachable', message: "Can't reach Koala right now. Your work is saved. Try again in a minute." } as const;
 

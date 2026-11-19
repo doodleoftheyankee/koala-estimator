@@ -4,6 +4,7 @@ import { priceEstimate, type PriceApproval, type PricedOption } from '@/lib/pric
 import { seededCoefficients, seededSnapshot } from '@/lib/pricing/__fixtures__/seeded';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { newArea, newDraft, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { fixElementId } from './fix';
 import { withMeasurement } from './measuring';
 import { sendChecks, type SendCheckInput } from './sendChecks';
 
@@ -24,7 +25,7 @@ const price = (d: EstimateDraft): PricedOption[] => {
   return areas.length ? priceEstimate({ ...toEstimateInput(d), areas }, seededSnapshot, seededCoefficients).options : [];
 };
 function input(d: EstimateDraft, over: Partial<SendCheckInput> = {}): SendCheckInput {
-  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, online: true, ...over };
+  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, online: true, reachable: true, ...over };
 }
 const failing = (i: SendCheckInput) => sendChecks(i).filter((c) => !c.ok);
 
@@ -156,6 +157,27 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
       ['2 changes from the model need a short note.', { label: 'Explain', target: { step: 'options' } }],
       ['Offline. Sending needs a connection; your work is saved.', undefined],
     ]);
+  });
+
+  // Review B flow-B5: "Shorten the notes" opened the Customer step at First name, with the notes box
+  // out of view below.
+  it('notes too long: the Fix goes to the notes box (review B flow-B5)', () => {
+    const d = { ...complete(), notes: 'x'.repeat(5001) };
+    const item = failing(input(d)).find((c) => c.id === 'other');
+    expect(item?.label).toBe('The notes for the quote are too long.');
+    expect(item?.fix).toEqual({ label: 'Shorten the notes', target: { step: 'customer', field: 'notes' } });
+    expect(fixElementId(item!.fix!.target)).toBe('customer-notes');
+  });
+
+  // Review B flow-B2: the phone has signal but Koala does not answer. The checklist said "Online" and
+  // "Everything the quote needs is here" under a "Can't reach Koala right now" banner.
+  it('signal but Koala unreachable: the online item says so and the checklist is not done (review B flow-B2)', () => {
+    const checks = sendChecks(input(complete(), { online: true, reachable: false }));
+    expect(checks.find((c) => c.id === 'online')).toEqual({ id: 'online', ok: false, label: "Can't reach Koala right now. Sending needs Koala; your work is saved." });
+    expect(checks.every((c) => c.ok)).toBe(false);
+    expect(failing(input(complete(), { online: true, reachable: false })).map((c) => c.id)).toEqual(['online']);
+    // No signal at all still reads as offline.
+    expect(sendChecks(input(complete(), { online: false, reachable: false })).find((c) => c.id === 'online')?.label).toBe('Offline. Sending needs a connection; your work is saved.');
   });
 
   // Owner decision OD12 (review A DOC-1, DOC-3; review B flow-B1): there is no business form to

@@ -43,14 +43,17 @@ export interface SendCheckInput {
   approvals?: readonly PriceApproval[];
   /** Changes from the model still without a note. */
   pendingFlags: number;
+  /** The phone has signal (navigator.onLine). */
   online: boolean;
+  /** Koala answers (lib/offline/sync isReachable): signal alone is not enough to send (review B flow-B2). */
+  reachable: boolean;
 }
 
 const TIER_WORDS: Record<Tier, string> = { good: 'Good', better: 'Better', best: 'Best' };
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 export function sendChecks(input: SendCheckInput): SendCheck[] {
-  const { draft, options, role, settings, approvals = [], pendingFlags, online } = input;
+  const { draft, options, role, settings, approvals = [], pendingFlags, online, reachable } = input;
   const checks: SendCheck[] = [...customerChecks(draft), ...areaChecks(draft)];
 
   const priceable = draft.areas.filter((a) => areaSchema.safeParse(a).success);
@@ -83,7 +86,13 @@ export function sendChecks(input: SendCheckInput): SendCheck[] {
       : { id: 'flags', ok: true, label: 'Every change from the model is explained' },
   );
 
-  checks.push(online ? { id: 'online', ok: true, label: 'Online' } : { id: 'online', ok: false, label: 'Offline. Sending needs a connection; your work is saved.' });
+  checks.push(
+    !online
+      ? { id: 'online', ok: false, label: 'Offline. Sending needs a connection; your work is saved.' }
+      : !reachable
+        ? { id: 'online', ok: false, label: "Can't reach Koala right now. Sending needs Koala; your work is saved." }
+        : { id: 'online', ok: true, label: 'Online' },
+  );
   return checks;
 }
 
@@ -170,7 +179,7 @@ function otherCheck(d: EstimateDraft): SendCheck {
   const top = String(path[0] ?? '');
   if (top === 'lineOverrides' || top === 'overrides' || top === 'deviationAcks' || top === 'driveMinutesOneWay')
     return { id: 'other', ok: false, label: 'A change on the Options step is not finished (a reason may be too short).', fix: { label: 'Open Options', target: { step: 'options' } } };
-  if (top === 'notes') return { id: 'other', ok: false, label: 'The notes for the quote are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'firstName' } } };
+  if (top === 'notes') return { id: 'other', ok: false, label: 'The notes for the quote are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'notes' } } };
   return { id: 'other', ok: false, label: 'Something on this estimate is not finished.', fix: { label: 'Check the customer', target: { step: 'customer', field: 'firstName' } } };
 }
 

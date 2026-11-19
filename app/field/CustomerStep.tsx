@@ -93,7 +93,8 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
 
       <Card>
         <Field label="Notes for the quote" hint="Printed on the customer's quote.">
-          <Textarea rows={3} value={draft.notes} onChange={(e) => update((d) => ({ ...d, notes: e.target.value }))} />
+          {/* The id is where the checklist's "Shorten the notes" lands; 5,000 is the draft's own limit (review B flow-B5). */}
+          <Textarea id="customer-notes" rows={3} maxLength={5000} value={draft.notes} onChange={(e) => update((d) => ({ ...d, notes: e.target.value }))} />
         </Field>
       </Card>
     </>

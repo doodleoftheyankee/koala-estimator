@@ -1245,6 +1245,12 @@ await page.screenshot({ path: SHOTS + '10-synced-list.png' });
 step("Koala's database unreachable is not a sign-out (L36)");
 {
   const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+  // Review B flow-B10: Pricing is open in the owner's browser when Koala stops answering.
+  const pctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await pctx.addCookies([sessionCookie(OWNER)]);
+  const pp = await pctx.newPage();
+  await pp.goto(BASE + '/admin/pricing');
+  await pp.getByRole('button', { name: 'Save', exact: true }).first().waitFor();
   unreachableStep = true;
   await rest(true);
   await page.goto(BASE + '/field');
@@ -1253,6 +1259,20 @@ step("Koala's database unreachable is not a sign-out (L36)");
   check(new URL(page.url()).pathname === '/field', 'opening /field with the database down opens the field app from the phone, not the sign-in page');
   check((await page.getByText('Pat Lee').count()) > 0 && (await page.getByText('Your work is saved on this phone. It syncs when Koala is back.').count()) === 1, "with the phone's estimates and \"Can't reach Koala right now\"");
   await page.screenshot({ path: SHOTS + '10b-field-unreachable.png' });
+  {
+    // Review B flow-B2: with signal but no Koala, the Send checklist does not say "Online", and Send waits.
+    await page.getByRole('button', { name: /Kim Pending/ }).first().click();
+    await page.getByRole('button', { name: /^4 Send/ }).click();
+    const item = page.locator('li[data-check="online"]');
+    await item.waitFor();
+    check(
+      (await item.getAttribute('data-ok')) === 'no' && (await item.innerText()).includes("Can't reach Koala right now. Sending needs Koala; your work is saved."),
+      `the Send checklist says Koala cannot be reached, not "Online": "${(await item.innerText()).trim()}"`,
+    );
+    check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits while Koala cannot be reached');
+    await page.screenshot({ path: SHOTS + '10b2-send-unreachable.png' });
+    await page.getByRole('button', { name: 'Back to estimates' }).click();
+  }
   const api = await ctx.request.get(BASE + '/api/estimates');
   const body = await api.json();
   check(api.status() === 503 && body.error === 'unreachable' && /Can't reach Koala right now/.test(body.message), `APIs answer 503, not "signed out": ${api.status()} ${body.error}`);
@@ -1264,6 +1284,13 @@ step("Koala's database unreachable is not a sign-out (L36)");
   check(at.pathname === '/unreachable' && at.searchParams.get('next') === '/estimates', `an office page goes to /unreachable, keeping the page: ${at.pathname}${at.search}`);
   check((await up.getByRole('heading', { name: 'Can’t reach Koala right now' }).count()) === 1 && (await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/estimates', 'it says so, with Try again back to the page');
   await up.screenshot({ path: SHOTS + '10c-unreachable-page.png' });
+  {
+    await pp.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await pp.getByText("Can't reach Koala right now. Nothing was saved.").first().waitFor({ timeout: 20000 });
+    check((await pp.getByText('Only the owner can change pricing.').count()) === 0, "saving Pricing while Koala is down says \"Can't reach Koala right now. Nothing was saved.\", not \"Only the owner can change pricing.\"");
+    await pp.screenshot({ path: SHOTS + '10d-pricing-save-unreachable.png' });
+    await pctx.close();
+  }
   await up.goto(BASE + '/unreachable?next=//evil.example/x');
   check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next= is only ever a path on this site');
   // Review B database-B1: dot segments that resolve to "//host" do not leave the site either.

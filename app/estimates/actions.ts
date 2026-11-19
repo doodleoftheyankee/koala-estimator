@@ -5,13 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { failure, formToObject, parseWith, success, type ActionResult } from '@/lib/admin/forms';
 import { LOSABLE_STATUSES, markLostForm } from '@/lib/jobs/forms';
 
 /** The customer said no (or went quiet): record why. Feeds the win-rate model as a loss. */
 export async function markLost(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role === 'crew') return failure('Your role cannot change estimates.');
+  if (!profile || profile.role === 'crew') return failure(await actionRefusal('Your role cannot change estimates.'));
   const parsed = parseWith(markLostForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { id, reason } = parsed.data;

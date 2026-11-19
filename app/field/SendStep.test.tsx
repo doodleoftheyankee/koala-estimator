@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/offline/db', () => ({ db: () => ({}), getCachedBundle: async () => null }));
-vi.mock('@/lib/offline/sync', () => ({ refreshBundle: async () => null, syncEstimate: async () => null }));
+vi.mock('@/lib/offline/sync', () => ({ refreshBundle: async () => null, syncEstimate: async () => null, isReachable: () => true, onReachChange: () => () => {} }));
 
 import { seededSnapshot } from '@/lib/pricing/__fixtures__/seeded';
 import { newArea, newDraft } from '@/lib/sync/draft';
@@ -29,7 +29,6 @@ function render(role: 'estimator' | 'office' | 'owner'): string {
       bundle: bundle as never,
       profile: { userId: 'u', role, fullName: 'X', email: null } as never,
       online: true,
-      reachable: true,
       flush: async () => {},
       locked: false,
       onFix: () => {},
