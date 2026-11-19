@@ -349,9 +349,10 @@ const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.
   await bp.goto(BASE + '/admin/business');
   const main = await bp.locator('main').innerText();
   check(main.includes('Optional. Quotes go out without it') && !/not finished|no quote can be sent/i.test(main), 'the page says it is optional, and names no gap');
-  check((await bp.getByLabel('Company name').inputValue()) === 'Koala Insulation', 'the company quotes print is Koala Insulation');
-  check((await bp.getByLabel('Warranty').inputValue()) === 'Limited lifetime warranty', 'the warranty quotes print is "Limited lifetime warranty"');
-  check((await bp.getByLabel('State').count()) === 0 && (await bp.getByLabel('Town').count()) === 0, 'no town or state to fill in (OD14)');
+  // By name: the license field's hint mentions "the company name", so a label match finds two.
+  check((await bp.locator('input[name="branding.company"]').inputValue()) === 'Koala Insulation', 'the company quotes print is Koala Insulation');
+  check((await bp.locator('textarea[name="warranty_text"]').inputValue()) === 'Limited lifetime warranty', 'the warranty quotes print is "Limited lifetime warranty"');
+  check((await bp.locator('[name="default_state"], [name="default_city"]').count()) === 0, 'no town or state to fill in (OD14)');
   check(/KN-\d{4}-0001-v1/.test(main) && main.includes('New estimates start in: Newark, DE'), 'it shows how quote numbers read and where new estimates start (the shop address)');
   await bp.screenshot({ path: SHOTS + '05b-business-profile-optional.png', fullPage: true });
   await bp.goto(BASE + '/admin/pricing');
@@ -779,7 +780,8 @@ await page.emulateMedia({ media: 'print' });
 check((await report.isVisible()) && !(await roof.isVisible()), 'in print, only the report shows');
 const reportText = (await report.innerText()).replace(/\s+/g, ' ');
 for (const bit of [
-  'KOALA INSULATION OF NEWARK · ROOF TAKEOFF',
+  // The brand, every franchise (review B flow-B7, OD12).
+  'KOALA INSULATION · ROOF TAKEOFF',
   '12 Elkton Rd, Newark, DE 19711, USA',
   'Medium-detail aerial photo from Jun 2023.',
   'Attic floor 1,970 sq ft',

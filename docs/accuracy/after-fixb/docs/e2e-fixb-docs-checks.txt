@@ -1,0 +1,33 @@
+e2e on claude/accuracy-fixb-docs (APP_PORT 3580, koala_fixb_docs): 337 ok, console errors: none. The build stopped once at the Next.js security-upgrade notice on each new run; the same command was retried once; nothing was upgraded.
+
+This branch's checks (review B docs/server/database/security, OD12-OD14):
+  - the Send checklist has no business-profile item
+  - and nothing on the Send step mentions a business profile
+  - Send is ready with the seeded settings, nothing filled in
+  - the server does not refuse it for the settings (wrong expected prices on purpose): 409 pricing_changed
+  - and no quote was made by that check
+  - the page says it is optional, and names no gap
+  - the company quotes print is Koala Insulation
+  - the warranty quotes print is "Limited lifetime warranty"
+  - no town or state to fill in (OD14)
+  - the Pricing page lists nothing about the business profile to fill in
+  - the request keeps the loaded cost the option had when it was asked
+  - a request written straight to the database with the estimator's token is refused: 403
+  - and nothing was written
+  - the signing sentence names the property's state (OD14)
+  - the quote names Koala Insulation
+  - its warranty reads "Limited lifetime warranty"
+  - no PLACEHOLDER, no empty License line, no "Call" without a number
+  - the accept sentence reads the price in whole dollars: "You are accepting Better: Air Seal + Blown Cellulose for $5,060."
+  - and reads the price in whole dollars
+  - deciding a request on a signed estimate: 409 signed
+  - the owner's queue leaves it out (no 'Needs you' for a signed quote)
+  - and it was not decided
+  - Copy summary copies the takeoff as text, under the brand (review B flow-B7)
+  - the Send checklist says Koala cannot be reached, not "Online": "To do:
+  - and Send waits while Koala cannot be reached
+  - saving Pricing while Koala is down says "Can't reach Koala right now. Nothing was saved.", not "Only the owner can change pricing."
+  - next=/.//evil.example/x is not a way off the site (Try again goes to /)
+  - a repeated next= on the sign-in page opens it (was a 500): 200
+
+Screenshots in this folder: 05a-send-step.png (no business-profile item, Send ready), 05b-business-profile-optional.png, 06-customer-quote.png (Koala Insulation, Limited lifetime warranty), 10b2-send-unreachable.png, 10d-pricing-save-unreachable.png.
