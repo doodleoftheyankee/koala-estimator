@@ -362,6 +362,31 @@ export function checkOptionsStepUp({ priced }: Pick<PricedQuote, 'priced'>): Vio
   return out;
 }
 
+/**
+ * options_step_up, kind ends_below_existing (review A F9): an option that takes out the insulation
+ * already in an area, when the estimator did not say it must go (removalNeeded), ends that area at
+ * or above the R it has. Paying to remove R-38 and get R-30 back is no step up.
+ */
+export function checkEndsAtOrAbove({ input, priced, snapshot, coefficients }: PricedQuote): Violation[] {
+  const out: Violation[] = [];
+  for (const o of shownOptions(priced)) {
+    for (const a of input.areas) {
+      if (a.removalNeeded || !(a.currentR > 0) || !removesExisting(o, a.id)) continue;
+      const r = finalR(o, a, snapshot, coefficients, { upperBound: true });
+      if (r < a.currentR - R_TOLERANCE) {
+        out.push({
+          invariant: 'options_step_up',
+          kind: 'ends_below_existing',
+          tier: o.tier,
+          areaId: a.id,
+          detail: `${o.tier} removes ${a.name}'s R-${fmt(a.currentR, 1)} and ends at R-${fmt(r, 1)}`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 const JOB_WORDS: Record<JobType, RegExp> = {
   attic: /\battics?\b/i,
   walls: /\bwalls?\b/i,
@@ -557,6 +582,7 @@ export function checkPricedQuote(q: PricedQuote): Violation[] {
     ...checkItemsAddUp(q),
     ...checkSameWorkSamePrice(q),
     ...checkOptionsStepUp(q),
+    ...checkEndsAtOrAbove(q),
     ...checkLabelsMatchWork(q),
     ...checkCavityNotOverfilled(q),
     ...checkFiniteAmounts(q),

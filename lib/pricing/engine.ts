@@ -333,7 +333,27 @@ function priceTier(
     const tpl = templates[i]!;
     const access = coeff(k, 'access_mult', { accessLevel: area.accessLevel });
     const hasExisting = area.currentR > 0 || !!area.existingMaterial;
-    const removal = area.removalNeeded || (tpl.includeRemoval && hasExisting);
+    let removal = area.removalNeeded || (tpl.includeRemoval && hasExisting);
+    let primary: ReturnType<typeof priceProductScope> | undefined;
+    if (removal && !area.removalNeeded) {
+      // The option's own removal (the estimator did not require it) never leaves the customer with
+      // less R than they have: the option keeps what is there instead (review A F9).
+      const trial: PricingWarning[] = [];
+      const after = priceProductScope(area, tpl, true, s, k, access, crew, tier, trial, ov);
+      const endsAt = after?.finalR ?? 0;
+      if (endsAt < area.currentR - 1e-9) {
+        removal = false;
+        warnings.push({
+          code: 'removal_kept',
+          areaId: area.id,
+          tier,
+          message: `${area.name}: ${capitalize(tier)} would remove the R-${fmtR(area.currentR)} there and end at R-${fmtR(endsAt)}, so it keeps what is there.`,
+        });
+      } else {
+        primary = after;
+        warnings.push(...trial);
+      }
+    }
     const work: AreaWork = { area, tpl, removal, primary: null, airSealing: false, airSealingPartial: false };
     works.push(work);
 
@@ -353,7 +373,7 @@ function priceTier(
       });
     }
 
-    const primary = priceProductScope(area, tpl, removal, s, k, access, crew, tier, warnings, ov);
+    if (primary === undefined) primary = priceProductScope(area, tpl, removal, s, k, access, crew, tier, warnings, ov);
     if (primary) {
       lines.push(...primary.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'primary', description: primary.description, cost: primary.cost });

@@ -315,7 +315,12 @@ export interface PricingWarning {
     /** The cavity has no room left for the product (existing insulation fills it, or no batt fits). */
     | 'cavity_full'
     /** An estimator's quantity was more than the cavity holds; the quantity priced was cut to a full cavity. */
-    | 'override_capped';
+    | 'override_capped'
+    /**
+     * An option's own removal (from its template, not required by the estimator) would leave the
+     * area with less R than it has; the option keeps what is there instead (review A F9).
+     */
+    | 'removal_kept';
   areaId: string | null;
   tier: Tier | null;
   message: string;

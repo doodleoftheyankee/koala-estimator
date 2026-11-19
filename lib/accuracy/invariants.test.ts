@@ -22,6 +22,7 @@ import {
   addedThickness,
   cavityDepth,
   checkCavityNotOverfilled,
+  checkEndsAtOrAbove,
   checkFiniteAmounts,
   checkItemsAddUp,
   checkLabelsMatchWork,
@@ -417,6 +418,20 @@ describe('options_step_up (S1-F7, OD6): the options shown step up', () => {
   it('checks only what is shown: a hidden duplicate is not a violation', () => {
     const hidden = { ...work('best', 5160, 'Cellulose to R-60'), hidden: true } as PricedOption;
     expect(checkOptionsStepUp(quote([work('good', 3720, 'Cellulose to R-49'), work('better', 5160, 'Cellulose to R-60'), hidden]))).toEqual([]);
+  });
+});
+
+describe('options_step_up (review A F9): an option never leaves an area with less R than it has', () => {
+  const attic = area({ id: A1, sqft: 1000, currentR: 38, existingMaterial: 'Cellulose' });
+  // Removed, then cellulose to R-30: 30 / 3.6 in over 1,000 sq ft, at 200 sq ft·in per bag, x 1.08 = 45 bags.
+  const removed = (bags: number) =>
+    option('best', 5025, { lines: [line({ kind: 'removal', product: 'removal' }), insulation('cellulose', bags)], customerItems: [item('Remove and dispose of existing insulation (1,000 sq ft)', 2000), item('Blown Cellulose', 3025)] });
+  it('removing R-38 to end at R-30 fails (ends_below_existing); ending at R-60 passes', () => {
+    expect(kinds(checkEndsAtOrAbove(quote([removed(45)], [attic])))).toEqual(['options_step_up:ends_below_existing:best']);
+    expect(checkEndsAtOrAbove(quote([removed(90)], [attic]))).toEqual([]);
+  });
+  it('a removal the estimator required (damaged, wet) may end lower', () => {
+    expect(checkEndsAtOrAbove(quote([removed(45)], [{ ...attic, removalNeeded: true }]))).toEqual([]);
   });
 });
 

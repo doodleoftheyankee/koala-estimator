@@ -546,3 +546,26 @@ RA-M1 A cavity depth goes with the job type. The Cavity depth field is shown for
     Tests: lib/sync/payload.test.ts "a cavity depth goes with the job type: changed to attic, an area
     keeps no hidden depth (review A M1)", "a depth stored on an attic (a draft saved before the fix)
     is not priced …".
+
+RA-F9 An option never removes what is there to leave the area with less R. When an option's own
+    removal (its template's, not one the estimator marked as needed) would end the area below the R
+    it has, the option keeps what is there instead (no removal priced), with a removal_kept warning.
+    Removal the estimator requires (damaged, wet, rodents) is priced as before, whatever R follows.
+    Examples (seeded, attic 1,000 sq ft):
+      R-38 cellulose, target R-30 typed: Best $5,025 "Remove, Air Seal + Cellulose" (removes R-38,
+        installs "Blown Cellulose to R-30 (~8.3" added)") -> Best keeps the R-38 and air seals, the
+        same work as Better ($1,500 "Air Sealing"), so it is not shown (OD6). Warning: "Attic: Best
+        would remove the R-38 there and end at R-30, so it keeps what is there."
+      R-49 blown fiberglass with a 7.25 in depth (an input the engine still accepts; see RA-M1): Best
+        $4,840 ending at "R-26.1 (fills the 7.25 in cavity)" -> not shown, as above.
+      R-19, no target: Best still removes and installs R-60, $ unchanged.
+    Random quotes: options_step_up ends_below_existing (new kind) 142 -> 0; options shown 22,203 ->
+      22,138 (65 Best options that were the same as Better once they keep what is there).
+    Owner decision: none in the record allows the dearest option to leave less R; the default here is
+    "keep what is there". Owner question: keep this, or skip such an option outright; and whether an
+    attic floor's joist depth should cap blown fill at all.
+    Tests: "target R-30 typed on an attic at R-38: Best no longer removes R-38 …", "attic 1,000 sq ft,
+    7.25 in joists, R-49 blown fiberglass: Best no longer removes R-49 to end at R-26.1", "removal the
+    estimator requires (damaged, wet) is kept …", "a removal that ends above what is there is kept …";
+    lib/accuracy/invariants.test.ts "options_step_up (review A F9): an option never leaves an area
+    with less R than it has".

@@ -66,3 +66,40 @@ describe('F3 (R3): a batt or air-sealing quantity says the area it covers', () =
     expect(violations(input)).toEqual([]);
   });
 });
+
+describe('F9: an option never removes what is there to leave the area with less R (unless removal is required)', () => {
+  it('target R-30 typed on an attic at R-38: Best no longer removes R-38 to install R-30; it keeps what is there', () => {
+    const a = area({ id: 'a1', currentR: 38, existingMaterial: 'Cellulose', targetR: 30 });
+    const r = all(estimate({ areas: [a] }));
+    const best = tier(r, 'best');
+    // Before: "Remove and dispose of existing insulation (1,000 sq ft)" + "Blown Cellulose to R-30 …", $5,025.
+    expect(work(best).some((d) => /^Remove/.test(d))).toBe(false);
+    expect(work(best).some((d) => /Blown Cellulose to R-30/.test(d))).toBe(false);
+    expect(r.warnings.find((w) => w.code === 'removal_kept' && w.tier === 'best')!.message).toBe(
+      'Attic: Best would remove the R-38 there and end at R-30, so it keeps what is there.',
+    );
+    // Best is then the same work as Better (air sealing over the R-38), so the customer sees Better only.
+    expect(shown(estimate({ areas: [a] })).options.map((o) => o.tier)).toEqual(['better']);
+    expect(violations(estimate({ areas: [a] }))).toEqual([]);
+  });
+
+  it('attic 1,000 sq ft, 7.25 in joists, R-49 blown fiberglass: Best no longer removes R-49 to end at R-26.1', () => {
+    const a = area({ id: 'a1', currentR: 49, existingMaterial: 'Blown fiberglass', depthIn: 7.25 });
+    const best = tier(all(estimate({ areas: [a] })), 'best');
+    expect(work(best)).not.toContain('Blown Cellulose to R-26.1 (fills the 7.25 in cavity), 1,000 sq ft');
+    expect(work(best).some((d) => /^Remove/.test(d))).toBe(false);
+  });
+
+  it('removal the estimator requires (damaged, wet) is kept, whatever R the option ends at', () => {
+    const a = area({ id: 'a1', currentR: 38, existingMaterial: 'Cellulose', targetR: 30, removalNeeded: true });
+    const best = tier(all(estimate({ areas: [a] })), 'best');
+    expect(work(best)[0]).toBe('Remove and dispose of existing insulation (1,000 sq ft)');
+  });
+
+  it('a removal that ends above what is there is kept: attic at R-19 to R-60', () => {
+    const a = area({ id: 'a1', currentR: 19, existingMaterial: 'Fiberglass batts' });
+    const best = tier(all(estimate({ areas: [a] })), 'best');
+    expect(work(best)[0]).toBe('Remove and dispose of existing insulation (1,000 sq ft)');
+    expect(best.label).toBe('Remove, Air Seal + Cellulose');
+  });
+});
