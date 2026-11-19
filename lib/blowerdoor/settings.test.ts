@@ -158,3 +158,25 @@ describe('helpers', () => {
     expect(formatEffectiveDate(null)).toBeNull();
   });
 });
+
+describe('review fixes', () => {
+  it('refuses defaults with more decimals than a saved reading keeps (BD-MATH-6)', () => {
+    expect(validateBlowerDoorSettings({ ...clone(), flow_exponent: 0.6525 })).toEqual({ ok: false, errors: ['The flow exponent can have at most 3 decimals.'] });
+    expect(validateBlowerDoorSettings({ ...clone(), n_factor: 15.391 })).toEqual({ ok: false, errors: ['The N-factor can have at most 2 decimals.'] });
+    expect(validateBlowerDoorSettings({ ...clone(), flow_exponent: 0.653, n_factor: 15.39 }).ok).toBe(true);
+    expect(parseBlowerDoorSettings({ ...clone(), flow_exponent: 0.6525 }).settings.flowExponent).toBe(0.65);
+  });
+
+  it('keeps how the tool rounds as a setting: exact CFM50 unless the owner picks whole numbers (BD-MATH-3)', () => {
+    expect(parseBlowerDoorSettings(SEEDED).settings.wholeCfm50).toBe(false);
+    expect(EMPTY_SETTINGS.wholeCfm50).toBe(false);
+    const on = validateBlowerDoorSettings({ ...clone(), whole_cfm50: true });
+    expect(on.ok && on.settings.wholeCfm50).toBe(true);
+    expect(on.ok && on.value.whole_cfm50).toBe(true);
+    expect(parseBlowerDoorSettings(on.ok ? on.value : null).settings.wholeCfm50).toBe(true);
+    expect(validateBlowerDoorSettings({ ...clone(), whole_cfm50: 'yes' }).ok).toBe(false);
+    const bad = parseBlowerDoorSettings({ ...clone(), whole_cfm50: 'yes' });
+    expect(bad.settings.wholeCfm50).toBe(false);
+    expect(bad.problems).toEqual(['How the tool rounds the CFM50 was not valid; using false.']);
+  });
+});

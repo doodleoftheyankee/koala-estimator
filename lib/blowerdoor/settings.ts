@@ -10,6 +10,7 @@
 //   validateBlowerDoorSettings  strict, for saving: every rule the editor enforces, with readable
 //                            messages, returning the JSON to store.
 import { z } from 'zod';
+import { hasAtMostDecimals } from './numbers';
 
 export interface RebateTier {
   /** Reduction in CFM50 the tier needs, in percent (20 = 20%). */
@@ -48,6 +49,12 @@ export interface BlowerDoorSettings {
   flowExponent: number;
   /** Default zone N-factor for the BAS estimate. */
   nFactor: number;
+  /**
+   * Decide the tier and the ventilation lines on CFM50 rounded once to whole numbers, as the
+   * gauge's @50 screen and a program's test-out form carry them. False (the default): on the exact
+   * converted CFM50. Which one a program uses is the owner's call (Rebate programs page).
+   */
+  wholeCfm50: boolean;
   programs: RebateProgram[];
 }
 
@@ -74,7 +81,7 @@ export const LIMITS = {
 } as const;
 
 /** Settings for a franchise that has not set any programs up. */
-export const EMPTY_SETTINGS: BlowerDoorSettings = { gauge: DEFAULT_GAUGE, flowExponent: DEFAULT_EXPONENT, nFactor: DEFAULT_N_FACTOR, programs: [] };
+export const EMPTY_SETTINGS: BlowerDoorSettings = { gauge: DEFAULT_GAUGE, flowExponent: DEFAULT_EXPONENT, nFactor: DEFAULT_N_FACTOR, wholeCfm50: false, programs: [] };
 
 // ---------------------------------------------------------------------------------------------
 // Stored shape
@@ -167,6 +174,8 @@ export interface StoredSettings {
   gauge: string;
   flow_exponent: number;
   n_factor: number;
+  /** Stored only when on (older settings do not have it). */
+  whole_cfm50?: boolean;
   programs: StoredProgram[];
 }
 
@@ -176,11 +185,15 @@ const settingsSchema = z
     flow_exponent: z
       .number({ error: 'The flow exponent must be a number.' })
       .min(LIMITS.exponent.min, `The flow exponent must be between ${LIMITS.exponent.min} and ${LIMITS.exponent.max}.`)
-      .max(LIMITS.exponent.max, `The flow exponent must be between ${LIMITS.exponent.min} and ${LIMITS.exponent.max}.`),
+      .max(LIMITS.exponent.max, `The flow exponent must be between ${LIMITS.exponent.min} and ${LIMITS.exponent.max}.`)
+      // A saved reading keeps 3 decimals of n (numeric(4,3)).
+      .refine((n) => hasAtMostDecimals(n, 3), 'The flow exponent can have at most 3 decimals.'),
     n_factor: z
       .number({ error: 'The N-factor must be a number.' })
       .min(LIMITS.nFactor.min, `The N-factor must be between ${LIMITS.nFactor.min} and ${LIMITS.nFactor.max}.`)
-      .max(LIMITS.nFactor.max, `The N-factor must be between ${LIMITS.nFactor.min} and ${LIMITS.nFactor.max}.`),
+      .max(LIMITS.nFactor.max, `The N-factor must be between ${LIMITS.nFactor.min} and ${LIMITS.nFactor.max}.`)
+      .refine((n) => hasAtMostDecimals(n, 2), 'The N-factor can have at most 2 decimals.'),
+    whole_cfm50: z.boolean({ error: 'How the tool rounds the CFM50 must be on or off.' }).default(false),
     programs: z.array(z.unknown()).max(LIMITS.programs, `At most ${LIMITS.programs} programs.`),
   })
   .loose();
@@ -206,6 +219,7 @@ export function toStored(s: BlowerDoorSettings): StoredSettings {
     gauge: s.gauge,
     flow_exponent: s.flowExponent,
     n_factor: s.nFactor,
+    ...(s.wholeCfm50 ? { whole_cfm50: true } : {}),
     programs: s.programs.map((p) => ({
       key: p.key,
       name: p.name,
@@ -249,6 +263,7 @@ export function parseBlowerDoorSettings(value: unknown): ParsedSettings {
   const gauge = field(shape.gauge, value.gauge, DEFAULT_GAUGE, 'The gauge name');
   const flowExponent = field(shape.flow_exponent, value.flow_exponent, DEFAULT_EXPONENT, 'The flow exponent');
   const nFactor = field(shape.n_factor, value.n_factor, DEFAULT_N_FACTOR, 'The N-factor');
+  const wholeCfm50 = field(z.boolean(), value.whole_cfm50, false, 'How the tool rounds the CFM50');
 
   const programs: RebateProgram[] = [];
   const raw = Array.isArray(value.programs) ? value.programs.slice(0, LIMITS.programs) : [];
@@ -267,7 +282,7 @@ export function parseBlowerDoorSettings(value: unknown): ParsedSettings {
     keys.add(r.data.key);
     programs.push(toProgram(r.data));
   });
-  return { settings: { gauge, flowExponent, nFactor, programs }, problems };
+  return { settings: { gauge, flowExponent, nFactor, wholeCfm50, programs }, problems };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -295,8 +310,9 @@ export function validateBlowerDoorSettings(input: unknown): ValidatedSettings {
   seen((p) => p.key, 'key');
   seen((p) => p.label, 'short name');
   if (errors.length) return { ok: false, errors: unique(errors) };
-  const value: StoredSettings = { gauge: top.data.gauge, flow_exponent: top.data.flow_exponent, n_factor: top.data.n_factor, programs };
-  return { ok: true, value, settings: { gauge: value.gauge, flowExponent: value.flow_exponent, nFactor: value.n_factor, programs: programs.map(toProgram) } };
+  const wholeCfm50 = top.data.whole_cfm50;
+  const value: StoredSettings = { gauge: top.data.gauge, flow_exponent: top.data.flow_exponent, n_factor: top.data.n_factor, ...(wholeCfm50 ? { whole_cfm50: true } : {}), programs };
+  return { ok: true, value, settings: { gauge: value.gauge, flowExponent: value.flow_exponent, nFactor: value.n_factor, wholeCfm50, programs: programs.map(toProgram) } };
 }
 
 const unique = (xs: string[]) => [...new Set(xs)];

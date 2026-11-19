@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { SEEDED } from './__fixtures__/settings';
-import { headlineWords, jobBlowerDoor, latestReadings, newTestSchema, parseBlowerDoorSettings, programSnapshot, savedTestSchema, toCfm50, toRpcTest, ventilationWords, type SavedTest } from './index';
+import { capNote, headlineWords, jobBlowerDoor, latestReadings, newTestSchema, parseBlowerDoorSettings, programSnapshot, savedProgramKey, savedTestSchema, toCfm50, toRpcTest, ventilationWords, type SavedTest } from './index';
 
-const PROGRAM = parseBlowerDoorSettings(SEEDED).settings.programs[0]!;
+const SETTINGS = parseBlowerDoorSettings(SEEDED).settings;
+const PROGRAM = SETTINGS.programs[0]!;
+const ASSISTED = SETTINGS.programs[1]!;
 const JOB = '0b000000-0000-4000-8000-000000000001';
 const EST = '0e000000-0000-4000-8000-000000000001';
 
@@ -112,5 +114,62 @@ describe("the job's readings", () => {
     const bare = { ...testOut, program: null };
     const j = jobBlowerDoor([{ ...testIn, program: null }, bare], 'G');
     expect(j.evaluation!.headline.kind).toBe('no-program');
+  });
+});
+
+describe("the job's price and program, whoever took each reading", () => {
+  const ESTIMATOR = '0c000000-0000-4000-8000-0000000000e1';
+  // The estimator saves the test-in on the estimate, under Assisted, with the air sealing price.
+  const estIn = saved({
+    id: '0d000000-0000-4000-8000-0000000000d1',
+    kind: 'test_in',
+    job_id: null,
+    program_key: 'assisted',
+    program: programSnapshot(ASSISTED),
+    air_sealing_cost: 1999,
+    recorded_by: ESTIMATOR,
+    recorded_by_name: 'Eddie Estimator',
+  });
+  // The crew saves the test-out on the job: crews never send a price.
+  const crewOut = (program = ASSISTED, at = '2026-11-19T14:00:00+00:00', id = '0d000000-0000-4000-8000-0000000000d2') =>
+    saved({ id, kind: 'test_out', cfm: 3325, pa: 50.8, cfm50: 3290.87, program_key: program.key, program: programSnapshot(program), recorded_at: at });
+
+  it('applies the cost cap from the price the estimator saved with the test-in (BD-MATH-1)', () => {
+    const e = jobBlowerDoor([estIn, crewOut()], 'G').evaluation!;
+    expect(e.cost).toBe(1999);
+    expect(headlineWords(e).badge).toBe('40% TIER — $1,499.25 AIR SEAL REBATE');
+    expect(capNote(e)).toBe(' (limited by 75% of $1,999)');
+  });
+
+  it('keeps the newest price when a later reading has none, and takes a newer one over it', () => {
+    const officeOut = { ...crewOut(ASSISTED, '2026-11-19T13:00:00+00:00', '0d000000-0000-4000-8000-0000000000d3'), air_sealing_cost: 2200 };
+    expect(jobBlowerDoor([estIn, officeOut, crewOut()], 'G').evaluation!.cost).toBe(2200);
+    expect(jobBlowerDoor([estIn, crewOut(PROGRAM)], 'G').evaluation!.rebate).toMatchObject({ amount: 1499.25, capped: true });
+  });
+
+  it("picks the program the readings were saved under for the crew's phone (BD-MATH-2)", () => {
+    expect(savedProgramKey([estIn], SETTINGS)).toBe('assisted');
+    // The newest reading's program counts; one that no longer exists is skipped.
+    expect(savedProgramKey([estIn, crewOut(PROGRAM)], SETTINGS)).toBe('home_performance');
+    expect(savedProgramKey([estIn, { ...crewOut(), program_key: 'gone' }], SETTINGS)).toBe('assisted');
+    expect(savedProgramKey([], SETTINGS)).toBeNull();
+    expect(savedProgramKey([{ ...estIn, program_key: null }], SETTINGS)).toBeNull();
+  });
+
+  it('warns when the test-in and the test-out were saved under different programs (BD-R2)', () => {
+    const same = jobBlowerDoor([estIn, crewOut()], 'G');
+    expect(same.programMismatch).toBeNull();
+    expect(headlineWords(same.evaluation!).badge).toBe('40% TIER — $1,499.25 AIR SEAL REBATE');
+    const differ = jobBlowerDoor([estIn, crewOut(PROGRAM)], 'G');
+    expect(differ.programMismatch).toEqual({ testIn: 'Assisted', testOut: 'Home Performance' });
+    // The result still uses the program saved with the test-out.
+    expect(differ.evaluation!.program!.key).toBe('home_performance');
+  });
+
+  it('decides on whole CFM50 when the franchise says so', () => {
+    const near = saved({ id: '0d000000-0000-4000-8000-0000000000d4', kind: 'test_out', cfm: 5576, pa: 50.2, cfm50: 5561.55 });
+    const testIn = saved({ id: '0d000000-0000-4000-8000-0000000000d5', kind: 'test_in', job_id: null });
+    expect(headlineWords(jobBlowerDoor([testIn, near], 'G').evaluation!).badge).toBe('20% TIER — $900 AIR SEAL REBATE');
+    expect(headlineWords(jobBlowerDoor([testIn, near], 'G', { wholeCfm50: true }).evaluation!).badge).toBe('BELOW 20% — NO AIR SEAL REBATE YET');
   });
 });

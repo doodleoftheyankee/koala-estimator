@@ -1,7 +1,23 @@
 // Everything the blower door tool shows, worked out from what was typed (and any readings already
 // saved to the job), the franchise's settings and the chosen program. Pure: the screen, the copied
 // summary and the office job page all read the same result.
-import { ach50, basFor, DEFAULT_STORIES, evaluateTiers, isStories, rebateFor, reductionPct, toCfm50, ventilation, type BasResult, type Rebate, type Stories, type TierEvaluation, type VentilationStatus } from './calc';
+import {
+  ach50,
+  basFor,
+  cfm50PerCfm,
+  DEFAULT_STORIES,
+  evaluateTiers,
+  isStories,
+  rebateFor,
+  reductionPct,
+  toCfm50,
+  ventilation,
+  type BasResult,
+  type Rebate,
+  type Stories,
+  type TierEvaluation,
+  type VentilationStatus,
+} from './calc';
 import { errorOf, LOW_PRESSURE_PA, readField, RULES, valueOf, type FieldValue } from './numbers';
 import type { BlowerDoorSettings, RebateProgram } from './settings';
 
@@ -20,12 +36,18 @@ export interface BlowerDoorForm {
   volume: string;
   occupants: string;
   stories: Stories;
+  /** Empty: the franchise's default N-factor. */
   nFactor: string;
+  /** Empty: the franchise's default flow exponent. */
   exponent: string;
 }
 
-/** A fresh form: the pressures at 50 Pa and the franchise's defaults filled in. */
-export function emptyForm(settings: Pick<BlowerDoorSettings, 'flowExponent' | 'nFactor'>, programKey: string | null = null): BlowerDoorForm {
+/**
+ * A fresh form: the pressures at 50 Pa. The exponent and the N-factor stay empty, so the
+ * franchise's defaults (shown as placeholders) apply until someone types a value, and a default the
+ * office changes later reaches a phone that already has a form kept.
+ */
+export function emptyForm(settings?: Pick<BlowerDoorSettings, 'flowExponent' | 'nFactor'>, programKey: string | null = null): BlowerDoorForm {
   return {
     programKey,
     preCfm: '',
@@ -37,8 +59,8 @@ export function emptyForm(settings: Pick<BlowerDoorSettings, 'flowExponent' | 'n
     volume: '',
     occupants: '',
     stories: DEFAULT_STORIES,
-    nFactor: String(settings.nFactor),
-    exponent: String(settings.flowExponent),
+    nFactor: '',
+    exponent: '',
   };
 }
 
@@ -92,6 +114,14 @@ export type Headline =
 
 export interface Evaluation {
   program: RebateProgram | null;
+  /** The settings say: decide on CFM50 rounded once to whole numbers. */
+  wholeCfm50: boolean;
+  /**
+   * The CFM50s the decisions use: the readings' own, or rounded to whole numbers when the settings
+   * say so. Null without that test.
+   */
+  pre50: number | null;
+  post50: number | null;
   /** The flow exponent used for typed readings, or null with an error. */
   exponent: number | null;
   exponentError: string | null;
@@ -111,6 +141,11 @@ export interface Evaluation {
   bas: BasResult;
   basErrors: { bas: string | null; volume: string | null; occupants: string | null; nFactor: string | null };
   ventilation: VentilationStatus | null;
+  /**
+   * The continuous fan flow (CFM) that ventilation needs: the gap in CFM when it is recommended,
+   * the whole requirement when it must be installed (CFM50 ÷ (N-factor × height correction)).
+   */
+  fanCfm: number | null;
   volume: number | null;
   /** The house inputs as read (null when empty or not valid), kept with a saved reading. */
   house: { basAudit: number | null; occupants: number | null; nFactor: number | null };
@@ -165,9 +200,15 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
   const pre = testIn.reading;
   const post = testOut.reading;
 
-  const reduction = pre && post ? reductionPct(pre.cfm50, post.cfm50) : null;
+  // The decision values: exact, or rounded once to whole CFM50 when the franchise decides that way.
+  const whole = settings.wholeCfm50 === true;
+  const decide = (n: number) => (whole ? Math.round(n) : n);
+  const pre50 = pre ? decide(pre.cfm50) : null;
+  const post50 = post ? decide(post.cfm50) : null;
+
+  const reduction = pre50 !== null && post50 !== null ? reductionPct(pre50, post50) : null;
   const rawReduction = pre && post ? reductionPct(pre.cfm, post.cfm) : null;
-  const tiers = pre && program ? evaluateTiers(pre.cfm50, post?.cfm50 ?? null, program.tiers) : null;
+  const tiers = pre50 !== null && program ? evaluateTiers(pre50, post50, program.tiers) : null;
 
   const costField = readField(form.cost, RULES.cost);
   const cost = valueOf(costField);
@@ -179,11 +220,15 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
   const nfField = form.nFactor.trim() === '' ? ({ state: 'ok', value: settings.nFactor } as FieldValue) : readField(form.nFactor, RULES.nFactor);
   const volume = valueOf(volField);
   const house = { basAudit: valueOf(basField), occupants: valueOf(occField), nFactor: valueOf(nfField) };
-  const bas = basFor({ audit: house.basAudit, volume, occupants: house.occupants, stories: form.stories, nFactor: house.nFactor });
-  const vent = post && bas.value !== null ? ventilation(post.cfm50, bas.value) : null;
+  const basExact = basFor({ audit: house.basAudit, volume, occupants: house.occupants, stories: form.stories, nFactor: house.nFactor });
+  const bas: BasResult = whole && basExact.value !== null ? { ...basExact, value: Math.max(1, Math.round(basExact.value)) } : basExact;
+  const vent = post50 !== null && bas.value !== null ? ventilation(post50, bas.value) : null;
+  const perCfm = cfm50PerCfm(house.nFactor, form.stories);
+  const fanCfm =
+    vent && perCfm !== null && bas.value !== null ? (vent.status === 'recommend' ? vent.gap / perCfm : vent.status === 'install' ? bas.value / perCfm : null) : null;
 
   let headline: Headline = { kind: 'enter' };
-  if (pre && !post) headline = { kind: 'test-in-only', pre50: pre.cfm50 };
+  if (pre && !post) headline = { kind: 'test-in-only', pre50: pre50 ?? pre.cfm50 };
   else if (pre && post && reduction !== null) {
     if (!program || !tiers) headline = { kind: 'no-program', reductionPct: reduction };
     else if (tiers.hit && rebate) headline = { kind: 'tier', reductionPct: reduction, tierPct: tiers.hit.reductionPct, amount: rebate.amount, capped: rebate.capped };
@@ -192,12 +237,15 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
 
   return {
     program,
+    wholeCfm50: whole,
+    pre50,
+    post50,
     exponent,
     exponentError: errorOf(exp),
     testIn,
     testOut,
     reductionPct: reduction,
-    removed: pre && post ? pre.cfm50 - post.cfm50 : null,
+    removed: pre50 !== null && post50 !== null ? pre50 - post50 : null,
     rawReductionPct: rawReduction,
     tiers,
     rebate,
@@ -206,6 +254,7 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
     bas,
     basErrors: { bas: errorOf(basField), volume: errorOf(volField), occupants: errorOf(occField), nFactor: errorOf(nfField) },
     ventilation: vent,
+    fanCfm,
     volume,
     house,
     ach50Pre: pre ? ach50(pre.cfm50, volume) : null,

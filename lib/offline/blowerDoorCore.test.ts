@@ -12,6 +12,7 @@ import {
   newReading,
   parseContextParams,
   settledLocalIds,
+  unsentNotes,
   type BlowerDoorContext,
   type LocalTest,
 } from './blowerDoorCore';
@@ -57,7 +58,8 @@ describe('the reading the phone saves', () => {
   });
 
   it('rounds a long typed value before working the CFM50 out, so the stored CFM50 matches the stored reading', () => {
-    const { form, e } = typed({ preCfm: '4012.3456', prePa: '-37.777', exponent: '0.6543' });
+    // A fourth decimal of the exponent is refused now (BD-MATH-6, below); three are kept.
+    const { form, e } = typed({ preCfm: '4012.3456', prePa: '-37.777', exponent: '0.654' });
     const t = newReading({ id: '0d000000-0000-4000-8000-000000000002', kind: 'test_in', context: EST_CTX, evaluation: e, program: null, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: true })!;
     expect([t.cfm, t.pa, t.exponent]).toEqual([4012.35, 37.78, 0.654]);
     expect(Math.abs(t.cfm50 - toCfm50(4012.35, 37.78, 0.654)!)).toBeLessThanOrEqual(0.005);
@@ -99,12 +101,14 @@ describe('a sync answer', () => {
     expect(applyTestResult(t, { status: 'applied', id: t.id, recorded_at: now }, now)).toMatchObject({ syncState: 'synced', lastError: null, syncedAt: now });
     expect(applyTestResult(t, { status: 'waiting' }, now)).toMatchObject({ syncState: 'waiting', lastError: 'Saved on this phone. It goes to the office once this estimate has synced.' });
     expect(applyTestResult(t, { status: 'error', error: 'No signal.' }, now)).toMatchObject({ syncState: 'error', lastError: 'No signal.' });
-    expect(applyTestResult(t, { status: 'refused', error: 'This job is not assigned to your crew.' }, now)).toMatchObject({ syncState: 'invalid', lastError: 'This job is not assigned to your crew.' });
+    // Refused (not the caller's job right now) is tried again on later syncs (BD-R7).
+    expect(applyTestResult(t, { status: 'refused', error: 'This job is not assigned to your crew.' }, now)).toMatchObject({ syncState: 'refused', lastError: 'This job is not assigned to your crew.' });
+    expect(applyTestResult(t, { status: 'invalid', error: 'x' }, now).syncState).toBe('invalid');
     expect(applyTestResult(t, { status: 'rejected', error: 'x' }, now).syncState).toBe('invalid');
   });
 
   it('sends again only what can still go: pending, waiting and failed readings', () => {
-    expect(['pending', 'waiting', 'error', 'invalid', 'synced'].filter((s) => isUnsent({ syncState: s as LocalTest['syncState'] }))).toEqual(['pending', 'waiting', 'error']);
+    expect(['pending', 'waiting', 'error', 'refused', 'invalid', 'synced'].filter((s) => isUnsent({ syncState: s as LocalTest['syncState'] }))).toEqual(['pending', 'waiting', 'error', 'refused']);
   });
 });
 
@@ -152,5 +156,29 @@ describe('the readings on screen', () => {
     const sent = local('0d000000-0000-4000-8000-0000000000c1', 'test_in', '2026-11-19T14:00:00.000Z', { syncState: 'synced' });
     expect(mergeReadings([], [sent]).map((r) => r.test.id)).toEqual([sent.id]);
     expect(settledLocalIds([], [sent])).toEqual([]);
+  });
+});
+
+describe('review fixes', () => {
+  it('saves the CFM50 the screen showed (BD-MATH-6)', () => {
+    const { form, e } = typed({ preCfm: '6000', prePa: '25', postCfm: '4000', postPa: '25', exponent: '0.653' });
+    const t = newReading({ id: '0d000000-0000-4000-8000-0000000000f1', kind: 'test_out', context: JOB_CTX, evaluation: e, program: e.program, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: true })!;
+    expect(t.exponent).toBe(0.653);
+    expect(Math.abs(t.cfm50 - e.testOut.reading!.cfm50)).toBeLessThanOrEqual(0.005);
+    // 0.6525 is refused on screen, so nothing different can be saved.
+    const four = typed({ preCfm: '6000', prePa: '25', postCfm: '4000', postPa: '25', exponent: '0.6525' });
+    expect(newReading({ id: 'x', kind: 'test_out', context: JOB_CTX, evaluation: four.e, program: null, form: four.form, recordedAt: '', includePrice: true })).toBeNull();
+  });
+
+  it('a refused reading is sent again, and the summary says it has not reached the office (BD-R7)', () => {
+    const t = local('0d000000-0000-4000-8000-0000000000f2', 'test_out', '2026-11-19T15:00:00.000Z');
+    const refused = applyTestResult(t, { status: 'refused', error: 'This job is not assigned to your crew.' }, '2026-11-19T15:05:00.000Z');
+    expect(isUnsent(refused)).toBe(true);
+    const shown = mergeReadings([], [refused]);
+    expect(unsentNotes([null, newestOf(shown, 'test_out')])).toEqual(['Note: the test-out is saved on this phone only; it has not reached the office yet.']);
+    const invalid = applyTestResult(t, { status: 'invalid', error: 'The reading is outside what a gauge can show.' }, '2026-11-19T15:05:00.000Z');
+    expect(unsentNotes([newestOf(mergeReadings([], [invalid]), 'test_out')])).toEqual(['Note: the test-out was not saved to the office: The reading is outside what a gauge can show.']);
+    const synced = { ...t, syncState: 'synced' as const };
+    expect(unsentNotes([newestOf(mergeReadings([], [synced]), 'test_out')])).toEqual([]);
   });
 });

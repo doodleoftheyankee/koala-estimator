@@ -21,7 +21,11 @@ import {
   sourceLine,
   capNote,
   basMissingText,
+  cfmText,
+  nFactorHint,
   parseBlowerDoorSettings,
+  shownNumbers,
+  ventilationFor,
   type BlowerDoorForm,
   type BlowerDoorSettings,
   type Evaluation,
@@ -48,7 +52,8 @@ describe('reading what was typed', () => {
   });
 
   it('calls anything else not a number, never NaN on screen', () => {
-    for (const t of ['abc', '-', '1.2.3', '12a', '1e5', '--5']) {
+    // A lone '-' is someone starting to type "-50": not typed yet (see BD-R8 below).
+    for (const t of ['abc', '1.2.3', '12a', '1e5', '--5']) {
       expect(Number.isNaN(readNumber(t)), t).toBe(true);
       expect(readField(t, RULES.cfm)).toEqual({ state: 'invalid', error: 'Fan flow: type a number.' });
     }
@@ -174,7 +179,8 @@ describe('tiers', () => {
   it('misses it by a fraction, and asks for at least 1 more CFM50', () => {
     const t = run({ preCfm: '1000', postCfm: '800.4' });
     expect(t.tiers!.hit).toBeNull();
-    expect(headlineWords(t)).toMatchObject({ tone: 'fail', badge: 'BELOW 20% — NO AIR SEAL REBATE YET', big: '20.0%' });
+    // 19.96% shows as 19.9%, never 20.0% beside BELOW 20% (BD-MATH-3).
+    expect(headlineWords(t)).toMatchObject({ tone: 'fail', badge: 'BELOW 20% — NO AIR SEAL REBATE YET', big: '19.9%' });
     expect(nextTierLine(t.tiers, true)).toBe('Need 1 more CFM50 of reduction to reach the 20% tier.');
     expect(t.rebate).toEqual({ tierAmount: 0, amount: 0, cap: null, capped: false });
   });
@@ -198,7 +204,8 @@ describe('tiers', () => {
     expect(t.headline).toEqual({ kind: 'test-in-only', pre50: 6952 });
     expect(headlineWords(t)).toEqual({ tone: 'neutral', badge: 'TEST-IN ONLY', big: '6,952', unit: 'CFM50 before', line: 'Enter the test-out after the work.' });
     expect(t.tiers!.rows.every((r) => !r.reached)).toBe(true);
-    expect(nextTierLine(t.tiers, false)).toBe('The test-out must be at or below 5,562 CFM50 for the 20% tier.');
+    // The limit is 5,561.6: the largest whole CFM50 that reaches it is 5,561 (BD-MATH-3).
+    expect(nextTierLine(t.tiers, false)).toBe('The test-out must be at or below 5,561 CFM50 for the 20% tier.');
     expect(summaryText(t, SETTINGS)).toBeNull();
   });
 });
@@ -338,7 +345,10 @@ describe('fields the tool cannot use', () => {
     const e = run({});
     expect(e.headline).toEqual({ kind: 'enter' });
     expect(headlineWords(e)).toEqual({ tone: 'neutral', badge: '—', big: '—', unit: null, line: 'Enter both tests below.' });
-    expect(emptyForm(SETTINGS)).toMatchObject({ prePa: '50', postPa: '50', exponent: '0.65', nFactor: '19', stories: '2' });
+    // The exponent and N-factor stay empty: the franchise default applies until someone types one (BD-MATH-5).
+    expect(emptyForm(SETTINGS)).toMatchObject({ prePa: '50', postPa: '50', exponent: '', nFactor: '', stories: '2' });
+    expect(run({}).exponent).toBe(0.65);
+    expect(run({}).house.nFactor).toBe(19);
   });
 
   it('shows an error under a zero or nonsense reading and leaves that test out', () => {
@@ -389,5 +399,158 @@ describe('saved readings', () => {
     expect(e.testIn.reading).toEqual(savedIn);
     expect(e.testOut.reading!.exponent).toBe(0.7);
     expect(e.reductionPct).toBeCloseTo(((savedIn.cfm50 - 2000) / savedIn.cfm50) * 100, 9);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Review fixes (docs/blower-door/build.txt, section 7)
+// ---------------------------------------------------------------------------------------------
+
+describe('typing a negative pressure (BD-R8)', () => {
+  it('takes a lone sign or dot as not typed yet, not as an error', () => {
+    for (const t of ['-', '+', '.', '-.', ' - ']) {
+      expect(readNumber(t), t).toBeNull();
+      expect(readField(t, RULES.pa), t).toEqual({ state: 'empty' });
+    }
+    expect(run({ ...WORKED, postPa: '-' }).testOut.paError).toBeNull();
+    // Half-typed is still not a reading, and nonsense is still an error.
+    expect(run({ ...WORKED, postPa: '-' }).testOut.reading).toBeNull();
+    expect(readField('--', RULES.pa)).toEqual({ state: 'invalid', error: 'House pressure: type a number.' });
+  });
+});
+
+describe('no more decimals than a saved reading keeps (BD-MATH-6)', () => {
+  it('refuses a flow exponent with more than 3 decimals', () => {
+    expect(readField('0.6525', RULES.exponent)).toEqual({ state: 'invalid', error: 'Flow exponent: at most 3 decimals.' });
+    expect(readField('0.653', RULES.exponent)).toEqual({ state: 'ok', value: 0.653 });
+    expect(readField('0.6500', RULES.exponent)).toEqual({ state: 'ok', value: 0.65 });
+    const e = run({ preCfm: '6000', prePa: '25', postCfm: '4000', postPa: '25', exponent: '0.6525' });
+    expect(e.exponentError).toBe('Flow exponent: at most 3 decimals.');
+    expect(e.testOut.reading).toBeNull();
+  });
+
+  it('reads the other fields at the precision the database keeps', () => {
+    expect(readField('4012.3456', RULES.cfm)).toEqual({ state: 'ok', value: 4012.35 });
+    expect(readField('-37.777', RULES.pa)).toEqual({ state: 'ok', value: 37.78 });
+    expect(readField('17486.25', RULES.volume)).toEqual({ state: 'ok', value: 17486.3 });
+    expect(readField('1569.84', RULES.bas)).toEqual({ state: 'ok', value: 1569.8 });
+    expect(readField('15.391', RULES.nFactor)).toEqual({ state: 'ok', value: 15.39 });
+    expect(readField('$1,999.999', RULES.cost)).toEqual({ state: 'ok', value: 2000 });
+  });
+});
+
+describe('office defaults reach a phone that already has a form (BD-MATH-5)', () => {
+  it('starts the exponent and the N-factor empty, so the office default applies until someone types one', () => {
+    expect(emptyForm(SETTINGS)).toMatchObject({ exponent: '', nFactor: '' });
+    const kept = reviveForm({ ...emptyForm(SETTINGS), preCfm: '6000', prePa: '25' }, SETTINGS);
+    const later: BlowerDoorSettings = { ...SETTINGS, flowExponent: 0.6, nFactor: 17 };
+    const e = evaluate({ form: reviveForm(kept, later), settings: later });
+    expect(e.exponent).toBe(0.6);
+    expect(e.testIn.reading!.cfm50).toBeCloseTo(6000 * 2 ** 0.6, 6);
+    expect(e.house.nFactor).toBe(17);
+    // A value someone typed is kept.
+    expect(evaluate({ form: { ...kept, exponent: '0.7' }, settings: later }).exponent).toBe(0.7);
+  });
+});
+
+describe('the numbers on screen agree with the decision (BD-MATH-3)', () => {
+  it('shows a tier limit as the largest whole CFM50 that reaches it', () => {
+    const t = run({ preCfm: '6952' });
+    expect(nextTierLine(t.tiers, false)).toBe('The test-out must be at or below 5,561 CFM50 for the 20% tier.');
+    expect(shownNumbers(t).limits).toEqual(['5,561', '4,866', '4,171']);
+  });
+
+  it('a test-out of 5,562 after 6,952 misses 20% and never reads 20.0%', () => {
+    const e = run({ preCfm: '6952', postCfm: '5562' });
+    expect(headlineWords(e)).toMatchObject({ badge: 'BELOW 20% — NO AIR SEAL REBATE YET', big: '19.9%', line: '6,952 → 5,562 CFM50' });
+    expect(nextTierLine(e.tiers, true)).toBe('Need 1 more CFM50 of reduction to reach the 20% tier.');
+    expect(shownNumbers(e)).toMatchObject({ post50: '5,562', limits: ['5,561', '4,866', '4,171'] });
+    expect(summaryText(e, SETTINGS)).toContain('Test-out: 5,562 CFM50 (read 5,562 CFM at 50 Pa)\nReduction: 19.9% (1,390 CFM50)\nAir sealing tier: below 20% — no rebate yet');
+  });
+
+  it('a test-out that reaches 20% by a fraction never reads the same as one that misses it', () => {
+    // 5,576 CFM at 50.2 Pa is 5,561.55 CFM50: under the 5,561.6 limit.
+    const e = run({ preCfm: '6952', postCfm: '5576', postPa: '50.2' });
+    expect(headlineWords(e)).toMatchObject({ badge: '20% TIER — $900 AIR SEAL REBATE', big: '20.0%' });
+    const s = shownNumbers(e);
+    expect(s.post50).toBe('5,561.5');
+    expect(s.limits[0]).toBe('5,561.6');
+    expect(summaryText(e, SETTINGS)).toContain('Test-out: 5,561.5 CFM50 (read 5,576 CFM at 50.2 Pa)');
+  });
+
+  it('a reduction just under a tier shows under it (5,000 then 3,002 is 39.96%)', () => {
+    const e = run({ preCfm: '5000', postCfm: '3002' });
+    expect(headlineWords(e)).toMatchObject({ badge: '30% TIER — $1,300 AIR SEAL REBATE', big: '39.9%' });
+    expect(summaryText(e, SETTINGS)).toContain('Reduction: 39.9% (1,998 CFM50)');
+    // Away from a tier the reduction rounds as it always did.
+    expect(headlineWords(run(WORKED)).big).toBe('52.7%');
+  });
+
+  it('a test-out just under 70% of the BAS never shows as 70% of it', () => {
+    const e = run({ preCfm: '1500', postCfm: '699.6', bas: '1000' });
+    expect(e.ventilation!.status).toBe('install');
+    expect(shownNumbers(e).post50).toBe('699.6');
+    expect(ventilationFor(e)!.text).toMatch(/^Under 70% of BAS \(69% of 1,000, from audit\)\./);
+  });
+
+  it('a test-out just under the BAS shows the real gap, never a 0 CFM50 gap', () => {
+    const e = run({ preCfm: '1500', postCfm: '999.7', bas: '1000' });
+    expect(e.ventilation!.status).toBe('recommend');
+    expect(shownNumbers(e)).toMatchObject({ post50: '999.7', bas: '1,000' });
+    expect(ventilationFor(e)!.text).toContain('sized to make up the 0.3 CFM50 gap');
+  });
+
+  it('with the whole-number setting, decides on CFM50 rounded once, as the gauge and the Test Out Form show it', () => {
+    const whole: BlowerDoorSettings = { ...SETTINGS, wholeCfm50: true };
+    const c = run({ preCfm: '6952', postCfm: '5576', postPa: '50.2' }, whole);
+    expect(c.post50).toBe(5562);
+    expect(headlineWords(c)).toMatchObject({ badge: 'BELOW 20% — NO AIR SEAL REBATE YET', big: '19.9%' });
+    expect(shownNumbers(c).post50).toBe('5,562');
+    const v = run({ preCfm: '1500', postCfm: '699.6', bas: '1000' }, whole);
+    expect(v.ventilation!.status).toBe('recommend');
+    // The worked example reads the same either way.
+    expect(headlineWords(run(WORKED, whole))).toMatchObject({ badge: '40% TIER — $1,800 AIR SEAL REBATE', big: '52.7%', line: '6,952 → 3,291 CFM50' });
+  });
+});
+
+describe('ventilation sized in fan CFM as well as CFM50 (BD-MATH-4)', () => {
+  // BPI's Albany example: 17,486 ft³, 4 people, 2 stories, N 19 → 102 CFM → BAS 1,570 CFM50.
+  const ALBANY = { volume: '17486', occupants: '4', stories: '2' as const, nFactor: '19' };
+
+  it('names the continuous fan flow that closes the gap when it is recommended', () => {
+    const e = run({ preCfm: '2500', postCfm: '1500', ...ALBANY });
+    expect(cfmText(e.bas.value!)).toBe('1,570');
+    expect(e.fanCfm).toBeCloseTo(69.8 / (19 * 0.81), 1);
+    const w = ventilationFor(e)!;
+    expect(w.text).toBe(
+      'Below BAS (95% of 1,570, estimated). BPI: continuous mechanical ventilation must be RECOMMENDED to the customer, sized to make up the 70 CFM50 gap (about 4.5 CFM of continuous fan flow). Program has a mechanical ventilation rebate (up to $400).',
+    );
+    expect(w.short).toBe('below BAS (95%) — recommend continuous mechanical ventilation (about 4.5 CFM)');
+    expect(summaryText(e, SETTINGS)).toContain('BAS: 1,570 CFM50 (estimated) — below BAS (95%) — recommend continuous mechanical ventilation (about 4.5 CFM)');
+  });
+
+  it('names the whole requirement when it must be installed', () => {
+    const e = run({ preCfm: '2500', postCfm: '1000', ...ALBANY });
+    expect(e.fanCfm).toBeCloseTo(102, 0);
+    expect(ventilationFor(e)!.text).toContain('sized for 100% of the ventilation requirement (about 102 CFM of continuous fan flow).');
+    // From the audit's BAS, the requirement is the BAS back in CFM.
+    const a = run({ preCfm: '2500', postCfm: '1000', bas: '1570', stories: '2', nFactor: '19' });
+    expect(ventilationFor(a)!.short).toBe('under 70% of BAS (63%) — mechanical ventilation must be installed (about 102 CFM)');
+  });
+
+  it('names no fan when ventilation is OK', () => {
+    const e = run({ preCfm: '2500', postCfm: '1800', ...ALBANY });
+    expect(e.fanCfm).toBeNull();
+    expect(ventilationFor(e)!.text).not.toContain('fan flow');
+  });
+});
+
+describe('the N-factor hint (BD-MATH-7)', () => {
+  it('asks for the 1-story zone value, since the tool corrects for the stories itself', () => {
+    const h = nFactorHint(19);
+    expect(h).toContain("N-factor 19 is BPI's Zone 2 example value (Zone 2 runs 17–20); match it to your audit software.");
+    expect(h).toContain('1-story');
+    expect(h).toContain('set Stories to 1');
+    expect(nFactorHint(17.5)).toMatch(/^N-factor 17\.5 is your office's default; match it to your audit software\. /);
   });
 });

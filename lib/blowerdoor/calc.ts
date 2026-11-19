@@ -6,6 +6,7 @@
 //   BAS (CFM50) = max(0.35 × volume ÷ 60, 15 × occupants) × N-factor × height correction
 //                                             BPI Building Analyst (ASHRAE 62-89)
 //   ACH50 = CFM50 × 60 ÷ volume
+//   fan CFM = CFM50 ÷ (N-factor × height correction)  a CFM50 gap as continuous fan flow (BPI)
 import type { RebateProgram, RebateTier } from './settings';
 
 /** Test pressure the program's numbers are quoted at. */
@@ -138,12 +139,26 @@ export type BasResult =
   | { source: 'audit' | 'estimated'; value: number }
   | { source: null; value: null; /** Why it could not be estimated, for the screen. */ missing: 'volume' | 'n-factor' | 'nothing' };
 
+/** What the house needs in CFM (ASHRAE 62-89, as BPI uses it): max(0.35 × volume ÷ 60, 15 × occupants). */
+export function ventilationNeedCfm(volume: number, occupants: number | null): number {
+  return Math.max((ACH_NATURAL * volume) / 60, occupants !== null && occupants > 0 ? CFM_PER_PERSON * occupants : 0);
+}
+
+/**
+ * CFM50 per CFM of natural (or fan) airflow: N-factor × height correction. BPI converts the house's
+ * CFM need to the BAS in CFM50 with it, so a CFM50 gap divided by it is the fan flow that closes it.
+ */
+export function cfm50PerCfm(nFactor: number | null, stories: Stories): number | null {
+  if (nFactor === null || !(nFactor > 0)) return null;
+  return nFactor * heightCorrection(stories);
+}
+
 /** The BAS: from the audit when given, else estimated from the house. */
 export function basFor(b: BasInputs): BasResult {
   if (b.audit !== null && b.audit > 0) return { source: 'audit', value: b.audit };
   if (b.volume === null || !(b.volume > 0)) return { source: null, value: null, missing: b.occupants !== null && b.occupants > 0 ? 'volume' : 'nothing' };
   if (b.nFactor === null || !(b.nFactor > 0)) return { source: null, value: null, missing: 'n-factor' };
-  const airflow = Math.max((ACH_NATURAL * b.volume) / 60, b.occupants !== null && b.occupants > 0 ? CFM_PER_PERSON * b.occupants : 0);
+  const airflow = ventilationNeedCfm(b.volume, b.occupants);
   const value = airflow * b.nFactor * heightCorrection(b.stories);
   return Number.isFinite(value) && value > 0 ? { source: 'estimated', value } : { source: null, value: null, missing: 'nothing' };
 }

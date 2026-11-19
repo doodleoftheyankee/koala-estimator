@@ -3,6 +3,7 @@
 // which readings the screen shows (the server's and the phone's own, never one twice).
 import { z } from 'zod';
 import {
+  KIND_LABELS,
   programSnapshot,
   toCfm50,
   type Evaluation,
@@ -42,7 +43,8 @@ export type LocalTestState =
   | 'pending' // waiting to be sent
   | 'waiting' // the estimate has not reached the server yet; sent again on the next sync
   | 'error' // a transient failure; retried
-  | 'invalid' // the server refused it; kept on the phone with the reason
+  | 'refused' // not the person's job or estimate right now (it may be given back); retried
+  | 'invalid' // values or an id the server will never take; kept on the phone with the reason
   | 'synced';
 
 /** One reading on the phone, from when it is saved until the server's list has it. */
@@ -142,13 +144,17 @@ export function applyTestResult(local: LocalTest, res: TestSyncResponse, now: st
       return { ...local, syncState: 'waiting', lastError: 'Saved on this phone. It goes to the office once this estimate has synced.' };
     case 'error':
       return { ...local, syncState: 'error', lastError: res.error };
+    case 'refused':
+      // The office may give the job back: the server keeps no record of a refusal, so sending the
+      // reading again later is safe.
+      return { ...local, syncState: 'refused', lastError: res.error };
     default:
       return { ...local, syncState: 'invalid', lastError: res.error };
   }
 }
 
-/** Readings the phone still sends. */
-export const isUnsent = (t: Pick<LocalTest, 'syncState'>) => t.syncState === 'pending' || t.syncState === 'waiting' || t.syncState === 'error';
+/** Readings the phone still sends (a refused one too: the job may be given back). */
+export const isUnsent = (t: Pick<LocalTest, 'syncState'>) => t.syncState === 'pending' || t.syncState === 'waiting' || t.syncState === 'error' || t.syncState === 'refused';
 
 /** A reading on screen: the server's copy, or the phone's own until the server has it. */
 export interface ShownReading {
@@ -193,6 +199,24 @@ export function mergeReadings(server: readonly SavedTest[], local: readonly Loca
 
 /** The newest shown reading of a kind. */
 export const newestOf = (shown: readonly ShownReading[], kind: TestKind) => shown.find((r) => r.test.kind === kind) ?? null;
+
+/**
+ * Lines for the copied summary about the readings it uses that the office does not have: still on
+ * the phone (offline, or refused for now and sent again), or not saved at all.
+ */
+export function unsentNotes(used: ReadonlyArray<ShownReading | null>): string[] {
+  const notes: string[] = [];
+  for (const r of used) {
+    if (!r?.local || r.local.syncState === 'synced') continue;
+    const what = KIND_LABELS[r.test.kind].toLowerCase();
+    notes.push(
+      r.local.syncState === 'invalid'
+        ? `Note: the ${what} was not saved to the office: ${r.local.lastError ?? 'the server refused it.'}`
+        : `Note: the ${what} is saved on this phone only; it has not reached the office yet.`,
+    );
+  }
+  return notes;
+}
 
 /** Phone copies the server's list now has: safe to drop. */
 export function settledLocalIds(server: readonly SavedTest[], local: readonly LocalTest[]): string[] {

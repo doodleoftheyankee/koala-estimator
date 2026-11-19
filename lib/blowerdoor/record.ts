@@ -162,40 +162,66 @@ export function savedInputs(t: (BasRow & Pick<SavedTest, 'air_sealing_cost'>) | 
   };
 }
 
+/**
+ * The program a job's or estimate's saved readings were taken under, for a phone that has not
+ * chosen one: the newest reading's program that the franchise still has (the estimator's choice at
+ * the test-in reaches the crew's test-out). Null when no saved reading names one.
+ */
+export function savedProgramKey(rows: readonly Pick<SavedTest, 'program_key' | 'recorded_at'>[], settings: Pick<BlowerDoorSettings, 'programs'>): string | null {
+  const keys = new Set(settings.programs.map((p) => p.key));
+  return newestFirst(rows).find((r) => r.program_key !== null && keys.has(r.program_key))?.program_key ?? null;
+}
+
+/** The air sealing price of a job: from the newest reading that was saved with one (any kind). */
+export function savedPrice(rows: readonly Pick<SavedTest, 'air_sealing_cost' | 'recorded_at'>[]): number | null {
+  return newestFirst(rows).find((r) => r.air_sealing_cost !== null && r.air_sealing_cost > 0)?.air_sealing_cost ?? null;
+}
+
 export interface JobBlowerDoor extends LatestReadings<SavedTest> {
   /** The result from the newest readings as recorded, with the program saved with the test-out. */
   evaluation: Evaluation | null;
   settings: BlowerDoorSettings;
+  /** The test-in and the test-out were saved under different programs (their short names). */
+  programMismatch: { testIn: string; testOut: string } | null;
 }
 
 /**
  * The job's result from its saved readings: the newest test-in against the newest test-out, the
- * program saved with the test-out (else the test-in), the BAS inputs given with the test-out (else
- * the test-in), and the price given with the test-out for the cost cap.
+ * program saved with the test-out (else the test-in; a different program on each is reported in
+ * programMismatch), the BAS inputs given with the test-out (else the test-in), and the air sealing
+ * price for the cost cap from the newest reading saved with one: a crew never sends a price, so the
+ * estimator's price from the test-in caps a crew's test-out. `whole`: the franchise decides on
+ * whole-number CFM50s (its current setting).
  */
-export function jobBlowerDoor(rows: readonly SavedTest[], gauge: string): JobBlowerDoor {
+export function jobBlowerDoor(rows: readonly SavedTest[], gauge: string, opts: { wholeCfm50?: boolean } = {}): JobBlowerDoor {
   const latest = latestReadings(rows);
   const { testIn, testOut } = latest;
-  const program = programOf(testOut) ?? programOf(testIn);
+  const inProgram = programOf(testIn);
+  const outProgram = programOf(testOut);
+  const program = outProgram ?? inProgram;
   const settings: BlowerDoorSettings = {
     gauge,
     flowExponent: testOut?.exponent ?? testIn?.exponent ?? DEFAULT_EXPONENT,
     nFactor: DEFAULT_N_FACTOR,
+    wholeCfm50: opts.wholeCfm50 === true,
     programs: program ? [program] : [],
   };
-  if (!testIn && !testOut) return { ...latest, evaluation: null, settings };
+  const programMismatch = inProgram && outProgram && inProgram.key !== outProgram.key ? { testIn: inProgram.label, testOut: outProgram.label } : null;
+  if (!testIn && !testOut) return { ...latest, evaluation: null, settings, programMismatch };
   const basRow = hasBas(testOut) ? testOut : hasBas(testIn) ? testIn : null;
+  const price = savedPrice(rows);
   const form: BlowerDoorForm = {
     ...emptyForm(settings, program?.key ?? null),
     ...savedInputs(basRow),
-    cost: testOut?.air_sealing_cost !== null && testOut?.air_sealing_cost !== undefined ? String(testOut.air_sealing_cost) : '',
+    cost: price === null ? '' : String(price),
   };
   const evaluation = evaluate({ form, settings, savedIn: testIn ? asReading(testIn) : null, savedOut: testOut ? asReading(testOut) : null });
-  return { ...latest, evaluation, settings };
+  return { ...latest, evaluation, settings, programMismatch };
 }
 
 /** The stored JSON of a program, to send with a reading. */
-export const programSnapshot = (p: RebateProgram | null): StoredProgram | null => (p ? toStored({ gauge: '', flowExponent: DEFAULT_EXPONENT, nFactor: DEFAULT_N_FACTOR, programs: [p] }).programs[0]! : null);
+export const programSnapshot = (p: RebateProgram | null): StoredProgram | null =>
+  p ? toStored({ gauge: '', flowExponent: DEFAULT_EXPONENT, nFactor: DEFAULT_N_FACTOR, wholeCfm50: false, programs: [p] }).programs[0]! : null;
 
 // ---------------------------------------------------------------------------------------------
 // The API's answers
