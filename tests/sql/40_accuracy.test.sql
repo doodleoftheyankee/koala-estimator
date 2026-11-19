@@ -199,4 +199,234 @@ begin
 end $$;
 reset role;
 
+-- ===========================================================================
+-- Flow stage (L11, L34, L35)
+-- ===========================================================================
+\set office '00000000-0000-0000-0000-0000000000e3'
+\set est2   '00000000-0000-0000-0000-0000000000e4'
+\set crew   '00000000-0000-0000-0000-0000000000e5'
+insert into auth.users (id) values (:'office'), (:'est2'), (:'crew');
+insert into profiles (id, role, full_name) values (:'office', 'office', 'Office AC'), (:'est2', 'estimator', 'Estimator AC 2'), (:'crew', 'crew', 'Crew AC');
+
+-- ---------------------------------------------------------------------------
+-- L11: every material has its usual cost range, half to twice its cost when the migration ran
+-- ---------------------------------------------------------------------------
+do $$ begin
+  assert (select count(*) from materials where cost_per_unit > 0 and (typical_min is null or typical_max is null)) = 0,
+    'every priced material has a usual range';
+  -- (Earlier test files change some costs after the migration ran; a batt size no test touches shows the rule.)
+  assert (select typical_min = round(cost_per_unit / 2, 4) and typical_max = round(cost_per_unit * 2, 4)
+            from materials where r_value = 11), 'the starting range is half to twice the cost';
+  assert (select bool_and(typical_max = typical_min * 4) from materials where typical_source like 'Starting range%'),
+    'every starting range runs from half to twice one cost';
+  assert (select bool_and(typical_source like 'Starting range: half to twice%') from materials where typical_min is not null),
+    'the range says where it comes from';
+end $$;
+do $$
+declare ok boolean := false;
+begin
+  begin
+    update materials set typical_min = 2, typical_max = 1 where r_value = 11;
+  exception when check_violation then ok := true;
+  end;
+  assert ok, 'a range runs from low to high';
+end $$;
+-- An owner's own range (and cost) is kept when the migration runs again.
+update materials set typical_min = 0.5, typical_max = 1.5, typical_source = 'Supplier price list' where r_value = 13;
+\i supabase/migrations/20261119000001_accuracy.sql
+do $$ begin
+  assert (select typical_min = 0.5 and typical_max = 1.5 and typical_source = 'Supplier price list' from materials where r_value = 13),
+    'a range the owner entered is kept on a second run';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- L35: a signed estimate answers 'locked' before the row-version check
+-- ---------------------------------------------------------------------------
+create table flow_payload as
+select jsonb_build_object(
+  'estimate', jsonb_build_object(
+    'id', 'f1000000-0000-0000-0000-000000000001', 'status', 'draft',
+    'coefficient_set_id', (select id from coefficient_sets where status = 'active'),
+    'pricing_snapshot', '{"test": true}'::jsonb, 'pricing_snapshot_hash', 'h1',
+    'drive_minutes_est', 20, 'crew_id', null, 'selected_tier', null, 'model_total_price', 5420,
+    'notes', null, 'priced_offline', false, 'client_created_at', now(),
+    'client_doc', '{"id": "f1000000-0000-0000-0000-000000000001", "overrides": {}}'::jsonb),
+  'customer', jsonb_build_object('id', 'f2000000-0000-0000-0000-000000000001', 'first_name', 'Sam', 'last_name', 'Flow',
+                                 'email', 'sam@example.com', 'phone', null, 'sms_consent', false, 'email_consent', true),
+  'property', jsonb_build_object('id', 'f3000000-0000-0000-0000-000000000001', 'street', '9 Test Rd', 'city', 'Springfield',
+                                 'state', 'IL', 'zip', '62701'),
+  'areas', '[]'::jsonb,
+  'options', jsonb_build_array(jsonb_build_object(
+    'id', 'f5000000-0000-0000-0000-000000000001', 'tier', 'better', 'label', 'Better', 'direct_cost', 2707.67,
+    'loaded_cost', 3249.20, 'price', 5420, 'model_price', 5420, 'is_overridden', false, 'margin_pct', 0.4005,
+    'crew_days', 1, 'financing', null, 'lines', '[]'::jsonb))
+) as p;
+grant select on flow_payload to authenticated;
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'est1', false);
+do $$
+declare r jsonb;
+begin
+  r := sync_upsert_estimate('f7000000-0000-0000-0000-000000000001', null, (select p from flow_payload));
+  assert r->>'status' = 'applied' and (r->>'row_version')::int = 1, 'the estimate is created: ' || r::text;
+  -- An empty state keeps the stored property's state (no state is written in by the database).
+  r := sync_upsert_estimate('f7000000-0000-0000-0000-000000000002', 1,
+         jsonb_set((select p from flow_payload), '{property,state}', '""'));
+  assert r->>'status' = 'applied', 'an edit applies: ' || r::text;
+  assert (select state from properties where id = 'f3000000-0000-0000-0000-000000000001') = 'IL', 'an empty state keeps the stored one';
+end $$;
+reset role;
+-- The customer signs (the server writes it): the row version moves on.
+update estimates set status = 'signed' where id = 'f1000000-0000-0000-0000-000000000001';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'est1', false);
+do $$
+declare r jsonb; v int;
+begin
+  v := (select row_version from estimates where id = 'f1000000-0000-0000-0000-000000000001');
+  -- The phone had an unsent edit made before it heard about the signature: its base is the old version.
+  r := sync_upsert_estimate('f7000000-0000-0000-0000-000000000003', 2,
+         jsonb_set((select p from flow_payload), '{options,0,price}', '5000'));
+  assert r->>'status' = 'locked', 'a signed estimate answers locked, not conflict: ' || r::text;
+  assert (r->>'row_version')::int = v and r->'server_doc' is not null, 'with the signed version and its document';
+  -- On the current version it is locked too.
+  r := sync_upsert_estimate('f7000000-0000-0000-0000-000000000004', v,
+         jsonb_set((select p from flow_payload), '{options,0,price}', '5000'));
+  assert r->>'status' = 'locked', 'locked on the current version as well: ' || r::text;
+  assert (select price from estimate_options where estimate_id = 'f1000000-0000-0000-0000-000000000001') = 5420, 'nothing was written';
+  assert (select status from estimates where id = 'f1000000-0000-0000-0000-000000000001') = 'signed', 'still signed';
+  -- A stale edit of an estimate that is not signed is still a conflict.
+end $$;
+reset role;
+do $$ begin
+  assert (select prosecdef from pg_proc where proname = 'sync_upsert_estimate') = false, 'the sync function still runs as the caller (RLS applies)';
+  assert has_function_privilege('authenticated', 'sync_upsert_estimate(uuid, int, jsonb)', 'execute'), 'signed-in staff may call it';
+  assert not has_function_privilege('anon', 'sync_upsert_estimate(uuid, int, jsonb)', 'execute'), 'the public may not';
+  assert (select count(*) from pg_proc where proname = 'sync_upsert_estimate') = 1, 'one function, same signature';
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- L34: price approvals. Staff read; an estimator (or the office) asks; the owner or the office
+-- decides; nobody decides their own request; below the floor margin only the owner.
+-- ---------------------------------------------------------------------------
+reset role;
+update estimates set status = 'draft' where id = 'f1000000-0000-0000-0000-000000000001';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'est1', false);
+do $$
+declare v_id uuid; ok boolean;
+begin
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, note, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, false, 'Neighbour discount', '00000000-0000-0000-0000-0000000000e3')
+  returning id into v_id;
+  assert (select requested_by from price_approvals where id = v_id) = auth.uid(), 'the request is always the asker''s own';
+  assert (select status from price_approvals where id = v_id) = 'pending', 'and starts pending';
+  -- One pending request per estimate, option and price.
+  ok := false;
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
+    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, auth.uid());
+  exception when unique_violation then ok := true;
+  end;
+  assert ok, 'the same request is not queued twice';
+  -- Whole dollars only.
+  ok := false;
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
+    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500.50, 5420, auth.uid());
+  exception when check_violation then ok := true;
+  end;
+  assert ok, 'an approval is for a whole-dollar price';
+  -- The estimator cannot approve it.
+  update price_approvals set status = 'approved' where id = v_id;
+  assert (select status from price_approvals where id = v_id) = 'pending', 'an estimator cannot approve (not even their own)';
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'best', 3000, 7000, true, auth.uid());
+end $$;
+
+-- Another estimator sees none of it and cannot ask for an estimate that is not theirs.
+select set_config('request.jwt.claim.sub', :'est2', false);
+do $$
+declare ok boolean := false;
+begin
+  assert (select count(*) from price_approvals) = 0, 'another estimator reads none';
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
+    values ('f1000000-0000-0000-0000-000000000001', 'good', 1000, 1500, auth.uid());
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'and cannot ask for someone else''s estimate';
+end $$;
+
+-- Crews read none.
+select set_config('request.jwt.claim.sub', :'crew', false);
+do $$ begin
+  assert (select count(*) from price_approvals) = 0, 'crews read no approvals';
+end $$;
+
+-- The office approves the price inside its own powers, not the one below the floor.
+select set_config('request.jwt.claim.sub', :'office', false);
+do $$
+declare ok boolean := false;
+begin
+  assert (select count(*) from price_approvals where estimate_id = 'f1000000-0000-0000-0000-000000000001') = 2, 'the office reads the requests';
+  update price_approvals set status = 'approved', decision_note = 'OK' where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  assert (select status = 'approved' and decided_by = auth.uid() and decided_role = 'office' and decided_at is not null
+            from price_approvals where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001'),
+    'the office approves it; who and when are recorded by the database';
+  begin
+    update price_approvals set status = 'approved' where tier = 'best' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'only the owner approves a price below the floor margin';
+  -- A request the office made itself is not the office's to decide.
+  insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'good', 2000, 2400, auth.uid());
+  update price_approvals set status = 'approved' where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  assert (select status from price_approvals where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001') = 'pending',
+    'nobody approves their own request';
+end $$;
+
+-- The owner approves below the floor; a decision cannot be changed, nor what was approved.
+select set_config('request.jwt.claim.sub', :'owner', false);
+do $$
+declare ok boolean := false;
+begin
+  update price_approvals set status = 'approved' where tier = 'best' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  assert (select status = 'approved' and decided_role = 'owner' from price_approvals where tier = 'best' and estimate_id = 'f1000000-0000-0000-0000-000000000001'),
+    'the owner approves below the floor';
+  update price_approvals set status = 'declined' where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  assert (select status from price_approvals where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001') = 'approved',
+    'a decision stands';
+  begin
+    update price_approvals set status = 'approved', price = 1 where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  exception when raise_exception then ok := true;
+  end;
+  assert ok, 'approving cannot change the price asked';
+  update price_approvals set status = 'declined', decision_note = 'Too low' where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  assert (select status from price_approvals where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001') = 'declined', 'the owner declines';
+  assert (select count(*) from audit_log where table_name = 'price_approvals') >= 5, 'requests and decisions are audited';
+end $$;
+reset role;
+do $$
+declare ok boolean := false;
+begin
+  begin
+    update price_approvals set status = 'pending' where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
+  exception when raise_exception then ok := true;
+  end;
+  assert ok, 'not even the server reopens a decision';
+  assert not has_table_privilege('anon', 'price_approvals', 'select'), 'the public cannot read approvals';
+end $$;
+
+-- Running the migration again keeps every approval.
+create temp table approvals_before as select count(*) as n, string_agg(id::text || status, ',' order by id) as s from price_approvals;
+\i supabase/migrations/20261119000001_accuracy.sql
+do $$ begin
+  assert (select n from approvals_before) = (select count(*) from price_approvals)
+     and (select s from approvals_before) = (select string_agg(id::text || status, ',' order by id) from price_approvals),
+    'approvals are kept on a second run';
+end $$;
+
 \echo '  ok'
