@@ -19,6 +19,7 @@ import { ActionForm, ToggleInput } from '../../admin/pricing/ActionForm';
 import { NumberField, TextField } from '../../admin/pricing/fields';
 import { changeStatus, saveActual, saveSchedule, setExcluded, unverifyActuals, verifyActuals } from '../actions';
 import { loadCrews, loadJob } from '../data';
+import { BlowerDoorCard } from './BlowerDoorCard';
 
 export const metadata: Metadata = { title: 'Job' };
 
@@ -268,6 +269,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             </tbody>
           </table>
         </Card>
+
+        <BlowerDoorCard db={db} jobId={job.id} estimateId={job.estimateId} label={`${job.customer.name}, ${job.address.split(',')[0] ?? ''}`.replace(/, $/, '')} />
 
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
