@@ -3,7 +3,8 @@ ACCURACY LEDGER (Phase 1, rebuild of round 1)
 One entry per value change: id, what changed, a before -> after example with real numbers, the
 owner decision behind it, and the test that fails before the change and passes after.
 "Seeded" means the pricing every new database starts with (supabase/migrations), which equals the
-live rows; tests use it through lib/pricing/__fixtures__/migrationSeed.ts. "Hand fixture" is the
+live rows; tests use it through lib/pricing/__fixtures__/seeded.ts (seeded-rows.json; the money
+stage used migrationSeed.ts, which the cavity stage replaced with it: the same values). "Hand fixture" is the
 hand-made test pricing in lib/pricing/__fixtures__/seed.ts. Drive is 20 min one way unless stated.
 
 === Stage "money": the engine's money lines and option rules ===
@@ -27,6 +28,7 @@ L2  The minimum job top-up is its own "Minimum job charge" line.
     The record's example ($1,254 + $186 + $60) used the dense-pack wall bag (122.5 sq ft x in per
       bag, 31 bags) that the insulation stage adds (L20). With that coverage the engine gives exactly
       $1,254 + $186 + $60.
+    After L20 (stage "cavity") the seeded example itself reads $1,254 + $186 + $60.
     Owner decision: OD2.
     Tests: phase1.test.ts "a job under the minimum shows its work, travel and the top-up to the
     minimum", "with the dense-pack wall coverage of 122.5 sq ft x in per bag, the record example
@@ -135,3 +137,136 @@ L17 Areas under 10 sq ft keep one decimal.
 
 Test data only (no customer price): the hand fixture's cellulose bag $14 -> $22 so its Good ($5,420)
 stays below Better ($6,255) under OD6. Math tests price every option with showAll.
+
+=== Stage "cavity": insulation that fits (L18-L24) ===
+
+Seeded below includes the accuracy migration's rows (supabase/migrations/20261119000001_accuracy.sql):
+the dense-pack wall bag, seven batt sizes and the walls cellulose waste cell. Easy access unless
+stated. "Before" is the engine after the money stage.
+
+L18 A wall with no depth entered is a 2x4 wall, a 3.5 in cavity; nothing is installed thicker than
+    the cavity.
+    Example (seeded): walls 1,000 sq ft, no depth, Better: "Open-Cell Spray Foam to R-20 (~5.4" added)"
+      $3,580 -> "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity)" $2,520 (6,756.8 -> 4,375 board
+      ft), with a warning "the 3.5 in cavity (no depth entered: a 2x4 wall) only fits R-13 of open-cell
+      spray foam (target R-20)". Synthetic S1-F4 (moderate access): Better $3,795 -> $2,660; walls
+      650 sq ft difficult: Better $2,810 -> $2,005; walls 2,400 no depth: Better $8,865 -> $5,770.
+    The phone's depth hint for walls now says a wall with no depth is priced as a 2x4.
+    Owner decision: OD5 (S1-F4, RF-08).
+    Tests: phase1.test.ts "walls with no depth are priced as a 2x4 wall (S1-F4, OD5)"; guards "a depth
+    entered is the cavity: a 2x6 wall takes R-20 of open-cell", "an open attic has no cavity".
+
+L19 Insulation already in an area takes its room: its depth entered, else its R over the one
+    R-per-inch table (L24); removed first, the whole cavity is free. With under 0.5 in of room left
+    the cavity is full: that option adds no product there, with a cavity_full warning.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, R-11 fiberglass batts (3.44 in): Good $1,500 / Better $1,740 / Best
+        $2,505 -> no options; three warnings "Walls: the 3.5 in cavity already holds 3.44 in of
+        insulation, so Good adds no blown cellulose." (and Better, Best).
+      Synthetic S1-F5, walls 800 sq ft, 2x4, 2 in of cellulose (R-7), moderate: Better $2,245 -> $1,500
+        ("Open-Cell Spray Foam to R-12.6 (~1.5 in added, fills the 3.5 in cavity)", 1,500 board ft),
+        Best $3,115 -> $2,295; Good ($1,500, the same as Better) is no longer shown (OD6).
+    An existing material not named, not in the table, or "None" with an R is read at the highest R
+    per inch (3.7), so the room left is never understated; the checker reads it the same way.
+    Owner decision: OD5 (S1-F5).
+    Tests: phase1.test.ts "existing insulation counts against the cavity (S1-F5): a full cavity gets
+    nothing", "walls with 2 in of cellulose: the new insulation fills only the 1.5 in left", "removed
+    first, the whole cavity is free again", "an existing material named in any case, or not named,
+    takes room by the one table".
+
+L20 Dense-pack walls: a new material row "Cellulose bag, dense-pack walls (25 lb)", walls only, 122.5
+    sq ft x in per bag (Greenfiber SANCTUARY INS765: 35 sq ft of 2x4 wall per bag), at the current
+    cellulose bag cost ($14), flagged Needs owner input. Dense-pack always fills the room left.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, Good: 19 -> 31 bags; $1,500 unchanged (the minimum), lines $820 + $190 +
+        $490 -> $1,254 + $186 + $60.
+      Walls 1,000 sq ft, 2x6, target R-13, Good: 20 bags (R-13) $1,500 -> 49 bags, "Blown Cellulose to
+        R-19.8 (fills the 5.5 in cavity)", $2,090; "Fills the full cavity" is now true.
+      Synthetic S1-F9 walls 2,200 sq ft 2x4, 60 min drive, moderate: Good $2,090 -> $3,070 (68 bags);
+        S1-F9b walls 1,400 sq ft 2x6: Good $1,920 -> $2,900; wet walls 1,200 (batts out): Good $4,740
+        -> $5,480. Attics keep the attic bag (200 sq ft x in).
+    Dense-pack walls are the only change in this stage that raises prices.
+    Owner decision: OD7 (S1-F9, R6); coverage and cost need owner input.
+    Tests: phase1.test.ts "dense-pack walls use the dense-pack bag coverage (S1-F9, OD7)", "dense-pack
+    fills the whole cavity, so \"Fills the full cavity\" is true (R6, E5)", "the synthetic dense-pack
+    jobs: 2,200 sq ft 2x4 and 1,400 sq ft 2x6"; guard "an attic keeps the attic bag";
+    tests/sql/40_accuracy.test.sql (the row, its cost and flag, never a default).
+
+L21 Walls get their own cellulose waste cell: waste_factor / cellulose / walls in the active set at
+    the shared value (1.08), bounds 1.00-1.60. No price moves today; wall actuals no longer move attic
+    prices.
+    Example (seeded): with the walls cell at 1.30 (wall actuals), a 2,200 sq ft 2x4 wall takes 68 -> 82
+      bags while every attic price stays as it was (before, the one shared cell moved both).
+    Owner decision: R4 (review finding). calibrate.ts is unchanged; it fits the walls child cell.
+    Tests: phase1.test.ts "starts at the shared 1.08, so no price moves", "wall actuals move wall prices
+    only: a walls cell of 1.30 leaves the attic as it was"; tests/sql/40_accuracy.test.sql (value and
+    bounds); tests/sql/10_phase1.test.sql (promotion and rollback move both cellulose cells).
+
+L22 Batts by size: seven rows R-11, R-13, R-15 (3.5 in), R-19 (6.25 in), R-21 (5.5 in), R-30 (10 in),
+    R-38 (12 in), each at the current batt cost ($0.75 per sq ft), flagged Needs owner input. The
+    engine picks, of the sizes that fit the room in the cavity (any size with no cavity), the least R
+    that reaches the R needed, else the most R that fits; a batt adds its rated R. No size fits under
+    3.5 in of room: cavity_full.
+    Examples (seeded):
+      Crawlspace 800 sq ft, 2x6 floor (5.5 in), target R-38, Good: "Fiberglass Batts, R-38" (a 12 in
+        batt in 5.5 in) -> "Fiberglass Batts to R-21 (5.5 in thick)", $2,270 unchanged, with "the
+        thickest batt that fits the 5.5 in cavity is R-21 (target R-38)".
+      Garage 480 sq ft (no depth), Good: "Fiberglass Batts, R-30" -> "Fiberglass Batts to R-30 (10 in
+        thick)"; crawlspace 7.25 in with R-6 of batts: an R-13 batt, "to R-19 (R-13 batts, 3.5 in thick)".
+    Owner decision: OD8 (S1-F6); batt costs need owner input.
+    Tests: phase1.test.ts "batts are picked by R-value and thickness (S1-F6, OD8)", "with no cavity the
+    least R that reaches the target; over what is there, the batt adds its own R", "no batt fits less
+    than 3.5 in of room: the cavity is full for batts"; tests/sql/40_accuracy.test.sql (seven sizes).
+
+L23 An estimator's quantity changes what the item promises, and never more than a full cavity is
+    priced: above it the quantity is cut, with an override_capped warning (the cut is the room left
+    over the bag coverage, times the waste, rounded up to a bag; board feet to 0.1).
+    Examples (seeded, walls 1,000 sq ft, 2x4, Good):
+      10 bags: "Blown Cellulose to R-12.6" and "Fills the full cavity" -> "Blown Cellulose to R-4.1
+        (~1.1" added)", the bullet removed (10 / 1.08 x 122.5 / 1,000 = 1.13 in).
+      60 bags: 60 priced -> 31 priced, "Walls: 60 bags of blown cellulose is more than the 3.5 in
+        cavity holds. Good is priced with 31, a full cavity." Price $1,500.
+      Open attic 1,000 sq ft, Good 37 bags (model 74): "to R-49" -> "to R-24.7 (~6.9" added)".
+    Also: an estimator's hours on one option scale from each option's hours for the quantities it
+      prices, so bags typed for every option are the same work at one price. Attic 508 sq ft at R-11,
+      27 bags counted for every option, Best's install set to 12.65 h: Good "to R-49 (~10.6" added)"
+      $1,328 (9 h) and Better "to R-60 (~13.6" added)" $1,451 (10.83 h) for the same 27 bags -> both
+      "to R-46.4 (~9.8" added)" at $1,573 (12.65 h).
+    Owner decision: R3 (review finding), OD2.
+    Tests: phase1.test.ts "a changed bag count changes what the item promises", "a bag count above what
+    the cavity holds is cut, with a warning", "the cut uses the waste factor: a full cavity is the room
+    left over the coverage, times the waste", "spray foam is cut the same way, in board feet", "bags
+    typed for every option, hours changed on Best: the same bags cost the same in every option (OD2)",
+    "fewer bags in an open attic promise less R; the model quantity promises the target".
+
+L23b The R an item states is capped at what the cavity holds.
+    Example (seeded, moderate): walls 1,000 sq ft, no depth, Good bags +20% (37): cut to 31 bags, which
+      at 122.5 per bag is 3.52 in: "R-12.7 (fills the 3.5 in cavity)" -> "R-12.6"; price $1,500
+      unchanged. 31 bags typed by hand read the same.
+    Owner decision: R3.
+    Test: phase1.test.ts "a full cavity priced in whole bags never promises more R than it holds".
+
+L24 One R-per-inch table for insulation already in place (lib/pricing/rPerInch.ts), used by the
+    engine, the photo read (its suggestions and its prompt) and the accuracy checker. The materials
+    the company installs read as its products: cellulose 3.5 -> 3.6; "Other" 2.5 -> 3.2.
+    Example: photo read of 10 in of cellulose with no R-value: R-35 -> R-36.
+    The photo read's prompt version is now photo-read-2026-11-19 (its per-inch numbers come from the table).
+    Owner decision: S2-F19; "Other" at 3.2 is a default for the owner to confirm.
+    Tests: phase1.test.ts "one R-per-inch table, equal to the products the company installs (S2-F19)",
+    "a photo read of 10 in of cellulose is R-36, the R the engine gives it".
+
+Labels in packages (part of L15's rule, needed once walls end at their cavity): a "code" sentence and a
+"full cavity" sentence hold for every area they are about (the areas whose job type they name, else
+every area of the quote). Example (synthetic attic + walls + rim joist, Good): "Brings your attic to
+current code R-value" stays (the attic reaches R-49); a bullet such as "Cost-effective code compliance"
+in a package whose 2x4 walls end at R-12.6 is removed. Tests: the checker's labels_match_work on
+10,000 random quotes (code_below_code 472 -> 0, full_cavity_not_filled 731 -> 0).
+
+Checker (no customer value): labels_match_work also checks full_cavity_not_filled and
+qty_below_stated_r; a batt adds its rated R. The generator keeps the 2026-11-18 per-inch table so the
+seed draws the same quotes.
+
+Live golden set (78 estimates, live rows plus the migration's rows): no shown option total changed
+(no live estimate has walls or a depth entered). 20 batt items now name the size priced, at the same
+price: "Fiberglass Batts, R-19, 840 sq ft" -> "Fiberglass Batts to R-19 (6.25 in thick), 840 sq ft";
+rim joists "Fiberglass Batts, R-10" -> "to R-11 (3.5 in thick)" (the least size that reaches code).

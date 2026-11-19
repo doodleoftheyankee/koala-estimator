@@ -112,3 +112,38 @@ function normalize(x: unknown): unknown {
       .map(([k, v]) => [k, normalize(v)]),
   );
 }
+
+/**
+ * Live rows as they would read after the accuracy migration (supabase/migrations/
+ * 20261119000001_accuracy.sql), from rows exported before it ran: the migration's new materials
+ * (a job type's or a size, from `seeded`) at the live general material's current cost, and the
+ * walls cellulose waste cell at the live shared value. Mirrors the migration's own inserts: a row
+ * already there is kept as it is. For pricing the live golden set "after"; production is never
+ * written.
+ */
+export function withAccuracyRows(live: SnapshotRows, seeded: SnapshotRows): SnapshotRows {
+  const liveProduct = new Map(live.products.map((p) => [p.code, p.id]));
+  const seededCode = new Map(seeded.products.map((p) => [p.id, p.code]));
+  const liveCode = new Map(live.products.map((p) => [p.id, p.code]));
+  const general = (code: string) => live.materials.find((m) => liveCode.get(m.product_id) === code && !m.job_type && m.r_value == null);
+  const has = (code: string, m: SnapshotRows['materials'][number]) =>
+    live.materials.some((x) => liveCode.get(x.product_id) === code && (m.job_type ? x.job_type === m.job_type : Number(x.r_value) === Number(m.r_value)));
+  const materials = [...live.materials];
+  for (const m of seeded.materials) {
+    if (!m.job_type && m.r_value == null) continue;
+    const code = seededCode.get(m.product_id);
+    const productId = code ? liveProduct.get(code) : undefined;
+    const base = code ? general(code) : undefined;
+    if (!code || !productId || !base || has(code, m)) continue;
+    materials.push({ ...m, id: stableId(`material:${code}:${m.name}`), product_id: productId, cost_per_unit: base.cost_per_unit });
+  }
+  const coefficients = [...live.coefficients];
+  const cell = (c: SnapshotRows['coefficients'][number]) => `${c.kind}/${c.product}/${c.job_type}/${c.access_level}`;
+  for (const c of seeded.coefficients) {
+    if (!c.job_type || coefficients.some((x) => cell(x) === cell(c))) continue;
+    const shared = live.coefficients.find((x) => x.kind === c.kind && x.product === c.product && !x.job_type && !x.access_level);
+    if (!shared) continue;
+    coefficients.push({ ...c, value: shared.value, sample_size: 0, n_eff: 0, confidence: 0 });
+  }
+  return { ...live, materials, coefficients };
+}

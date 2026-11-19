@@ -1,5 +1,5 @@
 {
-  "about": "Live golden set before any fix: counts, and each estimate's option totals (whole quote price per option shown) keyed by estimate id. No names or addresses. Made by scripts/accuracy/price-golden.ts live from a read-only production export.",
+  "about": "Live golden set after the money stage (L1-L7, L14-L17), live rows as exported: counts, and each estimate's option totals (whole quote price per option shown) keyed by estimate id. No names or addresses. Made by scripts/accuracy/price-golden.ts live from a read-only production export.",
   "bundle": "e74dc9218faea172",
   "counts": {
     "estimates": 78,

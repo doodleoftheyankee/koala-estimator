@@ -55,7 +55,8 @@ import type { QuoteDocument } from '@/lib/quotes/model';
 import { quoteSettingsFromRows } from '@/lib/quotes/settings';
 import { parseSettings } from '@/lib/server/snapshot';
 import { areaSchema } from '@/lib/sync/draft';
-import { diffRows, PRICING_SETTING_KEYS, stableId, stableRows } from './rows';
+import { diffRows, PRICING_SETTING_KEYS, stableId, stableRows, withAccuracyRows } from './rows';
+import type { SnapshotRows } from '@/lib/server/snapshot';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = (f: string) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -151,6 +152,28 @@ describe('seeded pricing fixture (the rows every migration leaves in a new datab
     expect(total(estimate([area({ sqft: 1200 })]), 'better')).toBe(5160);
     // L22: crawlspace 800 sq ft 2x6, target R-38: Good $2,270.
     expect(total(estimate([area({ jobType: 'crawlspace', sqft: 800, depthIn: 5.5, targetR: 38 })]), 'good')).toBe(2270);
+  });
+
+  it('withAccuracyRows reads rows exported before the accuracy migration as they read after it', () => {
+    // The rows without the migration's rows: the six general materials and 26 coefficients.
+    const before: SnapshotRows = {
+      ...seededRows,
+      materials: seededRows.materials.filter((m) => !m.job_type && m.r_value == null),
+      coefficients: seededRows.coefficients.filter((c) => !(c.kind === 'waste_factor' && c.product === 'cellulose' && c.job_type === 'walls')),
+    };
+    expect([before.materials.length, before.coefficients.length]).toEqual([6, 26]);
+    expect(diffRows(withAccuracyRows(before, seededRows), seededRows)).toEqual([]);
+    // Run on rows that already have them, nothing changes.
+    expect(diffRows(withAccuracyRows(seededRows, seededRows), seededRows)).toEqual([]);
+    // The new rows start at the live costs and the live shared waste value.
+    const moved: SnapshotRows = {
+      ...before,
+      materials: before.materials.map((m) => (m.name.startsWith('Cellulose') ? { ...m, cost_per_unit: 15 } : m)),
+      coefficients: before.coefficients.map((c) => (c.kind === 'waste_factor' && c.product === 'cellulose' ? { ...c, value: 1.12 } : c)),
+    };
+    const after = withAccuracyRows(moved, seededRows);
+    expect(after.materials.find((m) => m.job_type === 'walls')!.cost_per_unit).toBe(15);
+    expect(after.coefficients.find((c) => c.job_type === 'walls' && c.product === 'cellulose')!.value).toBe(1.12);
   });
 
   it('gives every row an id made from what it is, so two databases compare row for row', () => {

@@ -4,7 +4,7 @@
 //   node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts synthetic <out.json>
 //     The synthetic set (scripts/accuracy/golden-synthetic.json), priced with the seeded setup.
 //     Writes every estimate in full: option totals, items, titles, bullets, headline, violations.
-//   node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts live <golden dir> <out.json> [<summary.json>]
+//   node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts live <golden dir> <out.json> [<summary.json>] [--with-accuracy-rows]
 //     The live set made by make-live-golden.ts, priced with the live pricing rows. <out.json> (keep it
 //     out of git) has every estimate in full; <summary.json> has only counts and each estimate's option
 //     totals keyed by estimate id (no names or addresses), fit to commit.
@@ -12,12 +12,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { PricingBundle, Tier } from '@/lib/pricing';
-import { bundleFromRows, seededBundle } from '@/lib/pricing/__fixtures__/seeded';
+import { withAccuracyRows } from '@/lib/accuracy/rows';
+import { bundleFromRows, seededBundle, seededRows } from '@/lib/pricing/__fixtures__/seeded';
 import type { SnapshotRows } from '@/lib/server/snapshot';
 import { liveGolden, priceGolden, storedValidUntil, type GoldenEstimate, type LiveExport, type PricedGolden } from './golden';
 import { addQuote, newTally, tallyTable, type Tally } from './tally';
 
-const [mode, ...rest] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+// --with-accuracy-rows: price live rows exported before the accuracy migration as they read after it
+// (lib/accuracy/rows.ts withAccuracyRows: the dense-pack bag, the batt sizes, the walls waste cell).
+const withNewRows = argv.includes('--with-accuracy-rows');
+const [mode, ...rest] = argv.filter((a) => a !== '--with-accuracy-rows');
 const root = path.resolve(import.meta.dirname, '../..');
 
 function run(estimates: GoldenEstimate[], bundle: PricingBundle): { priced: PricedGolden[]; tally: Tally } {
@@ -52,7 +57,8 @@ if (mode === 'synthetic') {
   const [dir, out, summary] = rest;
   if (!dir || !out) throw new Error('Usage: price-golden.ts live <golden dir> <out.json> [<summary.json>]');
   const live = JSON.parse(fs.readFileSync(path.join(dir, 'live-estimates.json'), 'utf8')) as LiveExport;
-  const rows = JSON.parse(fs.readFileSync(path.join(dir, 'live-rows.json'), 'utf8')) as SnapshotRows;
+  const exported = JSON.parse(fs.readFileSync(path.join(dir, 'live-rows.json'), 'utf8')) as SnapshotRows;
+  const rows = withNewRows ? withAccuracyRows(exported, seededRows) : exported;
   const bundle = bundleFromRows(rows);
   const validDays = bundle.snapshot.settings.quoteValidDays;
   const { priced, tally } = run(
@@ -90,7 +96,7 @@ if (mode === 'synthetic') {
   if (summary) {
     write(summary, {
       about:
-        'Live golden set before any fix: counts, and each estimate\'s option totals (whole quote price per option shown) keyed by estimate id. No names or addresses. Made by scripts/accuracy/price-golden.ts live from a read-only production export.',
+        `Live golden set priced by the engine of the commit that wrote it${withNewRows ? ", with the accuracy migration's rows added to the live rows" : ''}: counts, and each estimate's option totals (whole quote price per option shown) keyed by estimate id. No names or addresses. Made by scripts/accuracy/price-golden.ts live from a read-only production export.`,
       bundle: bundle.hash,
       counts,
       totals: Object.fromEntries(priced.map((p) => [p.id, totals(p)])),
@@ -98,7 +104,7 @@ if (mode === 'synthetic') {
   }
   console.log(
     [
-      `Live golden set: ${tally.checked} estimates, live bundle ${bundle.hash}.`,
+      `Live golden set: ${tally.checked} estimates, live bundle ${bundle.hash}${withNewRows ? ' (live rows with the accuracy migration\'s rows added)' : ''}.`,
       '',
       tallyTable(tally, 'Estimates'),
       '',

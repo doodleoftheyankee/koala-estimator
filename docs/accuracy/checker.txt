@@ -5,7 +5,9 @@ What it checks
   - items_add_up            the items printed under an option add up to its printed total (S1-F2)
   - same_work_same_price    the same work item in the same area has one price in every option (S1-F3, OD2)
   - options_step_up         the options shown do different work and each costs more than the one before (S1-F7, OD6)
-  - labels_match_work       titles and bullets promise only priced work: "to Code", "Remove", "Air seal" (S1-F7)
+  - labels_match_work       titles and bullets promise only priced work: "to Code", "Remove", "Air seal" (S1-F7);
+                            "fills the cavity" only when it is full, and an item's R only when its quantity
+                            reaches it (full_cavity_not_filled, qty_below_stated_r: R3, R6; cavity stage)
   - cavity_not_overfilled   what is installed fits the cavity with what is already there; a wall with no
                             depth is a 2x4, 3.5 in (S1-F4, S1-F5, S1-F6, OD5)
   - finite_amounts          no blank, infinite or negative amount (a price adjustment line may be negative)
@@ -22,17 +24,30 @@ How to run it
       Takes about 70 s. Add --rows <rows.json> to price with other pricing rows.
   node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts synthetic <out.json>
       The 65 synthetic estimates (scripts/accuracy/golden-synthetic.json, written by make-synthetic.ts).
-  node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts live <golden dir> <out.json> [<summary.json>]
-      The live estimates. The export is read-only and never committed:
+  node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts live <golden dir> <out.json> [<summary.json>] [--with-accuracy-rows]
+      The live estimates. --with-accuracy-rows prices rows exported before the accuracy migration
+      (20261119000001) as they read after it (lib/accuracy/rows.ts withAccuracyRows).
+      The export is read-only and never committed:
         1. run scripts/accuracy/golden-export.sql and scripts/accuracy/bundle-rows.sql (as
            select rows::text as rows_text, md5(rows::text) as md5 from (...) x) on production, SELECT only;
         2. node scripts/accuracy/run.mjs scripts/accuracy/make-live-golden.ts <estimates result> <rows result> <golden dir>
            checks the copy against the database's md5 and counts and writes live-estimates.json and live-rows.json.
 
 Keeping it true
-  - shownOptions (lib/pricing/invariants.ts) is what the customer is shown. The engine returns only shown
-    options (with OD6, unless asked for all); an option marked hidden is never counted.
-  - Job-level customer lines (travel, minimum, adjustment) have no area and are not "work".
+  - shownOptions (lib/pricing/invariants.ts) is what the customer is shown. Give it the engine's default
+    result: the engine returns only shown options (OD6) and names each one it hides in an option_hidden
+    warning; an option so named, or marked hidden, is never counted. A showAll result is not what the
+    customer sees (violations.ts prices with showAll only to count every option).
+  - Items are read by their kind (itemKind; an item stored with no kind is work). Job-level lines
+    (travel, minimum, adjustment) have no area and are not "work".
+  - Existing insulation is read with the one R-per-inch table (lib/pricing/rPerInch.ts); a material
+    not in it is read at the highest R per inch, as the engine does. A sized material (a batt) adds its
+    rated R and is as thick as its row says.
+  - The random generator keeps its own copy of the 2026-11-18 per-inch table, so the same seed always
+    draws the same quotes whatever the app's table says.
+  - bundle-rows.sql and loadPricingBundle load the same materials: active, and the default, one for a
+    job type (dense-pack walls) or a size (batts). The new columns are read through to_jsonb so the
+    query also runs on a database without the accuracy migration.
   - PRICE_SURFACES lists each place a price is printed with its file, line and snippet; a test fails when
     a snippet leaves its file. When a surface changes, update its entry and priceTexts with it.
   - After a migration that changes a seeded value: DATABASE_URL=... bash scripts/accuracy/seeded-rows.sh
@@ -42,3 +57,7 @@ Keeping it true
 Before any fix (docs/accuracy/before/)
   violations-20261118.txt, golden-synthetic-before.json (in full), golden-live-before.json (counts and
   option totals by estimate id only).
+
+After each stage
+  docs/accuracy/after-money/ and docs/accuracy/after-cavity/: the random run and both golden sets after
+  that stage (about.txt in each says how they were made).
