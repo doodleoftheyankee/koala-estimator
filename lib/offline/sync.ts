@@ -6,6 +6,7 @@ import type { RemoteEstimate, SyncResponse } from '@/lib/sync/protocol';
 import { db, getCachedBundle, META, setMeta, type LocalEstimate } from './db';
 import { applySyncResult, mergeRemote } from './syncCore';
 import { syncPhotos } from './photos';
+import { refreshBlowerDoorSettings, syncBlowerDoor } from './blowerDoor';
 
 const uuid = () => crypto.randomUUID();
 type Listener = () => void;
@@ -155,7 +156,11 @@ export async function fetchEstimate(id: string, ownerId: string): Promise<LocalE
   }
 }
 
-/** Full cycle: push local edits, then refresh bundle and pull. */
+/**
+ * Full cycle: push local edits, then refresh bundle and pull. The blower door tool's programs are
+ * cached and its saved readings sent here too, so they are on the phone and sent without the tool
+ * being opened (neither ever throws).
+ */
 export function syncAll(ownerId: string): Promise<void> {
   if (running) return running;
   running = (async () => {
@@ -165,6 +170,8 @@ export function syncAll(ownerId: string): Promise<void> {
     if (!reachable) return;
     await pushAll();
     await syncPhotos();
+    await refreshBlowerDoorSettings();
+    await syncBlowerDoor(ownerId);
     await pullEstimates(ownerId);
   })().finally(() => {
     running = null;

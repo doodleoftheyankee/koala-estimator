@@ -1,0 +1,285 @@
+BLOWER DOOR AIR SEAL CALCULATOR IN KOALA (branch claude/blower-door, from claude/daymark)
+=====================================================================================
+
+What the owner asked for: their single-page Blower Door Air Seal Calculator, inside Koala, for
+every franchise. It keeps the tool's behaviour and words; the rebate programs became franchise
+settings; readings can be saved to a job or an estimate, offline too; the office sees them.
+
+
+1. THE ARITHMETIC (lib/blowerdoor/, pure, no React)
+---------------------------------------------------
+  numbers.ts    reading a typed field: "$", commas, spaces and the sign dropped (a gauge shows
+                negative pressure; a lone "-" is not typed yet, not an error); empty, zero,
+                nonsense and absurd values come back as an error in words (ranges: fan flow
+                0-50,000 CFM, pressure 1-100 Pa, exponent 0.5-1.0 with at most 3 decimals, price
+                over $0, BAS 1-100,000, volume 500-1,000,000 ft3, occupants 0-50 whole, N-factor
+                1-40). Values are read at the precision a saved reading keeps (CFM and Pa 2
+                decimals, BAS and volume 1, N-factor 2, price cents), so what the screen works out
+                is what is saved. Below 25 Pa the screen notes that the CFM50 is stretched far.
+  calc.ts       CFM50 = CFM x (50 / Pa)^n; reduction %; tiers (reached when post50 <=
+                pre50 x (1 - pct/100), exactly on the limit counts, with each tier's limit, the
+                next tier's gap rounded up and the top tier's spare rounded down); the cost cap
+                (tier amount or cap % of the price, whichever is lower, floored to the cent);
+                BAS from the audit (preferred) or max(0.35 x volume / 60, 15 x occupants) x
+                N-factor x height correction (1, .89, .81, .76, .72); ventilation OK at or above
+                the BAS, RECOMMEND from 70%, INSTALL under 70%, with the continuous fan flow in
+                CFM (gap / (N x height correction); the whole requirement when it must be
+                installed); ACH50. Nothing returns NaN or Infinity: a reading it cannot use is
+                null.
+  settings.ts   the franchise settings (app_settings.blower_door): programs (key, full name,
+                short name, tiers, cost cap %, mechanical ventilation rebate cap, source,
+                effective date, paperwork list and its source), the gauge name, the default
+                flow exponent and N-factor, and whether the tool decides on whole-number CFM50
+                (whole_cfm50, off unless the owner turns it on). A lenient reader for the tool (a broken program is
+                left out and named) and a strict validator for saving (tiers ascending, a higher
+                tier never pays less, whole dollars, percentages between 0 and 100, unique keys
+                and short names, real dates).
+  evaluate.ts   everything the screen shows, from what was typed, the readings already saved
+                and the chosen program. A saved reading is used as recorded: its CFM50 is never
+                worked out again with a later exponent.
+  words.ts      the headline ("40% TIER — $1,800 AIR SEAL REBATE" / "BELOW 20% — NO AIR SEAL
+                REBATE YET" / "TEST-IN ONLY" / "NO REBATE PROGRAM SET UP"), the next-tier line,
+                the ventilation messages, the N-factor hint, the source line and the copied
+                summary, in the owner's words. shownNumbers(): every CFM50, tier limit, BAS and
+                reduction on screen agrees with the decision (see 7, BD-MATH-3).
+  record.ts     the saved reading (what the phone sends, what the server returns) and the job's
+                result from its newest test-in and test-out, with the program saved with them,
+                the price from the newest reading saved with one, and a warning when the test-in
+                and the test-out name different programs; savedProgramKey() for the phone.
+  Tests: blowerdoor.test.ts, settings.test.ts, record.test.ts, franchise.test.ts (no program,
+  sponsor, state or dollar amount in the tool's code).
+
+  The worked example: 6,952 CFM at 50 Pa in, 3,325 CFM at 50.8 Pa out, n 0.65 -> 3,291 CFM50,
+  52.7%, the 40% tier, $1,800 on Home Performance ($2,000 Assisted).
+
+
+2. FRANCHISE SETTINGS, NOT CODE
+-------------------------------
+  app_settings.blower_door holds the programs. This franchise's two programs (Home Performance
+  with ENERGY STAR and Assisted Home Performance, tiers 20/30/40% = $900/$1,300/$1,800 and
+  $1,100/$1,500/$2,000, 75% cost cap, ventilation rebate up to $400/$600, schedule effective
+  2024-11-01, the four paperwork items) are seeded by the migration, only when the setting is
+  absent. The owner edits them on Rebate programs (/admin/rebates, admin menu; the office sees it
+  read-only), checked as typed and again on save, audited. With no program set up the tool still
+  converts and shows the reduction and the ventilation check, and says "No rebate program set
+  up" (the owner gets a "Set up programs" button, others are told to ask the owner).
+
+
+3. THE FIELD TOOL (/field/blower-door, Daymark field register)
+--------------------------------------------------------------
+  app/field/blower-door/page.tsx, BlowerDoorTool.tsx, parts.tsx, BlowerDoorLink.tsx.
+  Owner, office, estimator and crew can open it. In lib/nav.ts beside Roof lookup ("Blower
+  door"; a tab for crews, under More for the others). The result plate (big gauge, the tier in
+  words, a bar with a tick per tier), program buttons, test-in and test-out cards with 64px
+  gauge fields, the tier table, the cost cap (not shown to crews: they never type a price; they
+  are told the office applies the cap), the ventilation check with BAS from audit or the
+  estimate and the Advanced flow exponent, the numbers, the paperwork with the source line, and
+  a dock with Copy summary and Clear for new job.
+  Offline: the page is its own price-free service worker shell (public/sw.js VERSION v6, SHELLS
+  includes /field/blower-door); the programs are cached on the phone by the field app's and the
+  crew app's sync cycles (like the pricing bundle) and by the tool itself; what was typed is
+  kept per person and per job, estimate or the plain calculator (IndexedDB 'koala-blower-door').
+
+  Saved to the job: opened from the estimate (Areas step of the estimate editor) or from a crew
+  job (crew app), each test has a Save button. A saved reading shows as recorded (CFM50, the
+  reading, n, who and when, and whether it is on the server or still on the phone); Retake types
+  a new one, and the newest counts. The house (BAS inputs) given with a saved reading fills the
+  crew's empty fields, so the estimator's volume reaches the test-out.
+
+
+4. SAVED READINGS
+-----------------
+  supabase/migrations/20261120000001_blower_door.sql (additive; sorts after
+  20261119000001_accuracy.sql): table blower_door_tests (estimate_id, job_id, kind, cfm, pa,
+  exponent, cfm50, program_key, program as it was, air_sealing_cost, bas_audit, volume,
+  occupants, stories, n_factor, result as shown, recorded_by, recorded_at). The CFM50 must be
+  the reading at its stored exponent (a check constraint); a job's reading takes the job's
+  estimate; no update or delete policy, so readings stay as recorded; audited.
+  Who sees: owner and office all; an estimator their own estimates' readings; a crew lead only
+  their crew's jobs and the test-in taken on the estimate the job came from, and only through
+  blower_door_context(), which leaves the air sealing price out (the table itself is not theirs
+  to read). Who records: the same, only through sync_blower_door_test() (the outbox; idempotent
+  on the mutation id and on the reading's own id; dated no later than now; it keeps the
+  franchise's own program from app_settings by its key, never the copy the phone sent). No
+  direct insert, update or delete. blower_door_context() gives the tool a job's or estimate's
+  label and readings. Crews may read the one setting row app_settings.blower_door and no
+  other.
+  API: GET /api/blower-door/settings, GET/POST /api/blower-door/tests.
+  Phone: lib/offline/blowerDoor.ts (Dexie store and outbox) and blowerDoorCore.ts (pure rules,
+  tested). The tool keeps its own small IndexedDB database because the estimator's field app and
+  the crew app each have their own and the tool serves both; the outbox is sent by both apps'
+  existing sync cycles (lib/offline/sync.ts syncAll, lib/offline/crewSync.ts crewSyncAll) and
+  uses the same idempotency ledger on the server (sync_mutations). The crew job card and the
+  estimate's card load the saved readings onto the phone while there is signal, so the
+  estimator's test-in is there when the crew opens the tool in an attic with none. A reading taken with no signal waits on the phone and syncs on the next field-app or
+  crew-app sync (or the tool's own), once; one taken on an estimate that has not synced yet waits
+  for it; a refused one (not the person's job right now) stays on the phone with the reason and
+  is sent again on later syncs, in case the office gives the job back; one with values the
+  server never takes stays "Not saved". The copied summary says when a reading in it has not
+  reached the office. Values are rounded to what the database keeps before the CFM50 is worked
+  out. Save is off while a save is in flight, so a double tap stores one reading. Until someone
+  picks a program, the tool uses the program the job's saved readings name ("Chosen when the
+  test-in was saved."), so the estimator's choice at the audit reaches the crew's test-out.
+  Office job page (app/jobs/[id]/BlowerDoorCard.tsx): the result plate, the test-in and
+  test-out with who took them and their program, the reduction, the tier and rebate (with the
+  cost cap from the newest price saved with any reading, so the estimator's price caps the
+  crew's test-out), a warning when the readings name different programs, the ventilation
+  check, ACH50, and every reading with its program and Newest / Earlier.
+  tests/sql/50_blower_door.test.sql covers seeding, access, idempotency, the checks and that
+  nobody edits or deletes a reading.
+
+
+5. CHECKS
+---------
+  After the review fixes (section 7) all pass: typecheck, lint, vitest (80 files, 1,514 tests;
+  1,487 before the fixes), test:db (all five files) and scripts/e2e.sh (285 checks, none
+  failed; 275 before) with the blower door steps: the tool opens with no signal, the worked
+  example, the 5,561 target, a half-typed minus sign, Assisted, the cost cap, the ventilation
+  check, Copy summary, the readings kept after a reload, Clear for new job; the estimator saves
+  the test-in on the estimate under Assisted with a price (a double tap saves once); the crew
+  lead's phone opens on Assisted with no price, saves the test-out on the job with no signal,
+  it survives a reload and syncs once back online (no duplicates); a phone an estimator used,
+  then a crew member, opens the crew shell offline at /field; the office job page shows both
+  readings with their program, the capped rebate and the ventilation check; the owner edits
+  the programs (a broken rule is refused, a good change saved and audited; the whole-number
+  switch is off). The run logs two caught network errors from its deliberate offline steps
+  (a sync cycle that was mid-flight when the test cut the signal), as the run before did.
+  Also run: origin/main's database tests with this migration applied on top of main's
+  migrations (all pass), so the live site keeps working with it.
+  No existing test was deleted, skipped or weakened. Two exact lists grew with the new menu
+  entries (lib/nav.test.ts, components/shell/shell.test.tsx); the crew-menu test now also checks
+  that the blower door page never loads the pricing bundle.
+  Building in a git worktree: Turbopack does not follow a node_modules symlink that points
+  outside the worktree, so the worktree needs its own node_modules (a copy) to build.
+  Screenshots (not in the repo): Day, Night and Sun+ at 390 px with the worked example, the tool
+  saved on a job (crew), the crew job card, no program set up (owner), and the office job page
+  and Rebate programs at 1280 px. Retaken after the review fixes (scratchpad blower/final,
+  deviceScaleFactor 2): the crew's tool on the job (Assisted carried over) and the plain
+  calculator at a close call (5,561.5 against 5,561.6, ventilation with the fan flow), each in
+  Day, Night and Sun+ at 390 px with no sideways scroll and every target at least 48 px; the
+  office job page and Rebate programs at 1280 px.
+
+
+6. QUESTIONS FOR THE OWNER
+--------------------------
+  The current behaviour is kept for each of these until you answer; where it can be changed in
+  the settings, it says where.
+  a. Office role: the brief named estimator, crew lead and owner. The office also has the tool
+     in its menu (it already has Roof lookup, and can open it from the office job page). Say if
+     the office should not have it.
+  b. Mistaken readings are never edited or deleted (a retest supersedes them, and the office
+     page lists the earlier ones). Should the owner be able to delete one?
+  c. The cost cap needs the installed air sealing price. Crews never type it. The office page
+     now takes it from the newest reading saved with a price (normally the estimator's, with
+     the test-in). Should it come from the signed quote's air sealing line instead, or from a
+     field on the office job page?
+  d. Rounding (BD-MATH-3): does your program decide the air sealing tier on the whole-number
+     CFM50 of the Test Out Form and the gauge photo (6,952 then 5,562 = 19.99%, no rebate)? The
+     tool decides on the exact converted CFM50 (as your original calculator did) and shows
+     numbers that agree with that. If the program uses whole numbers, turn on "Decide on
+     whole-number CFM50" on Rebate programs.
+  e. Which program should a job use: the one the estimator chose at the audit? The crew's phone
+     now starts on the program saved with the test-in, and the crew can still change it (the
+     office page then warns that the readings name different programs and uses the
+     test-out's). Should crews be able to change it at all?
+  f. N-factor (BD-MATH-7): does your audit software report the zone's 1-story N-factor, or one
+     already corrected for the number of stories? The tool asks for the 1-story value and
+     applies the stories correction itself. The "Zone 2 runs 17–20" range could not be
+     confirmed (LBL's table for zone 2, 1-story, runs from 16.7 to 22.2); the default is a
+     setting on Rebate programs.
+  g. Ventilation standard: Energize Delaware's Test-Out Form (Sept 2025) also asks for "Whole
+     Building Ventilation per ASHRAE 62.2-2013", and current BPI practice (BPI-1200) uses
+     ASHRAE 62.2. Should the tool also compute 62.2-2013, or is the 62-89 BAS check enough?
+  h. Occupants: BPI's worked example uses the actual number of people, as the tool does;
+     ASHRAE 62.2 uses bedrooms + 1. Does your program or audit software use "actual occupants
+     or bedrooms + 1, whichever is greater"?
+  i. Is the 11/01/2024 schedule still current? No newer sheet was found. The Air Sealing / Heat
+     Pump bundling bonus ($300 / $350 when air sealing follows a heat pump within 3 months with
+     at least a 20% reduction) is not in the tool. Do you want it?
+  j. Is the mechanical ventilation rebate ($400 / $600) also capped at a share of the installed
+     cost, like air sealing? The tool shows it only as "up to".
+  k. Crews see rebate dollar amounts on the blower door page (the tier table and "40% TIER —
+     $2,000 AIR SEAL REBATE"); the rest of the crew app shows no money, and crews never get the
+     air sealing price. Is that all right, or should crews see only the tier reached?
+  l. Any member of the job's crew can record readings (crew_members.is_lead is not checked, the
+     same as for actuals). Should only crew leads save the test-out?
+  m. A higher tier paying less than a lower one is refused when saving programs. Say if any
+     program you work with does that.
+
+
+7. REVIEW FIXES
+---------------
+  Each finding was reproduced first, a test written that failed on the old code, then fixed.
+  "Before" numbers come from a scratch copy of ca0eb3b built and run on the e2e stack, with a
+  probe (POSTs as the estimator and crew, Playwright for the screens).
+
+  BD-MATH-1 / BD-R3 (price with the test-in ignored). Reproduced: estimator test-in under
+    Assisted with $1,999, crew test-out with no price: the office showed "40% TIER — $1,800".
+    Fix: jobBlowerDoor() takes the price from the newest reading saved with one (savedPrice()).
+    Now "40% TIER — $1,499.25 AIR SEAL REBATE" with "(limited by 75% of $1,999)".
+    Tests: record.test.ts, e2e (office step).
+  BD-MATH-2 / BD-R2 (program not carried over). Reproduced: the crew's phone opened on Home
+    Performance and saved the test-out under it. Fix: the tool uses savedProgramKey() until
+    someone picks a program, and says so; it warns when the test-in names another program; the
+    office page shows each reading's program and warns when the test-in and test-out differ
+    (the result still uses the test-out's program; owner question e).
+    Tests: record.test.ts, e2e (crew opens on Assisted, $2,000; saved as assisted).
+  BD-MATH-3 (rounded display against the decision). Reproduced with unit tests: target 5,562,
+    a 5,562 test-out shown "20.0%" beside "BELOW 20%", 5,561.55 and 5,562 both shown as 5,562
+    with opposite results, 699.6 shown as 700 under "Under 70%", a "0 CFM50 gap". Fix:
+    shownNumbers() and reductionText(): a limit is the largest whole CFM50 that reaches it
+    (5,561); the reduction never rounds across a tier line (19.9%); where whole numbers would
+    contradict a decision, the test-out and that line show a tenth, rounded toward the side
+    the decision put them on (5,561.5 against 5,561.6; 699.6; a 0.3 CFM50 gap). The decision
+    stays on the exact CFM50 (the original calculator's rule); the owner can switch to
+    whole-number decisions on Rebate programs (owner question d).
+    Tests: blowerdoor.test.ts (6,952/5,562; 5,576 at 50.2 Pa; 5,000/3,002; BAS 1,000 against
+    699.6 and 999.7; the whole-number setting), settings.test.ts, record.test.ts, e2e.
+  BD-MATH-4 (fan sizing in CFM). Reproduced: BPI's Albany example said "70 CFM50 gap" only.
+    Fix: the ventilation words and the summary add "(about 4.5 CFM of continuous fan flow)" =
+    gap / (N x height correction), and "(about 102 CFM ...)" for the whole requirement when it
+    must be installed. BPI's sentence is kept. Tests: blowerdoor.test.ts (Albany numbers).
+  BD-MATH-5 (office default never reaches a kept form). Reproduced: a kept form stayed at 0.65
+    after the default became 0.6. Fix: the exponent and N-factor start empty and show the
+    office default as a placeholder; a typed value is kept. (Forms kept on a phone by the v6
+    preview still hold the old copy; clearing the field returns to the default.)
+    Tests: blowerdoor.test.ts.
+  BD-MATH-6 (exponent decimals). Reproduced: 0.6525 showed 6,288 and saved 6,290. Fix: a
+    fourth decimal is refused ("Flow exponent: at most 3 decimals.", also for the setting);
+    other fields are read at the saved precision. Tests: blowerdoor.test.ts, settings.test.ts,
+    blowerDoorCore.test.ts (the CFM50 saved is the one shown). One existing test typed
+    0.6543 to check rounding on save; it types 0.654 now (0.6543 is refused, tested apart).
+  BD-MATH-7 (N-factor hint). Fix: the hint asks for the zone's 1-story value, says the tool
+    applies the stories correction, and to set Stories to 1 if the software's N already allows
+    for them; the same on Rebate programs. Tests: blowerdoor.test.ts (nFactorHint).
+  BD-R1 (crews could read the price). Reproduced: the crew's GET returned air_sealing_cost 1999
+    and PostgREST returned the rows with prices and the phone's result. Fix: the table's read
+    policy is for owner, office and estimators; crews read through blower_door_context(), which
+    leaves the price out. Tests: 50_blower_door.test.sql, e2e (crew's copy has no price).
+  BD-R4 (service worker). Reproduced in a unit test that runs public/sw.js in a stand-in
+    worker: estimator, then crew, then the blower door tool, then offline /field gave the
+    estimator's /field shell. Fix: only /field and /crew count as the last shell; VERSION v7.
+    Tests: lib/offline/serviceWorker.test.ts, e2e (a new step with a fresh phone).
+  BD-R5 (direct inserts). Reproduced: a crew POST to /rest/v1/blower_door_tests dated 2099 with
+    a made-up program got 201, and the office showed "1% TIER — $99,999 AIR SEAL REBATE". Fix:
+    no insert policy (the outbox is the only way in, dated no later than now); the outbox keeps
+    the franchise's own program by key, never the phone's copy (none for a key the franchise
+    does not have). Tests: 50_blower_door.test.sql. The trigger and CFM50 checks in that file
+    now run on an insert by the database owner (the outbox's path), since users cannot insert.
+  BD-R6 (double tap). Reproduced: two clicks before the screen updated stored 2 extra
+    readings. Fix: Save is off ("Saving…") until the saved reading is on screen.
+    Tests: e2e (the estimator's Save test-in clicked twice in one go stores one reading).
+  BD-R7 (refused never retried). Fix: "refused" is its own state, sent again on later syncs
+    (the server keeps no record of a refusal); "invalid" stays as it was; the summary notes a
+    reading that has not reached the office. Tests: blowerDoorCore.test.ts (the old assertion
+    that refused became "invalid" and was never sent again now expects the retry).
+  BD-R8 (lone minus sign). Fix: "-", "+", "." and "-." read as empty. The old test listed "-"
+    among invalid inputs; it is now tested as empty, the rest stay invalid. Tests:
+    blowerdoor.test.ts, e2e.
+  BD-R9 (raw colour). Fix: the heading uses text-ink; screens.test.ts keeps raw palette colours
+    out of the blower door screens.
+  Existing tests changed because they encoded a reported bug: 20.0% beside BELOW 20% (now
+  19.9%), the 5,562 target (now 5,561), the defaults copied into a new form (now empty), "-"
+  as invalid, refused readings never retried, and the e2e scenario (the estimator now saves the
+  test-in under Assisted with a $1,999 price, so the crew sees $2,000 and the office $1,499.25
+  instead of $1,800). Nothing was deleted or skipped.

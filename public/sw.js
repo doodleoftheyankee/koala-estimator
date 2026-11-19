@@ -2,6 +2,9 @@
  *
  * Goal: the field app (/field) and the crew app (/crew) open and work with no signal. The Roof
  * lookup page (/field/roof) is its own shell, so with no signal it opens and says it needs one.
+ * The blower door tool (/field/blower-door) is its own price-free shell for every staff role,
+ * crews included: it works fully offline (its data lives in IndexedDB) and reads its job or
+ * estimate from the query, so one cached copy serves every ?job= and ?estimate=.
  *  - On install, precache each app shell and every /_next/static asset it references. A shell
  *    the user's role cannot open (a redirect) is skipped.
  *  - Navigations to a shell path: network-first, fall back to that cached shell. A crew phone
@@ -14,21 +17,25 @@
  *  - /api/* and everything else: network only. Offline data lives in IndexedDB, not here.
  *  - The shells are per device, not per user. A shell the server refuses (redirect, 401, 403:
  *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
- *    and offline a /field launch opens the /crew shell when /crew was the last shell loaded, so
- *    a crew member never gets someone else's priced /field shell.
+ *    and offline a /field launch opens the /crew shell when /crew was the last role shell loaded,
+ *    so a crew member never gets someone else's priced /field shell. Only the role shells (/field
+ *    and /crew) count as "last": the tools every role opens (/field/blower-door) say nothing about
+ *    whose phone it is.
  *  - Koala's database or sign-in service not answering is not a sign-out (L36): the server sends a
  *    page to /unreachable (or answers 503). For a shell, the phone's cached copy opens instead and
  *    says "Can't reach Koala right now"; the cached copy is kept, never deleted for that.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v12';
+const VERSION = 'v13';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
-// Most specific first: /field/roof is not part of the /field shell.
-const SHELLS = ['/field/roof', '/field', '/crew'];
+// Most specific first: /field/roof and /field/blower-door are not part of the /field shell.
+const SHELLS = ['/field/roof', '/field/blower-door', '/field', '/crew'];
 // Offline only: which cached shell may stand in when a shell is missing (price-free shells only).
 const FALLBACK = { '/field': '/crew' };
+// The shells that say whose phone this is (the role's own app), for LAST_SHELL.
+const ROLE_SHELLS = ['/field', '/crew'];
 
 /** The shell a path belongs to ("/crew", "/field/x"), or null. */
 function shellFor(pathname) {
@@ -156,7 +163,7 @@ async function shellNavigation(req, shell) {
       return res.redirected ? Response.redirect(res.url, 302) : res;
     } else if (res.ok) {
       cache.put(shell, res.clone());
-      cache.put(LAST_SHELL, new Response(shell));
+      if (ROLE_SHELLS.includes(shell)) cache.put(LAST_SHELL, new Response(shell));
       // Keep the shell's assets cached as deployments change them.
       res
         .clone()
