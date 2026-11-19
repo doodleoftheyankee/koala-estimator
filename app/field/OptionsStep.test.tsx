@@ -76,3 +76,23 @@ describe('F1, M2 (OD6): an option the estimator priced out of view stays on the 
     expect(best).not.toContain('Remove price change');
   });
 });
+
+describe('F10 (OD1, OD6): the card the quote highlights says so, whichever option it is', () => {
+  // Rim joist 150 sq ft: all three options cost the $1,500 minimum, so only Best is shown.
+  const rim = seededArea({ id: AREA_ID, jobType: 'rim_joist', name: 'Rim', sqft: 150 });
+
+  it('no pick, only Best shown: Best is the default and is highlighted on the quote', () => {
+    const draft = draftWith(rim);
+    expect(priceOf(draft).options.map((o) => o.tier)).toEqual(['best']);
+    const best = card(render(draft), 'Best');
+    expect(best).toContain('Recommended (default)');
+    expect(best).toContain('Highlighted on the quote');
+  });
+
+  it('Better picked but not shown: Best is highlighted, and the card says the pick is not shown (not "default")', () => {
+    const best = card(render(draftWith(rim, { selectedTier: 'better' })), 'Best');
+    expect(best).toContain('Recommended (your pick is not shown)');
+    expect(best).not.toContain('(default)');
+    expect(best).toContain('Highlighted on the quote');
+  });
+});

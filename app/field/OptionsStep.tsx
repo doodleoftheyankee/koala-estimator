@@ -127,7 +127,7 @@ export function OptionsStep({
           <OptionCard
             key={o.tier}
             option={o}
-            recommended={recommended?.tier === o.tier ? (recommended.picked ? 'picked' : 'default') : null}
+            recommended={recommended?.tier === o.tier ? (recommended.picked ? 'picked' : draft.selectedTier ? 'moved' : 'default') : null}
             onSelect={() => update((d) => ({ ...d, selectedTier: o.tier }))}
             override={draft.overrides[o.tier] ?? null}
             onOverride={(ov) => update((d) => setPriceOverride(d, o.tier, ov))}
@@ -233,8 +233,12 @@ function OptionCard({
    * and the reason, with Change price, Remove price change and Details, and no Make recommended.
    */
   hiddenReason?: string | null;
-  /** This card is the recommended option: picked by the estimator, or the default (Better). */
-  recommended: 'picked' | 'default' | null;
+  /**
+   * This card is the recommended option, the one the quote highlights (lib/field/recommended.ts):
+   * picked by the estimator, the default (Better, else the first shown), or 'moved' when the
+   * estimator's pick is not shown (OD6) and the recommendation moved to this option.
+   */
+  recommended: 'picked' | 'default' | 'moved' | null;
   onSelect: () => void;
   override: { price: number; reason: string } | null;
   onOverride: (o: { price: number; reason: string } | null) => void;
@@ -465,7 +469,7 @@ function OptionCard({
             {recommended ? (
               <>
                 <Icon icon={Star} size="s" className={cx(recommended === 'picked' && 'fill-current')} />
-                {recommended === 'picked' ? 'Recommended' : 'Recommended (default)'}
+                {recommended === 'picked' ? 'Recommended' : recommended === 'moved' ? 'Recommended (your pick is not shown)' : 'Recommended (default)'}
               </>
             ) : (
               'Make recommended'
@@ -473,8 +477,8 @@ function OptionCard({
           </Button>
           {changePrice}
           {detailsButton}
-          {/* The quote marks the picked option, else Better (lib/quotes/model.ts). */}
-          {recommended === 'picked' || (recommended === 'default' && tier === 'better') ? <Badge tone="green">Highlighted on the quote</Badge> : null}
+          {/* The quote highlights the same recommended option (lib/quotes/model.ts, recommendedTier). */}
+          {recommended ? <Badge tone="green">Highlighted on the quote</Badge> : null}
         </div>
 
         {priceEditor}
