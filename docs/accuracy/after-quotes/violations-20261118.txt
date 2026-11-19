@@ -1,0 +1,32 @@
+Accuracy check: 10,000 random quotes, seed 20261118, seeded pricing (lib/pricing/__fixtures__/seeded-rows.json), bundle 5ecebe2c0f390417.
+Options priced: 26,333; shown to the customer: 22,145; quotes with no option: 967.
+A quote counts once per rule it breaks; violations count every break (per option, area or surface).
+
+| Invariant | Quotes | Violations | By kind |
+|---|---|---|---|
+| items_add_up | 0 (0.0%) | 0 |  |
+| same_work_same_price | 0 (0.0%) | 0 |  |
+| options_step_up | 0 (0.0%) | 0 |  |
+| labels_match_work | 0 (0.0%) | 0 |  |
+| cavity_not_overfilled | 0 (0.0%) | 0 |  |
+| finite_amounts | 0 (0.0%) | 0 |  |
+| same_price_text | 0 (0.0%) | 0 |  |
+| valid_until_is_expiry | 0 (0.0%) | 0 |  |
+
+Price surfaces read (same_price_text kinds):
+  quote_page: quote page (chosen option and its total), app/q/[token]/SignForm.tsx:229 (rendered)
+  sign_button: sign button, app/q/[token]/SignForm.tsx:560 (rendered)
+  accept_sentence: accept sentence ("You are accepting … for …"), app/q/[token]/SignForm.tsx:528 (rendered)
+  signed_page: signed page ("You accepted … for …" and the signed price), app/q/[token]/SignForm.tsx:370 (rendered)
+  pdf: quote PDF option total, lib/quotes/pdf.tsx:108 (formatter)
+  signed_pdf: signed PDF price, lib/quotes/pdf.tsx:194 (formatter)
+  quote_email: quote email, lib/quotes/email.ts:135 (rendered)
+  signed_email: signed confirmation email, lib/quotes/email.ts:172 (rendered)
+  office_email: office "quote signed" email, lib/quotes/email.ts:194 (rendered)
+  jobs_list: jobs list signed price, app/jobs/page.tsx:335 (formatter)
+  job_page: job page option price, app/jobs/[id]/page.tsx:112 (formatter)
+  office_list: office estimates list headline, app/estimates/page.tsx:404 (formatter)
+  field_card: estimator's phone list headline, app/field/EstimateList.tsx:303 (formatter)
+
+Examples:
+

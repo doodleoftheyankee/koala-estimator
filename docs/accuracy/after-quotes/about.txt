@@ -1,0 +1,29 @@
+AFTER THE QUOTES STAGE (L8, L9, L12, L13, L30-L33, L39: what the customer reads)
+
+What these files are
+  violations-20261118.txt              npm run accuracy:violations -- 10000 20261118 (seeded pricing)
+  golden-synthetic-after-quotes.json   price-golden.ts synthetic
+  golden-live-after-quotes.json        price-golden.ts live --with-accuracy-rows: the read-only production
+                                       export's rows plus the rows the migration adds; counts and option
+                                       totals keyed by estimate id only (no names or addresses)
+  hard-rule-1.txt                      the stored quotes of the live golden export rendered with the code
+                                       before this stage and after: what was compared and what differs
+
+10,000 random quotes, seed 20261118 (after cavity -> after quotes, same checker)
+  items_add_up, same_work_same_price, options_step_up, labels_match_work, cavity_not_overfilled,
+  finite_amounts: 0 -> 0
+  same_price_text         9,033 quotes / 111,893 -> 0
+                          accept_sentence, signed_page, signed_pdf, signed_email, office_email 22,145 each
+                          -> 0 (L8 whole dollars); office_list 1,168 -> 0 (L9 the recommended option)
+  valid_until_is_expiry   1,626 (day_after) -> 0 (L13)
+  Options priced 26,333; shown 22,145; quotes with no option 967 (unchanged: no price moved).
+
+Golden sets (estimates failing, after cavity -> after quotes)
+  Synthetic (65): same price text 63 -> 0; valid until 3 -> 0; every other rule 0 -> 0.
+                  No option total and no headline changed.
+  Live (78):      same price text 78 -> 0; valid until 16 -> 0; every other rule 0 -> 0.
+                  No shown option total changed (78 of 78 estimates the same).
+                  The office list's headline moves for one live estimate: c6b22b65 (draft, no option
+                  picked) $2,020 (the stored model price of Good) -> $2,730 (Better), L9.
+  The 16 stored live quotes whose printed "Valid until" is a day after their link stops keep that
+  date: they are sent documents (hard rule 1). Re-quoted today, they would print the right day.

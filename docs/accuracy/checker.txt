@@ -50,6 +50,15 @@ Keeping it true
     query also runs on a database without the accuracy migration.
   - PRICE_SURFACES lists each place a price is printed with its file, line and snippet; a test fails when
     a snippet leaves its file. When a surface changes, update its entry and priceTexts with it.
+  - The quote rules read documents the app builds today (sampleQuote: format 2, a counter number, the
+    consent for a sample state). A document sent before the quotes stage has no format and prints as
+    it did (cents in its sentences, its printed Valid until), so checking a stored document would
+    report those surfaces: that is hard rule 1 at work, not a new fault. The thank-you page is
+    rendered for real (SignForm's SignedThanks).
+  - Hard rule 1 (sent and signed quotes never change): scripts/accuracy/render-stored.ts renders the
+    stored quotes (scripts/accuracy/quote-docs-export.sql, read-only, people replaced) in every state,
+    with their PDFs and emails, through the real code; render it on two commits and diff the folders
+    (docs/accuracy/after-quotes/hard-rule-1.txt).
   - After a migration that changes a seeded value: DATABASE_URL=... bash scripts/accuracy/seeded-rows.sh
     and commit lib/pricing/__fixtures__/seeded-rows.json with the migration. A new pricing setting key
     goes in PRICING_SETTING_KEYS (lib/accuracy/rows.ts) and in bundle-rows.sql.
@@ -59,5 +68,6 @@ Before any fix (docs/accuracy/before/)
   option totals by estimate id only).
 
 After each stage
-  docs/accuracy/after-money/ and docs/accuracy/after-cavity/: the random run and both golden sets after
-  that stage (about.txt in each says how they were made).
+  docs/accuracy/after-money/, docs/accuracy/after-cavity/ and docs/accuracy/after-quotes/: the random
+  run and both golden sets after that stage (about.txt in each says how they were made);
+  after-quotes/hard-rule-1.txt also says how the stored quotes were compared.

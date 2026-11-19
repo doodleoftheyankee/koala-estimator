@@ -1,0 +1,57 @@
+HARD RULE 1: QUOTES ALREADY SENT OR SIGNED RENDER EXACTLY AS BEFORE (quotes stage, Nov 19 2026)
+
+What was rendered
+  The 77 quotes stored in production (45 signed, 24 declined, 5 expired, 2 viewed, 1 superseded;
+  231 options), exported read-only with scripts/accuracy/quote-docs-export.sql: each quote's stored
+  document (options, items, prices, number, dates, branding, terms, warranty) and its status, expiry
+  and signing fields. People are replaced inside the query (customer, address, estimator, signer),
+  so the export holds no one's details; it stays in the scratchpad and is not committed.
+  md5 of the export 2ca0d61ee3371b8dfa44c572dc8a9ca7, 198,319 characters, 77 quotes.
+
+  scripts/accuracy/render-stored.ts renders every quote through the real code (run with
+  scripts/accuracy/render-run.mjs, a stand-in for the database, nothing written anywhere):
+    the customer page (app/q/[token]/page.tsx with the masthead), as markup and as text:
+      in its stored state (77), open with each option as the recommended one (231), signed for
+      each option at its price (231), superseded (77), declined (77), expired (77);
+    the quote PDF (77) and the signed PDF for each option (231), as text (pdftotext -layout, which
+      keeps the page breaks);
+    the quote email (77), the signed confirmation (231) and the office notice (231), subject, text
+      and HTML.
+  2,926 files per run.
+
+Before this stage (7c6b08c) and after it (this commit's code)
+  2,926 files compared, 0 differences: every page in every state, every PDF and every email of a
+  stored quote reads exactly as before, character for character, including the accept sentence's
+  "$4,780.00", the signed price "to the cent", the expired page's printed date, the consent
+  sentence ("ESIGN Act and Delaware UETA"), the old quote numbers and the PDF page breaks.
+
+The live site's code (origin/main c0ae5f1) and this stage's
+  The PDFs (unsigned and signed for each option) and the three emails of the 77 stored quotes:
+  1,386 files compared, 0 differences. A customer who signs an older quote after this ships gets
+  the signed PDF and emails the live site would have made. (The customer pages differ from the
+  live site only by the new look of claude/daymark, which is not live yet; this stage changes
+  none of them for a stored quote.)
+
+How the code keeps it
+  A document now carries `format: 2` (lib/quotes/model.ts DOCUMENT_FORMAT) and its own consent
+  sentence. A stored document has neither, so isLegacyDocument() is true for it and:
+    - sentences print the price with cents (sentenceMoney), as before; new quotes print whole
+      dollars (L8);
+    - the expired page says its printed "Valid until" date (expiredOn); new quotes say the moment
+      the link stopped (L13);
+    - it is signed under the sentence it was sent with (consentFor -> LEGACY_ESIGN_CONSENT, word for
+      word), and the e-sign record stores that sentence (L31);
+    - its PDF says "Sign online at the link in your email." and lays out as before (no
+      keep-together, and no wrap prop at all, since react-pdf lays out `wrap={undefined}`
+      differently from none) (L33, L39);
+    - its number, dates and items are read from the document, never recomputed (L12, L13).
+  What is not part of a sent document follows the new rules for every quote: the thank-you page
+  says the copy was emailed only when it was (L33), and the office list's headline is the
+  recommended option (L9).
+
+To repeat it
+  1. Export: run scripts/accuracy/quote-docs-export.sql read-only (SELECT only) and save the `doc`
+     column as {"quotes": [...]} (check its md5).
+  2. node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts <docs.json> <out-before>
+     on the code before the change (a git worktree), and again with <out-after> on the change.
+  3. diff -r <out-before> <out-after>

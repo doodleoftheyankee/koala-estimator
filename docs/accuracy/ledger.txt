@@ -270,3 +270,134 @@ Live golden set (78 estimates, live rows plus the migration's rows): no shown op
 (no live estimate has walls or a depth entered). 20 batt items now name the size priced, at the same
 price: "Fiberglass Batts, R-19, 840 sq ft" -> "Fiberglass Batts to R-19 (6.25 in thick), 840 sq ft";
 rim joists "Fiberglass Batts, R-10" -> "to R-11 (3.5 in thick)" (the least size that reaches code).
+
+=== Stage "quotes": what the customer reads, the numbers and dates on a quote (L8, L9, L12, L13, L30-L33, L39) ===
+
+Hard rule 1 holds through the whole stage: a quote already sent or signed renders exactly as before.
+A document now carries `format: 2` (lib/quotes/model.ts DOCUMENT_FORMAT); one sent before has none
+and prints as it did (cents in its sentences, its printed "Valid until" on the expired page, its own
+consent sentence, its PDF layout). Proof: the 77 stored quotes of the live golden export, rendered
+with the code before this stage (7c6b08c) and after, in every state (page open for each option,
+signed for each option, superseded, declined, expired, as stored), plus the PDF and signed PDF as
+text and every email: 2,926 files, 0 differences (scripts/accuracy/render-stored.ts;
+docs/accuracy/after-quotes/hard-rule-1.txt).
+
+L8  The accept sentence, the thank-you page, the signed page's price, the signed PDF and the signed
+    and office emails print the price in whole dollars, as the option cards, the sign button and
+    the quote PDF already did (one formatter: lib/format.ts formatMoney, through lib/quotes/model.ts
+    quoteMoney and sentenceMoney).
+    Examples: "You are accepting Better: … for $4,780.00." -> "for $4,780."; signed PDF and signed
+      email "Price: $4,780.00" -> "Price: $4,780"; thank-you page "$5,060.00" -> "$5,060"; office
+      email subject "$4,780" and body "$4,780.00" -> both "$4,780".
+    10,000 random quotes (seed 20261118): same_price_text accept_sentence, signed_page, signed_pdf,
+      signed_email and office_email 22,145 each -> 0.
+    A quote sent before keeps its cents in those sentences (hard rule 1).
+    Owner decision: OD4 (S1-F1).
+    Tests: lib/quotes/quotes-stage.test.ts "the thank-you page says "for $4,780", not "for $4,780.00"",
+    "the signed PDF says "Price: $4,780"; a quote sent before still says "$4,780.00"", "the signed
+    emails say "Price: $4,780", the office email's subject and body alike"; quote-page.test.ts "keeps
+    the signing form legally identical, with the quote's own consent sentence and one price (L8, L31)",
+    "a signed quote shows the signed price in whole dollars, as the PDF does (L8)"; email.test.ts
+    "signed confirmation includes the price in whole dollars …", "office notice … the same in the
+    subject and the body (L8)".
+
+L9  The headline is the recommended option everywhere: the office list, the phone's list, the
+    sync's model_total_price and the quote. Recommended = the option the estimator picked; when the
+    pick is not shown (OD6), the next option shown after it, else the nearest before; with no pick,
+    Better, else the first (lib/field/recommended.ts).
+    Examples: office list, no pick, Good $2,375 / Better $4,095 / Best $6,920: $2,375 (the stored
+      model price, no option named) -> $4,095 "Better". Live golden set: c6b22b65 (draft, no pick)
+      $2,020 -> $2,730 Better; it is the only live estimate whose office headline moves.
+      Picked Better hidden (Best does more for the same price), Good and Best shown: recommended
+      Good -> Best. Sync with no pick: model_total_price was the first option's (Good's) model price
+      -> Better's. The phone's Send step stars the same option the quote will recommend.
+    Owner decision: OD1 (S2-F12, review R5).
+    Tests: lib/office/estimates.test.ts "with no pick, shows Better, the option every other list and
+    the quote recommend (OD1, L9)", "when the pick is no longer shown, shows the next option shown
+    (OD1, OD6, L9)"; lib/sync/payload.test.ts "the model total is the recommended option's: the pick,
+    else Better (OD1, L9)"; quotes-stage.test.ts "a picked option that is not shown recommends the
+    next one shown", "the quote recommends the same option as the lists".
+
+L12 Quote numbers come from a counter: PREFIX-YEAR-0001-v1, the year in the business time zone. The
+    database function next_quote_number(year) (security definer, search_path pinned, executable by
+    the service role only) gives the next number of the year from quote_number_counters; the prefix
+    is the quote_number_prefix setting, seeded "KN" (the prefix quotes already carry), set on the
+    Business profile page. A new version keeps the estimate's number ("-0001-v2"), including a
+    number given before the counter; the phone shows and finds the number each quote was sent with
+    (lastQuote.quoteNumber), and the old number for quotes sent before.
+    Examples: "KN-2026-1A2B3C-v1" (six characters of the estimate id) -> "KN-2026-0001-v1"; a quote
+      sent Jan 1 2027 at 03:00 UTC (Dec 31, 10 PM in the business zone): year 2027 -> 2026. e2e: the
+      first quote of the year is KN-<year>-0001-v1.
+    Owner decision: OD10 (S2-F16, S2-F17).
+    Tests: quotes-stage.test.ts "PREFIX-YEAR-0001-v1, a new version keeps its number, the year is the
+    business zone's"; tests/sql/40_accuracy.test.sql (1, 2, then 1 for a new year; grants; a second
+    run keeps the counters and a saved prefix); estimateList.test.ts "shows and finds the number a
+    quote was sent with, from the counter (L12, OD10)".
+
+L13 "Valid until" is the business-zone date of the last moment the link works (expires_at, which is
+    unchanged: sent + validDays x 24 h). The expired page says when the link stopped, date and time.
+    Examples: sent 2026-11-18 at 02:30 UTC for 30 days, the link stops 2026-12-18 02:30 UTC (Dec 17,
+      9:30 PM): "Valid until Dec 18" -> "Dec 17". Expired page "This quote expired on December 18,
+      2026" -> "on Dec 17, 2026 · 9:30 PM". A quote sent at noon reads the same date as before.
+    10,000 random quotes: valid_until_is_expiry 1,626 (all day_after) -> 0. Synthetic golden 3 -> 0,
+      live golden (re-quoted today) 16 -> 0. The 16 stored live quotes that print a day late keep
+      their printed date and their expired page says that date (hard rule 1).
+    Owner decision: OD11 (S1-F8, RF-11).
+    Tests: quotes-stage.test.ts "sent 2026-11-18 at 02:30 UTC for 30 days: valid until Dec 17 …",
+    "the expired page says when the link really stopped: "Dec 17, 2026 · 9:30 PM"".
+
+L30 A quote cannot be sent while the business profile has a gap: the company name, license number,
+    office phone, state, quote number prefix, warranty or terms missing, or still a seed
+    PLACEHOLDER. The send route answers 409 setup_incomplete with one sentence naming the gaps; the
+    phone's Send checklist says the same from its downloaded bundle (business info outside the
+    pricing hash; the ETag covers both) and Send waits. New page /admin/business (Business profile)
+    for the owner (edits) and the office (reads); the branding and quote text moved there from
+    Pricing. lib/quotes/profile.ts: PROFILE_FIELDS, businessProfileGaps, profileGapsSentence.
+    Example: the live seed (placeholder warranty, no phone, no license, no state): sent -> refused,
+      "The business profile is not finished: add the license number, the office phone, the state and
+      the warranty."
+    Owner decision: RF-01, UX-01 (Phase 1: "a business profile … required before a quote can go out").
+    Tests: quotes-stage.test.ts "names every gap in one plain sentence; a finished profile has none";
+    e2e "the Send checklist says the business profile is not finished, and what it needs", "the server
+    refuses to send it too", "once saved, everything a quote needs is filled in".
+
+L31 A new quote's e-sign consent sentence names the state in the business profile and is stored in
+    the quote (document.consent); the e-sign record keeps the sentence the customer saw. A quote sent
+    before keeps the sentence it was sent with (lib/quotes/consent.ts consentFor).
+    Example: "(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and Illinois UETA)" for a profile in IL;
+      e2e with the state DE: "Delaware UETA", from the data.
+    Owner decision: RF-01, hard rule 3 (no state typed into the code for new quotes).
+    Tests: quotes-stage.test.ts ""(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and <the profile's
+    state> UETA)""; quote-page.test.ts "a quote sent before keeps its sentence and its cents in the
+    accept sentence (hard rule 1)"; e2e "the e-sign record keeps the sentence the customer agreed to".
+
+L32 A new estimate starts in the business profile's town and state, else the shop address's, else
+    blank (newDraft takes the place; the phone reads it from its bundle, offline too).
+    Examples: no profile town and no shop address: "Newark, DE" -> blank; the seeded shop address
+      "Newark, DE 19711": Newark, DE, read from the setting, not the code.
+    Owner decision: RF-17, hard rule 3.
+    Tests: quotes-stage.test.ts "no town is typed into the code", "the profile, then the shop address";
+    e2e "a new estimate starts in the town of the shop address in the settings".
+
+L33 Honest wording. The thank-you page says the signed copy was emailed only when the email went
+    out (the sign route returns emailed); the PDF says the link "we sent you" (it may have been sent
+    by text or by hand when email is not set up).
+    Examples: email not set up: "We emailed you a copy and will contact you shortly …" -> "Download
+      your signed copy below. We will contact you shortly …"; PDF "Sign online at the link in your
+      email." -> "Sign online at the link we sent you."
+    Owner decision: RF-12.
+    Tests: quotes-stage.test.ts "with email not set up, the thank-you page points to the download …",
+    "the PDF says "Sign online at the link we sent you." …"; e2e "with email not set up, the thank-you
+    page points to the download, not to an email".
+
+L39 Each option block on the PDF stays on one page (wrap off for an option of up to 18 lines and
+    bullets; a longer one may still break). No amount changes.
+    Example: three options of 4, 5 and 6 lines: Best's title on page 1 and its lines and total on
+      page 2 -> Best whole on page 2.
+    Owner decision: UX-01.
+    Test: quotes-stage.test.ts "no option starts on one page and ends on the next".
+
+One formatter: every quote surface (page, PDF, emails) formats money with lib/format.ts formatMoney
+and dates with lib/format.ts (formatDateLong, formatDateTime, formatAuditTime, calendarDay); the
+quote's own formatUsd and the PDF's and emails' own date functions are gone. Output for a quote sent
+before is unchanged (the 2,926-file comparison above).
