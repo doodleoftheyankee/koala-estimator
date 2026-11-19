@@ -110,7 +110,8 @@ What else changed in Phase 1 (no prices)
 Decisions to look at
   Your decisions OD1-OD16 are applied. Quotes already sent or signed are unchanged: every stored
   quote's PDFs, emails and page text render exactly as before (docs/accuracy/final/hard-rule-1.txt).
-  The open questions are in docs/accuracy/results/final.json (ownerQuestions). The ones that touch
+  The open questions are in docs/release/owner-questions.txt, one list of every question still open
+  (release review C CLAIM-4; final.json alone missed several). The ones that touch
   the numbers above: the dense-pack bag coverage and batt costs (OD7, OD8), whether small jobs at
   the minimum should still offer three options (OD6), and the material ranges, which start at half
   to twice today's cost; and, new in review B, whether "This cost is right" should widen a

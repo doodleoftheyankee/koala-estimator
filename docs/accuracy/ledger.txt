@@ -1314,3 +1314,108 @@ The merge (no value change): the menus have both new pages, Blower door (every r
 lookup; a tab for crews) and Rebate programs (owner and office, after Pricing, before the optional
 Business profile); the e2e run has the accuracy round's L36 step and then the blower door's offline
 step, the review B screens step and then the rebate programs step.
+
+=== Release review fixes ===
+
+(Release review C of claude/release at 93d9dbc: docs/release/review-c.json, 19 verified findings.
+Each fix was reproduced first: the test named fails on the code before the fix and passes after
+(docs/release/release.txt, "Review C fixes"). No price formula changes: both golden sets re-price
+byte-identical to docs/accuracy/after/, the 10,000-quote check is 0 on every invariant, and every
+stored quote renders exactly as before (docs/release/hard-rule-1.txt).)
+
+RC-1 (review C DOC-1, FLOW-7; OD11, hard rule 1) Dates and times in the franchise's time zone.
+    Every date and time was New York's, for every franchise. The zone now comes from the
+    deployment's NEXT_PUBLIC_BUSINESS_TIME_ZONE (an IANA name; unset or not a zone: New York, so
+    this franchise reads exactly as before). A new quote keeps the zone it was sent in
+    (QuoteDocument.timeZone) and prints its Date, Valid until, signature time, Issued and signed-on
+    dates in it; a quote sent without one prints in New York, as it always did.
+    Examples (a franchise set to America/Los_Angeles, quote sent 9:30 PM Nov 19 Pacific = 05:30 UTC
+      Nov 20, 30 days): PDF "Date: November 20, 2026" -> "Date: November 19, 2026"; "Valid until:
+      December 20, 2026" -> "December 19, 2026" (the link stops Dec 19 at 9:30 PM Pacific); expired
+      page "Dec 20, 2026 · 12:30 AM" -> "Dec 19, 2026 · 9:30 PM PST"; signed at 12:15 PM Pacific:
+      "November 21, 2026 at 3:15:00 PM EST" -> "November 21, 2026 at 12:15:00 PM PST"; the phone
+      list "Quote v1 sent Nov 19 · 12:25 PM" -> "Nov 19 · 9:25 AM"; Insights "Runs nightly at
+      about 2:15 AM Eastern ... All times on this page are Eastern." -> "about 11:15 PM Pacific
+      (12:15 AM while daylight saving time is on). All times on this page are Pacific."
+    This franchise (no setting): one customer word changes, on the expired page of a quote sent
+      from the accuracy round on (none in production yet): "This quote expired on Dec 17, 2026 ·
+      9:30 PM" -> "Dec 17, 2026 · 9:30 PM EST" (the zone named, as the signed PDF already does).
+      Quotes sent before keep "December 17, 2026".
+    Owner decision: OD11 ("the business-zone date"); question D1 in docs/release/owner-questions.txt.
+    Tests: lib/format.test.ts "the franchise's time zone" (2 of 3 failed before),
+    lib/quotes/quotes-stage.test.ts "Release review C DOC-1" (3, failed before), the L13 expired
+    page test now expects "· 9:30 PM EST"; lib/admin/learning.test.ts "Insights words the nightly
+    run in the business zone" (failed before).
+
+RC-2 (review C DOC-2, CLAIM-1; OD14) A New York home's signature sentence names New York's own law.
+    "(ESIGN Act and New York UETA)" -> "(ESIGN Act and the New York Electronic Signatures and
+    Records Act)". New York never adopted UETA. Every other state ("Delaware UETA", "Illinois
+    UETA", ...) and the state-neutral sentence read as before; quotes already sent keep the
+    sentence stored with them.
+    Owner decision: OD14 (the sentence names the property's state: it still does); question A1.
+    Tests: lib/quotes/owner-decisions-2.test.ts "a New York home cites the Electronic Signatures and
+    Records Act, never "New York UETA"" (failed before), "every other state reads as before ...".
+
+RC-3 (review C DOC-4, FLOW-1) A rebate the cost cap was not applied to says "up to".
+    With a program that caps the rebate at a share of the air sealing price and no price known (the
+    crew's phone never has one; the office has none when no reading was saved with one), the tier
+    amount is only the most the program pays.
+    Examples (the worked example, Assisted, 40% tier $2,000, 75% cap): crew badge "40% TIER — $2,000
+      AIR SEAL REBATE" -> "40% TIER — UP TO $2,000 AIR SEAL REBATE"; copied summary "rebate $2,000"
+      -> "rebate up to $2,000 (before the 75% cost cap)"; the estimator's tool before a price is
+      typed, Home Performance: "40% TIER — $1,800 ..." -> "40% TIER — UP TO $1,800 ...". Office job
+      page, crew-only readings 4,800 -> 3,500 CFM50 (Home Performance, no price): "20% TIER — $900
+      AIR SEAL REBATE" and "20% tier · $900" -> "20% TIER — UP TO $900 AIR SEAL REBATE" and "20%
+      tier · up to $900 (before the 75% cost cap: no air sealing price saved)". With a price, as
+      before: "$1,499 ... (limited by 75% of $1,999)"; $688 gives "$516 (limited by 75% of $688)".
+    Owner decision: none needed (questions C4, C5 stay open).
+    Tests: lib/blowerdoor/blowerdoor.test.ts "release review C DOC-4" (1 of 3 failed before),
+    record.test.ts "release review C FLOW-1" (2, failed before); 8 existing no-price expectations
+    now read "UP TO"; e2e (the tool's badges and summary, the crew badge).
+
+RC-4 (review C SEC-1) A crew cannot set the air sealing price.
+    sync_blower_door_test drops a price sent by a crew (and the API drops it first). Before, a crew
+    member's crafted test-out with a price became the office's cost cap.
+    Example (estimator's test-in under Assisted at $1,999, crew's test-out sent with 1,000,000):
+      office "40% TIER — $2,000 AIR SEAL REBATE" (no cap note) -> "40% TIER — $1,499 AIR SEAL
+      REBATE (limited by 75% of $1,999)"; sent with 100: "$75 (limited by 75% of $100)" -> the same
+      $1,499. Stored air_sealing_cost 1000000.00 -> null.
+    Owner decision: none needed (crews never see or send a price).
+    Tests: tests/sql/50_blower_door.test.sql "release review C: a crew cannot set the air sealing
+    price" (failed before: stored 1000000.00); e2e office step (a crafted crew POST leaves $1,499).
+
+RC-5 (review C FLOW-2; OD1) The estimator's phone list keeps the headline when the server's copy
+    replaces the phone's.
+    Examples: Otto Offlineday after the customer opened the quote: "VIEWED" with no price and no
+      "Waiting to sign" -> "$3,975 Better VIEWED", "Waiting to sign $3,975"; Mona Moneyday signed:
+      no price -> $3,959; an estimate the phone pulled (Pat Lee, signed): no price -> $5,060. The
+      server sends the headline the office list shows (the signed price, else the recommended
+      option's).
+    Owner decision: OD1.
+    Tests: lib/offline/syncCore.test.ts "release review C FLOW-2" (2, failed before).
+
+RC-6 (review C DOC-5 and the two missed findings) PDF page breaks of quotes sent from the accuracy
+    round on: an option's title bar moves with its first bullet, its column header with its first
+    line, and Notes, Warranty and Terms are not split from their text. No word or price changes;
+    quotes sent before lay out exactly as they did.
+    Example: the five-area quote: page 2 ended "Best: Best package", 8 bullets, "AREA WORK PRICE";
+      now the header and the first line ("Main house attic ... $3,278") start page 3 together.
+    Tests: lib/quotes/quotes-stage.test.ts "Release review C DOC-5" (2 failed before: the long quote
+    and 15 of 150 swept layouts; the third checks quotes sent before against their old page text).
+
+Staff screens (no customer word, no price):
+  RC-7 (FLOW-4) /unreachable for a page that is not a phone app also offers "Open the estimates on
+    this phone" / "Open the crew app on this phone" when the phone has it saved, and "Go back".
+    Tests: lib/offline/phoneCopy.test.ts fallbackAppsFor (2, failed before); e2e L36.
+  RC-8 (FLOW-12) In a package the option cards name each line's area ("ATTIC", "EXTERIOR WALLS"
+    above the description), as the customer's quote does. Test: app/field/OptionsStep.test.tsx
+    (failed before); e2e.
+  RC-9 (FLOW-9) Business profile: "The next quote this year reads like KN-2026-0001-v1 (the number
+    counts up)." -> "Quote numbers read like KN-2026-0001-v1: the number counts up with each quote
+    and starts again at 0001 each year." Test: e2e.
+  RC-10 (FLOW-8, FLOW-11) At 390 px the dock's "BETT…" -> "BETTER" with a five-digit price (the
+    Previous button is 48 px wide, the name never truncates); an area's header button is at least
+    48 px tall (was 322x45). Tests: e2e (390 px).
+  RC-11 (FLOW-3) With Koala's database down, pages and APIs say so at once (no 1 + 2 + 4 s
+    retries): /field 14 s -> under 2 s, /estimates and /api/bundle 7 s -> under 2 s. Tests:
+    lib/supabase/server.test.ts (failed before); e2e L36 timing.

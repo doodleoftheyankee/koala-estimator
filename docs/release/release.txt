@@ -22,7 +22,9 @@ deployed; the go-live steps are in section 6.
     4c9c744  the e2e steps for those changes and the crew phone's console rule
     13d11db  the scripts behind the checks (scripts/release-migrations.sh,
              scripts/accuracy/render-docs-only.ts)
-    then these docs and the ledger section (docs only).
+    93d9dbc  these docs and the ledger section (docs only)
+    193334f .. 9f5a7b9  release review C: the findings (docs/release/review-c.json) and nine fix
+             commits (section 8), then the docs of section 8.
   Migrations, in order: supabase/migrations/20261119000001_accuracy.sql (unchanged from
   claude/accuracy), 20261120000001_blower_door.sql (from claude/blower-door, plus the revokes of
   RL-8). No other migration is new.
@@ -146,7 +148,8 @@ deployed; the go-live steps are in section 6.
   Database A: tests/sql/00_supabase_stub.sql (production's default privileges since review B
   database-B5) + every migration on origin/main (7 files, taken from origin/main itself), then
   20261119000001_accuracy.sql and 20261120000001_blower_door.sql in order, then both again.
-    The second run changes nothing: the schema dump (5,613 lines, with grants and policies), every
+    The second run changes nothing: the schema dump (5,613 lines, with grants and policies; 5,617
+    after review C SEC-1 added four lines to sync_blower_door_test, docs/release/migrations.txt), every
     row of every public table (283 lines) and the API roles' table grants (149 lines) are
     identical after the first and the second run.
     Then tests/sql/01_grants.sql and all seven SQL test files on that database: all pass.
@@ -257,7 +260,11 @@ deployed; the go-live steps are in section 6.
         has_table_privilege('authenticated','price_approvals','insert'),
         has_function_privilege('authenticated','next_quote_number(int)','execute');  -> all false.
   Deploy the code
-    3. Merge claude/release into main through a pull request (never a force-push), and let Vercel
+    3. For a franchise outside Eastern time, set NEXT_PUBLIC_BUSINESS_TIME_ZONE in its Vercel
+       project (an IANA name such as America/Chicago) before the build: every date and time it
+       prints, and each new quote's "Valid until" day, are then in its zone. Unset means
+       America/New_York (this franchise: nothing to set). A quote keeps the zone it was sent in.
+    4. Merge claude/release into main through a pull request (never a force-push), and let Vercel
        build it. The Next.js build may stop once at a "security upgrade" notice: retry the same
        build once; do not upgrade and do not follow the notice.
   Verify after the deploy
@@ -273,8 +280,16 @@ deployed; the go-live steps are in section 6.
     - Blower door: save a test-in on an estimate and a test-out on its job; the office job page
       shows both readings, the tier and the rebate in whole dollars.
   Rolling back: redeploy origin/main's code (c0ae5f1). It works on the migrated database (hard
-  rule 2); the migrations are additive and stay. Nothing in a sent or signed quote changes either
-  way.
+  rule 2); the migrations are additive and stay. Quotes sent before the release read exactly as
+  before. Quotes the release sent keep their prices, numbers, dates and stored quote PDF. After a
+  rollback, though, their page, signed PDF and signed and office emails print cents ($3,435.00
+  where the release prints $3,435), the signed PDF's page breaks can move (the live site does not
+  keep an option on one page), their page reads in the live site's own design and words (its
+  expired page says "please call our office" with no number), the live site signs them under its
+  own Delaware consent sentence whatever sentence the quote was sent with, and it prints their
+  dates in New York time. Roll back only if that is acceptable, ideally before any quote for a home
+  outside Delaware is sent (release review C CLAIM-3; the reviewer's render of release-sent
+  documents with the live site's code shows each of these).
 
 
 7. OPEN QUESTIONS FOR THE OWNER (none blocks the release; the current behaviour is kept)
@@ -289,5 +304,160 @@ deployed; the go-live steps are in section 6.
      neutral "the gauge" until the franchise sets one?
   c. RL-1: a capped rebate is floored to the dollar ($1,499 for 75% of $1,999). If your program pays
      to the cent and you want the cents shown, say so.
-  d. The blower door build notes' questions a-m (docs/blower-door/build.txt section 6) and the
-     accuracy round's open questions (docs/accuracy/results/final.json) still stand.
+  d. Every question still open, from the accuracy round, the blower door notes (build.txt section
+     6 a-m), this section and review C, is in one list: docs/release/owner-questions.txt.
+  e. Quotes for a New York home used to say the signature counts under "New York UETA". New York
+     never passed that law; its own law is the Electronic Signatures and Records Act, and new New
+     York quotes now name it (review C DOC-2). Is that right, should New York quotes use the
+     general wording, or should a lawyer word it? (owner-questions.txt A1)
+  f. Each franchise's time zone is a deployment setting (NEXT_PUBLIC_BUSINESS_TIME_ZONE, New York
+     when unset). Should owners choose it on a page instead? (owner-questions.txt D1)
+
+
+8. REVIEW C FIXES (release review C of 93d9dbc; findings: docs/release/review-c.json; ledger:
+   docs/accuracy/ledger.txt, "Release review fixes", RC-1 to RC-11)
+-------------------------------------------------------------------------------------------
+  Review C (documents, security, flows and claims, each finding checked by a verifier) gave 19
+  verified findings: 17 with a verdict "confirmed" and 2 "missed" notes, which were confirmed here
+  first (a sweep of 405 PDF layouts on the code before the fix: 31 pages ended with an option
+  title, 6 with "Warranty" or "Terms"). Every one is fixed. Each was reproduced first, with a test
+  that failed on the code before the fix or, for three screen findings, the verifier's measurement
+  and an e2e check of it; the fix is the smallest that makes it pass. No check was loosened and no
+  test skipped, disabled or weakened. Existing tests whose expectations encoded the old behaviour
+  were updated to the new words, each named below.
+
+  Most severe first (the verifier's severity):
+  SEC-1 (medium) A crew member could set the air sealing price through the blower door API and move
+        the rebate the office sees ($1,499 -> $2,000 with a crafted 1,000,000; $75 with 100).
+        sync_blower_door_test drops a price sent by a crew; the API route drops it first. Commit
+        37bfc03. Test that failed before: tests/sql/50_blower_door.test.sql "release review C: a crew
+        cannot set the air sealing price" (stored 1000000.00); e2e office step: a crafted crew POST
+        is saved without its price and the office card still reads "$1,499 ... (limited by 75% of
+        $1,999)". Ledger RC-4.
+  DOC-1, FLOW-7 (medium) Every date and time was New York's for every franchise. The zone now comes
+        from the deployment's NEXT_PUBLIC_BUSINESS_TIME_ZONE (validated; unset: America/New_York, so
+        this franchise reads as before). New quotes keep their zone (QuoteDocument.timeZone) and
+        print Date, Valid until, the signature time, Issued and signed-on dates in it; a quote sent
+        without one prints in New York. The expired page of a quote sent from the accuracy round on
+        names the zone ("Dec 17, 2026 · 9:30 PM EST"). Insights words its schedule from the zone.
+        Lists, job dates and the nightly job follow the same zone. Commit a5a07a7. Tests that failed
+        before (6): lib/format.test.ts (2), lib/quotes/quotes-stage.test.ts "Release review C DOC-1"
+        (3: Los Angeles "Valid until" 2026-12-19, the PDF's "Date: November 19, 2026", the signed
+        "12:15:00 PM PST", the expired page; a document with no zone prints as before),
+        lib/admin/learning.test.ts (1). Changed: the L13 expired-page test now expects "· 9:30 PM
+        EST". Go-live step 3 (section 6) and .env.example say how to set it. Ledger RC-1. The
+        verifier's spec named both a deployment setting (DOC-1) and an app_settings key editable on
+        /admin/business (FLOW-7); the deployment setting was built (one zone per deployment, set
+        before the build, which the phone's copy of the app needs too), and a page for it is owner
+        question D1.
+  DOC-2 (medium) A New York home's consent said "(ESIGN Act and New York UETA)", a law that does not
+        exist. New quotes now say "(ESIGN Act and the New York Electronic Signatures and Records
+        Act)", still naming the property's state as OD14 requires; every other state and the
+        state-neutral sentence read as before; sent quotes keep their stored sentence. Commit
+        5bd1ee5. Test that failed before: lib/quotes/owner-decisions-2.test.ts "a New York home
+        cites the Electronic Signatures and Records Act ...". Counsel to confirm: owner question A1
+        and 7e above. Ledger RC-2.
+  CLAIM-1 (medium) The New York question had dropped off the list the owner was pointed to. It is
+        back, in plain words (7e above; owner-questions.txt A1), and the wording is fixed (DOC-2).
+        The verifier's spec held the code change until counsel answers; it was made now because the
+        old sentence cites a law that does not exist and the new one still follows OD14; the
+        question to counsel stays open.
+  FLOW-1 (medium) With no reading carrying the air sealing price, the office card gave the bare tier
+        amount ("20% TIER — $900", "20% tier · $900") although the cap on a $688 line pays $516.
+        It now reads "20% TIER — UP TO $900 AIR SEAL REBATE" and "20% tier · up to $900 (before the
+        75% cost cap: no air sealing price saved)" (lib/blowerdoor/words.ts officeTierFact, used by
+        the card). Commit d6cc883. Tests that failed before: lib/blowerdoor/record.test.ts (2).
+        Not done: taking the price from the signed quote's air sealing line (the verifier's optional
+        step): that is owner question C4 (build.txt c). Ledger RC-3.
+  FLOW-2 (medium) The phone's list lost the headline price and the "Waiting to sign" total once the
+        server's copy replaced the phone's (viewed, signed, or pulled). The estimates API now sends
+        the office list's headline, and mergeRemote keeps it (or the phone's own when an older
+        server sends none). Commit 68f5c9c. Tests that failed before: lib/offline/syncCore.test.ts
+        (2: sent -> viewed -> signed keeps $3,975 and the waiting total; a pulled estimate shows
+        $5,060). Ledger RC-5.
+  FLOW-3 (medium) While Koala's database answered 503, every server step waited about 7 s
+        (postgrest-js retries 1 + 2 + 4 s): /field 14 s, /estimates and /api/bundle 7 s. The
+        signed-in user's client (lib/supabase/server.ts) and proxy.ts no longer retry. Commit
+        fadddde. Tests: lib/supabase/server.test.ts (failed before); e2e L36: /field 307 in 28 ms,
+        /estimates 307 in 15 ms, /api/bundle 503 in 10 ms (each under 2 s). Not done: the
+        verifier's optional service-worker timeout (open the saved copy when a page takes over
+        about 3 s) and a fetch timeout for a gateway that hangs without answering: with the retries
+        gone, a 503 is answered at once; a timeout would also open a stale copy on a slow but
+        working connection and could hide a sign-out, which needs its own design. Ledger RC-11.
+  FLOW-4 (low) /unreachable for a page that is not a phone app offered only "Try again". It now also
+        offers the field and crew apps the phone has saved (quietly nothing when it has none,
+        keeping flow-B8) and Go back. Commit 0190809. Tests: lib/offline/phoneCopy.test.ts
+        fallbackAppsFor (2, failed before); e2e L36: /estimates with the database down offers "Open
+        the estimates on this phone", which opens the field app. Ledger RC-7.
+  DOC-4 (low) The crew's phone and copied summary said "$2,000" where the office said "$1,499". With
+        no price on the phone the badge reads "40% TIER — UP TO $2,000 AIR SEAL REBATE" and the
+        summary "rebate up to $2,000 (before the 75% cost cap)"; with a price, as before. Commit
+        d6cc883. Test that failed before: lib/blowerdoor/blowerdoor.test.ts "with no air sealing
+        price, the badge and the copied summary ...". Changed: 8 existing no-price expectations in
+        blowerdoor.test.ts and record.test.ts, and the e2e tool, summary and crew badges, now read
+        "UP TO" / "up to" (each a program with a cost cap and no price). Ledger RC-3.
+  DOC-5 and the two missed findings (low) PDF pages of quotes sent from the accuracy round on could
+        end with an option's column header, its title bar, or "Warranty" / "Terms". The title bar
+        now moves with the first bullet, the column header with the first line, and short Notes,
+        Warranty and Terms stay whole (a long one keeps its heading with its first lines). Quotes
+        sent before keep exactly their old layout. Commit 144c168. Tests that failed before:
+        lib/quotes/quotes-stage.test.ts "Release review C DOC-5": the five-area quote
+        (lib/quotes/__fixtures__/long-quote-document.json, page 2 ended "AREA WORK PRICE") and a
+        sweep of 150 layouts (15 pages ended badly before: 9 with "Best: Best package", 3 with
+        "Terms", 3 with "Warranty"); a third test compares quotes sent before with their page text
+        recorded on the code before the change (__fixtures__/legacy-pdf-pages.json). Ledger RC-6.
+  FLOW-8 (low) At 390 px the dock cut the option's name to "BETT…" beside a five-digit price. The
+        Previous button is 48 px wide (was 64) and the name never truncates. Commit 9f5a7b9. Test:
+        e2e at 390 px, $27,205 Better on Areas and Options: the name fits (59/59; 59/54 before).
+  FLOW-9 (low) Business profile: "The next quote this year reads like KN-2026-0001-v1" (always
+        0001) -> "Quote numbers read like KN-2026-0001-v1: the number counts up with each quote and
+        starts again at 0001 each year." Commit 9f5a7b9. Test: e2e Business profile step.
+  FLOW-11 (low) An area's header button was 45 px tall when its summary fit one line; it is now at
+        least 48 px (min-h-12). Commit 9f5a7b9. Test: e2e 390 px small-target scan.
+  FLOW-12 (low) Option cards in a package now name each line's area, as the quote does. Commit
+        9f5a7b9. Test that failed before: app/field/OptionsStep.test.tsx "an attic and the exterior
+        walls: the Good card says which line is which"; e2e (ATTIC, EXTERIOR WALLS on the Good card).
+  CLAIM-3 (low) The rollback note said nothing in a sent quote changes either way; for quotes the
+        release sends that is not true. Section 6 now says what changes after a rollback (cents, page
+        breaks, the live site's page words, its Delaware consent sentence, New York dates). Docs only.
+  CLAIM-4 (low) The open questions were spread over seven files and the place the owner was pointed
+        to lacked the price ones. docs/release/owner-questions.txt holds every open question once, in
+        plain words, with the superseded ones listed apart; 7d above and
+        docs/accuracy/report/report-summary.txt point to it. Check: "New York", "batt", "minimum",
+        "half to twice" and "Valid until" each appear in it (final.json has none of them).
+
+  Ten of the thirteen code fixes (DOC-1 with FLOW-7, and DOC-5 with its two missed notes, counted
+  once) have a unit or SQL test that failed before the fix (the counts are above). FLOW-8, FLOW-9
+  and FLOW-11 are layout and wording on real screens, checked by the e2e run; their before figures
+  are the verifier's measurements on 93d9dbc (59/54 px, the old sentence, 322x45 px).
+
+  Checks on the final head (the code of 9f5a7b9; the commit after it adds these docs only), one at
+  a time:
+    npm run typecheck        pass
+    npm run lint             pass (0 problems)
+    npx vitest run           104 files, 1,869 tests, all passed (93d9dbc: 1,845 in 103; review C
+                             adds 24 tests and lib/supabase/server.test.ts). None skipped, deleted or
+                             weakened.
+    npm run test:db          7 files, all database tests passed (with the new SEC-1 block)
+    npm run accuracy:violations -- 10000 20261118
+                             every invariant 0; 10,000 quotes, 26,531 options priced, 22,113 shown,
+                             bundle 5ecebe2c0f390417; the output is byte-identical to the 20261118
+                             section of docs/accuracy/after/violations.txt.
+    Golden sets              synthetic 65 and live 78 estimates (--with-accuracy-rows, the existing
+                             export), 0 violations; in the after files' shape both byte-identical to
+                             docs/accuracy/after/golden-synthetic-after.json and
+                             golden-live-after.json. No price, title, bullet or headline moves, so
+                             docs/release/after-review.txt is not needed.
+    bash scripts/e2e.sh (APP_PORT=3650 PGRST_PORT=3651 MOCK_PORT=54850 E2E_DB_NAME=koala_release_fix)
+                             417 ok, 0 failed, console errors: none (docs/release/e2e.txt; 50 steps;
+                             13 new checks). The build stopped once at the Next.js security-upgrade
+                             notice; the same command was retried once, nothing upgraded, the
+                             notice not followed. koala_release_fix dropped afterwards.
+    Hard rule 1              docs/release/hard-rule-1.txt, refreshed: all 2,926 files of the 77
+                             stored quotes byte-identical to the accuracy round's final code and to
+                             the release head before review C; against the before code only the two
+                             documented class names differ; PDFs and emails identical to origin/main.
+    Migrations               scripts/release-migrations.sh again (the blower door migration changed):
+                             docs/release/migrations.txt; the second run changes nothing (schema
+                             5,617 lines, data 283, grants 149), all SQL tests pass on it, and the
+                             blower door migration alone on main's schema passes its test.
