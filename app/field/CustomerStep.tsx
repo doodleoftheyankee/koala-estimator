@@ -1,10 +1,30 @@
 'use client';
+import { useEffect, useState } from 'react';
 import type { EstimateDraft } from '@/lib/sync/draft';
+import { db } from '@/lib/offline/db';
+import { utilitySuggestions } from '@/lib/field/utilities';
 import { Card, Field, Input, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
 import type { Update } from './EstimateEditor';
 
+/** The electric utilities this phone's estimates already name (no franchise's list in the code: hard rule 3). */
+function useUtilitySuggestions(): string[] {
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    db()
+      .estimates.toArray()
+      .then((rows) => live && setNames(utilitySuggestions(rows.map((r) => r.draft))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  return names;
+}
+
 export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: Update }) {
+  const utilities = useUtilitySuggestions();
   const c = draft.customer;
   const p = draft.property;
   const setC = (patch: Partial<EstimateDraft['customer']>) => update((d) => ({ ...d, customer: { ...d.customer, ...patch } }));
@@ -62,10 +82,9 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
             <Field label="Electric utility">
               <Input list="utilities" value={p.utility ?? ''} onChange={(e) => setP({ utility: e.target.value || null })} />
               <datalist id="utilities">
-                <option value="Delmarva Power" />
-                <option value="City of Newark" />
-                <option value="Delaware Electric Co-op" />
-                <option value="DEMEC municipal" />
+                {utilities.map((u) => (
+                  <option key={u} value={u} />
+                ))}
               </datalist>
             </Field>
           </div>
