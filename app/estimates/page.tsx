@@ -24,6 +24,7 @@ import {
   type RowStatus,
 } from '@/lib/office/estimates';
 import type { MoneyGroup } from '@/lib/office/figures';
+import { ApprovalQueue, loadQueue } from './ApprovalQueue';
 import { RowMenu } from './RowMenu';
 
 export const metadata: Metadata = { title: 'Estimates' };
@@ -154,11 +155,13 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   if (status) query = query.in('status', statusFilterValues(status));
   if (estimatorId) query = query.eq('estimator_id', estimatorId);
 
-  const [res, estimatorsRes] = await Promise.all([
+  const [res, estimatorsRes, queue] = await Promise.all([
     query,
     canFilterEstimator
       ? db.from('profiles').select('id, full_name').in('role', ['owner', 'office', 'estimator']).order('full_name')
       : Promise.resolve(null),
+    // The prices waiting for a decision (L34): the owner and the office decide them here.
+    canFilterEstimator ? loadQueue(db) : Promise.resolve(null),
   ]);
 
   let rows: Row[] = [];
@@ -190,6 +193,8 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
           </ButtonLink>
         }
       />
+
+      {queue && queue.length ? <ApprovalQueue items={queue} role={profile.role} userId={profile.userId} /> : null}
 
       {!error && items.length > 0 ? (
         <KpiStrip

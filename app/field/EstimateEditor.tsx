@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { priceEstimate, type PricedEstimate } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
@@ -10,6 +11,7 @@ import { withDraftDefaults } from '@/lib/field/draft';
 import { ackSummary } from '@/lib/field/flags';
 import { formatMoney, TIER_LABELS } from '@/lib/format';
 import { recommendedTier } from '@/lib/field/recommended';
+import { fixElementId, type FixTarget } from '@/lib/field/fix';
 import {
   Banner,
   Button,
@@ -63,6 +65,9 @@ export function EstimateEditor({
   const bundle = useLive(() => getCachedBundle(), [], null);
   const [draft, setDraft] = useState<EstimateDraft | null>(null);
   const [step, setStep] = useState<Step>('customer');
+  const router = useRouter();
+  // Where the last Fix button from the Send checklist pointed (the step opens there).
+  const [focus, setFocus] = useState<FixTarget | null>(null);
 
   const latest = useRef<EstimateDraft | null>(null);
   const savedMutation = useRef<string | null>(null);
@@ -180,6 +185,19 @@ export function EstimateEditor({
     };
   }, [flushIfDirty]);
 
+  // After a Fix opens its step, bring the field, area or option into view (and focus a field).
+  useEffect(() => {
+    if (!focus || focus.step !== step) return;
+    const id = fixElementId(focus);
+    const frame = requestAnimationFrame(() => {
+      const el = id ? document.getElementById(id) : null;
+      if (!el) return;
+      el.scrollIntoView({ block: 'center' });
+      if (el instanceof HTMLInputElement) el.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focus, step]);
+
   if (record === undefined || !draft) {
     return (
       <div className="px-4 pt-6">
@@ -207,7 +225,18 @@ export function EstimateEditor({
     send: sent,
   };
   const goTo = (k: Step) => {
+    setFocus(null);
     setStep(k);
+    window.scrollTo(0, 0);
+  };
+  /** A Fix button: open the step (or the Business profile page) at the item to fix. */
+  const fix = (t: FixTarget) => {
+    if (t.step === 'business') {
+      router.push('/admin/business');
+      return;
+    }
+    setFocus(t);
+    setStep(t.step);
     window.scrollTo(0, 0);
   };
 
@@ -289,7 +318,7 @@ export function EstimateEditor({
 
         <fieldset disabled={locked} className="m-0 min-w-0 space-y-3 border-0 p-0">
           {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
-          {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} /> : null}
+          {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} focus={focus} /> : null}
           {step === 'options' ? (
             <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
           ) : null}
@@ -305,7 +334,7 @@ export function EstimateEditor({
             online={online}
             flush={flush}
             locked={locked}
-            onReviewOptions={() => goTo('options')}
+            onFix={fix}
           />
         ) : null}
         <DockSpacer />

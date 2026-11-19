@@ -1,6 +1,7 @@
 // Price approvals (table price_approvals, L34): reading them for one estimate, for the queue, and
 // the latest request per option for the phone's Send checklist. The rules about who may ask and who
 // may decide live in the database (RLS) and lib/pricing/policy.ts (which approvals let a price through).
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { TIERS, type PriceApproval, type Role, type Tier } from '@/lib/pricing';
 
@@ -53,16 +54,8 @@ export function approvalsFromRows(rows: unknown): PriceApproval[] {
   return Array.isArray(rows) ? rows.map(approvalFromRow).filter((a): a is PriceApproval => a !== null) : [];
 }
 
-interface Reader {
-  from: (table: 'price_approvals') => {
-    select: (cols: string) => {
-      eq: (col: 'estimate_id', v: string) => { order: (col: 'requested_at', o: { ascending: boolean }) => PromiseLike<{ data: unknown; error: { message: string } | null }> };
-    };
-  };
-}
-
 /** An estimate's approvals, newest first, as the signed-in user may read them (RLS). */
-export async function loadApprovals(db: Reader, estimateId: string): Promise<PriceApproval[]> {
+export async function loadApprovals(db: SupabaseClient, estimateId: string): Promise<PriceApproval[]> {
   const { data, error } = await db.from('price_approvals').select(APPROVAL_COLUMNS).eq('estimate_id', estimateId).order('requested_at', { ascending: false });
   if (error) throw new Error(`Reading price approvals failed: ${error.message}`);
   return approvalsFromRows(data);

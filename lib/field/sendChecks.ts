@@ -123,7 +123,7 @@ function customerChecks(d: EstimateDraft): SendCheck[] {
   const shape = draftSchema.shape.property.shape;
   const missing: Array<{ field: CustomerField; words: string }> = [];
   if (!shape.street.safeParse(p.street).success) missing.push({ field: 'street', words: 'the street' });
-  if (!shape.city.safeParse(p.city).success) missing.push({ field: 'city', words: 'the town' });
+  if (!shape.city.safeParse(p.city).success) missing.push({ field: 'city', words: 'the city' });
   if (!shape.state.safeParse(p.state).success) missing.push({ field: 'state', words: 'the state (two letters)' });
   if (!shape.zip.safeParse(p.zip).success) missing.push({ field: 'zip', words: 'a 5-digit ZIP code' });
   out.push(

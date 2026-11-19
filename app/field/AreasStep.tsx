@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Chips, Field, Input, Select, Textarea, Togg
 import { NumberInput } from '@/components/NumberInput';
 import { Button as DmButton, Ruler } from '@/components/daymark';
 import type { Update } from './EstimateEditor';
+import type { FixTarget } from '@/lib/field/fix';
 import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
 import { measurementChecks, withMeasurement } from '@/lib/field/measuring';
 import { MeasureSheet } from './measure/MeasureSheet';
@@ -26,10 +27,24 @@ const CAVITY_DEPTHS = [
 ] as const;
 const CAVITY_JOBS = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
 
-export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateDraft; update: Update; bundle: PricingBundle | null; ownerId: string }) {
+export function AreasStep({
+  draft,
+  update,
+  bundle,
+  ownerId,
+  focus,
+}: {
+  draft: EstimateDraft;
+  update: Update;
+  bundle: PricingBundle | null;
+  ownerId: string;
+  /** Where a Fix button from the Send checklist sent the estimator: this area opens (and its measuring sheet). */
+  focus?: FixTarget | null;
+}) {
   const remotePhotos = useRemotePhotos(draft.id);
-  const [open, setOpen] = useState<string | null>(draft.areas.at(-1)?.id ?? null);
-  const [measuring, setMeasuring] = useState<string | null>(null);
+  const focusArea = focus?.step === 'areas' && focus.areaId && draft.areas.some((a) => a.id === focus.areaId) ? focus : null;
+  const [open, setOpen] = useState<string | null>(focusArea?.areaId ?? draft.areas.at(-1)?.id ?? null);
+  const [measuring, setMeasuring] = useState<string | null>(focusArea?.open === 'measure' && draft.measurements[focusArea.areaId!] ? focusArea.areaId! : null);
   const [lookingUp, setLookingUp] = useState<string | null>(null);
   const [roofDone, setRoofDone] = useState<{ areaId: string; text: string } | null>(null);
   const address = lookupAddress(draft.property);
@@ -107,7 +122,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
         const codeR = bundle ? codeMinimumR(bundle.snapshot, a.jobType) : null;
         const expanded = open === a.id;
         return (
-          <Card key={a.id}>
+          <Card key={a.id} id={`area-${a.id}`}>
             <button type="button" className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setOpen(expanded ? null : a.id)} aria-expanded={expanded}>
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
@@ -153,7 +168,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Square feet">
-                    <NumberInput value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
+                    <NumberInput id={`area-${a.id}-sqft`} value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
                   </Field>
                   <Field label="Target R" hint={codeR ? `Blank = tier default (code R-${codeR})` : 'Blank = tier default'}>
                     <NumberInput value={a.targetR} onValue={(v) => set(a.id, { targetR: v && v > 0 ? v : null })} placeholder={codeR ? `R-${codeR}` : ''} />
@@ -281,7 +296,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
         />
       ) : null}
 
-      <Card>
+      <Card id="add-area">
         <h2 className="mb-2 font-semibold">Add an area</h2>
         <div className="grid grid-cols-2 gap-2">
           {JOB_TYPES.map((j) => (

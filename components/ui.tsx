@@ -49,8 +49,12 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
 }
 
 /** A plate: surface, edge, 16px radius, padded. */
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <DmCard className={className}>{children}</DmCard>;
+export function Card({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <DmCard className={className} id={id}>
+      {children}
+    </DmCard>
+  );
 }
 
 type Tone = 'slate' | 'green' | 'amber' | 'red' | 'blue';

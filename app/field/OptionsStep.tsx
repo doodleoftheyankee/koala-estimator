@@ -201,11 +201,11 @@ function OptionCard({
 
   const limitNote =
     advice && beyondOverrideLimit(advice.advice.best.price, o.modelPrice, overrideLimit)
-      ? `This is more than ${pct(overrideLimit ?? 0, 0)} from the model price (${usd(o.modelPrice)}), so the office would need to send it.`
+      ? `This is more than ${pct(overrideLimit ?? 0, 0)} from the model price (${usd(o.modelPrice)}), so it needs approval from the owner or the office before you can send it (Request approval on the Send step).`
       : null;
 
   return (
-    <div role="group" aria-label={`${TIER_LABELS[tier]} option`}>
+    <div role="group" id={`option-${tier}`} aria-label={`${TIER_LABELS[tier]} option`}>
       <Card className={cx(recommended && 'ring-2 ring-brand-600')}>
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -241,7 +241,7 @@ function OptionCard({
             {pct(deltaPct)}): {o.overrideReason}
           </p>
         ) : null}
-        {o.belowFloor ? <Alert tone="red">Below the floor margin. Only the owner can send this price.</Alert> : null}
+        {o.belowFloor ? <Alert tone="red">Below the floor margin. Only the owner can send this price or approve it.</Alert> : null}
 
         {mine.total.map((f) => (
           <div key={f.key} className="mt-2">

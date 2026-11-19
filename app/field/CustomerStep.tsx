@@ -16,15 +16,15 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
         <h2 className="mb-3 font-semibold">Customer</h2>
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name">
-            <Input autoComplete="off" value={c.firstName} onChange={(e) => setC({ firstName: e.target.value })} />
+            <Input id="customer-firstName" autoComplete="off" value={c.firstName} onChange={(e) => setC({ firstName: e.target.value })} />
           </Field>
           <Field label="Last name">
-            <Input autoComplete="off" value={c.lastName} onChange={(e) => setC({ lastName: e.target.value })} />
+            <Input id="customer-lastName" autoComplete="off" value={c.lastName} onChange={(e) => setC({ lastName: e.target.value })} />
           </Field>
         </div>
         <div className="mt-3 space-y-3">
           <Field label="Email" hint="The quote is emailed here.">
-            <Input type="email" inputMode="email" autoComplete="off" value={c.email ?? ''} onChange={(e) => setC({ email: e.target.value })} />
+            <Input id="customer-email" type="email" inputMode="email" autoComplete="off" value={c.email ?? ''} onChange={(e) => setC({ email: e.target.value })} />
           </Field>
           <Field label="Mobile phone">
             <Input type="tel" inputMode="tel" autoComplete="off" value={c.phone ?? ''} onChange={(e) => setC({ phone: e.target.value })} />
@@ -42,17 +42,17 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
         <h2 className="mb-3 font-semibold">Property</h2>
         <div className="space-y-3">
           <Field label="Street address">
-            <Input autoComplete="off" value={p.street} onChange={(e) => setP({ street: e.target.value })} />
+            <Input id="customer-street" autoComplete="off" value={p.street} onChange={(e) => setP({ street: e.target.value })} />
           </Field>
           <div className="grid grid-cols-6 gap-3">
             <Field label="City" className="col-span-6 sm:col-span-3">
-              <Input value={p.city} onChange={(e) => setP({ city: e.target.value })} />
+              <Input id="customer-city" value={p.city} onChange={(e) => setP({ city: e.target.value })} />
             </Field>
             <Field label="State" className="col-span-2 sm:col-span-1">
-              <Input maxLength={2} value={p.state} onChange={(e) => setP({ state: e.target.value.toUpperCase() })} />
+              <Input id="customer-state" maxLength={2} value={p.state} onChange={(e) => setP({ state: e.target.value.toUpperCase() })} />
             </Field>
             <Field label="ZIP" className="col-span-4 sm:col-span-2">
-              <Input inputMode="numeric" maxLength={10} value={p.zip} onChange={(e) => setP({ zip: e.target.value })} />
+              <Input id="customer-zip" inputMode="numeric" maxLength={10} value={p.zip} onChange={(e) => setP({ zip: e.target.value })} />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -3,7 +3,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
-import { canSendQuote, priceEstimate, TIERS, type PricedOption, type Tier } from '@/lib/pricing';
+import { approvalCovers, canSendQuote, priceEstimate, TIERS, type PriceApproval, type PricedOption, type Tier } from '@/lib/pricing';
+import { loadApprovals } from '@/lib/quotes/approvals';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import { acknowledgedNote, unacknowledgedFlags } from '@/lib/field/flags';
 import { esignConsent } from '@/lib/quotes/consent';
@@ -135,8 +136,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const policy = canSendQuote(profile.role, options, bundle.snapshot.settings);
-    if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons }, { status: 403 });
+    // A price beyond what this role may send alone goes out only at the exact price the owner or the
+    // office approved for this estimate's option (L34); the approvals used are kept with the quote.
+    const approvals = await loadApprovals(supabase, estimateId);
+    const policy = canSendQuote(profile.role, options, bundle.snapshot.settings, approvals);
+    if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons, problems: policy.problems }, { status: 403 });
+    const approvalsUsed = canSendQuote(profile.role, options, bundle.snapshot.settings)
+      .problems.map((p) => approvals.find((a) => approvalCovers(a, p)))
+      .filter((a): a is PriceApproval => !!a)
+      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, decidedRole: a.decidedRole }));
 
     const settings = quoteSettingsFromRows(settingRows);
     const admin = createAdminClient();
@@ -207,6 +215,7 @@ export async function POST(request: Request) {
             driveMinutesOneWay: draft.driveMinutesOneWay,
           },
           flags: flags.map((f) => ({ ...f, ackNote: acknowledgedNote(f, draft.deviationAcks) })),
+          ...(approvalsUsed.length ? { approvals: approvalsUsed } : {}),
         },
         public_token_hash: hash,
         expires_at: expiresAt.toISOString(),
