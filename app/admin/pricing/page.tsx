@@ -207,7 +207,7 @@ export default async function PricingPage() {
 type Material = Config['materials'][number];
 
 /** One material's form: name, cost per unit and, for bags, the coverage of one bag. */
-function MaterialCard({ m, title, productInactive, readOnly }: { m: Material; title: string; productInactive: boolean; readOnly: boolean }) {
+function MaterialCard({ m, title, productInactive, readOnly, note }: { m: Material; title: string; productInactive: boolean; readOnly: boolean; note?: string }) {
   const unit = UNIT_LABELS[m.unit] ?? m.unit;
   return (
     <Card>
@@ -216,6 +216,7 @@ function MaterialCard({ m, title, productInactive, readOnly }: { m: Material; ti
         {m.needs_owner_input ? <Badge tone="amber">Needs owner input</Badge> : null}
         {productInactive ? <Badge>Product inactive</Badge> : null}
       </div>
+      {note ? <p className="mb-3 text-sm text-slate-600">{note}</p> : null}
       <ActionForm action={saveMaterial} readOnly={readOnly}>
         <input type="hidden" name="id" value={m.id} />
         <TextField label="Name" name="name" defaultValue={m.name} required />
@@ -344,7 +345,14 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         </SectionHeading>
         <div className="grid gap-4 md:grid-cols-2">
           {defaultMaterials.map((m) => (
-            <MaterialCard key={m.id} m={m} title={productById.get(m.product_id)?.label ?? 'Product'} productInactive={productById.get(m.product_id)?.active === false} readOnly={readOnly} />
+            <MaterialCard
+              key={m.id}
+              m={m}
+              title={productById.get(m.product_id)?.label ?? 'Product'}
+              productInactive={productById.get(m.product_id)?.active === false}
+              readOnly={readOnly}
+              note={otherMaterials.some((o) => o.product_id === m.product_id && o.r_value) ? 'Quotes price batts by the sizes below, so this cost is not used while they are set up.' : undefined}
+            />
           ))}
         </div>
         {otherMaterials.length ? (
