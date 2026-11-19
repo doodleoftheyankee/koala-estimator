@@ -70,20 +70,24 @@ export function ResultPlate({ e }: { e: Evaluation }) {
   );
 }
 
-/** The reduction on a 0–100% bar, with a tick at each tier. */
+/**
+ * The reduction on a bar that runs from 0 to 20 points past the top tier (60% for a 40% top
+ * tier), so the tier ticks and their labels have room on a phone; a bigger reduction fills it.
+ */
 function ReductionBar({ pct, ticks }: { pct: number; ticks: number[] }) {
-  const w = Math.max(0, Math.min(100, pct));
+  const max = Math.max(50, Math.ceil((Math.max(...ticks) + 20) / 10) * 10);
+  const at = (v: number) => `${(Math.max(0, Math.min(max, v)) / max) * 100}%`;
   return (
     <div className="relative mx-1 mt-5 mb-1" aria-hidden>
       <div className="relative h-4 overflow-hidden rounded-full bg-track shadow-[inset_0_0_0_2px_var(--track-edge)]">
-        <div className="absolute inset-y-0 left-0 rounded-full bg-ink" style={{ width: `${w}%` }} />
+        <div className="absolute inset-y-0 left-0 rounded-full bg-ink" style={{ width: at(pct) }} />
       </div>
       {ticks.map((t) => (
-        <span key={t} className="absolute -top-1.5 h-7 w-[3px] -translate-x-1/2 rounded-sm bg-ink shadow-[0_0_0_2px_var(--surface)]" style={{ left: `${t}%` }} />
+        <span key={t} className="absolute -top-1.5 h-7 w-[3px] -translate-x-1/2 rounded-sm bg-ink shadow-[0_0_0_2px_var(--surface)]" style={{ left: at(t) }} />
       ))}
       <div className="relative mt-2 h-5">
         {ticks.map((t) => (
-          <span key={t} className="gauge-m absolute -translate-x-1/2 text-[16px] text-ink" style={{ left: `${t}%` }}>
+          <span key={t} className="gauge-m absolute -translate-x-1/2 text-[16px] text-ink" style={{ left: at(t) }}>
             {num(t)}%
           </span>
         ))}
@@ -146,8 +150,6 @@ function GaugeField({ label, value, onChange, error, hint, name }: { label: stri
 
 export interface TestCardProps {
   kind: TestKind;
-  /** What the readings are saved to. */
-  where: 'job' | 'estimate';
   /** The reading shown as recorded (null: the typed fields). */
   saved: { test: SavedTest; local: LocalTest | null } | null;
   result: TestResult;
@@ -177,7 +179,7 @@ export function TestCard(p: TestCardProps) {
         <span className="sign-label text-ink [--sign-size:14px]">
           {label} ({after ? 'after' : 'before'})
         </span>
-        {p.saved ? <SavedTag local={p.saved.local} online={p.online} where={p.where} /> : null}
+        {p.saved ? <SavedTag local={p.saved.local} online={p.online} where={p.saved.test.job_id ? 'job' : 'estimate'} /> : null}
       </h2>
 
       {p.saved ? (

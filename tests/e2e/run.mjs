@@ -943,6 +943,58 @@ await page.waitForTimeout(6000);
 console.log('  db after reconnect:', psql("select count(*) || ' estimates; ' || string_agg(c.last_name || ':' || e.priced_offline, ',') from estimates e join customers c on c.id=e.customer_id"));
 await page.screenshot({ path: SHOTS + '10-synced-list.png' });
 
+step('blower door: the tool opens with no signal, converts, shows the tier and copies the summary');
+{
+  // The field app's sync cached the franchise's rebate programs with the pricing bundle; the
+  // service worker kept the tool's page when it installed.
+  await ctx.setOffline(true);
+  offlineStep = true;
+  await page.goto(BASE + '/field/blower-door');
+  await page.getByRole('heading', { name: 'Blower door' }).waitFor({ timeout: 15000 });
+  await page.getByText('The calculator works with no signal.').waitFor();
+  check((await page.getByRole('radio', { name: 'Home Performance' }).getAttribute('aria-checked')) === 'true', 'offline, the tool opens with the first rebate program chosen');
+  const flow = page.getByLabel('Fan flow (CFM)');
+  const pressure = page.getByLabel('House pressure (Pa)');
+  await flow.nth(0).fill('6952');
+  check((await page.getByTestId('bd-badge').innerText()).includes('TEST-IN ONLY'), 'with only the test-in it says so');
+  check((await page.getByText('The test-out must be at or below 5,562 CFM50 for the 20% tier.').count()) === 1, 'and what the first tier needs');
+  await flow.nth(1).fill('3325');
+  await pressure.nth(1).fill('-50.8');
+  await page.getByTestId('bd-big').filter({ hasText: '52.7%' }).waitFor();
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'the worked example: 52.7% and the 40% tier, $1,800 on Home Performance');
+  check((await page.getByTestId('bd-test_out-cfm50').innerText()) === '3,291', 'the test-out at 50.8 Pa (typed with the minus sign) is 3,291 CFM50');
+  check((await page.getByText('Top tier reached with 880 CFM50 to spare.').count()) === 1, 'the tier table says how far past the top tier');
+  await page.getByRole('radio', { name: 'Assisted' }).click();
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $2,000 AIR SEAL REBATE', 'Assisted pays its own amount');
+  await page.getByRole('radio', { name: 'Home Performance' }).click();
+  await page.getByLabel('House volume (ft³)').fill('20000');
+  await page.getByLabel('Occupants').fill('3');
+  await page.getByTestId('bd-ventilation').waitFor();
+  check((await page.getByTestId('bd-ventilation').innerText()).startsWith('Ventilation OK: test-out is 1,495 CFM50 above the BAS of 1,796 (estimated).'), 'the ventilation check against the estimated BAS');
+  await page.getByLabel('Air sealing price ($)').fill('$2,000');
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,500 AIR SEAL REBATE', 'the 75% cost cap below the tier lowers the rebate');
+  await page.getByLabel('Air sealing price ($)').fill('');
+  await page.getByRole('button', { name: 'Copy summary' }).click();
+  await page.getByRole('button', { name: 'Copied' }).waitFor();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  check(
+    copied.startsWith('Blower Door Results (Retrotec Model 5000)\nProgram: Energize Delaware Home Performance with ENERGY STAR\nTest-in: 6,952 CFM50 (read 6,952 CFM at 50 Pa)\nTest-out: 3,291 CFM50 (read 3,325 CFM at 50.8 Pa)\nReduction: 52.7% (3,661 CFM50)\nAir sealing tier: 40% improvement — rebate $1,800') &&
+      copied.includes('ACH50: 20.86 -> 9.87'),
+    'Copy summary copies the same plain-text summary',
+  );
+  await page.screenshot({ path: SHOTS + '10a-blower-door-offline.png', fullPage: true });
+  // What was typed is still there on the next visit.
+  await page.waitForTimeout(500);
+  await page.reload();
+  await page.getByTestId('bd-big').filter({ hasText: '52.7%' }).waitFor({ timeout: 15000 });
+  check((await page.getByLabel('Fan flow (CFM)').nth(1).inputValue()) === '3325', 'the readings are kept on the phone between visits');
+  await page.getByRole('button', { name: 'Clear for new job' }).click();
+  check((await page.getByLabel('Fan flow (CFM)').nth(0).inputValue()) === '' && (await page.getByTestId('bd-badge').innerText()) === '—', 'Clear for new job empties the readings');
+  await ctx.setOffline(false);
+  offlineStep = false;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+}
+
 step('owner screens');
 const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.test' };
 const octx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -1004,6 +1056,28 @@ await op.locator('input[name="scheduled_start"]').fill(today);
 await op.getByRole('button', { name: 'Save schedule' }).click();
 await waitForDb(`select (crew_id is not null)::text || ':' || scheduled_start from jobs where id = '${jobId}'`, `true:${today}`, 'job scheduled for Crew A today');
 
+step('blower door: the estimator saves the test-in on the estimate');
+const leeEstimate = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Lee'");
+{
+  await page.goto(BASE + `/field?e=${leeEstimate}`);
+  await page.getByRole('navigation', { name: 'Estimate steps' }).getByRole('button', { name: /Areas/ }).click();
+  await page.getByRole('link', { name: 'Start the blower door test' }).click();
+  await page.waitForURL(/\/field\/blower-door\?estimate=/);
+  await page.getByText(/Readings you save go to this estimate: Pat Lee, 12 Elkton Rd/).waitFor({ timeout: 15000 });
+  await page.getByLabel('Fan flow (CFM)').nth(0).fill('6952');
+  await page.getByLabel('House pressure (Pa)').nth(0).fill('50');
+  await page.getByLabel('House volume (ft³)').fill('20000');
+  await page.getByLabel('Occupants').fill('3');
+  await page.getByRole('button', { name: 'Save test-in' }).click();
+  await waitForDb(
+    `select count(*) || ':' || min(cfm50) || ':' || min(volume) || ':' || bool_and(job_id is null) from blower_door_tests where estimate_id = '${leeEstimate}' and kind = 'test_in'`,
+    '1:6952.00:20000.0:true',
+    'the test-in is saved to the estimate, with the house',
+  );
+  await page.getByText('Saved to the estimate', { exact: true }).waitFor({ timeout: 15000 });
+  check((await page.getByRole('button', { name: 'Retake test-in' }).count()) === 1, 'a saved reading shows as recorded, with Retake');
+}
+
 step('crew starts the job on a phone');
 const cctx = await browser.newContext(phone);
 await cctx.addCookies([sessionCookie(CREW)]);
@@ -1039,12 +1113,61 @@ await waitForDb(`select status from jobs where id = '${jobId}'`, 'completed', 'c
 console.log('  actuals:', psql(`select count(*) || ' rows; ' || coalesce(sum(actual_hours), 0) || ' h' from job_actuals where job_id = '${jobId}'`));
 check(psql(`select count(*) from job_actuals where job_id = '${jobId}' and area_id is null and actual_days = 1 and actual_crew_size = 2`) === '1', 'whole-job actuals synced');
 await cpg.screenshot({ path: SHOTS + '17-crew-done.png', fullPage: true });
+step('blower door: the crew lead saves the test-out on the job with no signal');
+{
+  await cpg.goto(BASE + `/crew?j=${jobId}`);
+  await cpg.getByText('6,952 CFM50').waitFor({ timeout: 15000 });
+  check(true, "the crew job page loads the estimator's test-in onto the phone before the tool is opened");
+  await cpg.getByRole('link', { name: /blower door test/ }).click();
+  await cpg.waitForURL(/\/field\/blower-door\?job=/);
+  await cpg.getByTestId('bd-test_in-cfm50').filter({ hasText: '6,952' }).waitFor({ timeout: 15000 });
+  check((await cpg.getByText(/by Eddie Estimator/).count()) === 1, "the crew sees the estimator's test-in, as recorded");
+  check((await cpg.getByLabel('Air sealing price ($)').count()) === 0, 'a crew never types the air sealing price');
+  await cctx.setOffline(true);
+  await cpg.getByLabel('Fan flow (CFM)').fill('3325');
+  await cpg.getByLabel('House pressure (Pa)').fill('50.8');
+  check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'the crew sees the tier with the saved test-in');
+  await cpg.getByRole('button', { name: 'Save test-out' }).click();
+  await cpg.getByText('On this phone', { exact: true }).waitFor();
+  check(psql(`select count(*) from blower_door_tests where job_id = '${jobId}'`) === '0', 'with no signal the test-out waits on the phone');
+  await cpg.reload();
+  await cpg.getByTestId('bd-test_out-cfm50').filter({ hasText: '3,291' }).waitFor({ timeout: 15000 });
+  check((await cpg.getByText('On this phone', { exact: true }).count()) === 1, 'and is still there after a reload with no signal');
+  await cpg.screenshot({ path: SHOTS + '17a-blower-door-job.png', fullPage: true });
+  await cctx.setOffline(false);
+  await cpg.evaluate(() => window.dispatchEvent(new Event('online')));
+  await waitForDb(
+    `select count(*) || ':' || min(cfm50) || ':' || min(pa) || ':' || min(estimate_id::text) from blower_door_tests where job_id = '${jobId}' and kind = 'test_out'`,
+    `1:3290.87:50.80:${leeEstimate}`,
+    'back online, the test-out syncs to the job (and its estimate)',
+  );
+  await cpg.locator('#bd-test_out').getByText('Saved to the job', { exact: true }).waitFor({ timeout: 15000 });
+  check((await cpg.locator('#bd-test_in').getByText('Saved to the estimate', { exact: true }).count()) === 1, "the estimator's test-in says it is saved to the estimate");
+  // Another sync (the crew app's own, and a reload) sends nothing twice.
+  await cpg.goto(BASE + `/crew?j=${jobId}`);
+  await cpg.getByText('6,952 CFM50').waitFor({ timeout: 15000 });
+  await cpg.waitForTimeout(1500);
+  check(psql(`select count(*) from blower_door_tests where estimate_id = '${leeEstimate}'`) === '2', 'no duplicate readings after more syncs');
+  check(!/\$\s?\d/.test(await cpg.locator('body').innerText()), 'the crew job page still shows no prices');
+}
 await cpg.goto(BASE + '/field');
 await cpg.getByRole('heading', { name: 'This page is for the owner, the office and estimators' }).waitFor();
 check(new URL(cpg.url()).pathname === '/no-access', 'crew is kept out of the priced field app, and told whose page it is');
 check(!/\$\s?\d/.test(await cpg.locator('body').innerText()), 'and sees no prices there');
 await cpg.getByRole('link', { name: 'Go to Jobs' }).click();
 await cpg.waitForURL(BASE + '/crew');
+
+step('blower door: the office job page shows the readings, the tier and the ventilation check');
+{
+  await op.goto(BASE + '/jobs/' + jobId);
+  await op.getByRole('heading', { name: 'Blower door test' }).waitFor();
+  check((await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,800 AIR SEAL REBATE'), 'the office sees the tier and rebate');
+  const figures = await op.getByRole('region', { name: 'Blower door figures' }).innerText();
+  check(figures.includes('6,952 CFM50') && figures.includes('3,291 CFM50') && figures.includes('52.7%') && /Eddie Estimator/.test(figures) && /Carl Crew/.test(figures), 'both readings with who took them, and the reduction');
+  check((await op.getByTestId('job-bd-ventilation').innerText()).startsWith('Ventilation OK'), 'and the ventilation check from the house the estimator gave');
+  await op.getByRole('heading', { name: 'Blower door test' }).scrollIntoViewIfNeeded();
+  await op.screenshot({ path: SHOTS + '18a-job-blower-door.png', fullPage: true });
+}
 
 step('office verifies the actuals');
 await op.goto(BASE + '/jobs/' + jobId);
@@ -1091,6 +1214,32 @@ step('office marks an estimate lost from its row menu');
   await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost: Went with a competitor').waitFor({ timeout: 15000 });
   check((await op.getByRole('button', { name: 'More for Sam Offline' }).count()) === 1 && (await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost', { exact: true }).count()) === 1, 'the row now says Lost');
   await op.screenshot({ path: SHOTS + '21-estimate-lost.png', fullPage: true });
+}
+
+step('owner edits the rebate programs');
+{
+  await op.goto(BASE + '/admin/rebates');
+  await op.getByRole('heading', { name: 'Rebate programs' }).waitFor();
+  const hp = op.getByRole('region', { name: 'Program: Home Performance' });
+  const rebates = hp.getByLabel('Rebate ($, whole dollars)');
+  await rebates.nth(0).fill('900.50');
+  await op.getByText("Program 1: a tier's rebate must be whole dollars (no cents).").waitFor();
+  await rebates.nth(0).fill('950');
+  await hp.getByLabel('Reduction (%)').nth(1).fill('15');
+  await op.getByText('Program 1: tiers must go up in reduction, lowest first (20% then 15%).').waitFor();
+  await op.getByRole('button', { name: 'Save rebate programs' }).click();
+  await op.getByText(/tiers must go up in reduction/).nth(1).waitFor();
+  check(psql("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'") === '900', 'a change that breaks a rule is refused and nothing is saved');
+  await hp.getByLabel('Reduction (%)').nth(1).fill('30');
+  await op.getByRole('button', { name: 'Save rebate programs' }).click();
+  await op.getByText('Saved 2 programs. Phones get them the next time they sync.').waitFor({ timeout: 15000 });
+  check(psql("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'") === '950', 'the owner saves a new tier amount');
+  check(psql("select count(*) from audit_log where table_name = 'app_settings' and row_id = 'blower_door' and actor_id = '11111111-1111-4111-8111-111111111111'") !== '0', 'and the change is audited with who made it');
+  await op.screenshot({ path: SHOTS + '22-rebate-programs.png', fullPage: true });
+  // Back to the seeded amount, for anyone looking at the stack afterwards.
+  await rebates.nth(0).fill('900');
+  await op.getByRole('button', { name: 'Save rebate programs' }).click();
+  await waitForDb("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'", '900', 'and puts the seeded amount back');
 }
 
 console.log('console errors:', logs.length ? logs : 'none');

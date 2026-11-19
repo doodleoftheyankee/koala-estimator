@@ -48,6 +48,7 @@ import {
   Banner,
   Button,
   ButtonLink,
+  ChevronDown,
   ChevronLeft,
   CloudOff,
   Copy,
@@ -68,6 +69,8 @@ import { useLive, useOnline } from '../hooks';
 import { NumbersList, Paperwork, ResultPlate, TestCard, TierTable, effectiveLine } from './parts';
 
 const SYNC_INTERVAL_MS = 60_000;
+/** A gauge-style field; its placeholder ("best source") stays in the text face, so it never reads as a value. */
+const GAUGE_INPUT = 'gauge-m text-[26px] placeholder:font-[family-name:var(--f-text)] placeholder:text-[17px] placeholder:[font-stretch:100%]';
 const SAVE_DELAY_MS = 300;
 const NO_RETAKE: Record<TestKind, boolean> = { test_in: false, test_out: false };
 
@@ -386,7 +389,6 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
         {/* ------------------------------------------------------------ the two tests */}
         <TestCard
           kind="test_in"
-          where={where}
           saved={savedIn}
           result={e.testIn}
           cfm={form.preCfm}
@@ -402,7 +404,6 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
         />
         <TestCard
           kind="test_out"
-          where={where}
           saved={savedOut}
           result={e.testOut}
           cfm={form.postCfm}
@@ -432,7 +433,7 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
               error={e.costError}
               hint={`Air sealing rebate pays the tier amount or ${num(program.costCapPct, 2)}% of the installed air sealing cost, whichever is lower.${capNote(e)}`}
             >
-              <Input value={form.cost} onChange={(ev) => set({ cost: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder={`for ${num(program.costCapPct, 2)}% cap`} className="gauge-m text-[26px]" />
+              <Input value={form.cost} onChange={(ev) => set({ cost: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder={`for ${num(program.costCapPct, 2)}% cap`} className={GAUGE_INPUT} />
             </Field>
           </section>
         ) : program?.costCapPct != null && crew ? (
@@ -447,36 +448,39 @@ function ToolBody({ profile, context, initial }: { profile: CachedProfile; conte
             Ventilation check (BAS)
           </h2>
           <Field label="BAS from audit (CFM50)" error={e.basErrors.bas} hint="Use the Building Airflow Standard from the energy assessment report if you have it. If not, estimate it below.">
-            <Input value={form.bas} onChange={(ev) => set({ bas: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder="best source" className="gauge-m text-[26px]" />
+            <Input value={form.bas} onChange={(ev) => set({ bas: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder="best source" className={GAUGE_INPUT} />
           </Field>
           <h3 className="pt-1 text-[16px] font-bold text-ink">Or estimate it (BPI / ASHRAE 62-89 method)</h3>
           <div className="grid grid-cols-2 gap-3">
             <Field label="House volume (ft³)" error={e.basErrors.volume}>
-              <Input value={form.volume} onChange={(ev) => set({ volume: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder="incl. basement" className="gauge-m text-[26px]" />
+              <Input value={form.volume} onChange={(ev) => set({ volume: ev.target.value })} inputMode="decimal" autoComplete="off" placeholder="incl. basement" className={GAUGE_INPUT} />
             </Field>
             <Field label="Occupants" error={e.basErrors.occupants}>
-              <Input value={form.occupants} onChange={(ev) => set({ occupants: ev.target.value })} inputMode="numeric" autoComplete="off" placeholder="actual people" className="gauge-m text-[26px]" />
+              <Input value={form.occupants} onChange={(ev) => set({ occupants: ev.target.value })} inputMode="numeric" autoComplete="off" placeholder="actual people" className={GAUGE_INPUT} />
             </Field>
           </div>
           <Field label="Stories" group>
             <Segmented<Stories> label="Stories" value={form.stories} options={STORIES.map((s) => ({ value: s.value, label: s.label }))} onChange={(v) => set({ stories: v })} />
           </Field>
           <Field label="Zone N-factor" error={e.basErrors.nFactor} hint={nHint}>
-            <Input value={form.nFactor} onChange={(ev) => set({ nFactor: ev.target.value })} inputMode="decimal" autoComplete="off" className="gauge-m text-[26px]" />
+            <Input value={form.nFactor} onChange={(ev) => set({ nFactor: ev.target.value })} inputMode="decimal" autoComplete="off" className={GAUGE_INPUT} />
           </Field>
           <p className="text-[15px] leading-snug font-medium text-ink-2">
             BAS = the larger of (0.35 × volume ÷ 60) or (15 × occupants), times the N-factor, times the height correction.
           </p>
           {basNote ? <p className="text-[15.5px] leading-snug font-bold text-warn">{basNote}</p> : null}
           <details className="group rounded-control border-solid border-[length:var(--bw)] border-line px-3" open={Boolean(e.exponentError) || undefined}>
-            <summary className="flex min-h-12 cursor-pointer items-center text-[16px] font-bold text-ink">Advanced</summary>
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 text-[16px] font-bold text-ink [&::-webkit-details-marker]:hidden">
+              Advanced
+              <Icon icon={ChevronDown} size="s" className="transition-transform group-open:rotate-180" />
+            </summary>
             <div className="pb-3">
               <Field
                 label="Flow exponent (n)"
                 error={e.exponentError}
                 hint={`CFM50 = CFM × (50 ÷ Pa)^n. The default, ${num(settings.flowExponent, 3)}, is set by the office to match the ${settings.gauge}, so this matches the gauge's own @ Pressure result. Saved readings keep the exponent they were taken with.`}
               >
-                <Input value={form.exponent} onChange={(ev) => set({ exponent: ev.target.value })} inputMode="decimal" autoComplete="off" className="gauge-m text-[26px]" />
+                <Input value={form.exponent} onChange={(ev) => set({ exponent: ev.target.value })} inputMode="decimal" autoComplete="off" className={GAUGE_INPUT} />
               </Field>
             </div>
           </details>

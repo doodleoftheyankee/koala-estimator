@@ -1,8 +1,10 @@
 'use client';
 // The way into the blower door tool from a job (crew app) or an estimate (field app): a plate with
 // the readings already saved to it (on the server or still on this phone) and a plain link, so the
-// service worker opens the tool with no signal.
-import { blowerDoorDb, formKey } from '@/lib/offline/blowerDoor';
+// service worker opens the tool with no signal. With signal it loads the saved readings onto the
+// phone, so the estimator's test-in is there when the crew opens the tool in an attic with none.
+import { useEffect } from 'react';
+import { blowerDoorDb, fetchContext, formKey } from '@/lib/offline/blowerDoor';
 import { blowerDoorHref, contextKey, mergeReadings, newestOf, type BlowerDoorContext, type LocalTest } from '@/lib/offline/blowerDoorCore';
 import type { LocalContext } from '@/lib/offline/blowerDoor';
 import { cfmText } from '@/lib/blowerdoor';
@@ -21,6 +23,10 @@ export function BlowerDoorLink({ context, ownerId, hint }: { context: BlowerDoor
     [ownerId, context.kind, context.id],
     [],
   );
+  useEffect(() => {
+    if (navigator.onLine) void fetchContext(context, ownerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerId, context.kind, context.id]);
   const shown = mergeReadings(saved?.tests ?? [], local);
   const testIn = newestOf(shown, 'test_in');
   const testOut = newestOf(shown, 'test_out');
