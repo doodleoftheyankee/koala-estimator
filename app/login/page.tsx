@@ -17,7 +17,8 @@ const FEATURES: Array<{ icon: LucideIcon; text: string }> = [
 
 // Sign-in: the product's name, not a franchise's. A franchise's own name and colours appear on
 // its customer quotes, not here.
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string }> }) {
+// A repeated key (?next=/a&next=/b) arrives as an array: safeNext and the error lookup take one string only.
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string | string[]; error?: string | string[] }> }) {
   const { next, error } = await searchParams;
   return (
     <main className="min-h-dvh lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
@@ -78,7 +79,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         ) : null}
 
         <div className="plate p-5">
-          <LoginForm next={safeNext(next)} initialError={loginErrorMessage(error)} />
+          <LoginForm next={safeNext(next)} initialError={loginErrorMessage(typeof error === 'string' ? error : null)} />
         </div>
 
         <p className="mt-6 flex gap-2.5 text-[15px] font-medium text-ink-2">

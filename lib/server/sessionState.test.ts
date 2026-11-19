@@ -23,6 +23,9 @@ describe('a database that cannot be reached is not a sign-out (L36, RF-04, UX-05
   it('the page it sends people to keeps where they were going, on this site only', () => {
     expect(unreachableHref('/field?e=1')).toBe('/unreachable?next=%2Ffield%3Fe%3D1');
     expect(unreachableHref('//evil.example/x')).toBe('/unreachable?next=%2F');
+    // database-B1: dot segments that resolve to "//host" are not a path on this site either.
+    expect(unreachableHref('/.//evil.com')).toBe('/unreachable?next=%2F');
+    expect(unreachableHref('/a/..//evil.example/x')).toBe('/unreachable?next=%2F');
     expect(unreachableHref('https://evil.example/')).toBe('/unreachable?next=%2F');
     expect(unreachableHref(null)).toBe('/unreachable?next=%2F');
   });

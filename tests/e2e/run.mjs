@@ -1243,6 +1243,13 @@ step("Koala's database unreachable is not a sign-out (L36)");
   await up.screenshot({ path: SHOTS + '10c-unreachable-page.png' });
   await up.goto(BASE + '/unreachable?next=//evil.example/x');
   check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next= is only ever a path on this site');
+  // Review B database-B1: dot segments that resolve to "//host" do not leave the site either.
+  await up.goto(BASE + '/unreachable?next=%2F.%2F%2Fevil.example%2Fx');
+  check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next=/.//evil.example/x is not a way off the site (Try again goes to /)');
+  {
+    const res = await uctx.request.get(BASE + '/login?next=/a&next=/b', { maxRedirects: 0 });
+    check(res.status() === 200, `a repeated next= on the sign-in page opens it (was a 500): ${res.status()}`);
+  }
   const signedOut = await browser.newContext();
   const sp = await signedOut.newPage();
   await sp.goto(BASE + '/estimates');
