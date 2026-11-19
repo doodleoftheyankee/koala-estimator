@@ -12,9 +12,36 @@ export async function hasSavedCopy(
 ): Promise<boolean> {
   if (!store) return false;
   try {
-    // The shell is saved under its bare path; Next's Vary headers must not hide it.
-    return (await store.match(path, { ignoreVary: true })) !== undefined;
+    // The shell is saved under its bare path; Next's Vary headers must not hide it, and a query
+    // (?job= for the blower door tool) only says what the shell opens (public/sw.js shellFor).
+    return (await store.match(path, { ignoreVary: true, ignoreSearch: true })) !== undefined;
   } catch {
     return false;
   }
+}
+
+/** The phone's own copy of the app someone was opening when Koala did not answer: the link, the saved shell it opens, and its words. */
+export interface PhoneApp {
+  href: string;
+  /** The shell the service worker saved for it (public/sw.js SHELLS). */
+  copy: string;
+  label: string;
+}
+
+const BLOWER_DOOR = '/field/blower-door';
+
+/**
+ * The phone's own copy of the app the person was opening, which works without Koala. The blower
+ * door tool is its own saved shell, for every role, crews included: it opens at the same address
+ * (the same job or estimate), never the estimator's field app, which a crew phone does not have.
+ */
+export function phoneAppFor(next: string): PhoneApp | null {
+  if (next === BLOWER_DOOR || next.startsWith(`${BLOWER_DOOR}?`) || next.startsWith(`${BLOWER_DOOR}/`)) {
+    return { href: next, copy: BLOWER_DOOR, label: 'Open the blower door tool on this phone' };
+  }
+  if (next === '/field' || next.startsWith('/field?') || (next.startsWith('/field/') && !next.startsWith('/field/roof'))) {
+    return { href: '/field', copy: '/field', label: 'Open the estimates on this phone' };
+  }
+  if (next === '/crew' || next.startsWith('/crew?') || next.startsWith('/crew/')) return { href: '/crew', copy: '/crew', label: 'Open the crew app on this phone' };
+  return null;
 }

@@ -185,17 +185,17 @@ export function ErrorState({
  * flow-B8). With none (first use, cleared site data), the link would lead back here, so the page
  * says so instead. Nothing shows until the check is done.
  */
-function PhoneAppLink({ href, label }: { href: string; label: string }) {
+function PhoneAppLink({ href, copy: shell, label }: { href: string; copy?: string; label: string }) {
   const [copy, setCopy] = useState<{ href: string; saved: boolean } | null>(null);
   useEffect(() => {
     let live = true;
-    void hasSavedCopy(href).then((saved) => {
+    void hasSavedCopy(shell ?? href).then((saved) => {
       if (live) setCopy({ href, saved });
     });
     return () => {
       live = false;
     };
-  }, [href]);
+  }, [href, shell]);
   if (copy?.href !== href) return null;
   if (!copy.saved) return <p className="text-[17px] font-medium text-ink-2">This phone has no saved copy of the app yet; it needs Koala once.</p>;
   return (
@@ -205,7 +205,7 @@ function PhoneAppLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: { href: string; label: string } | null }) {
+export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: { href: string; copy?: string; label: string } | null }) {
   return (
     <StatePage
       icon={CloudOff}
@@ -217,7 +217,7 @@ export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: {
             <Icon icon={RefreshCw} size="s" />
             Try again
           </a>
-          {phoneApp ? <PhoneAppLink href={phoneApp.href} label={phoneApp.label} /> : null}
+          {phoneApp ? <PhoneAppLink href={phoneApp.href} copy={phoneApp.copy} label={phoneApp.label} /> : null}
         </>
       }
     >

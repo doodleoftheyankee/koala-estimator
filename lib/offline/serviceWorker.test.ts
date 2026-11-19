@@ -36,10 +36,18 @@ function fakeCaches() {
 /** Loads sw.js with a network that serves each shell for whoever is signed in. */
 function worker() {
   const listeners: Record<string, (e: unknown) => void> = {};
-  const net = { online: true, user: 'estimator' as 'estimator' | 'crew' };
+  const net = { online: true, user: 'estimator' as 'estimator' | 'crew', koalaDown: false };
   const fetchFn = async (req: string | { url: string }) => {
     if (!net.online) throw new TypeError('Failed to fetch');
     const path = new URL(typeof req === 'string' ? req : req.url, ORIGIN).pathname;
+    if (net.koalaDown && path !== '/unreachable') {
+      // Koala's database does not answer (L36): every page is sent to /unreachable, and the
+      // redirect is followed, as the browser does.
+      const res = new Response('<html>Can’t reach Koala right now</html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+      Object.defineProperty(res, 'redirected', { value: true });
+      Object.defineProperty(res, 'url', { value: `${ORIGIN}/unreachable?next=${encodeURIComponent(path)}` });
+      return res;
+    }
     // Crews are sent away from the priced field app; estimators from the crew app.
     const refused = (path === '/field' && net.user === 'crew') || (path === '/crew' && net.user === 'estimator');
     const res = new Response(`<html>${path} for ${net.user}</html>`, { status: refused ? 403 : 200, headers: { 'Content-Type': 'text/html' } });
@@ -85,5 +93,21 @@ describe('the service worker offline (public/sw.js)', () => {
     expect(await w.go('/field')).toBe('<html>/crew for crew</html>');
     // The blower door tool still opens from its own shell.
     expect(await w.go('/field/blower-door?job=0b000000-0000-4000-8000-000000000001')).toBe('<html>/field/blower-door for crew</html>');
+  });
+
+  // Release, "blower door under the accuracy rules": the tool's own shell under L36. Before the
+  // release (claude/blower-door, sw.js v7) the redirect to /unreachable counted as a refusal: the
+  // tool's saved copy was deleted and the phone showed the /unreachable page instead of the tool.
+  it('opens the blower door tool from its saved copy while Koala cannot be reached, and keeps it (L36)', async () => {
+    const w = worker();
+    w.net.user = 'crew';
+    const tool = '/field/blower-door?job=0b000000-0000-4000-8000-000000000001';
+    expect(await w.go(tool)).toBe('<html>/field/blower-door for crew</html>');
+    w.net.koalaDown = true;
+    expect(await w.go(tool)).toBe('<html>/field/blower-door for crew</html>');
+    // The copy is still there afterwards, with no signal at all.
+    w.net.koalaDown = false;
+    w.net.online = false;
+    expect(await w.go(tool)).toBe('<html>/field/blower-door for crew</html>');
   });
 });
