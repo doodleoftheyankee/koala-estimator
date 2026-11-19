@@ -264,9 +264,21 @@ deployed; the go-live steps are in section 6.
        project (an IANA name such as America/Chicago) before the build: every date and time it
        prints, and each new quote's "Valid until" day, are then in its zone. Unset means
        America/New_York (this franchise: nothing to set). A quote keeps the zone it was sent in.
-    4. Merge claude/release into main through a pull request (never a force-push), and let Vercel
+    4. The sender name on quote emails. This Vercel project sets QUOTE_FROM_EMAIL to
+       "Koala Insulation of Newark <onboarding@resend.dev>" (Production, Preview and Development;
+       read 2026-11-19). A set value wins over the code's "Koala Insulation" default (lib/env.ts),
+       so quote emails would still come from "Koala Insulation of Newark" (OD12). With the owner's
+       OK, change it to "Koala Insulation <onboarding@resend.dev>" (or delete it to use the default)
+       before step 5, so the new build picks it up. When the franchise sends from its own domain,
+       put that address here instead.
+    5. Merge claude/release into main through a pull request (never a force-push), and let Vercel
        build it. The Next.js build may stop once at a "security upgrade" notice: retry the same
        build once; do not upgrade and do not follow the notice.
+  Do not try the release on a Vercel preview. Every preview of this project (claude/release
+  included) uses the production Supabase project with DEMO_MODE=1 (NEXT_PUBLIC_SUPABASE_URL is set
+  for Production, Preview and Development). Before the migrations, a preview runs the new code on an
+  unmigrated database; after them, anything done on a preview writes to production. Try the release
+  on a local copy with its own database (scripts/e2e.sh with E2E_KEEP=1, or a seeded stack).
   Verify after the deploy
     - As the owner: the menu has Blower door and Rebate programs (and the optional Business
       profile); Rebate programs shows two programs and saves a change (audited).
@@ -279,6 +291,12 @@ deployed; the go-live steps are in section 6.
       tool shows no air sealing price.
     - Blower door: save a test-in on an estimate and a test-out on its job; the office job page
       shows both readings, the tier and the rebate in whole dollars.
+    - A test quote's email comes from "Koala Insulation" (step 4), not "of Newark".
+  Before real staff and customers use it: the live site runs in demo mode (DEMO_MODE=1 with
+  DEMO_PASSWORD: one-tap Owner, Estimator and Crew lead accounts on the sign-in page, and sample
+  estimates). Turn demo mode off (unset DEMO_MODE) and give each person their own account; the
+  demo accounts and sample data can then be removed. This is the owner's call and not part of the
+  code release.
   Rolling back: redeploy origin/main's code (c0ae5f1). It works on the migrated database (hard
   rule 2); the migrations are additive and stay. Quotes sent before the release read exactly as
   before. Quotes the release sent keep their prices, numbers, dates and stored quote PDF. After a
