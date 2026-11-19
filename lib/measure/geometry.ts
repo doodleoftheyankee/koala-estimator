@@ -268,10 +268,13 @@ export function solveCustom(custom: CustomShape | undefined): ShapeResult {
   const untyped = typed.filter((t) => !t).length;
   if (untyped) notes.push(`${untyped} side${untyped > 1 ? 's' : ''} taken from the drawing (no length typed).`);
 
-  const shape = solved(points, points.map((_, i) => `#${i + 1}`), notes);
-  if (selfIntersects(points)) shape.notes.unshift('The outline crosses itself; the area may be wrong. Redraw it.');
-  return { ok: true, shape };
+  // A crossed outline (a bow tie) has no true area: the shoelace sum cancels across the crossing (L27).
+  if (selfIntersects(points)) return { ok: false, errors: [CROSSED_OUTLINE] };
+  return { ok: true, shape: solved(points, points.map((_, i) => `#${i + 1}`), notes) };
 }
+
+/** Said when a custom outline crosses itself: it measures nothing until it is redrawn. */
+export const CROSSED_OUTLINE = "The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross.";
 
 /** True when two non-adjacent sides cross. */
 export function selfIntersects(points: Point[]): boolean {

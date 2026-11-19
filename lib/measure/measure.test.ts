@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMeasurement, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, type Measurement } from './measure';
+import { computeMeasurement, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, sqftAfterMeasurement, type Measurement } from './measure';
 
 function m(patch: Partial<Measurement> = {}): Measurement {
   return { ...newMeasurement('attic'), shape: { kind: 'rect', dims: { A: '40', B: '30' } }, ...patch };
@@ -73,6 +73,37 @@ describe('computeMeasurement', () => {
   it('flags a bad cutout quantity', () => {
     const r = computeMeasurement(m({ cutouts: [{ ...newCutout('floor', 'c'), shape: rect('1', '1'), qty: '1.5' }] }));
     expect(r.errors[0]).toMatch(/whole number/);
+  });
+});
+
+describe('a broken measurement takes its size back (L26, RF-07, S2-F14)', () => {
+  // Walls: 120 ft of wall, 8 ft high = 960 sq ft.
+  const walls = (wallHeight: string): Measurement => ({ ...newMeasurement('walls'), perimeter: '120', wallHeight });
+
+  it('a measurement that breaks takes back the square feet it gave', () => {
+    expect(measuredSqft(walls('8'))).toBe(960);
+    // Height cleared: the 960 sq ft from the measurement go back to 0.
+    expect(sqftAfterMeasurement(960, walls('8'), walls(''))).toBe(0);
+    expect(sqftAfterMeasurement(960, walls('8'), walls('eight'))).toBe(0);
+    // Finished again: its net.
+    expect(sqftAfterMeasurement(0, walls(''), walls('8'))).toBe(960);
+    expect(sqftAfterMeasurement(960, walls('8'), walls('9'))).toBe(1080);
+  });
+
+  it('a size typed by hand is not the measurement\'s, so it stays', () => {
+    // Typed 1,000 after measuring 960: the estimator's own number.
+    expect(sqftAfterMeasurement(1000, walls('8'), walls(''))).toBe(1000);
+    // A new measurement that was never finished leaves a typed size alone.
+    expect(sqftAfterMeasurement(960, undefined, newMeasurement('walls'))).toBe(960);
+    expect(sqftAfterMeasurement(960, newMeasurement('walls'), walls(''))).toBe(960);
+  });
+
+  it('a self-crossing outline measures nothing (L27)', () => {
+    const bowTie: Measurement = { ...newMeasurement('attic'), shape: { kind: 'custom', dims: {}, custom: { points: [[0, 0], [10, 10], [10, 0], [0, 10]], closed: true, sides: ['', '', '', ''] } } };
+    const r = computeMeasurement(bowTie);
+    expect(r.net).toBe(0);
+    expect(r.errors).toEqual(["The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross."]);
+    expect(measuredSqft(bowTie)).toBeNull();
   });
 });
 

@@ -207,6 +207,27 @@ export function measuredSqft(m: Measurement): number | null {
   return r.errors.length || r.net <= 0 ? null : Math.round(r.net);
 }
 
+/**
+ * The area's square feet after its measurement changes (L26). A finished measurement gives its
+ * net. One that is no longer finished takes back the size it gave: when the area's square feet are
+ * the net of the measurement before the change, they go to 0, so the old number is never priced.
+ * A size typed by hand (not the measurement's, or with no finished measurement before) stays.
+ */
+export function sqftAfterMeasurement(sqft: number, before: Measurement | undefined, after: Measurement): number {
+  const now = measuredSqft(after);
+  if (now !== null) return now;
+  const was = before ? measuredSqft(before) : null;
+  return was !== null && Math.round(sqft) === was ? 0 : sqft;
+}
+
+/** Why a measurement has no square feet yet: its first error, or a net of 0. Null when it is finished. */
+export function unfinishedReason(m: Measurement): string | null {
+  const r = computeMeasurement(m);
+  if (r.errors.length) return r.errors[0]!;
+  if (r.net <= 0) return r.notes.find((n) => n.startsWith('Cutouts are larger')) ?? 'The measurement comes to 0 sq ft.';
+  return null;
+}
+
 const SHAPE_WORDS: Record<ShapeInput['kind'], string> = { rect: 'rectangle', L: 'L-shape', T: 'T-shape', U: 'U-shape', custom: 'custom outline' };
 
 /** One line for the area card, e.g. "Measured: L-shape, 2 cutouts". */

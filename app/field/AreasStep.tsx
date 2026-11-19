@@ -8,6 +8,7 @@ import { NumberInput } from '@/components/NumberInput';
 import { Button as DmButton, Ruler } from '@/components/daymark';
 import type { Update } from './EstimateEditor';
 import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
+import { measurementChecks, withMeasurement } from '@/lib/field/measuring';
 import { MeasureSheet } from './measure/MeasureSheet';
 import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
 import { removeAreaPhotos } from '@/lib/offline/photos';
@@ -47,16 +48,17 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
     });
   };
 
-  /** Saves the measurement; once it's complete, its net becomes the area's square feet. */
-  const setMeasurement = (id: string, m: Measurement) =>
-    update((d) => {
-      const sqft = measuredSqft(m);
-      return {
-        ...d,
-        measurements: { ...d.measurements, [id]: m },
-        areas: sqft === null ? d.areas : d.areas.map((a) => (a.id === id ? { ...a, sqft } : a)),
-      };
-    });
+  /**
+   * Saves the measurement; once it's complete, its net becomes the area's square feet. One that
+   * breaks takes back the size it gave (L26), so the area is not priced until it is finished.
+   */
+  const setMeasurement = (id: string, m: Measurement) => update((d) => withMeasurement(d, id, m));
+  const unfinished = new Map(measurementChecks(draft).map((c) => [c.areaId, c]));
+  const openMeasure = (id: string) => {
+    if (!draft.measurements[id]) setMeasurement(id, newMeasurement(draft.areas.find((a) => a.id === id)?.jobType ?? 'attic'));
+    setRoofDone(null);
+    setMeasuring(id);
+  };
   const removeMeasurement = (id: string) =>
     update((d) => {
       return { ...d, measurements: without(d.measurements, id) };
@@ -82,13 +84,8 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
       if (!area) return d;
       const prepNotes = mergeNotes(area.prepNotes, a.note);
       if (a.use !== 'walls') return { ...d, areas: d.areas.map((x) => (x.id === id ? { ...x, sqft: a.sqft, prepNotes } : x)) };
-      const m = wallsWith(d.measurements[id], a.wallRunFt);
-      const sqft = measuredSqft(m);
-      return {
-        ...d,
-        measurements: { ...d.measurements, [id]: m },
-        areas: d.areas.map((x) => (x.id === id ? { ...x, prepNotes, ...(sqft === null ? {} : { sqft }) } : x)),
-      };
+      const next = withMeasurement(d, id, wallsWith(d.measurements[id], a.wallRunFt));
+      return { ...next, areas: next.areas.map((x) => (x.id === id ? { ...x, prepNotes } : x)) };
     });
     const wallSqft = a.use === 'walls' ? measuredSqft(wallsWith(draft.measurements[id], a.wallRunFt)) : null;
     const text =
@@ -115,7 +112,7 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
                 <span className="block text-sm text-slate-600">
-                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ', measured' : ''}` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
+                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ', measured' : ''}` : unfinished.has(a.id) ? '0 sq ft, measuring not finished' : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
                 </span>
               </span>
               {valid ? <Badge tone="green">Ready</Badge> : <Badge tone="amber">Incomplete</Badge>}
@@ -129,16 +126,15 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 <Field label="Job type" group>
                   <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, { jobType: v })} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
                 </Field>
-                <MeasureButton
-                  measurement={draft.measurements[a.id]}
-                  sqft={a.sqft}
-                  onOpen={() => {
-                    if (!draft.measurements[a.id]) setMeasurement(a.id, newMeasurement(a.jobType));
-                    setRoofDone(null);
-                    setMeasuring(a.id);
-                  }}
-                  onUseMeasured={(sqft) => set(a.id, { sqft })}
-                />
+                {unfinished.has(a.id) ? (
+                  <Alert tone="amber">
+                    <span className="block">{unfinished.get(a.id)!.label}</span>
+                    <Button size="sm" variant="secondary" className="mt-2" onClick={() => openMeasure(a.id)}>
+                      {unfinished.get(a.id)!.fix.label}
+                    </Button>
+                  </Alert>
+                ) : null}
+                <MeasureButton measurement={draft.measurements[a.id]} sqft={a.sqft} onOpen={() => openMeasure(a.id)} onUseMeasured={(sqft) => set(a.id, { sqft })} />
                 {ROOF_LOOKUP_JOBS.has(a.jobType) ? (
                   <RoofLookupButton
                     estimateId={draft.id}
