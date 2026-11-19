@@ -210,7 +210,7 @@ export function ContactCard({
                 {estimator.email ? (
                   <>
                     {' · '}
-                    <a href={`mailto:${estimator.email}`} className="underline underline-offset-2">
+                    <a href={`mailto:${estimator.email}`} className="inline-flex min-h-12 items-center underline underline-offset-2">
                       {estimator.email}
                     </a>
                   </>

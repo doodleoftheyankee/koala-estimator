@@ -314,7 +314,7 @@ function without<T>(record: Record<string, T>, key: string): Record<string, T> {
 }
 
 /** Opens the measuring tools; shows what was measured and whether the square feet still match. */
-function MeasureButton({
+export function MeasureButton({
   measurement,
   sqft,
   onOpen,
@@ -341,10 +341,11 @@ function MeasureButton({
       )}
       {differs ? (
         <Alert tone="amber">
-          Square feet ({num(sqft)}) don&apos;t match the measurement ({num(measured)}).{' '}
-          <button type="button" className="font-semibold underline" onClick={() => onUseMeasured(measured)}>
+          <p>Square feet ({num(sqft)}) don&apos;t match the measurement ({num(measured)}).</p>
+          {/* A 48 px button under the sentence, not a link-sized word inside it (review B flow-B11). */}
+          <DmButton size="sm" className="mt-2" onClick={() => onUseMeasured(measured)}>
             Use {num(measured)}
-          </button>
+          </DmButton>
         </Alert>
       ) : null}
     </div>
