@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { codeMinimumR, JOB_TYPES, ACCESS_LEVELS, type PricingBundle } from '@/lib/pricing';
-import { areaSchema, newArea, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
+import { areaSchema, hasDepthField, newArea, withJobType, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { ACCESS_HINTS, ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
 import { Alert, Badge, Button, Card, Chips, Field, Input, Select, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
@@ -25,7 +25,6 @@ const CAVITY_DEPTHS = [
   { value: '7.25', label: '2×8 (7.25")' },
   { value: '9.25', label: '2×10 (9.25")' },
 ] as const;
-const CAVITY_JOBS = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
 
 export function AreasStep({
   draft,
@@ -139,7 +138,7 @@ export function AreasStep({
                   <Input value={a.name} onChange={(e) => set(a.id, { name: e.target.value })} />
                 </Field>
                 <Field label="Job type" group>
-                  <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, { jobType: v })} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
+                  <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, withJobType({ jobType: a.jobType, depthIn: a.depthIn }, v))} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
                 </Field>
                 {unfinished.has(a.id) ? (
                   <Alert tone="amber">
@@ -203,7 +202,7 @@ export function AreasStep({
                   </Alert>
                 ) : null}
 
-                {CAVITY_JOBS.has(a.jobType) ? (
+                {hasDepthField(a.jobType) ? (
                   <Field
                     label="Cavity depth"
                     hint={

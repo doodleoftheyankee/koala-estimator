@@ -173,7 +173,31 @@ export function toEstimateInput(d: EstimateDraft): EstimateInput {
   };
 }
 
-/** Areas that are complete enough to price (the editor may hold half-filled ones). */
+/**
+ * The job types whose area form has a Cavity depth field (framed cavities). An attic floor and a
+ * commercial area have none, so a depth on one is not something the estimator can see or clear.
+ */
+const DEPTH_JOB_TYPES: ReadonlySet<AreaDraft['jobType']> = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
+
+/** True when the area form shows a Cavity depth for this job type. */
+export function hasDepthField(jobType: AreaDraft['jobType']): boolean {
+  return DEPTH_JOB_TYPES.has(jobType);
+}
+
+/**
+ * The area with another job type. A cavity depth goes with it only to a job type whose form
+ * shows the depth: an area changed from walls to attic keeps no hidden 3.5 in "cavity" that would
+ * cap its insulation (review A M1).
+ */
+export function withJobType<A extends Pick<AreaDraft, 'jobType' | 'depthIn'>>(area: A, jobType: AreaDraft['jobType']): A {
+  return { ...area, jobType, depthIn: hasDepthField(jobType) ? area.depthIn : null };
+}
+
+/**
+ * Areas that are complete enough to price (the editor may hold half-filled ones), as they are
+ * priced: a depth the form does not show for the job type (left by an earlier build when the job
+ * type changed) is not part of the estimate (review A M1).
+ */
 export function priceableAreas(d: EstimateDraft): AreaDraft[] {
-  return d.areas.filter((a) => areaSchema.safeParse(a).success);
+  return d.areas.filter((a) => areaSchema.safeParse(a).success).map((a) => (a.depthIn !== null && !hasDepthField(a.jobType) ? { ...a, depthIn: null } : a));
 }

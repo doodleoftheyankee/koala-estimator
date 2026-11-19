@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { priceEstimate, type PricingBundle } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
-import { draftSchema, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput, type EstimateDraft } from './draft';
+import { seededBundle } from '@/lib/pricing/__fixtures__/seeded';
+import { draftSchema, hasDepthField, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput, withJobType, type EstimateDraft } from './draft';
 import { buildSyncPayload } from './payload';
 
 /** New drafts start in the business profile's town (L32); these tests' estimates are in this one. */
@@ -54,6 +55,27 @@ describe('draft', () => {
     expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: { note: 'x'.repeat(501), pctDiff: 0.2 } } }).success).toBe(false);
     expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: { note: 'x', pctDiff: '0.2' } } }).success).toBe(false);
     expect(draftSchema.safeParse({ ...filledDraft(), deviationAcks: { a: 5 } }).success).toBe(false);
+  });
+
+  it('a cavity depth goes with the job type: changed to attic, an area keeps no hidden depth (review A M1)', () => {
+    // The Cavity depth field is shown for walls, rim joists, crawlspaces and garages only.
+    expect(['walls', 'rim_joist', 'crawlspace', 'garage'].every((j) => hasDepthField(j as never))).toBe(true);
+    expect(hasDepthField('attic') || hasDepthField('commercial')).toBe(false);
+    const walls = { ...newArea('walls', uuid), sqft: 1000, depthIn: 3.5 };
+    expect(withJobType(walls, 'crawlspace')).toMatchObject({ jobType: 'crawlspace', depthIn: 3.5 });
+    expect(withJobType(walls, 'attic')).toMatchObject({ jobType: 'attic', depthIn: null });
+  });
+
+  it('a depth stored on an attic (a draft saved before the fix) is not priced: the attic prices to R-49, not to a 3.5 in "cavity" (review A M1)', () => {
+    const d = filledDraft();
+    d.areas = [{ ...d.areas[0]!, accessLevel: 'easy', depthIn: 3.5 }];
+    expect(priceableAreas(d)[0]!.depthIn).toBeNull();
+    const priced = priceEstimate({ ...toEstimateInput(d), areas: priceableAreas(d) }, seededBundle.snapshot, seededBundle.coefficientSet);
+    const good = priced.options.find((o) => o.tier === 'good')!;
+    // Before: Good $1,500 "Blown Cellulose to R-12.6" (fills the 3.5 in cavity).
+    expect(good.label).toBe('Blown Cellulose to Code');
+    expect(good.customerItems[0]!.description).toBe('Blown Cellulose to R-49 (~13.6" added), 1,000 sq ft');
+    expect(good.price).toBe(2995);
   });
 
   it('every job type gets a sensible default name', () => {

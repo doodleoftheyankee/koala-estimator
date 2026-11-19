@@ -529,3 +529,20 @@ RA-F3 Batts and air sealing say the area their quantity covers (R3 closed for ev
     500 sq ft: "(500 of 1,000 sq ft)"", "air sealing set above the area (knee walls, L7) is not cut …";
     lib/accuracy/invariants.test.ts "labels_match_work (review A F3): the area an item states is the
     area its quantity covers".
+
+RA-M1 A cavity depth goes with the job type. The Cavity depth field is shown for walls, rim joists,
+    crawlspaces and garages only; changing an area to attic or commercial now clears its depth, and
+    a depth already stored on such an area (an earlier build kept it) is not priced
+    (lib/sync/draft.ts withJobType, priceableAreas; the phone, the sync and the send route all
+    price through priceableAreas).
+    Examples (seeded, attic 1,000 sq ft, R-0, with 3.5 in left from walls): Good $1,500 "Blown
+      Cellulose to R-12.6" (fills the 3.5 in cavity) -> $2,995 "Blown Cellulose to Code" (R-49);
+      Better $1,635 -> $4,390. At R-11: Good not offered (cavity full), Better $1,500, Best $4,085 ->
+      Good $2,385, Better $3,805, Best $6,655.
+    A quote already sent keeps its prices (hard rule 1); only drafts that still carry such a depth
+    re-price. The engine itself still reads a depth on any job type (L18); whether an attic floor's
+    joist depth should ever cap blown fill is an owner question (see RA-F9).
+    Owner decision: none needed (review finding M1; the form never showed this depth).
+    Tests: lib/sync/payload.test.ts "a cavity depth goes with the job type: changed to attic, an area
+    keeps no hidden depth (review A M1)", "a depth stored on an attic (a draft saved before the fix)
+    is not priced …".
