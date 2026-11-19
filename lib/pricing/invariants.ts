@@ -14,6 +14,7 @@ import type {
   AreaInput,
   CoefficientSet,
   CustomerItem,
+  CustomerItemKind,
   EstimateInput,
   JobType,
   PricedEstimate,
@@ -73,12 +74,20 @@ export function dollarsText(n: number): string {
 }
 
 /**
- * The options the customer is shown, in tier order. Today the engine returns only options it
- * shows (with OD6 it leaves out duplicates and options that do not step up, unless asked for all of
- * them); an option marked hidden is never shown.
+ * The options the customer is shown, in tier order (OD6). Give it the engine's own result
+ * (priceEstimate without showAll): the engine leaves out an option that repeats another or does
+ * not step up, and says so with an 'option_hidden' warning. An option named in such a warning, or
+ * marked hidden, is never counted as shown. (A showAll result has every option and no such
+ * warnings, so it is not what the customer sees.)
  */
 export function shownOptions(priced: PricedEstimate): PricedOption[] {
-  return priced.options.filter((o) => (o as { hidden?: boolean }).hidden !== true);
+  const hidden = new Set(priced.warnings.filter((w) => w.code === 'option_hidden' && w.tier !== null).map((w) => w.tier));
+  return priced.options.filter((o) => !hidden.has(o.tier) && (o as { hidden?: boolean }).hidden !== true);
+}
+
+/** What a customer item is (CustomerItemKind). An item stored before kinds existed is work. */
+export function itemKind(item: Pick<CustomerItem, 'kind'> | { kind?: CustomerItemKind }): CustomerItemKind {
+  return item.kind ?? 'work';
 }
 
 /**
@@ -86,7 +95,7 @@ export function shownOptions(priced: PricedEstimate): PricedOption[] {
  * setup, the minimum job charge, a price adjustment: OD2, OD3) have no area and are not "work".
  */
 export function workItems(option: PricedOption): CustomerItem[] {
-  return option.customerItems.filter((i) => i.areaId !== null && ((i as { kind?: string }).kind ?? 'work') === 'work');
+  return option.customerItems.filter((i) => i.areaId !== null && itemKind(i) === 'work');
 }
 
 /** What a work item is, as the customer reads it: the area it is in and what it says. */
@@ -444,7 +453,7 @@ export function checkFiniteAmounts({ priced }: Pick<PricedQuote, 'priced'>): Vio
       if (l.hours !== null) check(o.tier, l.areaId, `line "${l.description}" hours`, l.hours);
     }
     for (const i of o.customerItems) {
-      check(o.tier, i.areaId, `item "${i.description}"`, i.price, (i as { kind?: string }).kind === 'adjustment');
+      check(o.tier, i.areaId, `item "${i.description}"`, i.price, itemKind(i) === 'adjustment');
     }
   }
   return out;

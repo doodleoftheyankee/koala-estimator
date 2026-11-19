@@ -1,7 +1,7 @@
 // Golden sets: real and typical estimates priced again, so every fix shows what it does to every price.
 // Shared by make-live-golden.ts, make-synthetic.ts and price-golden.ts.
 import { priceEstimate, type AreaInput, type EstimateInput, type LineOverride, type PriceOverride, type PricingBundle, type Tier } from '@/lib/pricing';
-import { checkPricedQuote, shownOptions, type Violation } from '@/lib/pricing/invariants';
+import { checkPricedQuote, itemKind, shownOptions, type Violation } from '@/lib/pricing/invariants';
 import { checkSamePriceText, checkValidUntilIsExpiry, expectedHeadline, headlineInputFor, linkExpiresAt, sampleDraft, sampleQuote } from '@/lib/quotes/invariants';
 import { areaSchema } from '@/lib/sync/draft';
 
@@ -124,7 +124,7 @@ export function priceGolden(g: GoldenEstimate, bundle: PricingBundle): PricedGol
         modelPrice: o.modelPrice,
         label: o.label,
         bullets: o.bullets,
-        items: o.customerItems.map((i) => ({ ...((i as { kind?: string }).kind ? { kind: (i as { kind?: string }).kind } : {}), areaName: i.areaName, description: i.description, price: i.price })),
+        items: o.customerItems.map((i) => ({ kind: itemKind(i), areaName: i.areaName, description: i.description, price: i.price })),
       })),
       headline: expectedHeadline(headline),
       violations,

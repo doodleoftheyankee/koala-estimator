@@ -35,8 +35,9 @@ let noOptions = 0;
 for (const q of quotes) {
   let violations: Violation[];
   try {
+    // What the customer is shown (OD6), and every option priced (showAll) for the count.
     const priced = priceEstimate(q.input, bundle.snapshot, bundle.coefficientSet);
-    options += priced.options.length;
+    options += priceEstimate(q.input, bundle.snapshot, bundle.coefficientSet, { showAll: true }).options.length;
     shown += shownOptions(priced).length;
     if (priced.options.length === 0) noOptions++;
     violations = checkPricedQuote({ input: q.input, priced, snapshot: bundle.snapshot, coefficients: bundle.coefficientSet });

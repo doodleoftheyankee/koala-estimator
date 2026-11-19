@@ -33,8 +33,10 @@ import {
   existingThickness,
   finalR,
   INVARIANT_IDS,
+  itemKind,
   printedDollars,
   shownOptions,
+  workItems,
   workScope,
   type Violation,
 } from '@/lib/pricing/invariants';
@@ -242,6 +244,32 @@ describe('helpers: what the customer reads and what is in the wall', () => {
   it('shownOptions is what the customer is shown: every option, except one marked hidden', () => {
     const shown = shownOptions({ options: [option('good', 1), { ...option('better', 2), hidden: true } as PricedOption], warnings: [], crewId: 'c' });
     expect(shown.map((o) => o.tier)).toEqual(['good']);
+  });
+
+  it('shownOptions leaves out what the engine hides (OD6): an option named in an option_hidden warning', () => {
+    const warned = shownOptions({
+      options: [option('good', 1), option('better', 2), option('best', 3)],
+      warnings: [{ code: 'option_hidden', areaId: null, tier: 'best', message: 'Best is not shown to the customer' }],
+      crewId: 'c',
+    });
+    expect(warned.map((o) => o.tier)).toEqual(['good', 'better']);
+    // The engine itself: attic 1,200 sq ft at R-0, Best repeats Better, so the customer sees Good and Better.
+    const priced = priceSeeded(estimate([area({ sqft: 1200 })]));
+    expect(shownOptions(priced).map((o) => o.tier)).toEqual(['good', 'better']);
+    expect(priced.warnings.filter((w) => w.code === 'option_hidden').map((w) => w.tier)).toEqual(['best']);
+  });
+
+  it('reads item kinds the way the engine writes them; an item stored with no kind is work', () => {
+    const o = option('good', 1500, {
+      customerItems: [
+        { kind: 'work', areaId: A1, areaName: 'Attic', description: 'Cellulose', price: 1254 },
+        { areaId: A1, areaName: 'Attic', description: 'Removal', price: 100 } as CustomerItem,
+        { kind: 'travel', areaId: null, areaName: '', description: 'Travel and setup', price: 86 },
+        { kind: 'minimum', areaId: null, areaName: '', description: 'Minimum job charge', price: 60 },
+      ],
+    });
+    expect(workItems(o).map((i) => i.description)).toEqual(['Cellulose', 'Removal']);
+    expect(o.customerItems.map(itemKind)).toEqual(['work', 'work', 'travel', 'minimum']);
   });
 
   it('a wall with no depth is a 2x4 wall (OD5); other areas have a cavity only when a depth is entered', () => {
