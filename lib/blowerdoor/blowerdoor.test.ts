@@ -231,10 +231,24 @@ describe('the cost cap', () => {
     expect(rebateFor(top, program, 2400)).toEqual({ tierAmount: 1800, amount: 1800, cap: 1800, capped: false });
   });
 
-  it('floors a capped amount to the cent', () => {
-    expect(rebateFor(top, program, 1234).amount).toBe(925.5);
-    expect(rebateFor(top, program, 1001.01).amount).toBe(750.75);
-    expect(headlineWords(run({ ...WORKED, cost: '1234' })).badge).toBe('40% TIER — $925.50 AIR SEAL REBATE');
+  // Release, OD4: whole dollars on every customer surface. A capped rebate is floored to the dollar,
+  // so it never shows more than the program pays (was floored to the cent: $925.50, $750.75).
+  it('floors a capped amount to whole dollars, never more than the program pays (OD4)', () => {
+    expect(rebateFor(top, program, 1234)).toEqual({ tierAmount: 1800, amount: 925, cap: 925, capped: true });
+    expect(rebateFor(top, program, 1001)).toMatchObject({ amount: 750, cap: 750 });
+    expect(rebateFor(top, program, 1999)).toMatchObject({ amount: 1499, cap: 1499 });
+    const e = run({ ...WORKED, cost: '1234' });
+    expect(headlineWords(e).badge).toBe('40% TIER — $925 AIR SEAL REBATE');
+    expect(summaryText(e, SETTINGS)).toContain('Air sealing tier: 40% improvement — rebate $925 (limited by 75% of $1,234)');
+  });
+
+  it('takes the air sealing price in whole dollars, as on the quote (OD4)', () => {
+    const cents = run({ ...WORKED, cost: '1999.50' });
+    expect(cents.costError).toBe('Air sealing price: whole dollars, as on the quote (no cents).');
+    expect(cents.cost).toBeNull();
+    expect(cents.rebate!.amount).toBe(1800);
+    expect(run({ ...WORKED, cost: '$1,999.00' }).cost).toBe(1999);
+    expect(run({ ...WORKED, cost: '$1,999' }).costError).toBeNull();
   });
 
   it('has nothing to cap below the first tier, or without a cap percent', () => {
@@ -435,7 +449,10 @@ describe('no more decimals than a saved reading keeps (BD-MATH-6)', () => {
     expect(readField('17486.25', RULES.volume)).toEqual({ state: 'ok', value: 17486.3 });
     expect(readField('1569.84', RULES.bas)).toEqual({ state: 'ok', value: 1569.8 });
     expect(readField('15.391', RULES.nFactor)).toEqual({ state: 'ok', value: 15.39 });
-    expect(readField('$1,999.999', RULES.cost)).toEqual({ state: 'ok', value: 2000 });
+    // The air sealing price is whole dollars, as on the quote (OD4, release): cents are refused,
+    // not read to the cent ($1,999.999 was read as $2,000).
+    expect(readField('$1,999.999', RULES.cost)).toEqual({ state: 'invalid', error: 'Air sealing price: whole dollars, as on the quote (no cents).' });
+    expect(readField('$2,000', RULES.cost)).toEqual({ state: 'ok', value: 2000 });
   });
 });
 

@@ -137,14 +137,14 @@ describe("the job's price and program, whoever took each reading", () => {
   it('applies the cost cap from the price the estimator saved with the test-in (BD-MATH-1)', () => {
     const e = jobBlowerDoor([estIn, crewOut()], 'G').evaluation!;
     expect(e.cost).toBe(1999);
-    expect(headlineWords(e).badge).toBe('40% TIER — $1,499.25 AIR SEAL REBATE');
+    expect(headlineWords(e).badge).toBe('40% TIER — $1,499 AIR SEAL REBATE');
     expect(capNote(e)).toBe(' (limited by 75% of $1,999)');
   });
 
   it('keeps the newest price when a later reading has none, and takes a newer one over it', () => {
     const officeOut = { ...crewOut(ASSISTED, '2026-11-19T13:00:00+00:00', '0d000000-0000-4000-8000-0000000000d3'), air_sealing_cost: 2200 };
     expect(jobBlowerDoor([estIn, officeOut, crewOut()], 'G').evaluation!.cost).toBe(2200);
-    expect(jobBlowerDoor([estIn, crewOut(PROGRAM)], 'G').evaluation!.rebate).toMatchObject({ amount: 1499.25, capped: true });
+    expect(jobBlowerDoor([estIn, crewOut(PROGRAM)], 'G').evaluation!.rebate).toMatchObject({ amount: 1499, capped: true });
   });
 
   it("picks the program the readings were saved under for the crew's phone (BD-MATH-2)", () => {
@@ -159,7 +159,7 @@ describe("the job's price and program, whoever took each reading", () => {
   it('warns when the test-in and the test-out were saved under different programs (BD-R2)', () => {
     const same = jobBlowerDoor([estIn, crewOut()], 'G');
     expect(same.programMismatch).toBeNull();
-    expect(headlineWords(same.evaluation!).badge).toBe('40% TIER — $1,499.25 AIR SEAL REBATE');
+    expect(headlineWords(same.evaluation!).badge).toBe('40% TIER — $1,499 AIR SEAL REBATE');
     const differ = jobBlowerDoor([estIn, crewOut(PROGRAM)], 'G');
     expect(differ.programMismatch).toEqual({ testIn: 'Assisted', testOut: 'Home Performance' });
     // The result still uses the program saved with the test-out.

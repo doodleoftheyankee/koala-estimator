@@ -5,6 +5,8 @@
 // its sign dropped. Every field has a sensible range: a value outside it is an error the screen
 // shows under the field, never a NaN or an Infinity in a result. A value is read at the precision
 // a saved reading keeps (the database columns), so what the screen works out is what is saved.
+// Limits in messages are written by lib/format.ts, like every other number.
+import { formatMoney, num } from '@/lib/format';
 
 export type FieldValue =
   | { state: 'empty' }
@@ -28,11 +30,14 @@ export interface FieldRule {
   decimals?: number;
   /** Refuse more decimals than this (instead of rounding them away). */
   maxDecimals?: number;
+  /** The message after the label when it has more decimals than maxDecimals (default "at most N decimals."). */
+  decimalsError?: string;
 }
 
 const fmtLimit = (n: number, rule: FieldRule) => {
-  const s = n.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  return rule.money ? `$${s}` : rule.unit ? `${s} ${rule.unit}` : s;
+  if (rule.money) return formatMoney(n);
+  const s = num(n, 2);
+  return rule.unit ? `${s} ${rule.unit}` : s;
 };
 
 /** The number in a typed text: "$ 12,345" → 12345, "-50.8" → 50.8, "" or "-" → null, "abc" → NaN. */
@@ -61,7 +66,7 @@ export function readField(text: string | null | undefined, rule: FieldRule): Fie
   const n = rule.decimals !== undefined ? roundTo(typed, rule.decimals) : typed;
   if (rule.integer && !Number.isInteger(n)) return { state: 'invalid', error: `${rule.label} must be a whole number.` };
   if (rule.maxDecimals !== undefined && !hasAtMostDecimals(n, rule.maxDecimals)) {
-    return { state: 'invalid', error: `${rule.label}: at most ${rule.maxDecimals} decimal${rule.maxDecimals === 1 ? '' : 's'}.` };
+    return { state: 'invalid', error: `${rule.label}: ${rule.decimalsError ?? `at most ${rule.maxDecimals} decimal${rule.maxDecimals === 1 ? '' : 's'}.`}` };
   }
   const tooLow = rule.minExclusive ? n <= rule.min : n < rule.min;
   if (tooLow || n > rule.max) {
@@ -93,7 +98,8 @@ export const RULES = {
   cfm: { label: 'Fan flow', min: 0, minExclusive: true, max: 50_000, unit: 'CFM', decimals: 2 },
   pa: { label: 'House pressure', min: 1, max: 100, unit: 'Pa', decimals: 2 },
   exponent: { label: 'Flow exponent', min: 0.5, max: 1, maxDecimals: 3 },
-  cost: { label: 'Air sealing price', min: 0, minExclusive: true, max: 1_000_000, money: true, decimals: 2 },
+  // Whole dollars, as on the quote (OD4): typed cents are refused, never rounded away unseen.
+  cost: { label: 'Air sealing price', min: 0, minExclusive: true, max: 1_000_000, money: true, maxDecimals: 0, decimalsError: 'whole dollars, as on the quote (no cents).' },
   bas: { label: 'BAS', min: 1, max: 100_000, unit: 'CFM50', decimals: 1 },
   volume: { label: 'House volume', min: 500, max: 1_000_000, unit: 'ft³', decimals: 1 },
   occupants: { label: 'Occupants', min: 0, max: 50, integer: true },

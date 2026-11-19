@@ -92,13 +92,17 @@ export interface Rebate {
   capped: boolean;
 }
 
-/** Floors to the cent, so a capped rebate never shows more than the program pays. */
-const floorCents = (n: number) => Math.floor(n * 100 + 1e-6) / 100;
+/**
+ * Floors to whole dollars (OD4: whole dollars on every customer surface), so a capped rebate never
+ * shows more than the program pays: a cap percent of the price that leaves cents is the dollar
+ * below it (lib/blowerdoor/blowerdoor.test.ts has the worked numbers).
+ */
+const floorDollars = (n: number) => Math.floor(n + 1e-6);
 
 /** The air sealing rebate: the tier amount or cap % of the installed price, whichever is lower. */
 export function rebateFor(hit: RebateTier | null, program: Pick<RebateProgram, 'costCapPct'>, price: number | null): Rebate {
   const tierAmount = hit ? hit.rebate : 0;
-  const cap = price !== null && price > 0 && program.costCapPct !== null ? floorCents((price * program.costCapPct) / 100) : null;
+  const cap = price !== null && price > 0 && program.costCapPct !== null ? floorDollars((price * program.costCapPct) / 100) : null;
   if (!hit || cap === null || cap >= tierAmount) return { tierAmount, amount: tierAmount, cap, capped: false };
   return { tierAmount, amount: cap, cap, capped: true };
 }
