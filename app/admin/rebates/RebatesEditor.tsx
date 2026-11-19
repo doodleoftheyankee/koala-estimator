@@ -5,7 +5,7 @@
 // whole dollars, percentages between 0 and 100, unique names) and saved in one go.
 import { useMemo, useState } from 'react';
 import { newProgramKey, validateBlowerDoorSettings, type StoredSettings } from '@/lib/blowerdoor';
-import { Button, Field, Icon, IconButton, Input, OctagonAlert, Plus, Textarea, Trash2 } from '@/components/daymark';
+import { Button, Field, Icon, IconButton, Input, OctagonAlert, Plus, SwitchRow, Textarea, Trash2 } from '@/components/daymark';
 import { ActionForm } from '../pricing/ActionForm';
 import { saveRebatePrograms } from './actions';
 
@@ -33,6 +33,7 @@ interface Draft {
   gauge: string;
   exponent: string;
   nFactor: string;
+  wholeCfm50: boolean;
   programs: DraftProgram[];
 }
 
@@ -45,6 +46,7 @@ function toDraft(s: StoredSettings): Draft {
     gauge: s.gauge,
     exponent: text(s.flow_exponent),
     nFactor: text(s.n_factor),
+    wholeCfm50: s.whole_cfm50 === true,
     programs: s.programs.map((p) => ({
       key: p.key,
       uid: uid(),
@@ -76,6 +78,7 @@ function fromDraft(d: Draft): unknown {
     gauge: d.gauge,
     flow_exponent: number(d.exponent),
     n_factor: number(d.nFactor),
+    whole_cfm50: d.wholeCfm50,
     programs: d.programs.map((p) => {
       const key = p.key ?? newProgramKey(p.label, taken);
       if (!p.key) taken.push(key);
@@ -143,10 +146,18 @@ export function RebatesEditor({ initial, readOnly }: { initial: StoredSettings; 
           <Field label="Default flow exponent (n)" hint="The gauge's house setting, 0.5 to 1.0">
             <Input value={draft.exponent} onChange={(e) => edit((d) => ({ ...d, exponent: e.target.value }))} inputMode="decimal" />
           </Field>
-          <Field label="Default zone N-factor" hint="For the BAS estimate; match your audit software">
+          <Field label="Default zone N-factor" hint="For the BAS estimate: the zone's 1-story value (the tool corrects for the stories); match your audit software">
             <Input value={draft.nFactor} onChange={(e) => edit((d) => ({ ...d, nFactor: e.target.value }))} inputMode="decimal" />
           </Field>
         </div>
+        <SwitchRow
+          className="mt-4"
+          checked={draft.wholeCfm50}
+          onChange={(v) => edit((d) => ({ ...d, wholeCfm50: v }))}
+          disabled={readOnly}
+          label="Decide on whole-number CFM50"
+          hint="On: the tier and the ventilation check use each CFM50 rounded to a whole number, as the gauge's @50 screen and a test-out form show it. Off: the exact converted CFM50. Ask your program which one it uses."
+        />
       </section>
 
       {draft.programs.map((p, i) => {

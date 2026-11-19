@@ -1,7 +1,9 @@
 // The job's blower door test on the office job page (quiet register): the newest test-in and
 // test-out as recorded, the reduction, the tier and rebate under the program saved with the
-// readings (and the cost cap when a price was given), the ventilation check and every earlier
-// reading. Worked out by lib/blowerdoor from the saved CFM50s, never again from a later exponent.
+// readings (and the cost cap from the newest price saved with any reading: the estimator's price
+// with the test-in caps the crew's test-out), the ventilation check and every earlier reading, each
+// with its program. Worked out by lib/blowerdoor from the saved CFM50s, never again from a later
+// exponent.
 import { z } from 'zod';
 import {
   achText,
@@ -12,10 +14,11 @@ import {
   KIND_LABELS,
   paText,
   parseBlowerDoorSettings,
-  pctText,
+  programOf,
   savedTestSchema,
   SETTINGS_KEY,
-  ventilationWords,
+  shownNumbers,
+  ventilationFor,
   type SavedTest,
 } from '@/lib/blowerdoor';
 import { blowerDoorHref } from '@/lib/offline/blowerDoorCore';
@@ -32,34 +35,36 @@ const SELECT = `id, job_id, estimate_id, kind, cfm, pa, exponent, cfm50, program
 const rowSchema = z.object({ recorder: z.preprocess((v) => (Array.isArray(v) ? (v[0] ?? null) : v), z.object({ full_name: z.string() }).nullable().optional()) }).loose();
 
 /** The job's readings, and the readings taken on its estimate before it was a job. */
-async function loadReadings(db: Db, jobId: string, estimateId: string | null): Promise<{ tests: SavedTest[]; gauge: string; error: string | null }> {
+async function loadReadings(db: Db, jobId: string, estimateId: string | null): Promise<{ tests: SavedTest[]; gauge: string; wholeCfm50: boolean; error: string | null }> {
   let q = db.from('blower_door_tests').select(SELECT).order('recorded_at', { ascending: false });
   q = estimateId ? q.or(`job_id.eq.${jobId},and(job_id.is.null,estimate_id.eq.${estimateId})`) : q.eq('job_id', jobId);
   const [res, settings] = await Promise.all([q, db.from('app_settings').select('value').eq('key', SETTINGS_KEY).maybeSingle()]);
-  const gauge = parseBlowerDoorSettings(settings.data?.value ?? null).settings.gauge;
-  if (res.error) return { tests: [], gauge, error: res.error.message };
+  const { gauge, wholeCfm50 } = parseBlowerDoorSettings(settings.data?.value ?? null).settings;
+  if (res.error) return { tests: [], gauge, wholeCfm50, error: res.error.message };
   const tests: SavedTest[] = [];
   for (const raw of (res.data ?? []) as unknown[]) {
     const extra = rowSchema.safeParse(raw);
     const parsed = savedTestSchema.safeParse({ ...(raw as object), recorded_by_name: extra.success ? (extra.data.recorder?.full_name ?? null) : null });
     if (parsed.success) tests.push(parsed.data);
   }
-  return { tests, gauge, error: null };
+  return { tests, gauge, wholeCfm50, error: null };
 }
 
 const readLine = (t: SavedTest) => `Read ${cfmText(t.cfm)} CFM at ${paText(t.pa)} Pa · n ${num(t.exponent, 3)}`;
+/** The program a reading was saved under: its short name, or the key of one no longer set up. */
+const programLine = (t: SavedTest) => programOf(t)?.label ?? t.program_key ?? 'None';
 const byLine = (t: SavedTest) => `${formatDateTime(t.recorded_at)}${t.recorded_by_name ? ` · ${t.recorded_by_name}` : ''}`;
 
 export async function BlowerDoorCard({ db, jobId, estimateId, label }: { db: Db; jobId: string; estimateId: string | null; label: string }) {
-  const { tests, gauge, error } = await loadReadings(db, jobId, estimateId);
-  const bd = jobBlowerDoor(tests, gauge);
+  const { tests, gauge, wholeCfm50, error } = await loadReadings(db, jobId, estimateId);
+  const bd = jobBlowerDoor(tests, gauge, { wholeCfm50 });
   const e = bd.evaluation;
   const href = blowerDoorHref({ kind: 'job', id: jobId, label });
 
   return (
     <section aria-labelledby="blower-door" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="blower-door" className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+        <h2 id="blower-door" className="flex items-center gap-2 text-lg font-semibold text-ink">
           <Icon icon={Wind} size="s" />
           Blower door test
         </h2>
@@ -76,6 +81,14 @@ export async function BlowerDoorCard({ db, jobId, estimateId, label }: { db: Db;
         <p className="plate p-4 text-[16px] font-medium text-ink-2">
           No blower door readings yet. The estimator records the test-in on the estimate; the crew records the test-out on the job, on their phone.
         </p>
+      ) : null}
+      {bd.programMismatch ? (
+        <Banner tone="warn" title="The readings name different programs." live={false}>
+          <span data-testid="job-bd-mismatch">
+            The test-in was saved under {bd.programMismatch.testIn} and the test-out under {bd.programMismatch.testOut}. The result uses {bd.programMismatch.testOut}, the
+            program saved with the test-out. Retake the test-out under the right program if that is wrong.
+          </span>
+        </Banner>
       ) : null}
       {e ? <Result e={e} testIn={bd.testIn} testOut={bd.testOut} earlier={bd.earlier} /> : null}
     </section>
@@ -94,7 +107,10 @@ function Result({
   earlier: SavedTest[];
 }) {
   const w = headlineWords(e);
-  const vent = e.ventilation && e.bas.value !== null ? ventilationWords(e.ventilation, e.bas.value, e.bas, e.program) : null;
+  const s = shownNumbers(e);
+  const vent = ventilationFor(e);
+  /** The current test-in and test-out show the CFM50 that agrees with the tier; earlier ones are whole. */
+  const shownCfm50 = (t: SavedTest) => (t === testIn ? (s.pre50 ?? cfmText(t.cfm50)) : t === testOut ? (s.post50 ?? cfmText(t.cfm50)) : cfmText(t.cfm50));
   const tierFact =
     e.program && e.rebate && e.tiers
       ? e.tiers.hit
@@ -121,14 +137,14 @@ function Result({
       <FactStrip
         title="Blower door figures"
         facts={[
-          { key: 'in', label: 'Test-in', value: testIn ? <Reading t={testIn} /> : 'Not recorded' },
-          { key: 'out', label: 'Test-out', value: testOut ? <Reading t={testOut} /> : 'Not recorded' },
+          { key: 'in', label: 'Test-in', value: testIn ? <Reading t={testIn} cfm50={shownCfm50(testIn)} /> : 'Not recorded' },
+          { key: 'out', label: 'Test-out', value: testOut ? <Reading t={testOut} cfm50={shownCfm50(testOut)} /> : 'Not recorded' },
           {
             key: 'red',
             label: 'Reduction',
             value: e.reductionPct !== null ? (
               <span className="flex flex-col gap-1">
-                <span className="gauge-m text-[22px]">{pctText(e.reductionPct)}</span>
+                <span className="gauge-m text-[22px]">{s.reduction}</span>
                 <span>{tierFact}</span>
               </span>
             ) : (
@@ -141,7 +157,7 @@ function Result({
             value: (
               <span className="flex flex-col gap-1">
                 <span>{ventFact}</span>
-                {e.bas.value !== null ? <span className="text-ink-2">BAS {cfmText(e.bas.value)} CFM50 ({e.bas.source === 'audit' ? 'from audit' : 'estimated'})</span> : null}
+                {e.bas.value !== null ? <span className="text-ink-2">BAS {s.bas} CFM50 ({e.bas.source === 'audit' ? 'from audit' : 'estimated'})</span> : null}
                 {e.ach50Pre !== null && e.ach50Post !== null ? <span className="text-ink-2">ACH50 {achText(e.ach50Pre)} → {achText(e.ach50Post)}</span> : null}
               </span>
             ),
@@ -154,12 +170,13 @@ function Result({
         </Banner>
       ) : null}
       <div className="plate overflow-x-auto p-0">
-        <table className={`${TABLE.table} min-w-[640px]`}>
+        <table className={`${TABLE.table} min-w-[760px]`}>
           <thead>
             <tr className={TABLE.headRow}>
               <th scope="col" className={TABLE.th}>Reading</th>
               <th scope="col" className={`${TABLE.th} ${TABLE.thNum}`}>CFM50</th>
               <th scope="col" className={TABLE.th}>As read</th>
+              <th scope="col" className={TABLE.th}>Program</th>
               <th scope="col" className={TABLE.th}>Recorded</th>
               <th scope="col" className={TABLE.th}>Counts</th>
             </tr>
@@ -175,8 +192,9 @@ function Result({
                       {KIND_LABELS[t.kind]}
                       {t.job_id ? '' : ' (estimate)'}
                     </td>
-                    <td className={`${TABLE.td} ${TABLE.tdNum} gauge-m text-[20px]`}>{cfmText(t.cfm50)}</td>
+                    <td className={`${TABLE.td} ${TABLE.tdNum} gauge-m text-[20px]`}>{shownCfm50(t)}</td>
                     <td className={TABLE.td}>{readLine(t)}</td>
+                    <td className={TABLE.td}>{programLine(t)}</td>
                     <td className={TABLE.td}>{byLine(t)}</td>
                     <td className={TABLE.td}>
                       {current ? (
@@ -197,11 +215,12 @@ function Result({
   );
 }
 
-function Reading({ t }: { t: SavedTest }) {
+function Reading({ t, cfm50 }: { t: SavedTest; cfm50: string }) {
   return (
     <span className="flex flex-col gap-1">
-      <span className="gauge-m text-[22px]">{cfmText(t.cfm50)} CFM50</span>
+      <span className="gauge-m text-[22px]">{cfm50} CFM50</span>
       <span className="text-ink-2">{readLine(t)}</span>
+      <span className="text-ink-2">{programLine(t)}</span>
       <span className="text-ink-2">{byLine(t)}</span>
     </span>
   );
