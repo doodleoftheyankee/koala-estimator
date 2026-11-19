@@ -8,7 +8,23 @@
 // some with cents; line overrides (material quantities and hours, for one option or all); a crew id
 // that is not in the setup; the estimator's pick (or none); issue times across 2026 and the
 // quote's validity in days.
-import { EXISTING_MATERIALS, R_PER_INCH } from '@/lib/ai/photoRead';
+import { EXISTING_MATERIALS } from '@/lib/pricing/rPerInch';
+
+/**
+ * The R per inch the generator draws existing depths with: the table as it was on 2026-11-18, kept
+ * here so the same seed draws the same quotes after the app's table changes (L24 moved cellulose
+ * to 3.6 and "Other" to 3.2). Only the generator uses it; the checks read the app's table.
+ */
+const R_PER_INCH: Readonly<Record<(typeof EXISTING_MATERIALS)[number], number>> = {
+  None: 0,
+  'Fiberglass batts': 3.2,
+  'Blown fiberglass': 2.5,
+  Cellulose: 3.5,
+  'Rock wool': 3.1,
+  Vermiculite: 2.1,
+  'Spray foam': 3.7,
+  Other: 2.5,
+};
 import { priceEstimate } from '../engine';
 import {
   JOB_TYPES,

@@ -193,7 +193,15 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 ) : null}
 
                 {CAVITY_JOBS.has(a.jobType) ? (
-                  <Field label="Cavity depth" hint="Caps how much insulation fits. Leave blank for open areas." group>
+                  <Field
+                    label="Cavity depth"
+                    hint={
+                      a.jobType === 'walls'
+                        ? 'Caps how much insulation fits, with what is already there. With no depth, a wall is priced as a 2×4 (3.5").'
+                        : 'Caps how much insulation fits, with what is already there. Leave blank for open areas.'
+                    }
+                    group
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <Chips label="Framing" value={a.depthIn === null ? null : (String(a.depthIn) as (typeof CAVITY_DEPTHS)[number]['value'])} onChange={(v) => set(a.id, { depthIn: Number(v) })} options={CAVITY_DEPTHS} />
                       {a.depthIn !== null ? (

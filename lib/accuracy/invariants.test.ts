@@ -426,6 +426,49 @@ describe('labels_match_work (S1-F7): titles and bullets promise only work that i
   });
 });
 
+describe('labels_match_work (R3, R6): what an item says it installs is what is priced', () => {
+  const walls = area({ id: A1, jobType: 'walls', name: 'Walls', sqft: 1000, depthIn: 3.5 });
+  const dense = snap.materials.find((m) => m.productCode === 'cellulose' && m.jobType === 'walls')!;
+  // Dense-pack: 1,000 sq ft x 3.5 in / 122.5 sq ft·in per bag = 28.57 bags installed, x 1.08 = 31 priced.
+  const bags = (qty: number) => line({ kind: 'material', areaId: A1, product: 'cellulose', materialId: dense.id, unit: 'bag', qty, modelQty: 31, description: dense.name });
+  it('"Fills the full cavity" with 10 bags in a 2x4 wall fails; with 31 it passes', () => {
+    const ten = option('good', 1500, { bullets: ['Fills the full cavity'], lines: [bags(10)], customerItems: [item('Blown Cellulose to R-4.1 (~1.1" added), 1,000 sq ft', 1500)] });
+    expect(kinds(checkLabelsMatchWork(quote([ten], [walls])))).toEqual(['labels_match_work:full_cavity_not_filled:good']);
+    const full = option('good', 1500, { bullets: ['Fills the full cavity'], lines: [bags(31)], customerItems: [item('Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft', 1500)] });
+    expect(checkLabelsMatchWork(quote([full], [walls]))).toEqual([]);
+  });
+  it('an item that says it fills the cavity is checked against its own area', () => {
+    const o = option('good', 1500, { lines: [bags(20)], customerItems: [item('Blown Cellulose to R-8.2 (fills the 3.5 in cavity), 1,000 sq ft', 1500)] });
+    expect(kinds(checkLabelsMatchWork(quote([o], [walls])))).toEqual(['labels_match_work:full_cavity_not_filled:good']);
+  });
+  it('an item stating more R than its bags give fails (the R-12.6 left on a 10-bag item)', () => {
+    const o = option('good', 1500, { lines: [bags(10)], customerItems: [item('Blown Cellulose to R-12.6 (~3.5" added), 1,000 sq ft', 1500)] });
+    expect(kinds(checkLabelsMatchWork(quote([o], [walls])))).toEqual(['labels_match_work:qty_below_stated_r:good']);
+    const right = option('good', 1500, { lines: [bags(10)], customerItems: [item('Blown Cellulose to R-4.1 (~1.1" added), 1,000 sq ft', 1500)] });
+    expect(checkLabelsMatchWork(quote([right], [walls]))).toEqual([]);
+  });
+  it('a wall already full of what is there needs nothing added to be full', () => {
+    const fullOfBatts = area({ id: A2, jobType: 'walls', name: 'Walls 2', depthIn: 3.5, currentR: 11, existingMaterial: 'Fiberglass batts' });
+    const o = option('good', 1500, { bullets: ['Fills the full cavity'], lines: [bags(31)], customerItems: [item('Blown Cellulose to R-12.6 (fills the 3.5 in cavity), 1,000 sq ft', 1500)] });
+    expect(checkLabelsMatchWork(quote([o], [walls, fullOfBatts]))).toEqual([]);
+    // Half full and nothing added: the promise is broken for that wall.
+    const halfFull = { ...fullOfBatts, currentR: 5 };
+    expect(kinds(checkLabelsMatchWork(quote([o], [walls, halfFull])))).toEqual(['labels_match_work:full_cavity_not_filled:good']);
+  });
+  it('a batt adds its rated R: an R-21 batt is R-21, not its thickness times 3.2', () => {
+    const crawl = area({ id: A1, jobType: 'crawlspace', name: 'Crawlspace', sqft: 800, depthIn: 5.5 });
+    const r21 = snap.materials.find((m) => m.rValue === 21)!;
+    const o = option('good', 2270, {
+      lines: [line({ kind: 'material', areaId: A1, product: 'batts', materialId: r21.id, unit: 'sqft', qty: 840, modelQty: 840, description: r21.name })],
+      customerItems: [item('Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft', 2270)],
+    });
+    expect(finalR(o, crawl, snap, coeffs)).toBe(21);
+    expect(addedThickness(o, crawl, snap, coeffs)).toBe(5.5);
+    expect(checkLabelsMatchWork(quote([o], [crawl]))).toEqual([]);
+    expect(checkCavityNotOverfilled(quote([o], [crawl]))).toEqual([]);
+  });
+});
+
 describe('cavity_not_overfilled (S1-F4, S1-F5, S1-F6, OD5): insulation fits the cavity', () => {
   it('a wall with no depth is a 2x4: 5.4 in of open-cell does not fit (overfilled_no_depth)', () => {
     const walls = area({ jobType: 'walls', sqft: 1000 });

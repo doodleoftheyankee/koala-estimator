@@ -53,6 +53,9 @@ const schemas = {
       coverage_sqft_in: numOrNull,
       is_default: z.boolean(),
       needs_owner_input: z.boolean(),
+      job_type: z.enum(JOB_TYPES).nullable(),
+      r_value: numOrNull,
+      thickness_in: numOrNull,
     }),
   ),
   crews: z.array(z.object({ id: str, name: str, size: num, blended_hourly_cost: num, active: z.boolean(), needs_owner_input: z.boolean() })),
@@ -106,7 +109,7 @@ async function loadConfig(db: Db) {
     db.from('products').select('id, code, label, unit, r_per_inch, is_r_bearing, active'),
     db
       .from('materials')
-      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input')
+      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input, job_type, r_value, thickness_in')
       .eq('active', true),
     db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').order('name'),
     db
@@ -201,6 +204,45 @@ export default async function PricingPage() {
   );
 }
 
+type Material = Config['materials'][number];
+
+/** One material's form: name, cost per unit and, for bags, the coverage of one bag. */
+function MaterialCard({ m, title, productInactive, readOnly }: { m: Material; title: string; productInactive: boolean; readOnly: boolean }) {
+  const unit = UNIT_LABELS[m.unit] ?? m.unit;
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold text-slate-900">{title}</h3>
+        {m.needs_owner_input ? <Badge tone="amber">Needs owner input</Badge> : null}
+        {productInactive ? <Badge>Product inactive</Badge> : null}
+      </div>
+      <ActionForm action={saveMaterial} readOnly={readOnly}>
+        <input type="hidden" name="id" value={m.id} />
+        <TextField label="Name" name="name" defaultValue={m.name} required />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Unit" hint="Set by the product">
+            <Input value={unit} readOnly disabled aria-readonly="true" />
+          </Field>
+          <NumberField label="Cost per unit" name="cost_per_unit" defaultValue={m.cost_per_unit} prefix="$" suffix={`/ ${unit}`} />
+        </div>
+        {m.unit === 'bag' ? (
+          <NumberField
+            label="Coverage per bag"
+            name="coverage_sqft_in"
+            defaultValue={m.coverage_sqft_in}
+            suffix="sq ft·in"
+            hint={
+              m.job_type === 'walls'
+                ? 'Square feet × inches one bag fills, blown dense in a wall (e.g. 122.5 = 35 sq ft of a 3.5 in wall).'
+                : 'Square feet × inches one bag covers (e.g. 200 = 40 sq ft at 5 in).'
+            }
+          />
+        ) : null}
+      </ActionForm>
+    </Card>
+  );
+}
+
 function PricingContent({ config, readOnly }: { config: Config; readOnly: boolean }) {
   const map = toSettingsMap(config.settings);
   const productById = new Map(config.products.map((p) => [p.id, p]));
@@ -219,9 +261,12 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
     ...(objectFieldText(settingObject(map, 'branding'), 'phone').trim() ? [] : [{ href: '#business', text: 'Branding: office phone for customers' }]),
   ];
 
-  const defaultMaterials = config.materials
-    .filter((m) => m.is_default && productById.has(m.product_id))
-    .sort((a, b) => PRODUCTS.indexOf(productById.get(a.product_id)!.code) - PRODUCTS.indexOf(productById.get(b.product_id)!.code));
+  const productOrder = (m: Material) => PRODUCTS.indexOf(productById.get(m.product_id)!.code);
+  const defaultMaterials = config.materials.filter((m) => m.is_default && productById.has(m.product_id)).sort((a, b) => productOrder(a) - productOrder(b));
+  // Also priced: a material for one job type (dense-pack walls) and the sizes of a product (batts).
+  const otherMaterials = config.materials
+    .filter((m) => !m.is_default && (m.job_type || m.r_value) && productById.has(m.product_id))
+    .sort((a, b) => productOrder(a) - productOrder(b) || (a.job_type ?? '').localeCompare(b.job_type ?? '') || (a.r_value ?? 0) - (b.r_value ?? 0));
   const activeCrews = config.crews.filter((c) => c.active);
   const defaultCrewId = typeof map.default_crew_id === 'string' ? map.default_crew_id : null;
 
@@ -298,39 +343,26 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
           The default material for each product. Saving a material marks it as confirmed.
         </SectionHeading>
         <div className="grid gap-4 md:grid-cols-2">
-          {defaultMaterials.map((m) => {
-            const product = productById.get(m.product_id);
-            const unit = UNIT_LABELS[m.unit] ?? m.unit;
-            return (
-              <Card key={m.id}>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-slate-900">{product?.label}</h3>
-                  {m.needs_owner_input ? <Badge tone="amber">Needs owner input</Badge> : null}
-                  {product && !product.active ? <Badge>Product inactive</Badge> : null}
-                </div>
-                <ActionForm action={saveMaterial} readOnly={readOnly}>
-                  <input type="hidden" name="id" value={m.id} />
-                  <TextField label="Name" name="name" defaultValue={m.name} required />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Unit" hint="Set by the product">
-                      <Input value={unit} readOnly disabled aria-readonly="true" />
-                    </Field>
-                    <NumberField label="Cost per unit" name="cost_per_unit" defaultValue={m.cost_per_unit} prefix="$" suffix={`/ ${unit}`} />
-                  </div>
-                  {m.unit === 'bag' ? (
-                    <NumberField
-                      label="Coverage per bag"
-                      name="coverage_sqft_in"
-                      defaultValue={m.coverage_sqft_in}
-                      suffix="sq ft·in"
-                      hint="Square feet × inches one bag covers (e.g. 200 = 40 sq ft at 5 in)."
-                    />
-                  ) : null}
-                </ActionForm>
-              </Card>
-            );
-          })}
+          {defaultMaterials.map((m) => (
+            <MaterialCard key={m.id} m={m} title={productById.get(m.product_id)?.label ?? 'Product'} productInactive={productById.get(m.product_id)?.active === false} readOnly={readOnly} />
+          ))}
         </div>
+        {otherMaterials.length ? (
+          <>
+            <h3 className="pt-2 font-semibold text-slate-900">Also priced</h3>
+            <p className="text-sm text-slate-600">
+              Dense-pack wall cellulose is used for walls instead of the attic bag (a wall is blown dense, so a bag covers less). Batts are priced by size: the engine picks the size whose R-value
+              and thickness fit the cavity.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {otherMaterials.map((m) => {
+                const label = productById.get(m.product_id)?.label ?? 'Product';
+                const title = m.r_value ? `${label}, R-${m.r_value} (${m.thickness_in} in thick)` : `${label}, ${jobTypeLabel(m.job_type!)} only`;
+                return <MaterialCard key={m.id} m={m} title={title} productInactive={productById.get(m.product_id)?.active === false} readOnly={readOnly} />;
+              })}
+            </div>
+          </>
+        ) : null}
         {defaultMaterials.length === 0 ? <Alert tone="red">No default materials found.</Alert> : null}
       </section>
 

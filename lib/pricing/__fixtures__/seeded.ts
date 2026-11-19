@@ -9,7 +9,7 @@
 //
 // After a migration that changes a seeded value, regenerate the JSON:
 //   DATABASE_URL=... bash scripts/accuracy/seeded-rows.sh
-import type { PricingBundle } from '../types';
+import type { AreaInput, EstimateInput, PricingBundle } from '../types';
 import { validateSnapshot } from '../engine';
 import { makeBundle, type SnapshotRows } from '@/lib/server/snapshot';
 import rows from './seeded-rows.json';
@@ -29,3 +29,33 @@ export function bundleFromRows(r: SnapshotRows, builtAt: Date = BUILT_AT): Prici
 
 /** The bundle a new database prices with. */
 export const seededBundle: PricingBundle = bundleFromRows(seededRows);
+
+/** The seeded snapshot and coefficient set on their own, for tests that price with them. */
+export const seededSnapshot = seededBundle.snapshot;
+export const seededCoefficients = seededBundle.coefficientSet;
+
+/** An area as the phone sends it: an attic of 1,000 sq ft, easy access, nothing in place, no depth, no removal. */
+export const seededArea = (overrides: Partial<AreaInput> = {}): AreaInput => ({
+  id: 'a1',
+  name: 'Attic',
+  jobType: 'attic',
+  sqft: 1000,
+  currentR: 0,
+  targetR: null,
+  existingMaterial: null,
+  existingDepthIn: null,
+  depthIn: null,
+  accessLevel: 'easy',
+  removalNeeded: false,
+  prepNotes: null,
+  ...overrides,
+});
+
+/** An estimate with a 20 minute drive and the default crew. */
+export const seededEstimate = (overrides: Partial<EstimateInput> = {}): EstimateInput => ({
+  areas: [seededArea()],
+  crewId: null,
+  driveMinutesOneWay: 20,
+  overrides: {},
+  ...overrides,
+});

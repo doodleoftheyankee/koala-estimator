@@ -6,9 +6,10 @@ import { ACCESS_LEVELS, type AccessLevel, type JobType } from '@/lib/pricing';
 import type { AreaDraft } from '@/lib/sync/draft';
 import { MAX_CUTOUTS, measuredSqft, newCutout, type Measurement } from '@/lib/measure/measure';
 import { ACCESS_HINTS } from '@/lib/format';
+import { EXISTING_MATERIALS, EXISTING_R_PER_INCH } from '@/lib/pricing/rPerInch';
 
 export const PHOTO_READ_MODEL = 'claude-opus-5-5';
-export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-11';
+export const PHOTO_READ_PROMPT_VERSION = 'photo-read-2026-11-19';
 /** Photos per read (the area's photo limit). */
 export const MAX_READ_PHOTOS = 6;
 /** Phones shrink each photo to ~1568px on the long edge for reading (the size the model works at). */
@@ -20,20 +21,13 @@ export const MAX_READ_TOTAL_BYTES = 4_000_000;
 export const READS_PER_HOUR = 30;
 
 /** Existing-insulation choices in the area form; the model picks from the same list. */
-export const EXISTING_MATERIALS = ['None', 'Fiberglass batts', 'Blown fiberglass', 'Cellulose', 'Rock wool', 'Vermiculite', 'Spray foam', 'Other'] as const;
-export type ExistingMaterial = (typeof EXISTING_MATERIALS)[number];
+export { EXISTING_MATERIALS, type ExistingMaterial } from '@/lib/pricing/rPerInch';
 
-/** Typical R per inch, for when the model gives a depth but no R-value. Conservative mid values. */
-export const R_PER_INCH: Record<ExistingMaterial, number> = {
-  None: 0,
-  'Fiberglass batts': 3.2,
-  'Blown fiberglass': 2.5,
-  Cellulose: 3.5,
-  'Rock wool': 3.1,
-  Vermiculite: 2.1,
-  'Spray foam': 3.7,
-  Other: 2.5,
-};
+/**
+ * Typical R per inch, for when the model gives a depth but no R-value: the pricing engine's one
+ * table (S2-F19, lib/pricing/rPerInch.ts), so a photo read and the price agree on what is there.
+ */
+export const R_PER_INCH = EXISTING_R_PER_INCH;
 
 export const HAZARD_TYPES = [
   'vermiculite_suspected',
@@ -264,7 +258,7 @@ Identifying existing insulation (pick the closest of the allowed materials):
 - Spray foam: rigid or soft foam applied to surfaces, usually cream or yellow.
 - None: bare framing or drywall backs. Other: anything else.
 
-Depth and R-value: judge depth from what is in the photo. Joists or studs give a scale (actual depths 3.5" for 2x4, 5.5" for 2x6, 7.25" for 2x8, 9.25" for 2x10, 11.25" for 2x12); if joist tops show above the insulation, it is shallower than the joists. Attic rulers, tape measures and hands also give a scale. Estimate R from depth with typical R per inch: batts about 3.2, blown fiberglass about 2.5, cellulose about 3.5, rock wool about 3.1, vermiculite about 2.1, open-cell foam about 3.7, closed-cell foam about 6.5. Measure the depth as it is now: settling and compression are already in that depth, so don't lower R for them again. Lower R for wet, moldy or rodent-damaged insulation, and for gaps, voids or bare spots in proportion to how much of the area they cover. Give the typical depth where there is insulation, and say in the evidence how much is bare.
+Depth and R-value: judge depth from what is in the photo. Joists or studs give a scale (actual depths 3.5" for 2x4, 5.5" for 2x6, 7.25" for 2x8, 9.25" for 2x10, 11.25" for 2x12); if joist tops show above the insulation, it is shallower than the joists. Attic rulers, tape measures and hands also give a scale. Estimate R from depth with typical R per inch: batts about ${R_PER_INCH['Fiberglass batts']}, blown fiberglass about ${R_PER_INCH['Blown fiberglass']}, cellulose about ${R_PER_INCH.Cellulose}, rock wool about ${R_PER_INCH['Rock wool']}, vermiculite about ${R_PER_INCH.Vermiculite}, open-cell foam about ${R_PER_INCH['Spray foam']}, closed-cell foam about 6.5. Measure the depth as it is now: settling and compression are already in that depth, so don't lower R for them again. Lower R for wet, moldy or rodent-damaged insulation, and for gaps, voids or bare spots in proportion to how much of the area they cover. Give the typical depth where there is insulation, and say in the evidence how much is bare.
 
 Framing: report the depth of the joists, rafters or studs and their spacing (usually 16" or 24" on center) when you can see them.
 

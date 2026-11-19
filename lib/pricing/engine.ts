@@ -1,5 +1,6 @@
 import { coeff, findCoefficient } from './coefficients';
 import { ceilHalf, money, monthlyPayment, priceStep, roundUpTo } from './finance';
+import { cavityDepth, DEFAULT_WALL_CAVITY_IN, existingThicknessIn, MIN_ROOM_IN } from './rPerInch';
 import type {
   AreaInput,
   LineOverride,
@@ -68,8 +69,19 @@ export function priceEstimate(
       if (p) pure.set(tier, p);
     }
   }
+  // The hours an estimator's hours are scaled from: each tier's install hours for the quantities
+  // it prices (its model hours, unless a quantity was changed). Bags typed for every option are the
+  // same work in each, so they keep the same hours and the same price (OD2).
+  const base = new Map<Tier, PricedOption>(pure);
+  const qtyOnly = Object.fromEntries(Object.entries(overrides).filter(([, o]) => isNum(o.qty)).map(([key, o]) => [key, { ...o, hours: null }]));
+  if (Object.keys(qtyOnly).length > 0) {
+    for (const tier of TIERS) {
+      const b = priceTier(tier, input, snapshot, coeffs, crew, [], overridesForTier(qtyOnly, tier, pure, pure));
+      if (b) base.set(tier, b);
+    }
+  }
   for (const tier of TIERS) {
-    const ov = hasLineOverrides ? overridesForTier(overrides, tier, pure) : overrides;
+    const ov = hasLineOverrides ? overridesForTier(overrides, tier, pure, base) : overrides;
     const option = priceTier(tier, input, snapshot, coeffs, crew, warnings, ov);
     if (!option) continue;
     if (hasLineOverrides) option.modelPrice = pure.get(tier)?.adjustedPrice ?? option.adjustedPrice;
@@ -216,15 +228,44 @@ function product(s: PricingSnapshot, code: ProductCode): ProductConfig {
   return p;
 }
 
-function material(s: PricingSnapshot, code: ProductCode): MaterialConfig | null {
-  return s.materials.find((m) => m.productCode === code) ?? null;
+/** A product's general material: the default row, not one for a single job type and not a size. */
+const isGeneral = (m: MaterialConfig) => !m.jobType && !(m.rValue && m.thicknessIn);
+
+/**
+ * The material a product is priced with in a job type: the product's material for that job type
+ * (dense-pack wall cellulose), else its general material. Sizes (batts) are picked by battFor.
+ */
+function material(s: PricingSnapshot, code: ProductCode, jobType?: JobType): MaterialConfig | null {
+  const of = s.materials.filter((m) => m.productCode === code && !(m.rValue && m.thicknessIn));
+  return (jobType ? of.find((m) => m.jobType === jobType) : undefined) ?? of.find(isGeneral) ?? null;
 }
 
-function requireMaterial(s: PricingSnapshot, code: ProductCode): MaterialConfig {
-  const m = material(s, code);
+function requireMaterial(s: PricingSnapshot, code: ProductCode, jobType: JobType): MaterialConfig {
+  const m = material(s, code, jobType);
   if (!m) throw new PricingConfigError(`no default material for ${code}`);
   return m;
 }
+
+/** A product's sizes (batts) usable in a job type, thinnest R first. */
+function sizesOf(s: PricingSnapshot, code: ProductCode, jobType: JobType): MaterialConfig[] {
+  return s.materials
+    .filter((m) => m.productCode === code && m.rValue && m.thicknessIn && (!m.jobType || m.jobType === jobType))
+    .sort((a, b) => a.rValue! - b.rValue! || a.thicknessIn! - b.thicknessIn!);
+}
+
+/**
+ * The batt for an area (OD8, S1-F6): of the sizes that fit the room in the cavity (any size when
+ * there is no cavity), the one with the least R that still reaches the R needed; when none
+ * reaches it, the one with the most R that fits. Null when no size fits.
+ */
+function battFor(sizes: MaterialConfig[], addedR: number, room: number | null): MaterialConfig | null {
+  const fits = sizes.filter((m) => room === null || m.thicknessIn! <= room + THICKNESS_TOLERANCE_IN);
+  if (fits.length === 0) return null;
+  return fits.find((m) => m.rValue! >= addedR - 1e-9) ?? fits.reduce((a, b) => (b.rValue! > a.rValue! || (b.rValue === a.rValue && b.thicknessIn! < a.thicknessIn!) ? b : a));
+}
+
+/** Room for rounding a thickness (insulation is described to 0.1 in). */
+const THICKNESS_TOLERANCE_IN = 0.05;
 
 export function codeMinimumR(s: PricingSnapshot, jobType: AreaInput['jobType']): number | null {
   return s.codeRequirements.find((c) => c.jobType === jobType)?.minR ?? null;
@@ -249,8 +290,11 @@ interface AreaWork {
   area: AreaInput;
   tpl: TierTemplate;
   removal: boolean;
-  /** The template's own product added insulation; finalR is the R the area ends at (null: no R product). */
-  primary: { finalR: number | null } | null;
+  /**
+   * The template's own product added insulation; finalR is the R the area ends at (null: no R
+   * product); fillsCavity says whether it fills the cavity (null: no cavity, or no R product).
+   */
+  primary: { finalR: number | null; fillsCavity: boolean | null } | null;
   airSealing: boolean;
 }
 
@@ -311,7 +355,7 @@ function priceTier(
     if (primary) {
       lines.push(...primary.lines);
       groups.push({ areaId: area.id, areaName: area.name, scope: 'primary', description: primary.description, cost: primary.cost });
-      work.primary = { finalR: primary.finalR };
+      work.primary = { finalR: primary.finalR, fillsCavity: primary.fillsCavity };
       if (tpl.primaryProduct === 'air_sealing') work.airSealing = true;
     }
 
@@ -328,7 +372,7 @@ function priceTier(
       code: 'tier_skipped',
       areaId: null,
       tier,
-      message: `The ${tier} option has no work to do (every area is already at its target R-value).`,
+      message: `The ${tier} option has no work to do (every area is already at its target R-value, or its cavity is full).`,
     });
     return null;
   }
@@ -502,7 +546,12 @@ function customerLines(groups: ScopeGroup[], markup: number, costPrice: number, 
  */
 function optionText(tier: Tier, works: AreaWork[], s: PricingSnapshot): { label: string; bullets: string[] } {
   const withWork = works.filter((w) => w.removal || w.primary || w.airSealing);
-  const bullets = dedupe(withWork.flatMap((w) => areaBullets(w, s)));
+  let bullets = dedupe(withWork.flatMap((w) => areaBullets(w, s)));
+  // A sentence holds for every area it is about: the areas whose job type it names, else every
+  // area of the quote. "Code" only when each ends at code (a package's 2x4 walls end below R-20);
+  // "Fills the full cavity" only when each cavity is full (R6, L23).
+  bullets = bullets.filter((b) => !CODE_WORDS.test(b) || !areasAbout(b, works).some((w) => endsBelowCode(w, s)));
+  bullets = bullets.filter((b) => !FULL_CAVITY_WORDS.test(b) || areasAbout(b, works).every(cavityFilled));
   if (works.length !== 1) return { label: `${capitalize(tier)} package`, bullets };
   return { label: areaLabel(works[0]!, s), bullets };
 }
@@ -513,6 +562,41 @@ const promisesProduct = (tpl: TierTemplate) => tpl.primaryProduct !== 'removal';
 function keepsPromise(w: AreaWork): boolean {
   const removal = w.tpl.includeRemoval || w.tpl.primaryProduct === 'removal';
   return (!removal || w.removal) && (!promisesProduct(w.tpl) || w.primary !== null) && (!w.tpl.includeAirSealing || w.airSealing);
+}
+
+/**
+ * True when the area's cavity is full in this option: its product filled it, or, with nothing
+ * added, what is there leaves less room than can be filled. An area with no cavity has nothing to fill.
+ */
+function cavityFilled(w: AreaWork): boolean {
+  if (w.primary && w.primary.fillsCavity !== null) return w.primary.fillsCavity;
+  const depth = cavityDepth(w.area);
+  if (depth === null) return true;
+  return depth - (w.removal ? 0 : existingThicknessIn(w.area)) < MIN_ROOM_IN;
+}
+
+/** The R an area ends at in an option: what its product brings it to, else what stays there. */
+const endsAt = (w: AreaWork): number => w.primary?.finalR ?? (w.removal ? 0 : w.area.currentR);
+
+function endsBelowCode(w: AreaWork, s: PricingSnapshot): boolean {
+  const code = codeMinimumR(s, w.area.jobType);
+  return code !== null && endsAt(w) < code - 1e-9;
+}
+
+/** How a sentence names each kind of job ("your attic", "the walls"). */
+const JOB_WORDS: Record<JobType, RegExp> = {
+  attic: /\battics?\b/i,
+  walls: /\bwalls?\b/i,
+  crawlspace: /\bcrawl\s?spaces?\b/i,
+  rim_joist: /\brim\b/i,
+  garage: /\bgarages?\b/i,
+  commercial: /\bcommercial\b/i,
+};
+
+/** The areas a sentence is about: those whose job type it names, else every area. */
+function areasAbout(text: string, works: AreaWork[]): AreaWork[] {
+  const named = works.filter((w) => JOB_WORDS[w.area.jobType].test(text));
+  return named.length ? named : works;
 }
 
 function belowCode(w: AreaWork, s: PricingSnapshot): number | null {
@@ -536,6 +620,7 @@ function areaLabel(w: AreaWork, s: PricingSnapshot): string {
 const REMOVAL_WORDS = /\bremov/i;
 const SEALING_WORDS = /seal|leak|draft|penetration|bypass/i;
 const CODE_WORDS = /\bcode\b/i;
+const FULL_CAVITY_WORDS = /\b(full|whole|entire) cavit(y|ies)\b|\bfills? the cavit(y|ies)\b/i;
 
 function areaBullets(w: AreaWork, s: PricingSnapshot): string[] {
   let out = w.tpl.bullets;
@@ -545,6 +630,7 @@ function areaBullets(w: AreaWork, s: PricingSnapshot): string[] {
   }
   if (!w.removal) out = out.filter((b) => !REMOVAL_WORDS.test(b));
   if (belowCode(w, s) !== null) out = out.filter((b) => !CODE_WORDS.test(b));
+  if (w.primary?.fillsCavity !== true) out = out.filter((b) => !FULL_CAVITY_WORDS.test(b));
   return out;
 }
 
@@ -559,10 +645,10 @@ function priceProductScope(
   tier: Tier,
   warnings: PricingWarning[],
   ov: Record<string, LineOverride>,
-): { lines: PricedLine[]; description: string; cost: number; finalR: number | null } | null {
+): { lines: PricedLine[]; description: string; cost: number; finalR: number | null; fillsCavity: boolean | null } | null {
   const code = tpl.primaryProduct;
   const p = product(s, code);
-  if (code === 'air_sealing') return { ...priceAirSealing(area, s, k, access, crew, ov), finalR: null };
+  if (code === 'air_sealing') return { ...priceAirSealing(area, s, k, access, crew, ov), finalR: null, fillsCavity: null };
   if (code === 'removal') return null; // removal is handled as its own scope
   if (!p.isRBearing) throw new PricingConfigError(`${code} cannot be a primary insulation product`);
 
@@ -580,27 +666,60 @@ function priceProductScope(
     return null;
   }
 
-  const mat = requireMaterial(s, code);
-  let designQty: number;
-  let achievedR = targetR;
-  let thickness: number | null = null;
+  // The cavity it has to fit in (a wall with no depth is a 2x4 wall, OD5) and the room that the
+  // insulation already in it leaves, unless this option removes it first (S1-F5).
+  const depth = cavityDepth(area);
+  const existingIn = removal ? 0 : existingThicknessIn(area);
+  const room = depth === null ? null : Math.max(0, depth - existingIn);
+  const cavity = depth === null ? '' : cavityText(area, depth);
+  const already = existingIn > 0 && depth !== null ? `, with ${fmtIn(Math.min(existingIn, depth))} in already in it,` : '';
+  const full = (why: string) => {
+    warnings.push({ code: 'cavity_full', areaId: area.id, tier, message: `${area.name}: ${why}, so ${capitalize(tier)} adds no ${p.label.toLowerCase()}.` });
+    return null;
+  };
+  if (room !== null && room < MIN_ROOM_IN) return full(`${cavity} already holds ${fmtIn(existingIn)} in of insulation`);
+  const capped = (why: string) =>
+    warnings.push({
+      code: 'thickness_capped',
+      areaId: area.id,
+      tier,
+      message: `${area.name}: ${why} (target R-${fmtNum(targetR)}).`,
+    });
 
-  if (mat.unit === 'board_ft' || mat.unit === 'bag') {
-    if (!p.rPerInch || p.rPerInch <= 0) throw new PricingConfigError(`${code} has no R per inch`);
-    thickness = addedR / p.rPerInch;
-    if (area.depthIn !== null && thickness > area.depthIn) {
-      thickness = area.depthIn;
-      achievedR = existingR + thickness * p.rPerInch;
-      warnings.push({
-        code: 'thickness_capped',
-        areaId: area.id,
-        tier,
-        message: `${area.name}: a ${fmtNum(area.depthIn)}" cavity only fits R-${fmtNum(round1(achievedR))} of ${p.label.toLowerCase()} (target R-${fmtNum(targetR)}).`,
-      });
-    }
-    designQty = mat.unit === 'board_ft' ? area.sqft * thickness : (area.sqft * thickness) / mat.coverageSqftIn!;
-  } else {
+  const sizes = sizesOf(s, code, area.jobType);
+  let mat: MaterialConfig;
+  let designQty: number;
+  let achievedR: number;
+  let thickness: number | null = null;
+  let fillsCavity: boolean | null = null;
+
+  if (p.unit === 'sqft' && sizes.length > 0) {
+    // Batts: one size, picked by R-value and thickness so it fits (OD8, S1-F6).
+    const batt = battFor(sizes, addedR, room);
+    if (!batt) return full(`no batt fits the ${fmtIn(room!)} in left in ${cavity}`);
+    mat = batt;
     designQty = area.sqft;
+    achievedR = existingR + batt.rValue!;
+    thickness = batt.thicknessIn!;
+    if (batt.rValue! < addedR - 1e-9) {
+      capped(room === null ? `the thickest batt is R-${fmtR(batt.rValue!)}` : `the thickest batt that fits ${cavity}${already ? `${already.slice(0, -1)}` : ''} is R-${fmtR(batt.rValue!)}`);
+    }
+    fillsCavity = room === null ? null : batt.thicknessIn! >= room - THICKNESS_TOLERANCE_IN;
+  } else {
+    mat = requireMaterial(s, code, area.jobType);
+    if (mat.unit === 'board_ft' || mat.unit === 'bag') {
+      if (!p.rPerInch || p.rPerInch <= 0) throw new PricingConfigError(`${code} has no R per inch`);
+      // A wall blown with loose fill is dense-packed: it always fills the room left (L20, R6).
+      const denseFill = mat.unit === 'bag' && room !== null && area.jobType === 'walls';
+      thickness = denseFill ? room! : addedR / p.rPerInch;
+      if (room !== null && thickness > room) thickness = room;
+      achievedR = existingR + thickness * p.rPerInch;
+      if (room !== null && achievedR < targetR - 1e-9) capped(`${cavity}${already} only fits R-${fmtR(achievedR)} of ${p.label.toLowerCase()}`);
+      designQty = mat.unit === 'board_ft' ? area.sqft * thickness : (area.sqft * thickness) / mat.coverageSqftIn!;
+    } else {
+      designQty = area.sqft;
+      achievedR = targetR;
+    }
   }
 
   const waste = coeff(k, 'waste_factor', { product: code, jobType: area.jobType });
@@ -610,19 +729,61 @@ function priceProductScope(
   const setup = findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0;
   const rate = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
 
-  const matLine = materialLine(area.id, code, mat, `${mat.name}`, designQty, modelQty, ov);
+  let matLine = materialLine(area.id, code, mat, `${mat.name}`, designQty, modelQty, ov);
+  const loose = mat.unit === 'bag' || mat.unit === 'board_ft';
+  if (loose && thickness !== null) {
+    // An estimator's quantity: never more than a full cavity (cut, with a warning), and the item
+    // says what that quantity installs (L23, R3).
+    if (room !== null && matLine.isOverridden) {
+      const most = mat.unit === 'bag' ? Math.ceil(((area.sqft * room) / mat.coverageSqftIn!) * waste - 1e-9) : round1(area.sqft * room * waste);
+      if (matLine.qty > most) {
+        warnings.push({
+          code: 'override_capped',
+          areaId: area.id,
+          tier,
+          message: `${area.name}: ${fmtNum(matLine.qty)} ${unitWord(mat.unit, matLine.qty)} of ${p.label.toLowerCase()} is more than ${cavity} holds. ${capitalize(tier)} is priced with ${fmtNum(most)}, a full cavity.`,
+        });
+        matLine = { ...matLine, qty: most, cost: money(most * mat.costPerUnit) };
+      }
+    }
+    if (matLine.isOverridden && matLine.qty !== matLine.modelQty && waste > 0 && area.sqft > 0) {
+      const installed = matLine.qty / waste;
+      const t = mat.unit === 'bag' ? (installed * mat.coverageSqftIn!) / area.sqft : installed / area.sqft;
+      thickness = room === null ? t : Math.min(t, room); // never more R than the cavity holds (L23b)
+      achievedR = existingR + thickness * p.rPerInch!;
+    }
+    fillsCavity = room === null ? null : thickness >= room - THICKNESS_TOLERANCE_IN;
+  }
   const matCost = matLine.cost;
   // Install labor is priced for the quantity priced: a changed quantity moves the hours with it
   // (the model's hours stay the model's). A changed number of hours still wins.
   const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, setup + designQty * rate, crew, ov, setup + pricedUnits(matLine, designQty, waste) * rate);
 
-  const rLabel = `R-${fmtNum(round1(achievedR))}`;
-  const description =
-    thickness !== null
-      ? `${p.label} to ${rLabel} (~${fmtNum(round1(thickness))}" added), ${fmtSqft(area.sqft)} sq ft`
-      : `${p.label}, ${rLabel}, ${fmtSqft(area.sqft)} sq ft`;
+  const rLabel = `R-${fmtR(achievedR)}`;
+  let description: string;
+  if (mat.rValue && mat.thicknessIn) {
+    description =
+      existingR > 0
+        ? `${p.label} to ${rLabel} (R-${fmtR(mat.rValue)} batts, ${fmtIn(mat.thicknessIn)} in thick), ${fmtSqft(area.sqft)} sq ft`
+        : `${p.label} to ${rLabel} (${fmtIn(mat.thicknessIn)} in thick), ${fmtSqft(area.sqft)} sq ft`;
+  } else if (thickness !== null && fillsCavity && depth !== null) {
+    description =
+      existingIn > 0
+        ? `${p.label} to ${rLabel} (~${fmtIn(thickness)} in added, fills the ${fmtIn(depth)} in cavity), ${fmtSqft(area.sqft)} sq ft`
+        : `${p.label} to ${rLabel} (fills the ${fmtIn(depth)} in cavity), ${fmtSqft(area.sqft)} sq ft`;
+  } else if (thickness !== null) {
+    description = `${p.label} to ${rLabel} (~${fmtNum(round1(thickness))}" added), ${fmtSqft(area.sqft)} sq ft`;
+  } else {
+    description = `${p.label}, ${rLabel}, ${fmtSqft(area.sqft)} sq ft`;
+  }
 
-  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR };
+  return { lines: [matLine, labor], description, cost: matCost + labor.cost, finalR: achievedR, fillsCavity };
+}
+
+/** "the 3.5 in cavity", saying when a wall had no depth entered (a 2x4 wall, OD5). */
+function cavityText(area: AreaInput, depth: number): string {
+  const noDepth = area.depthIn === null && depth === DEFAULT_WALL_CAVITY_IN ? ' (no depth entered: a 2x4 wall)' : '';
+  return `the ${fmtIn(depth)} in cavity${noDepth}`;
 }
 
 /** Where air sealing is done, in the words of each kind of job (S3-F20). */
@@ -680,31 +841,32 @@ function pricedUnits(line: PricedLine, designQty: number, waste: number): number
 
 /**
  * The overrides as they apply to `tier`. An override is the estimator's number for the tier they
- * changed (override.tier); another tier with the same line gets its own model value scaled by the
- * same proportion, so a change on Good never copies Good's quantity onto a deeper Best fill.
- * Without a usable base (no tier, the source tier or line missing, a zero model value) the number
- * is used as-is.
+ * changed (override.tier); another tier with the same line gets its own value scaled by the same
+ * proportion, so a change on Good never copies Good's quantity onto a deeper Best fill. Quantities
+ * scale from each tier's model quantity (`pure`); hours from each tier's hours for the quantities
+ * it prices (`base`), so the same bags take the same hours in every option. Without a usable base
+ * (no tier, the source tier or line missing, a zero value) the number is used as-is.
  */
 function overridesForTier(
   overrides: Record<string, LineOverride>,
   tier: Tier,
   pure: Map<Tier, PricedOption>,
+  base: Map<Tier, PricedOption>,
 ): Record<string, LineOverride> {
   const out: Record<string, LineOverride> = {};
+  const lineIn = (m: Map<Tier, PricedOption>, t: Tier, key: string) => m.get(t)?.lines.find((l) => l.key === key);
   for (const [key, o] of Object.entries(overrides)) {
-    const from = o.tier && o.tier !== tier ? pure.get(o.tier)?.lines.find((l) => l.key === key) : undefined;
-    const to = from ? pure.get(tier)?.lines.find((l) => l.key === key) : undefined;
-    if (!from || !to) {
-      out[key] = o;
-      continue;
-    }
     const scaled: LineOverride = { ...o };
-    if (isNum(o.qty) && isNum(from.modelQty) && from.modelQty > 0 && isNum(to.modelQty)) {
-      const q = to.modelQty * (o.qty / from.modelQty);
-      scaled.qty = to.unit === 'bag' ? Math.ceil(q - 1e-9) : round1(q);
-    }
-    if (isNum(o.hours) && isNum(from.modelHours) && from.modelHours > 0 && isNum(to.modelHours)) {
-      scaled.hours = round2(to.modelHours * (o.hours / from.modelHours));
+    if (o.tier && o.tier !== tier) {
+      const [fromQ, toQ] = [lineIn(pure, o.tier, key), lineIn(pure, tier, key)];
+      if (isNum(o.qty) && fromQ && toQ && isNum(fromQ.modelQty) && fromQ.modelQty > 0 && isNum(toQ.modelQty)) {
+        const q = toQ.modelQty * (o.qty / fromQ.modelQty);
+        scaled.qty = toQ.unit === 'bag' ? Math.ceil(q - 1e-9) : round1(q);
+      }
+      const [fromH, toH] = [lineIn(base, o.tier, key), lineIn(base, tier, key)];
+      if (isNum(o.hours) && fromH && toH && isNum(fromH.hours) && fromH.hours > 0 && isNum(toH.hours)) {
+        scaled.hours = round2(toH.hours * (o.hours / fromH.hours));
+      }
     }
     out[key] = scaled;
   }
@@ -800,6 +962,9 @@ const capitalize = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
 const fmtSqft = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: n < 10 ? 1 : 0 });
 const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const fmtR = (n: number) => round1(n).toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false });
+/** Inches: up to two decimals, as a framing depth is written (3.5, 5.5, 7.25). */
+const fmtIn = (n: number) => (Math.round(n * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2, useGrouping: false });
+const unitWord = (unit: string, qty: number) => (unit === 'bag' ? (qty === 1 ? 'bag' : 'bags') : unit === 'board_ft' ? 'board ft' : unit);
 /** "$5,420", or "$0.40" for an amount with cents. */
 const usd = (n: number) =>
   `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;

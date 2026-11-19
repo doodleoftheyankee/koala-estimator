@@ -8,7 +8,7 @@
 // random quotes; lib/accuracy/invariants.test.ts shows each one on hand-made good and bad quotes.
 //
 // Pure: no I/O, no clock.
-import { EXISTING_MATERIALS, R_PER_INCH } from '@/lib/ai/photoRead';
+import { EXISTING_MATERIALS, EXISTING_R_PER_INCH as R_PER_INCH } from './rPerInch';
 import { findCoefficient } from './coefficients';
 import type {
   AreaInput,
@@ -133,7 +133,7 @@ export function cavityDepth(area: Pick<AreaInput, 'jobType' | 'depthIn'>): numbe
 
 /**
  * R per inch of the existing insulation, from the app's one table of existing materials
- * (lib/ai/photoRead R_PER_INCH), names matched without regard to case. An unknown or missing
+ * (lib/pricing/rPerInch EXISTING_R_PER_INCH, which the photo read uses too), names matched without regard to case. An unknown or missing
  * material uses the highest R per inch in the table, so the room it takes is never overstated.
  */
 export function existingRPerInch(material: string | null): number {
@@ -182,6 +182,16 @@ export function statedR(description: string): number | null {
 }
 
 /**
+ * Reading a quantity with room for its rounding. `lowerBound`: the least it can install (a bag
+ * count is rounded up, so the last bag may be partly used; board feet are rounded to 0.1).
+ * `upperBound`: the most (board feet rounded down by up to 0.05).
+ */
+export interface ThicknessBound {
+  lowerBound?: boolean;
+  upperBound?: boolean;
+}
+
+/**
  * How many inches of insulation the option installs in the area, from the quantity priced (the
  * waste factor taken out). Bags and board feet give a thickness directly. A product priced by the
  * square foot (batts) is as thick as its material says, else its stated R over its R per inch.
@@ -193,7 +203,7 @@ export function addedThickness(
   area: AreaInput,
   snapshot: PricingSnapshot,
   coefficients?: CoefficientSet | null,
-  opts: { lowerBound?: boolean } = {},
+  opts: ThicknessBound = {},
 ): number {
   return insulationLines(option, area.id, snapshot).reduce((a, line) => a + lineThickness(line, option, area, snapshot, coefficients, opts), 0);
 }
@@ -204,18 +214,20 @@ function lineThickness(
   area: AreaInput,
   snapshot: PricingSnapshot,
   coefficients: CoefficientSet | null | undefined,
-  opts: { lowerBound?: boolean },
+  opts: ThicknessBound,
 ): number {
   if (!(area.sqft > 0)) return 0;
   const product = snapshot.products.find((p) => p.code === line.product)!;
-  const mat = snapshot.materials.find((m) => m.id === line.materialId) ?? snapshot.materials.find((m) => m.productCode === line.product);
+  const mat =
+    snapshot.materials.find((m) => m.id === line.materialId) ??
+    snapshot.materials.find((m) => m.productCode === line.product && !m.jobType && !m.rValue);
   if (line.unit === 'bag' || line.unit === 'board_ft') {
-    const slack = opts.lowerBound ? (line.unit === 'bag' ? 1 : 0.05) : 0;
+    const slack = opts.lowerBound ? (line.unit === 'bag' ? 1 : 0.05) : opts.upperBound && line.unit === 'board_ft' ? -0.05 : 0;
     const installed = Math.max(0, line.qty - slack) / wasteOf(line, area, coefficients);
     const coverage = line.unit === 'bag' ? (mat?.coverageSqftIn ?? 0) : 1;
     return (installed * coverage) / area.sqft;
   }
-  const thick = (mat as { thicknessIn?: number | null } | undefined)?.thicknessIn;
+  const thick = mat?.thicknessIn;
   if (typeof thick === 'number' && thick > 0) return thick;
   const item = workItems(option).find((i) => i.areaId === area.id && i.description.toLowerCase().includes(product.label.toLowerCase()));
   const r = item ? statedR(item.description) : null;
@@ -223,12 +235,21 @@ function lineThickness(
   return r !== null && product.rPerInch && product.rPerInch > 0 ? Math.max(0, r - existingR) / product.rPerInch : 0;
 }
 
-/** The R-value the area ends up at in this option: what stays (unless removed) plus what is installed. */
-export function finalR(option: PricedOption, area: AreaInput, snapshot: PricingSnapshot, coefficients?: CoefficientSet | null): number {
+/**
+ * The R-value the area ends up at in this option: what stays (unless removed) plus what is
+ * installed. A sized material (a batt with its own R-value and thickness) adds its rated R;
+ * anything else adds its thickness times its product's R per inch.
+ */
+export function finalR(option: PricedOption, area: AreaInput, snapshot: PricingSnapshot, coefficients?: CoefficientSet | null, opts: ThicknessBound = {}): number {
   let r = removesExisting(option, area.id) ? 0 : area.currentR;
   for (const line of insulationLines(option, area.id, snapshot)) {
+    const sized = snapshot.materials.find((m) => m.id === line.materialId);
+    if (sized?.rValue && sized.thicknessIn && line.unit === 'sqft') {
+      r += sized.rValue;
+      continue;
+    }
     const rPerInch = snapshot.products.find((p) => p.code === line.product)?.rPerInch ?? 0;
-    r += lineThickness(line, option, area, snapshot, coefficients, {}) * rPerInch;
+    r += lineThickness(line, option, area, snapshot, coefficients, opts) * rPerInch;
   }
   return r;
 }
@@ -341,6 +362,9 @@ const JOB_WORDS: Record<JobType, RegExp> = {
   commercial: /\bcommercial\b/i,
 };
 const PROMISES_CODE = /\bcode\b/i;
+const PROMISES_FULL_CAVITY = /\b(full|whole|entire) cavit(y|ies)\b|\bfills? the (\d+(\.\d+)? in )?cavit(y|ies)\b/i;
+/** A cavity with less room than this left is full: nothing more can be blown, sprayed or laid in (cavity_full). */
+const FULL_ROOM_IN = 0.5;
 const PROMISES_REMOVAL = /\bremov/i;
 const PROMISES_AIR_SEALING = /\bair[\s-]?seal/i;
 
@@ -366,6 +390,11 @@ function areasNamed(text: string, areas: AreaInput[]): AreaInput[] {
  *  - removal_not_priced: it says remove/removed but no area it is about has removal priced.
  *  - air_sealing: it says air seal/air sealing but no area it is about is air sealed (air sealing
  *    priced, or spray foam, which seals as it insulates: "Air seal and insulate in one step").
+ *  - full_cavity_not_filled: it, or a work item, says the cavity is filled ("Fills the full
+ *    cavity", "fills the 3.5 in cavity") but a cavity it is about is left partly empty.
+ *  - qty_below_stated_r: a work item states an R-value ("… to R-12.6 …") that the quantity priced
+ *    for its area does not reach (the estimator's bag count, R3).
+ * Work items are about their own area.
  * A sentence is about the areas whose job type it names, else every area in the quote.
  */
 export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: PricedQuote): Violation[] {
@@ -395,9 +424,42 @@ export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: 
       if (PROMISES_AIR_SEALING.test(text) && !about.some((a) => airSealed(o, a.id))) {
         add('air_sealing', about.length === 1 ? about[0]!.id : null, `"${text}" but no air sealing is priced`);
       }
+      if (PROMISES_FULL_CAVITY.test(text)) {
+        for (const a of about) {
+          const left = roomLeft(o, a, snapshot, coefficients);
+          if (left !== null) add('full_cavity_not_filled', a.id, `"${text}" but ${a.name} has ${fmt(left, 2)} in of its ${fmt(cavityDepth(a)!, 2)} in cavity left empty`);
+        }
+      }
+    }
+    for (const item of workItems(o)) {
+      const a = input.areas.find((x) => x.id === item.areaId);
+      if (!a) continue;
+      // What an item states it installs is what its quantity installs (R3).
+      const stated = statedR(item.description);
+      if (stated !== null && insulationLines(o, a.id, snapshot).length > 0) {
+        const r = finalR(o, a, snapshot, coefficients, { upperBound: true });
+        if (r < stated - R_TOLERANCE) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
+      }
+      if (PROMISES_FULL_CAVITY.test(item.description)) {
+        const left = roomLeft(o, a, snapshot, coefficients);
+        if (left !== null) add('full_cavity_not_filled', a.id, `"${item.description}" but ${fmt(left, 2)} in of the ${fmt(cavityDepth(a)!, 2)} in cavity is left empty`);
+      }
     }
   }
   return out;
+}
+
+/**
+ * The inches of an area's cavity an option leaves empty, when that breaks a promise of a full
+ * cavity; null when the cavity is full (or the area has none). With insulation added, full is to
+ * within rounding; with nothing added, what is there leaves less room than can be filled.
+ */
+function roomLeft(o: PricedOption, a: AreaInput, snapshot: PricingSnapshot, coefficients: CoefficientSet | null | undefined): number | null {
+  const depth = cavityDepth(a);
+  if (depth === null) return null;
+  const added = addedThickness(o, a, snapshot, coefficients, { upperBound: true });
+  const left = depth - existingThickness(a, o) - added;
+  return left > (added > 0 ? THICKNESS_TOLERANCE_IN : FULL_ROOM_IN) ? left : null;
 }
 
 /**
