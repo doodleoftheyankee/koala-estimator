@@ -468,6 +468,9 @@ step('the owner approves it from the Estimates page (L34)');
   check(/1 price waiting for approval/.test(await ap.locator('main').innerText()), 'the owner sees one price waiting for approval');
   check(row.includes('Pat Lee') && row.includes(`Good: $${asked.toLocaleString('en-US')}, 30% above the model price of`) && row.includes('Asked by Eddie Estimator') && row.includes('Two hatches and baffles'), 'with the customer, the option, the price against the model price, who asked and why');
   await ap.screenshot({ path: SHOTS + '05f-approval-queue.png', fullPage: true });
+  // Review B flow-B11: the customer link in the queue is a 48 px target.
+  const qb = await queue.getByRole('link', { name: 'Pat Lee' }).boundingBox();
+  check(qb && qb.height >= 48, `the queue's customer link is ${Math.round(qb?.width ?? 0)}x${Math.round(qb?.height ?? 0)} px (was 107x24)`);
   await queue.getByRole('button', { name: `Approve Good at $${asked.toLocaleString('en-US')} for Pat Lee` }).click();
   await queue.waitFor({ state: 'detached', timeout: 15000 });
   check(psql("select status || ':' || decided_role || ':' || (decided_by = '11111111-1111-4111-8111-111111111111') from price_approvals") === 'approved:owner:true', 'the approval is recorded with who decided and in which role');
@@ -1474,6 +1477,137 @@ step('office marks an estimate lost from its row menu');
   await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost: Went with a competitor').waitFor({ timeout: 15000 });
   check((await op.getByRole('button', { name: 'More for Sam Offline' }).count()) === 1 && (await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost', { exact: true }).count()) === 1, 'the row now says Lost');
   await op.screenshot({ path: SHOTS + '21-estimate-lost.png', fullPage: true });
+}
+
+step('review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)');
+{
+  const FIXB = SHOTS + 'fixb-';
+  // Every visible control smaller than 48 x 48 px (the Daymark minimum, components/daymark/Button.tsx).
+  const smallTargets = (p) =>
+    p.evaluate(() =>
+      [...document.querySelectorAll('a[href], button, select, [role=button], [role=switch], [role=radio]')]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ el, r }) => r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden')
+        .filter(({ r }) => r.width < 48 || r.height < 48)
+        .map(({ el, r }) => `${(el.textContent || el.getAttribute('aria-label') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40)} ${Math.round(r.width)}x${Math.round(r.height)}`),
+    );
+
+  // flow-B13: a phone's first /field?new=1 runs before any bundle is on the phone.
+  const fresh = await browser.newContext(phone);
+  await fresh.addCookies([sessionCookie(EST)]);
+  const fp = await fresh.newPage();
+  fp.on('pageerror', (e) => logs.push('FIXB PAGEERROR ' + e.message));
+  await fp.goto(BASE + '/field?new=1');
+  await fp.getByLabel('City').waitFor({ timeout: 20000 });
+  const town = [await fp.getByLabel('City').inputValue(), await fp.getByLabel('State').inputValue()];
+  check(town[0] === 'Newark' && town[1] === 'DE', `a phone's first /field?new=1 starts in the shop address's town and state: "${town.join('", "')}" (was "", "")`);
+  await fp.getByLabel('First name').fill('Rae');
+  await fp.getByLabel('Last name').fill('Firstopen');
+  await fp.getByLabel('Street address').fill('8 First Open Ln');
+  await fp.getByLabel('ZIP').fill('19711');
+  await fp.screenshot({ path: FIXB + 'b13-first-open-town.png' });
+  await fp.getByRole('button', { name: 'Next' }).click();
+
+  // flow-B6: in Sun+ an empty field's placeholder is grey and italic, never the black of typed text.
+  await fp.getByRole('button', { name: '+ Attic' }).click();
+  await fp.evaluate(() => document.documentElement.setAttribute('data-theme', 'sun'));
+  const look = await fp.getByLabel('Square feet').evaluate((el) => {
+    const ph = getComputedStyle(el, '::placeholder');
+    return { text: getComputedStyle(el).color, placeholder: ph.color, italic: ph.fontStyle, shown: el.getAttribute('placeholder') };
+  });
+  check(look.text !== look.placeholder && look.italic === 'italic', `in Sun+ the empty Square feet's "${look.shown}" is ${look.placeholder} in italics, typed text ${look.text} (both rgb(0, 0, 0) before)`);
+  await fp.screenshot({ path: FIXB + 'b6-sun-placeholders.png', fullPage: true });
+  await fp.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+  // flow-B11: "Use 1,200" under the mismatch sentence is a 48 px button.
+  await fp.getByRole('button', { name: /Measure this area/ }).click();
+  const msheet = fp.getByRole('dialog', { name: /Measure/ });
+  await msheet.getByLabel('A · Width').fill('40');
+  await msheet.getByLabel('B · Depth').fill('30');
+  await msheet.getByRole('button', { name: 'Use 1,200 sq ft' }).click();
+  await fp.getByLabel('Square feet').fill('1000');
+  const use = fp.getByRole('button', { name: 'Use 1,200', exact: true });
+  await use.waitFor();
+  const ub = await use.boundingBox();
+  check(ub && ub.width >= 48 && ub.height >= 48, `"Use 1,200" is ${Math.round(ub?.width ?? 0)}x${Math.round(ub?.height ?? 0)} px (was 71x21)`);
+  const areaSmall = await smallTargets(fp);
+  check(!areaSmall.some((t) => t.startsWith('Use 1,200 ')), 'the small-target scan at 390 px does not list "Use 1,200"');
+  console.log('  other small targets on the Areas step:', areaSmall.join(' | ') || 'none');
+  await use.scrollIntoViewIfNeeded();
+  await fp.screenshot({ path: FIXB + 'b11-use-measured.png' });
+  await use.click();
+  check((await fp.getByLabel('Square feet').inputValue()) === '1200', '"Use 1,200" puts the measured size back');
+
+  // flow-B4 (OD15): no pick, Better priced above Best so it is not shown: Best is recommended, not Good.
+  await fp.getByRole('button', { name: 'Next' }).click();
+  const better = fp.getByRole('group', { name: 'Better option' });
+  await better.getByRole('button', { name: 'Change price' }).click();
+  await better.getByLabel('Customer price').fill('99999');
+  await better.getByLabel('Reason (required)').fill('Checking the recommendation when Better is hidden');
+  await better.getByRole('button', { name: 'Apply', exact: true }).click();
+  await better.getByText('Not shown to the customer', { exact: true }).waitFor();
+  const best = fp.getByRole('group', { name: 'Best option' });
+  check((await best.getByRole('button', { name: 'Recommended (default)' }).count()) === 1, 'with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)');
+  check((await fp.getByRole('group', { name: 'Good option' }).getByRole('button', { name: 'Make recommended' }).count()) === 1, 'and Good is not');
+  const dock = await fp.getByRole('region', { name: 'Estimate actions' }).innerText();
+  const bestPrice = (await best.locator('p.text-2xl').first().innerText()).trim();
+  check(dock.includes(bestPrice) && /best/i.test(dock), `the dock's headline is Best's ${bestPrice}: "${dock.replace(/\s+/g, ' ').slice(0, 60)}"`);
+  await fp.screenshot({ path: FIXB + 'b4-best-recommended.png', fullPage: true });
+  await fresh.close();
+
+  // flow-B11: the estimator's email link on the customer's quote page.
+  const cq = await browser.newContext(phone);
+  const cqp = await cq.newPage();
+  await cqp.goto(link);
+  const contact = cqp.getByRole('region', { name: 'Questions about this quote?' }).first();
+  await contact.waitFor({ timeout: 15000 });
+  const mail = contact.locator('a[href^="mailto:"]').filter({ hasText: '@' }).first();
+  if ((await mail.count()) === 1) {
+    const mb = await mail.boundingBox();
+    check(mb && mb.height >= 48, `the estimator's email link on the quote is ${Math.round(mb?.width ?? 0)}x${Math.round(mb?.height ?? 0)} px (was 100x20)`);
+  } else check(false, "the customer's quote shows the estimator's email link");
+  const quoteSmall = await smallTargets(cqp);
+  console.log('  other small targets on the customer quote:', quoteSmall.join(' | ') || 'none');
+  await contact.scrollIntoViewIfNeeded();
+  await cqp.screenshot({ path: FIXB + 'b11-quote-contact.png' });
+  await cq.close();
+
+  // flow-B9: the refusal says how far the cost is from the nearest edge (office screen, 1280).
+  const pc = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  await pc.addCookies([sessionCookie(OWNER)]);
+  const pp = await pc.newPage();
+  await pp.goto(BASE + '/admin/pricing');
+  const pcost = pp.getByLabel(/cost per unit/i).first();
+  const pform = pcost.locator('xpath=ancestor::form[1]');
+  const ocsfNow = psql("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default");
+  await pcost.fill('0.30');
+  await pform.getByRole('button', { name: /save/i }).click();
+  await pform.getByText(/Not saved\. \$0\.30 per board ft is 25% above the usual high of \$0\.24\. The usual range is \$0\.06 to \$0\.24/).waitFor({ timeout: 15000 });
+  check(psql("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default") === ocsfNow, '$0.30 is "25% above the usual high of $0.24" (was "2.0 times more than the usual"), and not saved');
+  await pform.scrollIntoViewIfNeeded();
+  await pp.screenshot({ path: FIXB + 'b9-cost-from-the-edge.png' });
+  await pc.close();
+
+  // flow-B8: with Koala unreachable, /unreachable offers the phone's copy only when the phone has one.
+  const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+  unreachableStep = true;
+  await rest(true);
+  const none = await browser.newContext(phone);
+  await none.addCookies([sessionCookie(EST)]);
+  const np = await none.newPage();
+  await np.goto(BASE + '/unreachable?next=%2Ffield');
+  await np.getByText('This phone has no saved copy of the app yet; it needs Koala once.').waitFor({ timeout: 15000 });
+  check((await np.getByRole('link', { name: 'Open the estimates on this phone' }).count()) === 0, 'a phone with no saved copy is not offered "Open the estimates on this phone" (it led back to /unreachable: count 1 before)');
+  await np.screenshot({ path: FIXB + 'b8-unreachable-no-copy.png' });
+  await none.close();
+  const own = await ctx.newPage();
+  await own.goto(BASE + '/unreachable?next=%2Ffield');
+  await own.getByRole('link', { name: 'Open the estimates on this phone' }).waitFor({ timeout: 15000 });
+  check((await own.getByText('This phone has no saved copy').count()) === 0, 'the phone that has its copy is offered it');
+  await own.screenshot({ path: FIXB + 'b8-unreachable-with-copy.png' });
+  await own.close();
+  await rest(false);
+  unreachableStep = false;
 }
 
 console.log('console errors:', logs.length ? logs : 'none');
