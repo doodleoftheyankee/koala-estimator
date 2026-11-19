@@ -1,0 +1,80 @@
+Accuracy check: 10,000 random quotes, seed 20261118, seeded pricing (lib/pricing/__fixtures__/seeded-rows.json), bundle 56ccd238ee6bea55.
+Options priced: 27,349; shown to the customer: 27,349; quotes with no option: 704.
+A quote counts once per rule it breaks; violations count every break (per option, area or surface).
+
+| Invariant | Quotes | Violations | By kind |
+|---|---|---|---|
+| items_add_up | 1,849 (18.5%) | 2,434 | printed 2,434 |
+| same_work_same_price | 4,842 (48.4%) | 10,693 | insulation 4,357, removal 4,195, air_sealing 2,141 |
+| options_step_up | 3,353 (33.5%) | 4,370 | not_increasing 3,081, not_increasing_override 723, duplicate_shown 566 |
+| labels_match_work | 1,997 (20.0%) | 2,456 | code_below_code 1,638, removal_not_priced 782, air_sealing 36 |
+| cavity_not_overfilled | 2,215 (22.1%) | 5,214 | overfilled 3,261, overfilled_no_depth 1,953 |
+| finite_amounts | 0 (0.0%) | 0 |  |
+| same_price_text | 9,296 (93.0%) | 139,719 | accept_sentence 27,349, signed_page 27,349, signed_pdf 27,349, signed_email 27,349, office_email 27,349, office_list 1,444, jobs_list 765, job_page 765 |
+| valid_until_is_expiry | 1,681 (16.8%) | 1,681 | day_after 1,681 |
+
+Price surfaces read (same_price_text kinds):
+  quote_page: quote page (chosen option and its total), app/q/[token]/SignForm.tsx:230 (rendered)
+  sign_button: sign button, app/q/[token]/SignForm.tsx:515 (rendered)
+  accept_sentence: accept sentence ("You are accepting … for …"), app/q/[token]/SignForm.tsx:483 (rendered)
+  signed_page: signed page ("You accepted … for …" and the signed price), app/q/[token]/SignForm.tsx:441 (rendered)
+  pdf: quote PDF option total, lib/quotes/pdf.tsx:109 (formatter)
+  signed_pdf: signed PDF price, lib/quotes/pdf.tsx:193 (formatter)
+  quote_email: quote email, lib/quotes/email.ts:137 (rendered)
+  signed_email: signed confirmation email, lib/quotes/email.ts:174 (rendered)
+  office_email: office "quote signed" email, lib/quotes/email.ts:196 (rendered)
+  jobs_list: jobs list signed price, app/jobs/page.tsx:335 (formatter)
+  job_page: job page option price, app/jobs/[id]/page.tsx:112 (formatter)
+  office_list: office estimates list headline, app/estimates/page.tsx:404 (formatter)
+  field_card: estimator's phone list headline, app/field/EstimateList.tsx:303 (formatter)
+
+Examples:
+items_add_up:
+  [printed] 81cec929 good: items print $292 + $1,583 + $44,846 = $46,721 under a $46,720 total
+  [printed] 81cec929 best: items print $899 + $2,014 + $142,453 = $145,366 under a $145,365 total
+same_work_same_price:
+  [removal] f243616f better: "Remove and dispose of existing insulation (397 sq ft)" is $1,022 in good and $1,045 in better
+  [removal] f243616f better: "Remove and dispose of existing insulation (1,488 sq ft)" is $4,152 in good and $4,246 in better
+  [insulation] f243616f best: "Closed-Cell Spray Foam to R-19 (~2.9" added), 1,488 sq ft" is $7,164 in better and $7,040 in best
+  [air_sealing] 73c0e4a6 best: "Air sealing of top plates, penetrations and bypasses (1,267 sq ft)" is $787 in better and $786 in best
+  [insulation] 73c0e4a6 best: "Closed-Cell Spray Foam to R-30 (~4.6" added), 659 sq ft" is $5,557 in better and $5,556 in best
+  [air_sealing] 7ca22ec1 best: "Air sealing of top plates, penetrations and bypasses (2,954 sq ft)" is $5,998 in better and $6,217 in best
+options_step_up:
+  [not_increasing] 7d9396ad better: better $1,500 does not cost more than good $1,500
+  [not_increasing] 7d9396ad best: best $1,500 does not cost more than better $1,500
+  [not_increasing_override] b9ada614 better: better $3,955 does not cost more than good $6,000
+  [not_increasing_override] a75c69f3 better: better $1,052 does not cost more than good $1,500
+  [duplicate_shown] f273b777 best: best ($9,540) does the same work as better ($9,540)
+  [duplicate_shown] 9a6f41aa best: best ($5,280) does the same work as better ($5,280)
+labels_match_work:
+  [code_below_code] 03326db5 good: "Cost-effective code compliance" but Commercial area ends at R-19, below the R-30 code minimum
+  [code_below_code] e4a1f29e good: "Cost-effective code compliance" but Exterior walls ends at R-13.9, below the R-20 code minimum
+  [removal_not_priced] f273b777 best: "Remove, Air Seal + Cellulose" but no removal is priced
+  [removal_not_priced] 9a6f41aa best: "Remove, Air Seal + Cellulose" but no removal is priced
+  [air_sealing] 7bed23da better: "Air seal and insulate in one step" but no air sealing is priced
+  [air_sealing] 57e916b5 better: "Air seal and insulate in one step" but no air sealing is priced
+cavity_not_overfilled:
+  [overfilled] 81cec929 better: Garage 3: 3 in already there + 8 in added in a 9.25 in cavity
+  [overfilled_no_depth] 340fe60f good: Exterior walls: 0 in already there + 5.6 in added in a 3.5 in cavity (no depth entered: a 2x4 wall)
+  [overfilled_no_depth] 340fe60f better: Exterior walls: 0 in already there + 5.4 in added in a 3.5 in cavity (no depth entered: a 2x4 wall)
+  [overfilled] 5984845e good: Crawlspace: 4 in already there + 5.3 in added in a 7.25 in cavity
+same_price_text:
+  [accept_sentence] 03326db5 good: accept sentence ("You are accepting … for …") reads "$28,615.00" for $28,615
+  [signed_page] 03326db5 good: signed page ("You accepted … for …" and the signed price) reads "$28,615.00" for $28,615
+  [signed_pdf] 03326db5 good: signed PDF price reads "$28,615.00" for $28,615
+  [signed_email] 03326db5 good: signed confirmation email reads "$28,615.00" for $28,615
+  [office_email] 03326db5 good: office "quote signed" email reads "$28,615.00" for $28,615
+  [accept_sentence] 03326db5 better: accept sentence ("You are accepting … for …") reads "$63,900.00" for $63,900
+  [signed_page] 03326db5 better: signed page ("You accepted … for …" and the signed price) reads "$63,900.00" for $63,900
+  [signed_pdf] 03326db5 better: signed PDF price reads "$63,900.00" for $63,900
+  [signed_email] 03326db5 better: signed confirmation email reads "$63,900.00" for $63,900
+  [office_email] 03326db5 better: office "quote signed" email reads "$63,900.00" for $63,900
+  [office_list] e4a1f29e better: office estimates list headline reads "$21,785" for $38,255, the recommended option (better)
+  [office_list] b9ada614 better: office estimates list headline reads "$6,000" for $3,955, the recommended option (better)
+  [jobs_list] 331b5a54 good: jobs list signed price reads "$60,837.70" for $60,838
+  [job_page] 331b5a54 good: job page option price reads "$60,837.70" for $60,838
+  [jobs_list] a75c69f3 better: jobs list signed price reads "$1,052.07" for $1,052
+  [job_page] a75c69f3 better: job page option price reads "$1,052.07" for $1,052
+valid_until_is_expiry:
+  [day_after] b9ada614: prints "Valid until July 29, 2026" (email: July 29, 2026); the link works until July 28, 2026 (2026-07-29T03:42:52.000Z)
+  [day_after] 331b5a54: prints "Valid until July 18, 2026" (email: July 18, 2026); the link works until July 17, 2026 (2026-07-18T00:16:06.000Z)
