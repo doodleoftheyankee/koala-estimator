@@ -158,6 +158,15 @@
       "coverage_sqft_in": 200
     },
     {
+      "id": "7853747c-efe5-46ce-8a1b-92c99feb8ae5",
+      "name": "Cellulose bag, dense-pack walls (25 lb)",
+      "unit": "bag",
+      "job_type": "walls",
+      "product_id": "d73d8420-9c37-4d73-846d-687e4f6433e2",
+      "cost_per_unit": 14,
+      "coverage_sqft_in": 122.5
+    },
+    {
       "id": "86c3457f-ad80-4eaa-87b4-1295fd06fb00",
       "name": "Blown fiberglass bag (~28 lb)",
       "unit": "bag",
@@ -170,6 +179,76 @@
       "name": "Batt (per sqft @ rated R)",
       "unit": "sqft",
       "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "1aac0f06-07a7-4c14-8eb4-81973fc67ddf",
+      "name": "Fiberglass batt R-11 (3.5 in)",
+      "unit": "sqft",
+      "r_value": 11,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 3.5,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "12185c16-0f89-484a-8486-fc5eb4466383",
+      "name": "Fiberglass batt R-13 (3.5 in)",
+      "unit": "sqft",
+      "r_value": 13,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 3.5,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "7ccbcebc-d13a-4917-8a35-e8fc2d555283",
+      "name": "Fiberglass batt R-15 (3.5 in)",
+      "unit": "sqft",
+      "r_value": 15,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 3.5,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "27557696-31ca-4050-843f-508010cceecf",
+      "name": "Fiberglass batt R-19 (6.25 in)",
+      "unit": "sqft",
+      "r_value": 19,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 6.25,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "904c0cf7-77dc-4fe4-8a3a-89545f4e3505",
+      "name": "Fiberglass batt R-21 (5.5 in)",
+      "unit": "sqft",
+      "r_value": 21,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 5.5,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "02404ab1-83ae-4b29-863d-864493da9037",
+      "name": "Fiberglass batt R-30 (10 in)",
+      "unit": "sqft",
+      "r_value": 30,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 10,
+      "cost_per_unit": 0.75,
+      "coverage_sqft_in": null
+    },
+    {
+      "id": "8a1d734b-48ee-45e5-8d23-a08eb1a89a58",
+      "name": "Fiberglass batt R-38 (12 in)",
+      "unit": "sqft",
+      "r_value": 38,
+      "product_id": "e49cad07-ea6d-4470-874e-a63f1a260e45",
+      "thickness_in": 12,
       "cost_per_unit": 0.75,
       "coverage_sqft_in": null
     }
@@ -696,6 +775,16 @@
       "value": 1.08,
       "product": "cellulose",
       "job_type": null,
+      "confidence": 0,
+      "sample_size": 0,
+      "access_level": null
+    },
+    {
+      "kind": "waste_factor",
+      "n_eff": 0,
+      "value": 1.08,
+      "product": "cellulose",
+      "job_type": "walls",
       "confidence": 0,
       "sample_size": 0,
       "access_level": null

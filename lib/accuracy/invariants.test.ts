@@ -99,11 +99,13 @@ describe('seeded pricing fixture (the rows every migration leaves in a new datab
     const sql = read('scripts/accuracy/bundle-rows.sql');
     const keys = /where key in \(([^)]*)\)/.exec(sql)![1]!.match(/'([a-z_]+)'/g)!.map((k) => k.slice(1, -1));
     expect(keys.sort()).toEqual([...PRICING_SETTING_KEYS].sort());
-    for (const filter of ['from products where active', 'where m.active and m.is_default', 'from crews where active', 'from code_requirements where is_default', 'from tier_templates where active', "where status = 'active'", 'from win_models where is_active']) {
+    // Materials: active, and the default or one for a job type or a size (the accuracy migration's rows).
+    const materialsFilter = "where m.active and (m.is_default or to_jsonb(m) ->> 'job_type' is not null or to_jsonb(m) ->> 'r_value' is not null)";
+    for (const filter of ['from products where active', materialsFilter, 'from crews where active', 'from code_requirements where is_default', 'from tier_templates where active', "where status = 'active'", 'from win_models where is_active']) {
       expect(sql).toContain(filter);
     }
     const loader = read('lib/server/bundle.ts');
-    for (const filter of [".from('products')", ".eq('active', true)", ".eq('is_default', true)", ".eq('status', 'active')", ".eq('is_active', true)"]) {
+    for (const filter of [".from('products')", ".eq('active', true)", ".or(MATERIALS_PRICED)", "'is_default.eq.true,job_type.not.is.null,r_value.not.is.null'", ".eq('is_default', true)", ".eq('status', 'active')", ".eq('is_active', true)"]) {
       expect(loader).toContain(filter);
     }
   });
@@ -112,10 +114,32 @@ describe('seeded pricing fixture (the rows every migration leaves in a new datab
     const st = seededBundle.snapshot.settings;
     expect([st.overheadPct, st.targetMarginPct, st.floorMarginPct, st.minimumJobPrice, st.priceRounding, st.quoteValidDays]).toEqual([0.63, 0.15, 0.05, 1500, 5, 30]);
     expect(seededBundle.snapshot.crews.map((c) => [c.size, c.blendedHourlyCost])).toEqual([[2, 35]]);
-    const cost = Object.fromEntries(seededBundle.snapshot.materials.map((m) => [m.productCode, [m.costPerUnit, m.coverageSqftIn]]));
-    expect(cost).toMatchObject({ ocsf: [0.12, 1], ccsf: [0.47, 1], cellulose: [14, 200], fiberglass_blown: [38, 450], batts: [0.75, null], air_sealing: [0.1, null] });
+    // Each product's general material, as on 2026-11-18.
+    const general = seededBundle.snapshot.materials.filter((m) => !m.jobType && !m.rValue);
+    const cost = Object.fromEntries(general.map((m) => [m.productCode, [m.costPerUnit, m.coverageSqftIn]]));
+    expect(cost).toEqual({ ocsf: [0.12, 1], ccsf: [0.47, 1], cellulose: [14, 200], fiberglass_blown: [38, 450], batts: [0.75, null], air_sealing: [0.1, null] });
     expect(Object.fromEntries(seededBundle.snapshot.codeRequirements.map((c) => [c.jobType, c.minR]))).toEqual({ attic: 49, walls: 20, crawlspace: 19, rim_joist: 10, garage: 30, commercial: 30 });
-    expect(seededBundle.coefficientSet.coefficients).toHaveLength(26);
+    // The accuracy migration (20261119000001) adds the dense-pack wall bag (L20), seven batt sizes
+    // (L22) and the walls cellulose waste cell (L21): 14 materials and 27 coefficients.
+    expect(seededBundle.snapshot.materials).toHaveLength(14);
+    expect(seededBundle.snapshot.materials.filter((m) => m.jobType).map((m) => [m.productCode, m.jobType, m.costPerUnit, m.coverageSqftIn])).toEqual([
+      ['cellulose', 'walls', 14, 122.5],
+    ]);
+    expect(seededBundle.snapshot.materials.filter((m) => m.rValue).map((m) => [m.rValue, m.thicknessIn, m.costPerUnit])).toEqual([
+      [11, 3.5, 0.75],
+      [13, 3.5, 0.75],
+      [15, 3.5, 0.75],
+      [19, 6.25, 0.75],
+      [21, 5.5, 0.75],
+      [30, 10, 0.75],
+      [38, 12, 0.75],
+    ]);
+    expect(seededBundle.coefficientSet.coefficients).toHaveLength(27);
+    const waste = seededBundle.coefficientSet.coefficients.filter((c) => c.kind === 'waste_factor' && c.product === 'cellulose');
+    expect(waste.map((c) => [c.jobType, c.value])).toEqual([
+      [null, 1.08],
+      ['walls', 1.08],
+    ]);
   });
 
   it('prices the record\'s examples to the dollar (drive 20 min): totals the record says no fix changes', () => {

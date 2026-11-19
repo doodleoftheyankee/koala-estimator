@@ -65,6 +65,14 @@ export interface MaterialConfig {
   costPerUnit: number;
   /** sqft x inches covered by one unit (bags). Null for per-sqft / per-board-ft products. */
   coverageSqftIn: number | null;
+  /**
+   * Used only for this job type (dense-pack walls: a wall is blown dense, so a bag covers less).
+   * Absent or null on a product's general material.
+   */
+  jobType?: JobType | null;
+  /** A sized material (a batt): its rated R-value and its thickness in inches. Absent on general materials. */
+  rValue?: number | null;
+  thicknessIn?: number | null;
 }
 
 export interface CrewConfig {
@@ -94,7 +102,8 @@ export interface TierTemplate {
 export interface PricingSnapshot {
   settings: PricingSettings;
   products: ProductConfig[];
-  materials: MaterialConfig[]; // default material per product
+  /** Each product's general (default) material, plus job-type materials (dense-pack walls) and sizes (batts). */
+  materials: MaterialConfig[];
   crews: CrewConfig[];
   defaultCrewId: string | null;
   codeRequirements: CodeRequirement[];
@@ -294,7 +303,11 @@ export interface PricingWarning {
     /** OD6: an option that duplicates another or does not step up is not shown to the customer. */
     | 'option_hidden'
     /** A price under $1 was typed; it is not used. */
-    | 'override_too_low';
+    | 'override_too_low'
+    /** The cavity has no room left for the product (existing insulation fills it, or no batt fits). */
+    | 'cavity_full'
+    /** An estimator's quantity was more than the cavity holds; the quantity priced was cut to a full cavity. */
+    | 'override_capped';
   areaId: string | null;
   tier: Tier | null;
   message: string;

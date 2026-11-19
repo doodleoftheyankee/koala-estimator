@@ -3,7 +3,7 @@
 -- golden set (run it on production with SELECT rights only).
 --
 -- Same filters as loadPricingBundle (lib/server/bundle.ts); keep the two in step:
---   products active, materials active and default, crews active, code requirements default,
+--   products active, materials active and default (or for one job type, or sized), crews active, code requirements default,
 --   tier templates active, the one active coefficient set and its coefficients, the active win model.
 -- Settings: only the keys the pricing snapshot reads (PRICING_SETTING_KEYS in lib/accuracy/rows.ts;
 -- lib/accuracy/invariants.test.ts checks this list against that one). No branding, terms or
@@ -27,11 +27,17 @@ select jsonb_build_object(
     select jsonb_agg(jsonb_build_object('id', id, 'code', code, 'label', label, 'unit', unit,
              'r_per_inch', r_per_inch, 'is_r_bearing', is_r_bearing) order by code)
       from products where active), '[]'::jsonb),
+  -- The job-type and sized columns (job_type, r_value, thickness_in) come from the accuracy migration
+  -- (20261119000001); they are read through to_jsonb so this also runs on a database without them,
+  -- and added to a row only when set, so a default material reads as it always has.
   'materials', coalesce((
     select jsonb_agg(jsonb_build_object('id', m.id, 'product_id', m.product_id, 'name', m.name, 'unit', m.unit,
-             'cost_per_unit', m.cost_per_unit, 'coverage_sqft_in', m.coverage_sqft_in) order by p.code, m.name)
+             'cost_per_unit', m.cost_per_unit, 'coverage_sqft_in', m.coverage_sqft_in)
+             || jsonb_strip_nulls(jsonb_build_object('job_type', to_jsonb(m) -> 'job_type', 'r_value', to_jsonb(m) -> 'r_value',
+                                                     'thickness_in', to_jsonb(m) -> 'thickness_in'))
+             order by p.code, m.name)
       from materials m left join products p on p.id = m.product_id
-     where m.active and m.is_default), '[]'::jsonb),
+     where m.active and (m.is_default or to_jsonb(m) ->> 'job_type' is not null or to_jsonb(m) ->> 'r_value' is not null)), '[]'::jsonb),
   'crews', coalesce((
     select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'size', size,
              'blended_hourly_cost', blended_hourly_cost) order by name)
