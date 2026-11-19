@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   crossCheckSettings,
   displayValue,
+  marginPreview,
   objectFieldText,
   parseSettingsForm,
   SETTING_GROUPS,
@@ -63,7 +64,7 @@ describe('parseSettingsForm', () => {
     const r = parseSettingsForm({ target_margin_pct: '95', overhead_pct: '-1', quote_valid_days: '2.5' });
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.error).toContain('Target margin must be less than 95');
+      expect(r.error).toContain('Target net margin must be less than 95');
       expect(r.error).toContain('Overhead must be at least 0');
       expect(r.error).toContain('Quote valid days must be a whole number');
     }
@@ -159,5 +160,32 @@ describe('display helpers', () => {
     expect(objectFieldText(fin, 'term_months')).toBe('120');
     expect(settingObject(map, 'missing')).toEqual({});
     expect(settingObject({ a: [1] }, 'a')).toEqual({});
+  });
+});
+
+describe('Target net margin (L10, OD9, S2-F10, RF-14)', () => {
+  const setting = (key: string): ScalarSetting => SETTING_GROUPS.flatMap((g) => g.settings).find((x) => x.key === key)!;
+
+  it('is labelled net, after overhead, and previews the gross margin', () => {
+    // The engine prices direct cost x (1 + overhead) / (1 - margin): the margin is net of overhead.
+    expect(setting('target_margin_pct').label).toBe('Target net margin (after overhead)');
+    expect(setting('target_margin_pct').hint).not.toMatch(/gross/i);
+    expect(setting('floor_margin_pct').hint).toMatch(/after overhead/);
+    expect(setting('ceiling_margin_pct').hint).toMatch(/after overhead/);
+    const p = marginPreview(0.63, 0.15)!;
+    expect(p.multiple).toBeCloseTo(1.9176, 4);
+    expect(p.grossMarginPct).toBeCloseTo(0.4785, 4);
+    expect(p.text).toBe('With 63% overhead, a 15% net margin is about a 48% gross margin: prices are 1.92 times the direct job cost.');
+    // The trap the audit found: typing the usual 48% gross margin here overprices by about 63%.
+    const typedGross = marginPreview(0.63, 0.48)!;
+    expect(typedGross.multiple / p.multiple).toBeCloseTo(1.63, 2);
+    expect(marginPreview(0.63, 0.95)).toBeNull();
+    expect(marginPreview(Number.NaN, 0.15)).toBeNull();
+  });
+
+  it('the stored value is unchanged: 15 on the page is 0.15 in the database, as before', () => {
+    const r = parseSettingsForm({ target_margin_pct: '15' });
+    expect(r).toEqual({ ok: true, values: { target_margin_pct: 0.15 } });
+    expect(displayValue({ target_margin_pct: 0.15 }, setting('target_margin_pct'))).toBe('15');
   });
 });

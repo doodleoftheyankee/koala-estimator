@@ -19,6 +19,7 @@ import {
 } from '@/lib/admin/settings';
 import { PRIMARY_PRODUCTS } from '@/lib/admin/pricingForms';
 import { ActionForm, ToggleInput } from './ActionForm';
+import { MarginPreview } from './MarginPreview';
 import { NumberField, SectionHeading, TextField } from './fields';
 import { addCrew, saveCodeRequirement, saveCrew, saveMaterial, saveProduct, saveSettings, saveTierTemplates } from './actions';
 
@@ -203,6 +204,12 @@ export default async function PricingPage() {
   );
 }
 
+/** A numeric setting as stored (NaN when missing). */
+function settingNumber(map: SettingsMap, key: string): number {
+  const v = map[key];
+  return typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+}
+
 type Material = Config['materials'][number];
 
 /** One material's form: name, cost per unit and, for bags, the coverage of one bag. */
@@ -322,6 +329,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
                   <SettingInput key={s.key} setting={s} map={map} crews={activeCrews} placeholder={placeholderKeys.has(s.key)} />
                 ))}
               </div>
+              {group.id === 'margins' ? <MarginPreview overheadPct={settingNumber(map, 'overhead_pct')} netMarginPct={settingNumber(map, 'target_margin_pct')} /> : null}
             </ActionForm>
           </Card>
         ))}
