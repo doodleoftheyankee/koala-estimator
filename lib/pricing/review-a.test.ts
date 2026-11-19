@@ -207,3 +207,14 @@ describe('F11 (L23b): an R the cavity caps is never stated above what the cavity
     expect(work(tier(r, 'good'))).toEqual(['Blown Cellulose to R-24.7 (~6.9" added), 1,000 sq ft']);
   });
 });
+
+describe('F12 (L17): a tiny area never reads "0 sq ft"', () => {
+  it('attic 0.04 sq ft (the form takes any size above 0): "0.04 sq ft", not "0 sq ft"; 0.3 sq ft still reads 0.3', () => {
+    const tiny = (sqft: number) => all(estimate({ areas: [area({ id: 'a1', sqft })] }));
+    // Before: "Blown Cellulose to R-49 (~13.6" added), 0 sq ft".
+    expect(work(tier(tiny(0.04), 'good'))).toEqual(['Blown Cellulose to R-49 (~13.6" added), 0.04 sq ft']);
+    expect(work(tier(tiny(0.04), 'better'))).toContain('Air sealing of top plates, penetrations and bypasses (0.04 sq ft)');
+    expect(work(tier(tiny(0.3), 'good'))).toEqual(['Blown Cellulose to R-49 (~13.6" added), 0.3 sq ft']);
+    expect(work(tier(tiny(12.4), 'good'))).toEqual(['Blown Cellulose to R-49 (~13.6" added), 12 sq ft']);
+  });
+});

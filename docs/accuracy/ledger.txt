@@ -647,3 +647,14 @@ RA-F11 A fill that fills its cavity states the R the cavity holds rounded down t
     (was R-13)", "an R the cavity does not cap still rounds to the nearest 0.1 …"; phase1.test.ts "walls
     with no depth are priced as a 2x4 wall (S1-F4, OD5)" and "walls with 2 in of cellulose: …" (their
     expected text updated); engine.test.ts "caps thickness at cavity depth and reports the achieved R".
+
+RA-F12 A tiny area never reads "0 sq ft" (L17 below 0.05 sq ft). Under 1 sq ft an area is written
+    with two significant digits; and a model quantity to 0.1 (batts, board feet, air sealing) is
+    never 0 for a positive need, so a tiny area's air sealing is not dropped as "a quantity of 0"
+    (RA-F4).
+    Examples (seeded, attic 0.04 sq ft, the area form takes any size above 0): "Blown Cellulose to
+      R-49 (~13.6" added), 0 sq ft" -> "…, 0.04 sq ft"; "Air sealing of top plates, penetrations and
+      bypasses (0 sq ft)" -> "(0.04 sq ft)", its material 0 -> 0.1 sq ft; every option $1,500 (the
+      minimum) unchanged. 0.3 sq ft still reads "0.3 sq ft"; 12.4 sq ft "12 sq ft".
+    Owner decision: S3-F23.
+    Test: "attic 0.04 sq ft (the form takes any size above 0): "0.04 sq ft", not "0 sq ft" …".

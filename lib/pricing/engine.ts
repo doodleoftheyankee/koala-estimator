@@ -780,7 +780,7 @@ function priceProductScope(
 
   const waste = coeff(k, 'waste_factor', { product: code, jobType: area.jobType });
   const rawQty = designQty * waste;
-  const modelQty = mat.unit === 'bag' ? Math.ceil(rawQty - 1e-9) : round1(rawQty);
+  const modelQty = mat.unit === 'bag' ? Math.ceil(rawQty - 1e-9) : qty1(rawQty);
 
   const setup = findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0;
   // Hours for a number of design units: units x hours per unit x access, multiplied in that order
@@ -810,7 +810,7 @@ function priceProductScope(
     // An estimator's quantity: never more than a full cavity (cut, with a warning), and the item
     // says what that quantity installs (L23, R3).
     if (room !== null && matLine.isOverridden) {
-      const most = mat.unit === 'bag' ? Math.ceil(((area.sqft * room) / mat.coverageSqftIn!) * waste - 1e-9) : round1(area.sqft * room * waste);
+      const most = mat.unit === 'bag' ? Math.ceil(((area.sqft * room) / mat.coverageSqftIn!) * waste - 1e-9) : qty1(area.sqft * room * waste);
       if (matLine.qty > most) {
         warnings.push({
           code: 'override_capped',
@@ -927,7 +927,7 @@ function priceAirSealing(
   const designQty = area.sqft;
   const mat = material(s, code);
   const waste = findCoefficient(k, 'waste_factor', { product: code, jobType: area.jobType })?.value ?? 1;
-  const qty = round1(designQty * waste);
+  const qty = qty1(designQty * waste);
   const setup = findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0;
   const perUnit = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType });
   const hoursFor = (units: number) => setup + units * perUnit * access; // in this order (F6)
@@ -1083,12 +1083,18 @@ function laborLine(
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const isNum = (n: number | null | undefined): n is number => typeof n === 'number' && Number.isFinite(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
+/** A model quantity to 0.1, never 0 for a positive need (a 0.04 sq ft area still gets its 0.1: F12). */
+const qty1 = (n: number) => (n > 0 ? Math.max(0.1, round1(n)) : round1(n));
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 const dedupe = (xs: string[]) => [...new Set(xs)];
 const capitalize = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
-/** Square feet: whole numbers, with one decimal under 10 sq ft so a tiny area never reads "0" (S3-F23). */
-const fmtSqft = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: n < 10 ? 1 : 0 });
+/**
+ * Square feet: whole numbers, with one decimal under 10 sq ft and two significant digits under 1 sq
+ * ft, so a tiny area never reads "0" (S3-F23, L17; 0.04 sq ft: review A F12).
+ */
+const fmtSqft = (n: number) =>
+  n > 0 && n < 1 ? n.toLocaleString('en-US', { maximumSignificantDigits: 2 }) : n.toLocaleString('en-US', { maximumFractionDigits: n < 10 ? 1 : 0 });
 const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const fmtR = (n: number) => round1(n).toLocaleString('en-US', { maximumFractionDigits: 1, useGrouping: false });
 /** An R-value rounded down to 0.1: what a full cavity holds, never more (L23b, F11). */
