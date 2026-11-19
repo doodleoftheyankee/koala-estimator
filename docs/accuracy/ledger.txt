@@ -1177,3 +1177,140 @@ RB-flow-B13 (L32, OD14) A new estimate made on a phone's first open starts in th
     Review B flow-B13. Tests: lib/field/newPlace.test.ts (4 tests: the pair or nothing, filled only
     while both are blank, the 3 s wait); e2e "review B screens" step "a phone's first /field?new=1
     starts in the shop address's town and state".
+
+=== Release: blower door under the accuracy rules ===
+
+(Branch claude/release = claude/accuracy 30afd15 + claude/blower-door 30a21a3, merged at 4ae7878. The
+blower door tool, its office card and its Rebate programs page brought under this round's rules:
+OD4 whole dollars, OD12/OD13 wording and hard rule 3, one formatter (lib/format.ts), L36 and
+review B flow-B10 for Koala unreachable, database-B1 safeNext, and the service worker. Each change
+was reproduced first: the test named fails on the merged code before the change (the outputs are
+in docs/release/release.txt) and passes after. No quote price, title, bullet or customer word of a
+quote moves: both golden sets re-price byte-identical to docs/accuracy/after/, and every stored
+quote renders as before (docs/release/hard-rule-1.txt). Worked example below: the blower door
+build notes' house (6,952 CFM at 50 Pa in, 3,325 CFM at 50.8 Pa out, n 0.65: 3,291 CFM50, 52.7%,
+the 40% tier) on the seeded programs (Assisted: 40% tier $2,000, 75% cost cap).)
+
+RL-1 (OD4) A capped air sealing rebate is whole dollars, never more than the program pays. The
+    cost cap (cap % of the air sealing price) is floored to the dollar, on the tool, the copied
+    summary, the result saved with a test-out and the office job card.
+    Examples: Assisted, price $1,999: "40% TIER — $1,499.25 AIR SEAL REBATE" -> "40% TIER — $1,499
+      AIR SEAL REBATE" (75% of $1,999 is $1,499.25); Home Performance, price $1,234: $925.50 ->
+      $925; price $1,001: $750.75 -> $750. Uncapped rebates ($900 ... $2,000) are unchanged.
+    Owner decision: OD4.
+    Tests: lib/blowerdoor/blowerdoor.test.ts "floors a capped amount to whole dollars, never more
+    than the program pays (OD4)" (was "floors a capped amount to the cent"), record.test.ts (3
+    expectations $1,499.25 -> $1,499); e2e "a capped rebate is whole dollars, never more than the
+    program pays: $1,499 (was $1,499.25)" and the office card "40% TIER — $1,499 AIR SEAL REBATE".
+
+RL-2 (OD4) The air sealing price is typed in whole dollars, as on the quote. Cents are refused
+    with a reason instead of being read to the cent.
+    Examples: "1999.50" -> was read as $1,999.50 (cap $1,499.62, shown "$1,499.62") -> "Air sealing
+      price: whole dollars, as on the quote (no cents)." and no cap until it is fixed (the badge
+      stays "$1,800" on Home Performance); "$1,999.999" -> was read as $2,000 -> refused;
+      "$1,999.00" and "$1,999" -> $1,999.
+    Owner decision: OD4.
+    Tests: blowerdoor.test.ts "takes the air sealing price in whole dollars, as on the quote
+    (OD4)", "reads the other fields at the precision the database keeps" (its $1,999.999 line now
+    expects the refusal); e2e "a price with cents is refused (whole dollars, as on the quote) and
+    caps nothing".
+
+RL-3 (one formatter, L8) The blower door code formats money, numbers and dates through
+    lib/format.ts. Before it had its own Intl.DateTimeFormat for a program's effective date, 'en-US'
+    toLocaleString for field limits and ACH50, and a dollar sign glued to raw numbers in the Rebate
+    programs messages. lib/format.ts gains fixed(n, digits) (exactly that many decimals, for ACH50).
+    Example (Rebate programs, a higher tier paying less): "Program 1: a higher tier cannot pay less
+      than a lower one ($1300 then $1000)." -> "($1,300 then $1,000)." Effective dates ("Nov 1,
+      2024"), field limits ("at most $1,000,000", "at most 50,000 CFM") and ACH50 ("20.86",
+      "7.10") read as before.
+    Owner decision: none needed (the accuracy round's one-formatter rule).
+    Tests: lib/blowerdoor/format.test.ts (no Intl formatter, own locale, toLocaleString or "$"
+    template in the blower door code: 4 scans failed before, naming settings.ts, numbers.ts and
+    words.ts; the readings that must not change), settings.test.ts "wants a higher tier to pay at
+    least as much".
+
+RL-4 (review B flow-B10, L36) Saving the rebate programs while Koala's database does not answer
+    says so. Before: "Only the owner can change the rebate programs." (as if the owner were not
+    allowed) -> "Can't reach Koala right now. Nothing was saved." Signed out, or the office, keep
+    the action's own words (lib/server/actionAuth.ts actionRefusal, as Pricing, Team, Insights,
+    Jobs and Estimates do).
+    Owner decision: none needed.
+    Tests: app/admin/rebates/actions.test.ts (3; the unreachable one failed before),
+    lib/server/actionAuth.test.ts "the server actions use it wherever they refuse a person" (lists
+    app/admin/rebates/actions.ts; failed before); e2e "saving the rebate programs while Koala is
+    down says "Can't reach Koala right now. Nothing was saved."", "and nothing was saved".
+
+RL-5 (L36) The blower door tool treats Koala not answering as Koala not answering. Its APIs already
+    answered 503 {error: 'unreachable'} through lib/server/auth authorize (the accuracy round's);
+    the phone read that answer as "The server answered 503. Will retry." and showed nothing else.
+    Now a 503 on a saved reading reads "Can't reach Koala right now. The reading is saved on this
+    phone; it is sent when Koala is back." (kept, sent again on the next sync), and the tool shows
+    "Can't reach Koala right now." with Try again while it lasts, like the field app. It is never
+    "Your session expired" or "not one you can save readings to".
+    Examples (e2e, REST answering 503): the estimator opens /field/blower-door?estimate=<Lee>:
+      the phone's copy opens with "Can't reach Koala right now."; POST /api/blower-door/tests: 503
+      unreachable (not 401 "Not signed in").
+    Owner decision: none needed.
+    Tests: lib/offline/blowerDoorCore.test.ts "a 503 from Koala says "Can't reach Koala right now"
+    and keeps the reading to send again (was "The server answered 503")" (failed before), "a 401
+    is a sign-out; a refusal and a stored reading are as the server says; anything else is
+    retried"; e2e "the blower door tool, opened while Koala's database is down, opens from the
+    phone and says ...", "the blower door API answers 503 unreachable".
+
+RL-6 (review B database-B1, safeNext) "Sign in again" on the tool comes back to the same job or
+    estimate. Before: /login?next=%2Ffield%2Fblower-door, the plain calculator, whose typed form and
+    readings are kept apart from the job's, so the readings seemed gone after signing in. Now
+    /login?next=<the tool's address for the job or estimate>, through safeNext.
+    Example: job 0b000000-...-000000000001 "Pat Lee, 12 Elkton Rd": next=/field/blower-door ->
+      next=/field/blower-door?job=0b000000-0000-4000-8000-000000000001&label=Pat+Lee%2C+12+Elkton+Rd.
+    Owner decision: none needed.
+    Tests: blowerDoorCore.test.ts ""Sign in again" comes back to the same job or estimate, through
+    safeNext (was /field/blower-door, the plain calculator)" (failed before).
+
+RL-7 (L36, review B flow-B8, service worker) The blower door shell under L36. public/sw.js v13 (the
+    merge: one past the accuracy round's v12 and the blower door's v7) opens /field/blower-door from
+    its saved copy while Koala's pages go to /unreachable, and keeps the copy; on the blower door
+    branch alone (v7) that redirect counted as a refusal, the copy was deleted and the phone showed
+    /unreachable. And /unreachable opened for the tool offers "Open the blower door tool on this
+    phone" for the same job or estimate, instead of the estimator's field app ("Open the estimates
+    on this phone", /field), which a crew phone never has: a crew lead was told "This phone has no
+    saved copy of the app yet" while the tool was saved. phoneAppFor moves to
+    lib/offline/phoneCopy.ts; hasSavedCopy finds a shell saved under its bare path for any ?job=.
+    Owner decision: none needed.
+    Tests: lib/offline/serviceWorker.test.ts "opens the blower door tool from its saved copy while
+    Koala cannot be reached, and keeps it (L36)" (fails on the v7 worker: "Can't reach Koala right
+    now" instead of the tool), lib/offline/phoneCopy.test.ts "offers the blower door tool for the
+    tool, with its job or estimate", "finds the tool saved under its bare path for any job" (both
+    failed before), "keeps the field and crew apps as they were ..."; e2e "/unreachable for the
+    blower door tool offers the tool for the same estimate (was the estimates list)".
+
+RL-8 (review B database-B4, database-B5; no customer value) The readings table does not rest on RLS
+    alone. On a production-shaped database (production's default privileges, as the test stub has
+    them since database-B5) the new blower_door_tests table was granted to the API roles at
+    creation: the public had every privilege on it, and signed-in users insert, update, delete and
+    truncate, held back by RLS alone (RLS does not cover truncate). The blower door migration now
+    revokes all from anon and insert, update, delete and truncate from authenticated, as the
+    accuracy migration does for price_approvals. Readings still get in only through
+    sync_blower_door_test(); a second run of the migration changes nothing.
+    Before -> after (grants on blower_door_tests): anon DELETE,INSERT,REFERENCES,SELECT,TRIGGER,
+      TRUNCATE,UPDATE -> none; authenticated the same -> REFERENCES,SELECT,TRIGGER; service_role
+      unchanged. A crew's or the owner's UPDATE or DELETE of a reading: "0 rows" -> refused
+      (permission denied).
+    Owner decision: none needed (hard rule 2: additive, the live site never reads this table).
+    Tests: tests/sql/50_blower_door.test.sql "release: readings table privileges" (failed before:
+    "the public cannot read readings"); its edit and delete checks now expect the refusal.
+
+RL-9 (OD12, OD13, hard rule 3; no change) The blower door screens, its copied summary (its report;
+    it has no PDF), the office card and the Rebate programs page name no company and no franchise,
+    show no PLACEHOLDER and never send anyone to the business profile; nothing in them needed
+    changing. The hard-rule-3 scan (lib/franchise-text.test.ts) reads every blower door file, and
+    now says so; lib/blowerdoor/franchise.test.ts also keeps out "Koala Insulation", PLACEHOLDER,
+    the business profile and its page, a warranty, Newark and (302).
+    Owner decision: OD12, OD13, hard rule 3.
+    Tests: lib/franchise-text.test.ts "reads the code it means to" (13 blower door files listed),
+    lib/blowerdoor/franchise.test.ts "never says %s" (9 words). Both pass on the merged code.
+
+The merge (no value change): the menus have both new pages, Blower door (every role, after Roof
+lookup; a tab for crews) and Rebate programs (owner and office, after Pricing, before the optional
+Business profile); the e2e run has the accuracy round's L36 step and then the blower door's offline
+step, the review B screens step and then the rebate programs step.

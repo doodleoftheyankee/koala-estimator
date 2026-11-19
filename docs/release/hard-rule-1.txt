@@ -1,0 +1,67 @@
+HARD RULE 1 ON THE RELEASE HEAD (claude/release = claude/accuracy + claude/blower-door, Nov 19 2026)
+
+Quotes already sent or signed never change: their documents, PDFs and emails must render exactly as
+before. This repeats the proof in docs/accuracy/final/hard-rule-1.txt ("To repeat it") on the release
+code: claude/release with the merge (4ae7878) and the blower door changes of "Release: blower door
+under the accuracy rules" (954dc06 ... b0d63f2); the commits after those add the e2e steps, the
+check scripts and docs.
+
+What was rendered
+  The same 77 stored production quotes from the same read-only export (scratchpad
+  accuracy/golden/live-quote-docs.json; manifest md5 2ca0d61ee3371b8dfa44c572dc8a9ca7, file md5
+  15914e91c59ace3fbfd9b0d8cae9ef91, 77 quotes; not re-exported), through the same
+  scripts/accuracy/render-stored.ts and render-run.mjs:
+    node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts <export> <out>
+  2,926 files per run: the quote PDF (77) and the signed PDF per option (231) as text; the quote,
+  signed confirmation and office notice emails (subject + text and HTML, 1,078); the customer page as
+  text and as markup in every state (stored, open and signed per option, superseded, declined,
+  expired; 770 + 770). All sets below were rendered within a few minutes of each other on the same
+  clock, from the same export.
+
+1. Against the accuracy round's final code (claude/accuracy 30afd15, git archive, rendered now):
+     2,926 of 2,926 files byte-identical (diff -rq: no differences). The release head renders
+     every stored quote exactly as the finished accuracy round does. It is also byte-identical, all
+     2,926 files, to the accuracy round's own final render (scratchpad accuracy/finalB/render-final),
+     made earlier the same day.
+     Two renders of the release head: identical to each other (the harness is deterministic).
+
+2. Against the before code (7c6b08c, the quotes stage's starting point, rendered now):
+     python3 -I scripts/accuracy/hard-rule-1-diff.py <before> <release>:
+       files 2926; identical 2674; differ only by the flow-B11 / flow-B6 class names 252; other
+       differences 0. Text, PDF and email files: 2,156, 0 differing.
+     PDFs 308/308, emails 1,078/1,078 and page text 770/770 identical: every word, price, date,
+     quote number, consent sentence and page break of every stored quote, in every state. The 252
+     markup files differ only in the two class names the accuracy round already documented (review B
+     flow-B11, the estimator email link's 48 px tap target; flow-B6, the sign form's placeholder
+     colour token), exactly as in docs/accuracy/final/hard-rule-1.txt:
+       page-open-<tier>.html (B6) 74 x 3, (B11+B6) 3 x 3; page-stored/-declined/-expired/
+       -superseded/-signed-<tier>.html (B11) 3 each.
+
+3. Against the live site's code (origin/main c0ae5f1, git archive, rendered now with
+   scripts/accuracy/render-docs-only.ts, the quotes stage's documents-only harness, now in the repo:
+   PDFs and emails):
+     1,386 files compared (the quote PDF, the signed PDF per option and the three emails of the 77
+     stored quotes), 0 differences. A customer who signs an older quote after the release ships gets
+     the signed PDF and emails the live site would make today.
+
+Why the release cannot change a stored quote
+  - Nothing in the release touches the quote code: the blower door files, the menu, the service
+    worker, /unreachable's offer of the phone's copy, lib/format.ts (one new function, fixed(),
+    which no quote uses) and the blower door migration are all outside lib/quotes and app/q.
+  - The blower door migration adds one app_settings row ('blower_door', only when absent), a read
+    policy on app_settings for that row, a new table with its triggers, policies and grants, and
+    new functions. It touches no quote, snapshot, PDF path, e-sign record or other setting.
+  - The accuracy migration is unchanged from claude/accuracy: its conditional seed replacements
+    apply only to rows that still equal the seed, and a stored quote reads its company, terms,
+    warranty, consent, number and dates from its own document (docs/accuracy/final/hard-rule-1.txt).
+
+To repeat it
+  1. Render the release head: node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts
+     <export> <release>.
+  2. git archive 30afd15 into a folder, link node_modules, run the same command there into
+     <accuracy>; diff -rq <accuracy> <release> (expect nothing).
+  3. Render 7c6b08c the same way (with render-run.mjs, render-stored.ts and stubs/ copied in) into
+     <before>; python3 -I scripts/accuracy/hard-rule-1-diff.py <before> <release>.
+  4. git archive origin/main, copy render-run.mjs, stubs/ and render-docs-only.ts into its
+     scripts/accuracy/, run render-docs-only.ts there into <main>, and cmp each of its 1,386 files
+     with the same file in <release>.

@@ -1,0 +1,90 @@
+== A: stub + origin/main's migrations (7 files) + accuracy + blower door, twice
+  first run: supabase/migrations/20261119000001_accuracy.sql
+  first run: supabase/migrations/20261120000001_blower_door.sql
+  second run: supabase/migrations/20261119000001_accuracy.sql
+  second run: supabase/migrations/20261120000001_blower_door.sql
+  second run changes nothing: schema.sql identical (5613 lines)
+  second run changes nothing: data.txt identical (283 lines)
+  second run changes nothing: grants.txt identical (149 lines)
+  what the first run changed in rows (lines only in the first-run dump):
+  (read: "<" a row before the two migrations, ">" the row after the first run; the first 40 lines)
+    > {"id":"06c8f15c-1530-4208-821e-1d671c76b215","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-21 (5.5 in)","sku":null,"unit":"sqf
+    > {"id":"119ed51c-5f78-46ef-acba-a12ad085f45a","set_id":"9a290502-cdc1-49ff-928c-db506145ddda","kind":"waste_factor","product":"cellulose","job_type":"walls","a
+    > {"id":"3a2ae5af-80a3-45f1-9679-e60437985c27","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-13 (3.5 in)","sku":null,"unit":"sqf
+    > {"id":"476e29bd-9eda-4a2d-8bc9-02c2aecd91f4","product_id":"fd5feebf-e830-4e08-ab74-a6886f47b03f","name":"Cellulose bag, dense-pack walls (25 lb)","sku":null,"
+    > {"id":"4a7cbbc1-90a4-4e8e-86f9-21a6bc14cc21","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-11 (3.5 in)","sku":null,"unit":"sqf
+    > {"id":"5d0954f5-cad3-43e7-a885-adae079ffb58","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-19 (6.25 in)","sku":null,"unit":"sq
+    < {"id":"7f5c0382-dc63-4467-9211-f908bb701f3c","product_id":"409cf7af-d7a7-4f9f-b537-e9aabe6a127e","name":"Open-cell set (~$1,800/set at full yield, per board f
+    < {"id":"7fef9f30-6b01-410f-93f4-0c5cb29c4780","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Batt (per sqft @ rated R)","sku":null,"unit":"sqft","
+    > {"id":"7f5c0382-dc63-4467-9211-f908bb701f3c","product_id":"409cf7af-d7a7-4f9f-b537-e9aabe6a127e","name":"Open-cell set (~$1,800/set at full yield, per board f
+    > {"id":"7fef9f30-6b01-410f-93f4-0c5cb29c4780","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Batt (per sqft @ rated R)","sku":null,"unit":"sqft","
+    < {"id":"9c36917e-7e18-4b38-acc5-023567205452","product_id":"73ee5618-ee13-4969-84a6-6cf137f30246","name":"Air sealing materials (per sqft)","sku":null,"unit":"
+    > {"id":"9c36917e-7e18-4b38-acc5-023567205452","product_id":"73ee5618-ee13-4969-84a6-6cf137f30246","name":"Air sealing materials (per sqft)","sku":null,"unit":"
+    > {"id":"9eb4c4a0-65a3-459d-9f3d-25bf01a4970d","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-15 (3.5 in)","sku":null,"unit":"sqf
+    < {"id":"c3981eed-09cc-4ede-8cbd-72a3e862c4b7","product_id":"fd5feebf-e830-4e08-ab74-a6886f47b03f","name":"Cellulose bag (25 lb)","sku":null,"unit":"bag","cost_
+    > {"id":"c3981eed-09cc-4ede-8cbd-72a3e862c4b7","product_id":"fd5feebf-e830-4e08-ab74-a6886f47b03f","name":"Cellulose bag (25 lb)","sku":null,"unit":"bag","cost_
+    < {"id":"dbaa72e9-a746-452f-89f7-410021d10fc3","product_id":"5a2c05e9-f2b9-4d67-af5c-388f182f9155","name":"Blown fiberglass bag (~28 lb)","sku":null,"unit":"bag
+    > {"id":"dbaa72e9-a746-452f-89f7-410021d10fc3","product_id":"5a2c05e9-f2b9-4d67-af5c-388f182f9155","name":"Blown fiberglass bag (~28 lb)","sku":null,"unit":"bag
+    > {"id":"de9338a4-61ee-4c4d-9789-4261fb4409d4","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-38 (12 in)","sku":null,"unit":"sqft
+    > {"id":"e3bca08a-9a26-499a-8c5f-6c4b0500b973","product_id":"d9c05d45-60b9-4638-95c2-db05ead98478","name":"Fiberglass batt R-30 (10 in)","sku":null,"unit":"sqft
+    < {"id":"f54fbefc-df83-4ada-81da-de7c42d307a9","product_id":"8a3c3544-cb49-4ba3-96a6-aabc2b9d7da2","name":"Closed-cell set (~$2,350/set at full yield, per board
+    > {"id":"f54fbefc-df83-4ada-81da-de7c42d307a9","product_id":"8a3c3544-cb49-4ba3-96a6-aabc2b9d7da2","name":"Closed-cell set (~$2,350/set at full yield, per board
+    > {"id":100,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"dbaa72e9-a746-452f-89
+    > {"id":101,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"7fef9f30-6b01-410f-93
+    > {"id":102,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"9c36917e-7e18-4b38-ac
+    > {"id":103,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"7f5c0382-dc63-4467-92
+    > {"id":104,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"f54fbefc-df83-4ada-81
+    > {"id":105,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"476e29bd-9eda-4a2d-8b
+    > {"id":106,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"3a2ae5af-80a3-45f1-96
+    > {"id":107,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"9eb4c4a0-65a3-459d-9f
+    > {"id":108,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"5d0954f5-cad3-43e7-a8
+    > {"id":109,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"de9338a4-61ee-4c4d-97
+    > {"id":110,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"06c8f15c-1530-4208-82
+    > {"id":111,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"e3bca08a-9a26-499a-8c
+    > {"id":112,"at":"2026-11-19T15:17:51.322556+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"materials","row_id":"4a7cbbc1-90a4-4e8e-86
+    > {"id":113,"at":"2026-11-19T15:17:51.346541+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"app_settings","row_id":"branding","before"
+    > {"id":114,"at":"2026-11-19T15:17:51.347406+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"app_settings","row_id":"quote_terms","befo
+    > {"id":115,"at":"2026-11-19T15:17:51.347928+00:00","actor_id":null,"actor_role":null,"action":"UPDATE","table_name":"app_settings","row_id":"warranty_text","be
+    > {"id":116,"at":"2026-11-19T15:17:51.385673+00:00","actor_id":null,"actor_role":null,"action":"INSERT","table_name":"app_settings","row_id":"blower_door","befo
+    < {"key":"branding","value":{"phone": null, "company": "Koala Insulation of Newark", "license": null, "logo_path": null, "primary_color": null},"description":"P
+    > {"id":90,"at":"2026-11-19T15:17:51.304149+00:00","actor_id":null,"actor_role":null,"action":"INSERT","table_name":"materials","row_id":"476e29bd-9eda-4a2d-8bc
+  blower door objects' grants (production's default privileges, then the migration's revokes):
+    authenticated blower_door_tests REFERENCES,SELECT,TRIGGER
+    service_role blower_door_tests DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+    blower_door_context postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres
+    can_record_blower_door postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres
+    can_see_blower_door postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres
+    sync_blower_door_test postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres
+    tg_blower_door_tests_job_estimate =X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres
+  SQL tests on this database (after tests/sql/01_grants.sql, as npm run test:db does):
+  ok
+    ok tests/sql/10_phase1.test.sql
+  ok
+    ok tests/sql/20_phase2.test.sql
+  ok
+    ok tests/sql/30_photo_reads.test.sql
+  ok
+    ok tests/sql/31_roof_lookups.test.sql
+  ok
+    ok tests/sql/40_accuracy.test.sql
+  ok
+  ok (review B database-B2, database-B4)
+    ok tests/sql/41_owner_decisions.test.sql
+  ok
+  ok (release: readings table privileges)
+    ok tests/sql/50_blower_door.test.sql
+== B: stub + origin/main's migrations + the blower door migration alone (no accuracy migration)
+  ok
+  ok (release: readings table privileges)
+    ok tests/sql/50_blower_door.test.sql (blower door without the accuracy migration, applied twice)
+  names the blower door migration uses that only the accuracy migration creates:
+    none (checked 9 names the accuracy migration adds: next_quote_number price_approvals price_approvals_estimate_idx price_approvals_one_pending price_approvals_pending_idx price_approvals_pkey quote_number_counters quote_number_counters_pkey tg_price_approval_guard )
+  app_settings keys the blower door migration reads or writes:
+          1 'blower_door'
+          2 key = 'blower_door'
+  app_settings keys the accuracy migration writes:
+          1 values ('quote_number_prefix'
+          1 where key = 'branding'
+          1 where key = 'quote_terms'
+          1 where key = 'warranty_text'
+done

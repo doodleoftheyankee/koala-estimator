@@ -1,0 +1,293 @@
+KOALA RELEASE CANDIDATE: claude/release (Nov 19 2026)
+
+claude/release is the release candidate for every Koala Insulation franchise: the accuracy round
+(claude/accuracy) and the Blower Door Air Seal calculator (claude/blower-door), merged, with the
+blower door brought under the accuracy round's rules. Nothing has been applied to production or
+deployed; the go-live steps are in section 6.
+
+
+1. WHAT IT CONTAINS
+-------------------
+  origin/main         c0ae5f1  the live site (Roof takeoff in Koala, #10)
+  claude/daymark      9051b81  the new look (Daymark), on top of main
+  claude/accuracy     30afd15  the accuracy round on top of daymark (99 commits past it): money
+                               lines, cavity, measuring guards, quotes, flow, review A and review B
+                               fixes, owner decisions OD1-OD16, finished and fully checked
+                               (docs/accuracy/results/final.json)
+  claude/blower-door  30a21a3  the Blower Door Air Seal calculator on top of daymark (15 commits),
+                               finished and reviewed (docs/blower-door/build.txt)
+  claude/release      branch from claude/accuracy 30afd15, then
+    4ae7878  merge --no-ff of claude/blower-door (the conflicts in section 2)
+    954dc06 .. b0d63f2  the blower door under the accuracy rules (section 3, seven commits)
+    4c9c744  the e2e steps for those changes and the crew phone's console rule
+    13d11db  the scripts behind the checks (scripts/release-migrations.sh,
+             scripts/accuracy/render-docs-only.ts)
+    then these docs and the ledger section (docs only).
+  Migrations, in order: supabase/migrations/20261119000001_accuracy.sql (unchanged from
+  claude/accuracy), 20261120000001_blower_door.sql (from claude/blower-door, plus the revokes of
+  RL-8). No other migration is new.
+
+
+2. THE MERGE: CONFLICTS AND HOW EACH WAS RESOLVED
+-------------------------------------------------
+  Both branches grew from claude/daymark 9051b81. Five files conflicted; every other file merged on
+  its own (app/field/EstimateEditor.tsx, app/jobs/[id]/page.tsx, lib/offline/sync.ts: both sides'
+  lines kept as git merged them, checked by typecheck, vitest and the e2e run).
+
+  lib/nav.ts            Both new menu entries and their roles. Blower door (/field/blower-door, every
+                        role, after Roof lookup; a tab for crews, under More for the others) and
+                        Rebate programs (/admin/rebates, owner and office, after Pricing), with the
+                        accuracy round's optional Business profile kept after Rebate programs. The
+                        NavIcon type has both 'blowerDoor', 'rebates' and 'business'.
+  components/shell/parts.tsx
+                        Both icon maps: rebates -> ListChecks, business -> Briefcase, blowerDoor ->
+                        Wind (the icon import has all three).
+  lib/nav.test.ts       The owner's exact list has both: ... Pricing, Rebate programs, Business
+                        profile, Insights, Team, Design. The estimator's and crew's lists (blower
+                        door's) and the four-tab and offline-shell tests pass as they were.
+  public/sw.js          The accuracy round's worker (L36: a shell whose page goes to /unreachable
+                        opens the phone's copy and keeps it; redirects followed, so refused and
+                        unreachable are told apart) with the blower door's /field/blower-door shell
+                        and its role-shell rule (BD-R4: only /field and /crew count as "whose phone");
+                        the header comment has both. VERSION v13: one past the higher of the two
+                        (accuracy v12, blower door v7).
+  tests/e2e/run.mjs     Both sets of steps, in the order each was written to follow: after the
+                        offline estimate, the accuracy round's "Koala's database unreachable is not
+                        a sign-out (L36)", then the blower door's offline step; after "office marks
+                        an estimate lost", the accuracy round's review B screens step, then the
+                        blower door's "owner edits the rebate programs" (the last step).
+
+
+3. THE BLOWER DOOR UNDER THE ACCURACY RULES (step 2; ledger: docs/accuracy/ledger.txt, section
+   "Release: blower door under the accuracy rules", RL-1 to RL-9)
+--------------------------------------------------------------------------------------------
+  Each change was reproduced first: the test was written against the merged code and failed, then
+  the change made it pass. On the merged code (4ae7878) the new and changed unit tests gave
+  "17 failed | 127 passed" (the list below); the service worker test failed on the blower door's
+  own worker (sw.js v7) and passes on the merged v13; the SQL test failed with "the public cannot
+  read readings" before the migration's revokes.
+
+  RL-1  OD4: a capped rebate is whole dollars, floored, never more than the program pays.
+        "40% TIER — $1,499.25 AIR SEAL REBATE" -> "$1,499" (Assisted, $1,999 price); $925.50 -> $925.
+        lib/blowerdoor/calc.ts rebateFor. Tests: blowerdoor.test.ts "floors a capped amount to whole
+        dollars ..." (failed before), record.test.ts (3, failed before), e2e (tool and office card).
+  RL-2  OD4: the air sealing price is typed in whole dollars, as on the quote. "1999.50" -> "Air
+        sealing price: whole dollars, as on the quote (no cents)." lib/blowerdoor/numbers.ts RULES.cost.
+        Tests: blowerdoor.test.ts "takes the air sealing price in whole dollars ..." (failed before),
+        the precision test's $1,999.999 line; e2e.
+  RL-3  One formatter: money, numbers and dates through lib/format.ts (formatMoney, num, formatDate
+        with calendarDay, and a new fixed() for ACH50). "($1300 then $1000)" -> "($1,300 then
+        $1,000)"; effective dates, limits and ACH50 read as before. Tests: lib/blowerdoor/
+        format.test.ts (4 scans and the readings, failed before), settings.test.ts (failed before).
+  RL-4  flow-B10/L36: saving the rebate programs while Koala cannot be reached says "Can't reach
+        Koala right now. Nothing was saved." (was "Only the owner can change the rebate programs.").
+        app/admin/rebates/actions.ts through actionRefusal. Tests: app/admin/rebates/actions.test.ts
+        (failed before), lib/server/actionAuth.test.ts (lists the action; failed before); e2e.
+  RL-5  L36: the tool and its outbox. A 503 on a saved reading reads "Can't reach Koala right now.
+        The reading is saved on this phone; it is sent when Koala is back." (was "The server
+        answered 503. Will retry."), and the tool shows "Can't reach Koala right now." with Try
+        again; never "Your session expired". The APIs answered 503 through authorize already.
+        lib/offline/blowerDoorCore.ts testSyncAnswer, lib/offline/blowerDoor.ts, BlowerDoorTool.tsx.
+        Tests: blowerDoorCore.test.ts (failed before); e2e (tool and API with the database down).
+  RL-6  safeNext: "Sign in again" comes back to the same job or estimate (was /login?next=/field/
+        blower-door, the plain calculator). blowerDoorCore.ts signInHref. Test: blowerDoorCore.test.ts
+        (failed before).
+  RL-7  Service worker and /unreachable: the tool's shell opens from its saved copy while Koala's
+        pages go to /unreachable and keeps it (sw.js v13; v7 deleted it); /unreachable for the tool
+        offers "Open the blower door tool on this phone" for the same job or estimate (was the
+        estimator's field app, which a crew phone never has). lib/offline/phoneCopy.ts phoneAppFor
+        and hasSavedCopy, components/shell/StatePages.tsx, app/unreachable/page.tsx. Tests:
+        serviceWorker.test.ts (fails on v7), phoneCopy.test.ts (2 failed before); e2e.
+  RL-8  database-B4/B5: the readings table does not rest on RLS alone. On production's default
+        privileges the new blower_door_tests was granted to anon (everything) and authenticated
+        (insert, update, delete, truncate); the migration now revokes those. Test:
+        tests/sql/50_blower_door.test.sql "release: readings table privileges" (failed before).
+  RL-9  OD12, OD13, hard rule 3: no company name, franchise text, PLACEHOLDER or business-profile
+        nag in the blower door screens, its copied summary (its report; it has no PDF), the office
+        card or the Rebate programs page. Nothing needed changing. lib/franchise-text.test.ts now
+        checks that it reads the 13 blower door files; lib/blowerdoor/franchise.test.ts keeps out 9
+        more words. Both pass.
+  Also in the e2e run: the crew phone's console uses the same rule as the estimator's (a failure
+  caused on purpose by a step that cuts the signal is expected; anything else is logged). Before,
+  the crew's deliberate offline step logged "CREW Failed to load resource:
+  net::ERR_INTERNET_DISCONNECTED", which the blower door build notes listed as a known caught
+  error; the run now reports console errors: none.
+
+  Tests that failed on the merged code before the step 2 changes (vitest, 17):
+    lib/blowerdoor/blowerdoor.test.ts: floors a capped amount to whole dollars, never more than the
+      program pays (OD4); takes the air sealing price in whole dollars, as on the quote (OD4)
+    lib/blowerdoor/format.test.ts: has no its own Intl formatter (settings.ts); has no a locale of
+      its own; has no toLocaleString (numbers.ts, settings.ts, words.ts); has no a dollar sign glued
+      to a raw number (numbers.ts, settings.ts); reads the same as before ... (fixed() was missing)
+    lib/blowerdoor/record.test.ts: applies the cost cap from the price the estimator saved with the
+      test-in (BD-MATH-1); keeps the newest price ...; warns when the test-in and the test-out were
+      saved under different programs (BD-R2) ("$1,499.25" against "$1,499")
+    lib/blowerdoor/settings.test.ts: wants a higher tier to pay at least as much ("$1300")
+    lib/offline/blowerDoorCore.test.ts: a 503 from Koala says "Can't reach Koala right now" ...;
+      "Sign in again" comes back to the same job or estimate, through safeNext ...
+    lib/offline/phoneCopy.test.ts: offers the blower door tool for the tool, with its job or
+      estimate; finds the tool saved under its bare path for any job
+    lib/server/actionAuth.test.ts: the server actions use it wherever they refuse a person
+    app/admin/rebates/actions.test.ts: Koala unreachable: "Can't reach Koala right now. Nothing was
+      saved.", not "Only the owner ..."
+  Plus lib/offline/serviceWorker.test.ts "opens the blower door tool from its saved copy while
+  Koala cannot be reached, and keeps it (L36)" on the v7 worker (received "Can't reach Koala right
+  now" instead of the tool), and tests/sql/50_blower_door.test.sql "the public cannot read
+  readings".
+  Existing tests changed, each because it encoded what an owner decision or a rule changed: the
+  cent-precision cap ($925.50, $1,499.25 x 3), "$1,999.999 read as $2,000", "($1300 then $1000)",
+  the SQL test's edits and deletes of no rows (now refused), the e2e office card ($1,499.25). Nothing
+  was deleted, skipped or weakened.
+
+
+4. THE MIGRATIONS ON A PRODUCTION-SHAPED DATABASE (step 3; output: docs/release/migrations.txt,
+   script: scripts/release-migrations.sh)
+--------------------------------------------------------------------------------------------
+  Database A: tests/sql/00_supabase_stub.sql (production's default privileges since review B
+  database-B5) + every migration on origin/main (7 files, taken from origin/main itself), then
+  20261119000001_accuracy.sql and 20261120000001_blower_door.sql in order, then both again.
+    The second run changes nothing: the schema dump (5,613 lines, with grants and policies), every
+    row of every public table (283 lines) and the API roles' table grants (149 lines) are
+    identical after the first and the second run.
+    Then tests/sql/01_grants.sql and all seven SQL test files on that database: all pass.
+    Grants on blower_door_tests after the migrations: anon none; authenticated REFERENCES, SELECT,
+    TRIGGER; service_role all. Its functions: authenticated and service_role only (the trigger
+    function keeps the default, which no API can call).
+  Database B: the same stub and origin/main's 7 migrations, then ONLY the blower door migration,
+  twice: tests/sql/50_blower_door.test.sql passes. The blower door migration relies on nothing the
+  accuracy migration adds or changes:
+    - names: none of the 9 objects only the accuracy migration creates (next_quote_number,
+      price_approvals and its indexes, quote_number_counters, tg_price_approval_guard) appears in it;
+    - grants: it grants and revokes its own objects explicitly, and holds on production's default
+      privileges (the B5 stub), as shown above;
+    - app_settings: it reads and writes only the key 'blower_door' (inserted only when absent); the
+      accuracy migration writes quote_number_prefix (only when absent) and branding, quote_terms
+      and warranty_text (only where they still equal the seed).
+  npm run test:db (the project's own run, release head): 7 files, all database tests passed.
+  Production's migration record, read with a SELECT on 2026-11-19 (project fznkewranivklezxhtsf,
+  read-only): supabase_migrations.schema_migrations lists 5 entries under other names and versions
+  (init, phase1_seed, market_defaults, code_minimums_2018_iecc, photo_reads), but the schema has
+  every origin/main migration applied (job_actuals and sync_job_actuals from phase 2,
+  roof_lookups with matched_key, photo_analyses' policy), and nothing of the two new migrations
+  (no price_approvals, quote_number_counters, blower_door_tests, materials.typical_min or
+  blower_door setting).
+
+
+5. THE CHECKS ON THE RELEASE HEAD (step 4), one at a time
+---------------------------------------------------------
+  The code checked is the release head's. typecheck, lint, vitest, test:db and the violations ran
+  on 13d11db; the e2e run, the golden sets, the renders of hard rule 1 and the compat run ran on
+  the same app code and migrations (the e2e with tests/e2e/run.mjs exactly as committed in
+  4c9c744). The commit after 13d11db adds docs only (this file, the ledger section, e2e.txt,
+  hard-rule-1.txt, compat-main.txt, migrations.txt).
+  npm run typecheck        pass (tsc on the app and on scripts/accuracy)
+  npm run lint             pass (0 problems)
+  npx vitest run           103 files, 1,845 tests, all passed (the accuracy round's final head: 1,708 in
+                           94 files; the blower door branch: 1,514 in 80; the merge: 1,819 in 101;
+                           the release's tests add 26). None skipped, deleted or weakened.
+  npm run test:db          7 files, all database tests passed
+  npm run accuracy:violations -- 10000 20261118
+                           every invariant 0 (items_add_up, same_work_same_price, options_step_up,
+                           labels_match_work, cavity_not_overfilled, finite_amounts,
+                           same_price_text, valid_until_is_expiry); 10,000 quotes, 26,531 options
+                           priced, 22,113 shown, bundle 5ecebe2c0f390417. The output (after npm's
+                           three header lines) is byte-identical to the 20261118 section of
+                           docs/accuracy/after/violations.txt (sha256 ff480b7a...).
+  bash scripts/e2e.sh (APP_PORT=3600 PGRST_PORT=3601 MOCK_PORT=54800 E2E_DB_NAME=koala_release)
+                           404 ok, 0 failed, console errors: none (docs/release/e2e.txt; 50 steps).
+                           The accuracy round's final head had 356 ok, the blower door branch 285.
+                           Each run's build stopped once at the Next.js security-upgrade notice;
+                           the same command was retried once, nothing upgraded, the notice not
+                           followed. The run before the crew console rule: 404 ok, 0 failed, one
+                           console line from the crew's deliberate offline step (section 3).
+  Golden sets (scripts/accuracy/price-golden.ts, the existing live export, not re-exported):
+                           synthetic 65 estimates and live 78 estimates (--with-accuracy-rows), 0
+                           violations; written in the after files' shape, both byte-identical to
+                           docs/accuracy/after/golden-synthetic-after.json (168,377 bytes) and
+                           golden-live-after.json (9,328 bytes). No option total or headline moves.
+  origin/main on the same database (hard rule 2): docs/release/compat-main.txt.
+                           origin/main's own e2e on a worktree of c0ae5f1 with only the two new
+                           migration files added, ports 3000/3001/54321, database koala_e2e:
+                           225 ok, 0 failed, console errors: none; the same 225 checks word for
+                           word as without the migrations (only the clock in one line differs).
+                           Worktree removed, koala_e2e dropped.
+  Hard rule 1 (sent and signed quotes never change): docs/release/hard-rule-1.txt. The release head
+                           renders all 2,926 files of the 77 stored quotes byte-identical to the
+                           accuracy round's final code; against the before code only the two
+                           documented class names differ (252 markup files), with every PDF, email
+                           and page text identical; against origin/main the 1,386 PDF and email
+                           files are identical.
+
+
+6. GO-LIVE STEPS (for later; nothing is applied now)
+----------------------------------------------------
+  Before
+    a. Take a backup of the production database (Supabase: Database, Backups; or pg_dump).
+    b. Read, with SELECTs only, what the migrations will meet, and keep the answers:
+         select key, value from app_settings where key in ('branding','quote_terms','warranty_text',
+           'quote_number_prefix','blower_door','shop_address');
+         select count(*), md5(string_agg(id::text || status::text || coalesce(snapshot::text, '') ||
+           coalesce(pdf_sha256, '') || coalesce(signed_at::text, ''), ',' order by id)) from quotes;
+         select to_regclass('public.price_approvals'), to_regclass('public.blower_door_tests');
+       The two to_regclass answers should be null (neither migration applied yet).
+    c. Decide owner question 7a (the seeded programs: data) or accept the default; 7b and 7c are
+       code defaults and can follow later.
+  Apply the migrations, in this order, each once, each in one transaction:
+    1. supabase/migrations/20261119000001_accuracy.sql
+    2. supabase/migrations/20261120000001_blower_door.sql
+    Through the same route the earlier ones took (the SQL editor, or the Supabase MCP
+    apply_migration run by the owner): production's migration record does not use this repo's
+    file names (section 4), so "supabase db push" would try to apply every repo migration again.
+    With psql: psql "$PROD_URL" -v ON_ERROR_STOP=1 --single-transaction -f <file>. Both files are
+    safe to run again: a second run changes nothing (section 4).
+    The live site (origin/main) keeps working on the migrated database (compat-main.txt), so the
+    migrations can go first and the code a little later, and the code can be rolled back alone.
+  Verify after the migrations (SELECTs)
+    - app_settings: branding company 'Koala Insulation' and warranty_text 'Limited lifetime
+      warranty' where they were still the seed ('Koala Insulation of Newark'; 'Workmanship warranty
+      — PLACEHOLDER, owner to replace.'); quote_terms neutral if it was the seed; a value the owner
+      had changed is as it was. quote_number_prefix "KN". blower_door present with two programs.
+    - quotes: the same count and the same md5 as in step b (no quote, snapshot or PDF touched).
+      Take b and this in a quiet moment: a customer viewing or signing a quote in between changes
+      the answer for a reason that has nothing to do with the migrations.
+    - New objects: price_approvals, quote_number_counters, blower_door_tests, the new material rows
+      (dense-pack cellulose, seven batt sizes; none is a product's default), materials.typical_min.
+    - Grants: select has_table_privilege('anon','blower_door_tests','select'),
+        has_table_privilege('authenticated','blower_door_tests','insert'),
+        has_table_privilege('authenticated','price_approvals','insert'),
+        has_function_privilege('authenticated','next_quote_number(int)','execute');  -> all false.
+  Deploy the code
+    3. Merge claude/release into main through a pull request (never a force-push), and let Vercel
+       build it. The Next.js build may stop once at a "security upgrade" notice: retry the same
+       build once; do not upgrade and do not follow the notice.
+  Verify after the deploy
+    - As the owner: the menu has Blower door and Rebate programs (and the optional Business
+      profile); Rebate programs shows two programs and saves a change (audited).
+    - Open a quote that was already sent: it reads as before (the same number, prices, dates,
+      company and warranty). Make and send a new test quote to yourself: "Koala Insulation",
+      "Limited lifetime warranty", whole dollars, a number like KN-2026-0001-v1, no business form
+      asked for.
+    - Phones: the service worker updates to v13 on the next open with signal; the field app, the
+      crew app and the blower door tool then open with no signal. On a crew phone the blower door
+      tool shows no air sealing price.
+    - Blower door: save a test-in on an estimate and a test-out on its job; the office job page
+      shows both readings, the tier and the rebate in whole dollars.
+  Rolling back: redeploy origin/main's code (c0ae5f1). It works on the migrated database (hard
+  rule 2); the migrations are additive and stay. Nothing in a sent or signed quote changes either
+  way.
+
+
+7. OPEN QUESTIONS FOR THE OWNER (none blocks the release; the current behaviour is kept)
+------------------------------------------------------------------------------------------
+  a. The blower door migration seeds this franchise's two Energize Delaware programs (tiers, cost
+     cap, paperwork) into app_settings.blower_door when the setting is absent. On another
+     franchise's database they would be Delaware's programs until that owner edits or removes them
+     on Rebate programs. Should the seed stay (this franchise's database), or should new franchises
+     start with no programs ("No rebate program set up")?
+  b. The tool's default gauge, when a phone has no settings yet, is "Retrotec Model 5000" (code
+     default, lib/blowerdoor/settings.ts DEFAULT_GAUGE; the seed sets the same). Keep it, or a
+     neutral "the gauge" until the franchise sets one?
+  c. RL-1: a capped rebate is floored to the dollar ($1,499 for 75% of $1,999). If your program pays
+     to the cent and you want the cents shown, say so.
+  d. The blower door build notes' questions a-m (docs/blower-door/build.txt section 6) and the
+     accuracy round's open questions (docs/accuracy/results/final.json) still stand.

@@ -1,0 +1,108 @@
+E2E ON THE RELEASE HEAD (claude/release; the code of the final head)
+Command: APP_PORT=3600 PGRST_PORT=3601 MOCK_PORT=54800 E2E_DB_NAME=koala_release bash scripts/e2e.sh
+The build stopped at the Next.js security-upgrade notice on the first attempt of each run; the same command was retried once each time, nothing upgraded, the notice not followed.
+An earlier full run (before the crew phone's console rule) also had 404 ok and 0 failed, with one console line: CREW Failed to load resource: net::ERR_INTERNET_DISCONNECTED, from the crew's deliberate offline step.
+Checks ok: 404; failed: 0; console errors: none; exit 0
+
+Steps (50):
+• open /field
+• create estimate
+• add attic area, measured with the Measure tool, with a photo
+• pitch from a photo of the gable, in Measure
+• AI photo read
+• options
+• a price change that hides an option can be taken back (OD6, review A F1)
+• change a line from the model and explain it
+• send: nothing about a business profile holds it back (OD12; review B flow-B1, review A DOC-3)
+• the Business profile page is optional (OD12)
+• Send checklist: plain words, and a Fix button that goes to the item (L34)
+• a price beyond what the estimator may quote alone: Request approval (L34)
+• the owner approves it from the Estimates page (L34)
+• send
+• back on the list, the sent quote stays Sent, and the waiting total is the sum of its rows
+• a change on the phone while the customer signs, and another estimate made offline (L35)
+• customer signs
+• the phone hears of the signature: signed, read-only, the change not applied; the other estimate syncs (L35)
+• db checks after signing
+• satellite roof lookup from the address
+• roof takeoff on the area: edges on the photo, roofing, materials, print, copy
+• satellite: another area of the same house shares the lookup
+• satellite: a garage starts with every face off
+• satellite: a saved lookup of the same house after a reload
+• satellite: wrong house, tap the right roof
+• satellite: what an unknown address, a house with no roof data, an older Roof Takeoff and a carport look like
+• Roof lookup page: from the estimate list, filled in from a link without a lookup
+• Roof lookup page: Look up
+• Roof lookup page: a recent lookup opens without a new lookup
+• Roof lookup page: Start an estimate here
+• Roof lookup page: an old map-pin link is looked up at the pin
+• Roof lookup page: the right roof tapped, then Start an estimate here
+• Roof lookup page: a roof with 24 faces still prints on one page
+• offline estimate
+• Koala's database unreachable is not a sign-out (L36)
+• blower door: the tool opens with no signal, converts, shows the tier and copies the summary
+• owner screens
+• office schedules the job and assigns Crew A
+• blower door: the estimator saves the test-in on the estimate
+• crew starts the job on a phone
+• crew enters actuals and completes the job
+• blower door: the crew lead saves the test-out on the job with no signal
+• a phone an estimator used, then a crew member: offline, /field opens the crew app, not the priced field app
+• blower door: the office job page shows the readings, the tier and the ventilation check
+• office verifies the actuals
+• nightly learning run (cron)
+• owner learning dashboard
+• office marks an estimate lost from its row menu
+• review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)
+• owner edits the rebate programs
+
+The release's own checks (blower door under the accuracy rules):
+  ok: the blower door tool, opened while Koala's database is down, opens from the phone and says "Can't reach Koala right now", not "Your session expired" or "not one you can save readings to"
+  ok: the blower door API answers 503 unreachable, not "Not signed in": 503
+  ok: /unreachable for the blower door tool offers the tool for the same estimate (was the estimates list)
+  ok: a price with cents is refused (whole dollars, as on the quote) and caps nothing
+  ok: a capped rebate is whole dollars, never more than the program pays: $1,499 (was $1,499.25)
+  ok: the office sees the tier and rebate, capped by the estimator's price, in whole dollars
+  ok: saving the rebate programs while Koala is down says "Can't reach Koala right now. Nothing was saved.", not "Only the owner can change the rebate programs."
+  ok: and nothing was saved
+
+Tail of the log:
+  ok: actuals changes are audited
+• nightly learning run (cron)
+  ok: cron refuses a request without the secret
+  cron 200 {"startedAt":"2026-11-19T15:46:10.274Z","finishedAt":"2026-11-19T15:46:10.446Z","trigger":"cron","expiredQuotes":0,"calibration":{"runId":"49ca56ff-63b9-49e5-9a6e-e6e488dbf7a6","status":"succeeded","jobsConsidered":1,"jobsUsed":1,"candidateSetId":null,"changedCount":0,"promoted":false,"gates":[{"name":"sanity","passed":true,"detail":"All 27 coefficients are finite, positive and within bounds."},{"name":"bounds","passed":true,"detail":"0 clamped to bounds."},{"name":"step_limit","passed":true,"detail":"0 limited to ±10% of the active value."},{"name":"min_evidence","passed":true,"detail":"4 hel
+  ok: nightly run succeeded
+  ok: learning run recorded
+• owner learning dashboard
+  run now: Learning run finished. Calibration: no coefficient moved (1 of 1 completed job usable). Win model not trained: Only 1 decided quote; the win model needs at least 40. Showing win rates by bucket only. |
+  estimator on /admin/learning ends at: /no-access
+  ok: estimators cannot open the learning dashboard
+• office marks an estimate lost from its row menu
+  ok: nothing changes until the confirm step
+  ok: office marked the estimate lost from the row menu, with the reason
+  ok: the row now says Lost
+• review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)
+  ok: a phone's first /field?new=1 starts in the shop address's town and state: "Newark", "DE" (was "", "")
+  ok: in Sun+ the empty Square feet's "0" is rgb(75, 85, 99) in italics, typed text rgb(0, 0, 0) (both rgb(0, 0, 0) before)
+  ok: "Use 1,200" is 117x48 px (was 71x21)
+  ok: the small-target scan at 390 px does not list "Use 1,200"
+  other small targets on the Areas step: Skip to content 32x24
+  ok: "Use 1,200" puts the measured size back
+  ok: with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)
+  ok: and Good is not
+  ok: the dock's headline is Best's $5,270: "RECOMMENDED $5,270 BEST Next : Send"
+  ok: the estimator's email link on the quote is 100x48 px (was 100x20)
+  other small targets on the customer quote: Eddie Estimator 132x22
+  ok: $0.30 is "25% above the usual high of $0.24" (was "2.0 times more than the usual"), and not saved
+  ok: a phone with no saved copy is not offered "Open the estimates on this phone" (it led back to /unreachable: count 1 before)
+  ok: the phone that has its copy is offered it
+• owner edits the rebate programs
+  ok: the tool decides on the exact CFM50 until the owner says otherwise
+  ok: a change that breaks a rule is refused and nothing is saved
+  ok: the owner saves a new tier amount
+  ok: and the change is audited with who made it
+  ok: and puts the seeded amount back
+  ok: saving the rebate programs while Koala is down says "Can't reach Koala right now. Nothing was saved.", not "Only the owner can change the rebate programs."
+  ok: and nothing was saved
+console errors: none
+exit 0
