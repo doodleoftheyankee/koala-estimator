@@ -83,3 +83,45 @@ select c.set_id, 'waste_factor', 'cellulose', 'walls', null, c.value, c.prior_va
    and not exists (
      select 1 from coefficients x
       where x.set_id = c.set_id and x.kind = 'waste_factor' and x.product = 'cellulose' and x.job_type = 'walls' and x.access_level is null);
+
+-- =============================================================================
+-- Accuracy round, quotes stage (docs/accuracy/ledger.txt, stage "quotes"). Additive like the rest:
+-- origin/main never calls the function, reads the table or the new setting, and keeps numbering
+-- its quotes as before.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Quote numbers from a counter (L12, OD10): PREFIX-YEAR-0001-v1, the year in the business time
+-- zone. One row per year holds the last number given; next_quote_number(year) gives the next one,
+-- so two quotes sent at the same moment never share a number. Only the server's service role may
+-- call it (the send route); nobody reads or writes the table directly.
+-- -----------------------------------------------------------------------------
+create table if not exists quote_number_counters (
+  year       int primary key check (year between 2000 and 9999),
+  last_value int not null check (last_value >= 1),
+  updated_at timestamptz not null default now()
+);
+alter table quote_number_counters enable row level security;
+revoke all on table quote_number_counters from public, anon, authenticated;
+
+create or replace function next_quote_number(year int) returns int
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare n int;
+begin
+  if next_quote_number.year is null or next_quote_number.year not between 2000 and 9999 then
+    raise exception 'next_quote_number: % is not a year', next_quote_number.year;
+  end if;
+  insert into quote_number_counters as c (year, last_value) values (next_quote_number.year, 1)
+  on conflict on constraint quote_number_counters_pkey
+    do update set last_value = c.last_value + 1, updated_at = now()
+  returning c.last_value into n;
+  return n;
+end $$;
+revoke all on function next_quote_number(int) from public, anon, authenticated;
+grant execute on function next_quote_number(int) to service_role;
+
+-- The prefix in front of every quote number: the one quotes already carry. The owner changes it
+-- on the Business profile page; a value already saved is kept.
+insert into app_settings (key, value, description)
+values ('quote_number_prefix', '"KN"', 'Quote number prefix: quote numbers read PREFIX-YEAR-0001-v1')
+on conflict (key) do nothing;

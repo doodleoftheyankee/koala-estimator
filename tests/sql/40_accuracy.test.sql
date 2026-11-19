@@ -1,6 +1,6 @@
 -- Accuracy round, cavity stage (supabase/migrations/20261119000001_accuracy.sql): dense-pack wall
 -- cellulose (L20, OD7), batt sizes by R and thickness (L22, OD8) and the walls cellulose waste cell
--- (L21). The new rows are never a default, so the live site's default-material lookup is unchanged.
+-- (L21). Quotes stage: quote numbers from a counter (L12, OD10) and the quote number prefix. The new rows are never a default, so the live site's default-material lookup is unchanged.
 -- Runs after the earlier test files (10_phase1 changes the active set), so it reads the seed set
 -- where it needs the values the migration wrote.
 
@@ -135,4 +135,68 @@ do $$ begin
 end $$;
 
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- Quote numbers from a counter (L12, OD10)
+-- ---------------------------------------------------------------------------
+do $$ begin
+  assert (select value from app_settings where key = 'quote_number_prefix') = '"KN"'::jsonb, 'the prefix quotes already carry is seeded';
+  assert next_quote_number(2026) = 1, 'the first number of a year is 1';
+  assert next_quote_number(2026) = 2, 'then 2';
+  assert next_quote_number(2027) = 1, 'a new year starts again at 1';
+  assert next_quote_number(2026) = 3, 'and the year before goes on from where it was';
+  assert (select last_value from quote_number_counters where year = 2026) = 3, 'the counter keeps the last number given';
+end $$;
+do $$
+declare ok boolean := false;
+begin
+  begin
+    perform next_quote_number(1999);
+  exception when raise_exception then ok := true;
+  end;
+  assert ok, 'a year out of range is refused';
+end $$;
+
+-- Running the migration again keeps the counters and a prefix the owner changed (and the
+-- function's grants: Supabase grants every new function to the API roles, the migration takes
+-- them back; tests/sql/01_grants.sql granted them again before this file).
+update app_settings set value = '"AB"' where key = 'quote_number_prefix';
+\i supabase/migrations/20261119000001_accuracy.sql
+do $$ begin
+  assert (select value from app_settings where key = 'quote_number_prefix') = '"AB"'::jsonb, 'a saved prefix is kept on a second run';
+  assert (select last_value from quote_number_counters where year = 2026) = 3, 'the counters are kept on a second run';
+  assert (select prosecdef from pg_proc where proname = 'next_quote_number'), 'next_quote_number runs as its owner';
+  assert (select proconfig::text from pg_proc where proname = 'next_quote_number') like '%search_path=public, pg_temp%', 'with a pinned search_path';
+  assert has_function_privilege('service_role', 'next_quote_number(int)', 'execute'), 'the service role (the send route) may call it';
+  assert not has_function_privilege('authenticated', 'next_quote_number(int)', 'execute'), 'a signed-in user may not';
+  assert not has_function_privilege('anon', 'next_quote_number(int)', 'execute'), 'nor may the public';
+end $$;
+update app_settings set value = '"KN"' where key = 'quote_number_prefix';
+
+-- Nobody but the server reads or moves the counter.
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'owner', false);
+do $$
+declare ok boolean := false;
+begin
+  begin
+    perform next_quote_number(2026);
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'even the owner cannot take a number directly';
+  ok := false;
+  begin
+    perform count(*) from quote_number_counters;
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'or read the counters';
+  ok := false;
+  begin
+    update quote_number_counters set last_value = 1;
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'or move them';
+end $$;
+reset role;
+
 \echo '  ok'
