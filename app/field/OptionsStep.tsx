@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DeviationFlag, WinFeatures } from '@/lib/learning/types';
-import type { PricedOption, PricingBundle, Tier, WinModel } from '@/lib/pricing';
+import { priceEstimate, type PricedOption, type PricingBundle, type Tier, type WinModel } from '@/lib/pricing';
 import type { CachedProfile } from '@/lib/offline/db';
-import { priceableAreas, type EstimateDraft } from '@/lib/sync/draft';
+import { priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, ackSummary, flagsForOption, isAcknowledged, setDeviationAck } from '@/lib/field/flags';
 import { applyLineOverride, formatPctDiff, relativeDiff, removeLineOverride, setPriceOverride, tiersWithLine } from '@/lib/field/lineOverrides';
 import { beyondOverrideLimit, priceAdvice, recommendationReason, winFeaturesFor, type PriceAdvice } from '@/lib/field/priceAdvice';
@@ -46,6 +46,11 @@ export function OptionsStep({
   const winModel = bundle?.winModel ?? null;
   const features = winModel ? winFeaturesFor(priceableAreas(draft)) : null;
   const options = priced?.ok?.options ?? [];
+  // Options the customer is not shown (OD6) stay on this step, collapsed, with the reason: a price
+  // or line change that hid one can be changed or removed here (review A F1, M2).
+  const hidden = useMemo(() => notShown(draft, bundle, priced?.ok?.options ?? []), [draft, bundle, priced]);
+  const hiddenReason = (tier: Tier) =>
+    priced?.ok?.warnings.find((w) => w.code === 'option_hidden' && w.tier === tier)?.message ?? 'This option is not shown to the customer.';
   // The same option the dock and the customer quote mark as recommended.
   const recommended = recommendedTier(options, draft.selectedTier);
   const areaNames = new Map(draft.areas.map((a) => [a.id, a.name]));
@@ -53,7 +58,8 @@ export function OptionsStep({
 
   const onAck: OnAck = (flag, note) => update((d) => setDeviationAck(d, flag, note));
   const onLineOverride: OnLineOverride = (key, ov) => update((d) => (ov ? applyLineOverride(d, key, ov) : removeLineOverride(d, key)));
-  const tiersByKey = (key: string) => tiersWithLine(options, key);
+  // A line change applies to every option with that line, shown or not.
+  const tiersByKey = (key: string) => tiersWithLine(byTier([...options, ...hidden]), key);
 
   async function lookupDrive() {
     const p = draft.property;
@@ -99,11 +105,14 @@ export function OptionsStep({
       {!priced ? <Alert tone="blue">Add an area with square footage to see prices.</Alert> : null}
       {priced?.error ? <Alert tone="red">Pricing setup problem: {priced.error}. Tell the office.</Alert> : null}
 
-      {priced?.ok?.warnings.map((w, i) => (
-        <Alert key={i} tone="amber">
-          {w.message}
-        </Alert>
-      ))}
+      {/* Why an option is not shown is said on its own card below. */}
+      {priced?.ok?.warnings
+        .filter((w) => !(w.code === 'option_hidden' && hidden.some((o) => o.tier === w.tier)))
+        .map((w, i) => (
+          <Alert key={i} tone="amber">
+            {w.message}
+          </Alert>
+        ))}
 
       {toExplain > 0 ? (
         <Alert tone="amber">
@@ -135,6 +144,32 @@ export function OptionsStep({
         );
       })}
 
+      {hidden.length > 0 ? (
+        <>
+          <h3 className="px-1 pt-2 text-sm font-semibold text-slate-600">Not shown to the customer</h3>
+          {hidden.map((o) => (
+            <OptionCard
+              key={o.tier}
+              option={o}
+              hiddenReason={hiddenReason(o.tier)}
+              recommended={null}
+              onSelect={() => {}}
+              override={draft.overrides[o.tier] ?? null}
+              onOverride={(ov) => update((d) => setPriceOverride(d, o.tier, ov))}
+              showCosts={showCosts}
+              overrideLimit={overrideLimit}
+              flags={flags}
+              acks={draft.deviationAcks}
+              onAck={onAck}
+              onLineOverride={onLineOverride}
+              areaNames={areaNames}
+              tiersByKey={tiersByKey}
+              advice={null}
+            />
+          ))}
+        </>
+      ) : null}
+
       {options.length > 0 && bundle && !winModel ? (
         <p className="px-1 text-xs text-slate-500">Price recommendations start once enough quotes have been won or lost.</p>
       ) : null}
@@ -148,6 +183,24 @@ export function OptionsStep({
   );
 }
 
+const TIER_ORDER: Tier[] = ['good', 'better', 'best'];
+const byTier = (xs: PricedOption[]) => [...xs].sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+
+/**
+ * The options priced but not shown to the customer (OD6), in tier order: every option priced with
+ * showAll, less those shown. Never breaks the step: with no bundle or a pricing error, none.
+ */
+function notShown(draft: EstimateDraft, bundle: PricingBundle | null, shown: PricedOption[]): PricedOption[] {
+  if (!bundle || shown.length === 0) return [];
+  try {
+    const all = priceEstimate({ ...toEstimateInput(draft), areas: priceableAreas(draft) }, bundle.snapshot, bundle.coefficientSet, { showAll: true });
+    const tiers = new Set(shown.map((o) => o.tier));
+    return all.options.filter((o) => !tiers.has(o.tier));
+  } catch {
+    return [];
+  }
+}
+
 /** Advice is a nice-to-have: a bad cached model must never break the Options step. */
 function adviceFor(model: WinModel, option: PricedOption, features: Omit<WinFeatures, 'markup'>, settings: Settings): PriceAdvice | null {
   try {
@@ -159,6 +212,7 @@ function adviceFor(model: WinModel, option: PricedOption, features: Omit<WinFeat
 
 function OptionCard({
   option: o,
+  hiddenReason = null,
   recommended,
   onSelect,
   override,
@@ -174,6 +228,11 @@ function OptionCard({
   advice,
 }: {
   option: PricedOption;
+  /**
+   * Why the customer is not shown this option (OD6). The card is then collapsed: its title, price
+   * and the reason, with Change price, Remove price change and Details, and no Make recommended.
+   */
+  hiddenReason?: string | null;
   /** This card is the recommended option: picked by the estimator, or the default (Better). */
   recommended: 'picked' | 'default' | null;
   onSelect: () => void;
@@ -203,6 +262,128 @@ function OptionCard({
     advice && beyondOverrideLimit(advice.advice.best.price, o.modelPrice, overrideLimit)
       ? `This is more than ${pct(overrideLimit ?? 0, 0)} from the model price (${usd(o.modelPrice)}), so it needs approval from the owner or the office before you can send it (Request approval on the Send step).`
       : null;
+
+  const priceEditor = editing ? (
+    <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
+      <Field
+        label="Customer price"
+        hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
+      >
+        <NumberInput value={price} onValue={setPrice} allowDecimal={false} />
+      </Field>
+      {price !== null && price < 1 ? <p className="text-xs text-amber-800">Enter a price of $1 or more.</p> : null}
+      <Field label="Reason (required)">
+        <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. matched competitor quote" />
+      </Field>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={price === null || price < 1 || reason.trim().length < 3}
+          onClick={() => {
+            // Prices are whole dollars (the engine rounds the same way).
+            onOverride({ price: Math.round(price!), reason: reason.trim() });
+            setEditing(false);
+          }}
+        >
+          Apply
+        </Button>
+        {override ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              onOverride(null);
+              setPrice(null);
+              setReason('');
+              setEditing(false);
+            }}
+          >
+            Use model price
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
+  const lineDetails = details ? (
+    <OptionLines
+      tier={o.tier}
+      lines={o.lines}
+      areaNames={areaNames}
+      tiersByKey={tiersByKey}
+      flagsByLine={mine.byLine}
+      acks={acks}
+      onAck={onAck}
+      onLineOverride={onLineOverride}
+      showCosts={showCosts}
+    />
+  ) : null;
+  const changePrice = (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => {
+        // Start from the saved override: it may have changed since (e.g. "Use this price").
+        if (!editing) {
+          setPrice(override?.price ?? null);
+          setReason(override?.reason ?? '');
+        }
+        setEditing((e) => !e);
+      }}
+    >
+      Change price
+    </Button>
+  );
+  const detailsButton = (
+    <Button size="sm" variant="ghost" onClick={() => setDetails((v) => !v)} aria-expanded={details}>
+      {details ? 'Hide details' : 'Details'}
+      {linesToExplain > 0 ? <Badge tone="amber">{linesToExplain} to explain</Badge> : null}
+    </Button>
+  );
+
+  if (hiddenReason !== null) {
+    return (
+      <div role="group" id={`option-${tier}`} aria-label={`${TIER_LABELS[tier]} option`}>
+        <Card className="border-dashed bg-slate-50">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{TIER_LABELS[tier]}</p>
+              <h3 className="font-semibold text-slate-700">{o.label}</h3>
+            </div>
+            <p className="shrink-0 text-lg font-semibold text-slate-500 tabular-nums">{usd(o.price)}</p>
+          </div>
+          <div className="mt-2">
+            <Badge tone="amber">Not shown to the customer</Badge>
+          </div>
+          <p className="mt-2 text-sm text-slate-700">{hiddenReason}</p>
+          {override ? (
+            <p className="mt-1 text-xs text-amber-800">
+              Your price {usd(override.price)} (model {usd(o.modelPrice)}): {override.reason}
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {changePrice}
+            {override ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  onOverride(null);
+                  setPrice(null);
+                  setReason('');
+                  setEditing(false);
+                }}
+              >
+                Remove price change
+              </Button>
+            ) : null}
+            {detailsButton}
+          </div>
+          {priceEditor}
+          {lineDetails}
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div role="group" id={`option-${tier}`} aria-label={`${TIER_LABELS[tier]} option`}>
@@ -290,83 +471,14 @@ function OptionCard({
               'Make recommended'
             )}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              // Start from the saved override: it may have changed since (e.g. "Use this price").
-              if (!editing) {
-                setPrice(override?.price ?? null);
-                setReason(override?.reason ?? '');
-              }
-              setEditing((e) => !e);
-            }}
-          >
-            Change price
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setDetails((v) => !v)} aria-expanded={details}>
-            {details ? 'Hide details' : 'Details'}
-            {linesToExplain > 0 ? <Badge tone="amber">{linesToExplain} to explain</Badge> : null}
-          </Button>
+          {changePrice}
+          {detailsButton}
           {/* The quote marks the picked option, else Better (lib/quotes/model.ts). */}
           {recommended === 'picked' || (recommended === 'default' && tier === 'better') ? <Badge tone="green">Highlighted on the quote</Badge> : null}
         </div>
 
-        {editing ? (
-          <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-3">
-            <Field
-              label="Customer price"
-              hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
-            >
-              <NumberInput value={price} onValue={setPrice} allowDecimal={false} />
-            </Field>
-            {price !== null && price < 1 ? <p className="text-xs text-amber-800">Enter a price of $1 or more.</p> : null}
-            <Field label="Reason (required)">
-              <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. matched competitor quote" />
-            </Field>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={price === null || price < 1 || reason.trim().length < 3}
-                onClick={() => {
-                  // Prices are whole dollars (the engine rounds the same way).
-                  onOverride({ price: Math.round(price!), reason: reason.trim() });
-                  setEditing(false);
-                }}
-              >
-                Apply
-              </Button>
-              {override ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    onOverride(null);
-                    setPrice(null);
-                    setReason('');
-                    setEditing(false);
-                  }}
-                >
-                  Use model price
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {details ? (
-          <OptionLines
-            tier={o.tier}
-            lines={o.lines}
-            areaNames={areaNames}
-            tiersByKey={tiersByKey}
-            flagsByLine={mine.byLine}
-            acks={acks}
-            onAck={onAck}
-            onLineOverride={onLineOverride}
-            showCosts={showCosts}
-          />
-        ) : null}
+        {priceEditor}
+        {lineDetails}
       </Card>
     </div>
   );

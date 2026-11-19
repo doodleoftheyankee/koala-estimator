@@ -279,6 +279,24 @@ const prices = await page.locator('p.text-2xl').allTextContents();
 console.log('  prices', prices);
 const num = (t) => Number(t.replace(/[^0-9.]/g, ''));
 
+step('a price change that hides an option can be taken back (OD6, review A F1)');
+{
+  // Good priced above Better is not shown to the customer; its card stays, collapsed, with the reason.
+  const good = page.getByRole('group', { name: 'Good option' });
+  await good.getByRole('button', { name: 'Change price' }).click();
+  await good.getByLabel('Customer price').fill(String(num(prices[1]) + 100));
+  await good.getByLabel('Reason (required)').fill('Checking an option the customer does not see');
+  await good.getByRole('button', { name: 'Apply', exact: true }).click();
+  await good.getByText('Not shown to the customer', { exact: true }).waitFor();
+  check((await good.getByText(/^Good is not shown to the customer: it costs .*Change its price to show it\.$/).count()) === 1, 'the hidden Good card says why, and how to show it');
+  check((await page.locator('p.text-2xl').count()) === 2, 'the customer is shown Better and Best only');
+  await page.screenshot({ path: SHOTS + '04a-option-not-shown.png', fullPage: true });
+  await good.getByRole('button', { name: 'Remove price change' }).click();
+  await good.getByRole('button', { name: 'Make recommended' }).waitFor();
+  const back = await page.locator('p.text-2xl').allTextContents();
+  check(JSON.stringify(back) === JSON.stringify(prices), 'Remove price change brings Good back at its model price: ' + back.join(' / '));
+}
+
 step('change a line from the model and explain it');
 await page.getByRole('button', { name: 'Details', exact: true }).first().click();
 await page.getByRole('button', { name: /^Change Install / }).first().click();
