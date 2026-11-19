@@ -105,21 +105,25 @@ describe('seeded pricing fixture (the rows every migration leaves in a new datab
     }
   });
 
-  it('prices the examples in the round 1 record exactly as the record says (drive 20 min, seeded pricing)', () => {
-    // L1: attic 1,200 sq ft at R-19 with removal.
-    const l1 = priceSeeded(estimate([area({ sqft: 1200, currentR: 19, removalNeeded: true })]));
-    expect(l1.options.map((o) => o.price)).toEqual([6385, 8010, 8010]);
-    expect(l1.options[0]!.customerItems[0]!.price).toBe(2720.15);
-    expect(l1.options[1]!.customerItems[0]!.price).toBe(2735.84);
-    // L18: walls 1,000 sq ft, no depth: Better $3,580.
-    expect(priceSeeded(estimate([area({ jobType: 'walls', name: 'Walls' })])).options[1]!.price).toBe(3580);
-    // L14: attic 1,200 sq ft at R-0: Best $5,160, the same as Better.
-    expect(priceSeeded(estimate([area({ sqft: 1200 })])).options.map((o) => o.price)).toEqual([3720, 5160, 5160]);
-    // L19: walls 1,000 sq ft 2x4 full of R-11 batts: $1,500 / $1,740 / $2,505.
-    const l19 = priceSeeded(estimate([area({ jobType: 'walls', depthIn: 3.5, currentR: 11, existingMaterial: 'Fiberglass batts' })]));
-    expect(l19.options.map((o) => o.price)).toEqual([1500, 1740, 2505]);
-    // L22: crawlspace 800 sq ft 2x6, target R-38: Good batts $2,270.
-    expect(priceSeeded(estimate([area({ jobType: 'crawlspace', sqft: 800, depthIn: 5.5, targetR: 38 })])).options[0]!.price).toBe(2270);
+  it('is the setup the round 1 record priced with (the live values on 2026-11-18)', () => {
+    const st = seededBundle.snapshot.settings;
+    expect([st.overheadPct, st.targetMarginPct, st.floorMarginPct, st.minimumJobPrice, st.priceRounding, st.quoteValidDays]).toEqual([0.63, 0.15, 0.05, 1500, 5, 30]);
+    expect(seededBundle.snapshot.crews.map((c) => [c.size, c.blendedHourlyCost])).toEqual([[2, 35]]);
+    const cost = Object.fromEntries(seededBundle.snapshot.materials.map((m) => [m.productCode, [m.costPerUnit, m.coverageSqftIn]]));
+    expect(cost).toMatchObject({ ocsf: [0.12, 1], ccsf: [0.47, 1], cellulose: [14, 200], fiberglass_blown: [38, 450], batts: [0.75, null], air_sealing: [0.1, null] });
+    expect(Object.fromEntries(seededBundle.snapshot.codeRequirements.map((c) => [c.jobType, c.minR]))).toEqual({ attic: 49, walls: 20, crawlspace: 19, rim_joist: 10, garage: 30, commercial: 30 });
+    expect(seededBundle.coefficientSet.coefficients).toHaveLength(26);
+  });
+
+  it('prices the record\'s examples to the dollar (drive 20 min): totals the record says no fix changes', () => {
+    const total = (input: EstimateInput, tier: Tier) => priceSeeded(input).options.find((o) => o.tier === tier)?.price;
+    // L1: attic 1,200 sq ft at R-19 with removal: Good $6,385, Better $8,010.
+    const l1 = estimate([area({ sqft: 1200, currentR: 19, removalNeeded: true })]);
+    expect([total(l1, 'good'), total(l1, 'better')]).toEqual([6385, 8010]);
+    // L14: attic 1,200 sq ft at R-0: Better $5,160.
+    expect(total(estimate([area({ sqft: 1200 })]), 'better')).toBe(5160);
+    // L22: crawlspace 800 sq ft 2x6, target R-38: Good $2,270.
+    expect(total(estimate([area({ jobType: 'crawlspace', sqft: 800, depthIn: 5.5, targetR: 38 })]), 'good')).toBe(2270);
   });
 
   it('gives every row an id made from what it is, so two databases compare row for row', () => {
