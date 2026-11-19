@@ -1,4 +1,5 @@
-// The before/after report on both golden sets (flow stage): prices them on this commit, compares
+// The before/after report on both golden sets (written in the flow stage; its stages run to the end of
+// the round: Phase 1, the review A fixes, the review B fixes): prices them on this commit, compares
 // them with docs/accuracy/before/, and explains every difference a customer or the office would see
 // (an option total, an option no longer shown, the headline, an option's title or bullets) with the
 // ledger entries and owner decision behind it. Anything it cannot explain is listed as unexplained.
@@ -10,7 +11,8 @@
 //                 amounts only: no names, addresses, titles or item words.
 //   <after dir>   docs/accuracy/after/: the synthetic set in full and the live set's counts and totals.
 //
-// Where a change came from: the synthetic set was priced after every stage (docs/accuracy/after-*),
+// Where a change came from: the synthetic set was priced after every stage (docs/accuracy/after-*: money,
+// cavity, quotes, then the review A fixes (fixa) and the review B fixes (fixb); "final" is this commit),
 // so each difference is traced to the stage that made it and, within it, to the rule the estimate's
 // inputs and the engine's own warnings point at. The live set's totals are traced the same way.
 import fs from 'node:fs';
@@ -364,7 +366,8 @@ const totalsOf = (e: PricedGolden | null | undefined): Totals | null => (e ? Obj
 
 // Synthetic: before (in full), each stage after (in full), now.
 const synthBefore = read<FullSet>('docs/accuracy/before/golden-synthetic-before.json');
-const synthStages = ['money', 'cavity', 'quotes'].map((s) => ({ name: s, set: byId(read<FullSet>(`docs/accuracy/after-${s}/golden-synthetic-after-${s}.json`)) }));
+const STAGES = ['money', 'cavity', 'quotes', 'fixa', 'fixb'];
+const synthStages = STAGES.map((s) => ({ name: s, set: byId(read<FullSet>(`docs/accuracy/after-${s}/golden-synthetic-after-${s}.json`)) }));
 const synthSet = read<{ estimates: GoldenEstimate[] }>('scripts/accuracy/golden-synthetic.json');
 const synthNow = priceAll(synthSet.estimates, seededBundle);
 const synthNowById = new Map(synthNow.priced.map((x) => [x.p.id, x.p]));
@@ -373,7 +376,7 @@ const synthReport = compare(
   'synthetic',
   { counts: synthBefore.counts, byId: byId(synthBefore) },
   synthNow,
-  [synthView('before', byId(synthBefore)), ...synthStages.map((s) => synthView(s.name, s.set)), synthView('flow', synthNowById)],
+  [synthView('before', byId(synthBefore)), ...synthStages.map((s) => synthView(s.name, s.set)), synthView('final', synthNowById)],
   () => undefined,
   seededBundle.snapshot.settings.minimumJobPrice,
 );
@@ -384,7 +387,7 @@ const liveRows = withAccuracyRows(read<SnapshotRows>(path.join(goldenDir, 'live-
 const liveBundle = bundleFromRows(liveRows);
 const liveBeforeFull = read<FullSet>(path.join(goldenDir, 'live-priced-before.json'));
 const liveBeforeSummary = read<{ counts: Counts; totals: Record<string, Totals> }>('docs/accuracy/before/golden-live-before.json');
-const liveStages = ['money', 'cavity', 'quotes'].map((s) => ({ name: s, totals: read<{ totals: Record<string, Totals> }>(`docs/accuracy/after-${s}/golden-live-after-${s}.json`).totals }));
+const liveStages = STAGES.map((s) => ({ name: s, totals: read<{ totals: Record<string, Totals> }>(`docs/accuracy/after-${s}/golden-live-after-${s}.json`).totals }));
 const liveNow = priceAll(
   liveExport.estimates.map((e) => liveGolden(e, liveBundle.snapshot.settings.quoteValidDays)),
   liveBundle,
@@ -398,7 +401,7 @@ const liveReport = compare(
   [
     { name: 'before', totals: (id) => liveBeforeSummary.totals[id] ?? null },
     ...liveStages.map((s) => ({ name: s.name, totals: (id: string) => s.totals[id] ?? null })),
-    { name: 'flow', totals: (id) => liveNowTotals[id] ?? null },
+    { name: 'final', totals: (id) => liveNowTotals[id] ?? null },
   ],
   (id) => statusById.get(id),
   liveBundle.snapshot.settings.minimumJobPrice,
@@ -437,7 +440,7 @@ const liveChanges = [...liveReport.changes, ...officeList].map((c) => ({ estimat
 
 write(reportOut, {
   about:
-    'Before/after report on the golden sets (flow stage). Before: docs/accuracy/before/ (the code before any fix). After: this commit, priced by scripts/accuracy/report.ts. Every difference a customer or the office would see is listed with the ledger entries (docs/accuracy/ledger.txt) and the owner decision behind it; "stage" is the stage that made it. The live set keeps estimate ids, statuses and amounts only.',
+    'Before/after report on the golden sets at the end of the accuracy round (Phase 1, the review A fixes and the review B fixes). Before: docs/accuracy/before/ (the code before any fix). After: this commit, priced by scripts/accuracy/report.ts. Every difference a customer or the office would see is listed with the ledger entries (docs/accuracy/ledger.txt) and the owner decision behind it; "stage" is the stage that made it. The live set keeps estimate ids, statuses and amounts only.',
   sets: {
     synthetic: { ...synthReport, bundle: seededBundle.hash },
     live: { ...liveReport, changes: liveChanges, officeListMoved: officeList.length, bundle: liveBundle.hash, export: { estimates: liveExport.estimates.length } },
@@ -447,14 +450,14 @@ write(reportOut, {
 
 // After files: the synthetic set in full, the live set's counts and totals by id.
 write(path.join(afterDir, 'golden-synthetic-after.json'), {
-  about: 'The synthetic golden set priced on the final commit of Phase 1 (flow stage) with the seeded setup.',
+  about: 'The synthetic golden set priced on the final commit of the accuracy round (Phase 1, the review A fixes and the review B fixes, claude/accuracy) with the seeded setup, by scripts/accuracy/price-golden.ts synthetic.',
   bundle: seededBundle.hash,
   counts: synthNow.counts,
   estimates: synthNow.priced.map((x) => x.p),
 });
 write(path.join(afterDir, 'golden-live-after.json'), {
   about:
-    "Live golden set priced on the final commit of Phase 1 (flow stage), with the accuracy migration's rows added to the live rows: counts, and each estimate's option totals keyed by estimate id. No names or addresses.",
+    "Live golden set priced on the final commit of the accuracy round (Phase 1, the review A fixes and the review B fixes, claude/accuracy), with the accuracy migration's rows added to the live rows, by scripts/accuracy/price-golden.ts live --with-accuracy-rows from the read-only production export (not re-exported): counts, and each estimate's option totals keyed by estimate id. No names or addresses.",
   bundle: liveBundle.hash,
   counts: liveNow.counts,
   totals: liveNowTotals,

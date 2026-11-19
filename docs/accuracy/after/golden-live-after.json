@@ -1,5 +1,5 @@
 {
-  "about": "Live golden set priced on the final commit of Phase 1 (flow stage), with the accuracy migration's rows added to the live rows: counts, and each estimate's option totals keyed by estimate id. No names or addresses.",
+  "about": "Live golden set priced on the final commit of the accuracy round (Phase 1, the review A fixes and the review B fixes, claude/accuracy), with the accuracy migration's rows added to the live rows, by scripts/accuracy/price-golden.ts live --with-accuracy-rows from the read-only production export (not re-exported): counts, and each estimate's option totals keyed by estimate id. No names or addresses.",
   "bundle": "1fffe7bf3c72bbe9",
   "counts": {
     "estimates": 78,

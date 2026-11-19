@@ -1,5 +1,5 @@
 {
-  "about": "Before/after report on the golden sets (flow stage). Before: docs/accuracy/before/ (the code before any fix). After: this commit, priced by scripts/accuracy/report.ts. Every difference a customer or the office would see is listed with the ledger entries (docs/accuracy/ledger.txt) and the owner decision behind it; \"stage\" is the stage that made it. The live set keeps estimate ids, statuses and amounts only.",
+  "about": "Before/after report on the golden sets at the end of the accuracy round (Phase 1, the review A fixes and the review B fixes). Before: docs/accuracy/before/ (the code before any fix). After: this commit, priced by scripts/accuracy/report.ts. Every difference a customer or the office would see is listed with the ledger entries (docs/accuracy/ledger.txt) and the owner decision behind it; \"stage\" is the stage that made it. The live set keeps estimate ids, statuses and amounts only.",
   "sets": {
     "synthetic": {
       "estimates": 65,

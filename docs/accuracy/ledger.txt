@@ -880,7 +880,8 @@ No customer value (the phone, the checker, the generator):
 
 (One section for both review B fix branches, merged on claude/accuracy: first the documents,
 server, database and security part from claude/accuracy-fixb-docs (RB-OD*, RB-B*, RB-FB*), then the
-screens part from claude/accuracy-fixb-screens (RB-flow-B*), then the integration entries (RB-INT*).)
+screens part from claude/accuracy-fixb-screens (RB-flow-B*). The merge itself changes no price,
+title, bullet, quantity or customer word; the final checks are in docs/accuracy/results/final.json.)
 
 Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
 verifier) and the owner's round-2 decisions. This part is the documents, server, database, security

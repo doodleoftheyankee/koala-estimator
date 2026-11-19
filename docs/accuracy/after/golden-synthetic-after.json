@@ -1,5 +1,5 @@
 {
-  "about": "The synthetic golden set priced on the final commit of Phase 1 (flow stage) with the seeded setup.",
+  "about": "The synthetic golden set priced on the final commit of the accuracy round (Phase 1, the review A fixes and the review B fixes, claude/accuracy) with the seeded setup, by scripts/accuracy/price-golden.ts synthetic.",
   "bundle": "5ecebe2c0f390417",
   "counts": {
     "estimates": 65,
