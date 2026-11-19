@@ -271,6 +271,21 @@ describe('OD14: the consent sentence never throws and never needs a state in the
   });
 });
 
+describe('OD14, release review C DOC-2: New York, which never adopted UETA, is named with its own act', () => {
+  it('a New York home cites the Electronic Signatures and Records Act, never "New York UETA"', () => {
+    for (const code of ['NY', 'ny', ' NY ']) {
+      expect(esignConsent(code), code).toContain('(ESIGN Act and the New York Electronic Signatures and Records Act)');
+      expect(esignConsent(code), code).not.toContain('New York UETA');
+    }
+  });
+  it('every other state reads as before, and no state is the neutral sentence', () => {
+    expect(esignConsent('DE')).toContain('(ESIGN Act and Delaware UETA)');
+    expect(esignConsent('IL')).toContain('(ESIGN Act and Illinois UETA)');
+    expect(esignConsent('WA')).toContain('(ESIGN Act and Washington UETA)');
+    expect(esignConsent(null)).toBe(NEUTRAL_CONSENT);
+  });
+});
+
 describe('flow-B1 (c): a quote number never starts with a blank or a bad prefix', () => {
   it("a stored prefix that is not 1 to 6 capitals or digits falls back to 'KN' (OD16)", () => {
     const rows = (v: unknown) => [{ key: 'quote_number_prefix', value: v }];

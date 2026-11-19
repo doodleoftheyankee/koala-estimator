@@ -29,13 +29,21 @@ export function stateName(code: string | null | undefined): string | null {
 }
 
 /**
+ * A state that never adopted the Uniform Electronic Transactions Act has its own e-signature act,
+ * named instead of "<State> UETA" (release review C DOC-2): New York's is the Electronic Signatures
+ * and Records Act (State Technology Law, article 3). Counsel to confirm (owner questions).
+ */
+const OWN_ESIGN_ACT: Readonly<Record<string, string>> = { NY: 'the New York Electronic Signatures and Records Act' };
+
+/**
  * The consent sentence for a new quote (OD14): naming the e-sign law of the state given (the
  * property's state, else the shop address's: lib/quotes/profile.ts consentState), or, with no
  * state, the federal and uniform acts by name. Never throws: a send never waits for a state.
  */
 export function esignConsent(stateCode: string | null | undefined): string {
   const name = stateName(stateCode);
-  const law = name ? `ESIGN Act and ${name} UETA` : 'ESIGN Act and the Uniform Electronic Transactions Act';
+  const own = name ? OWN_ESIGN_ACT[stateCode!.trim().toUpperCase()] : undefined;
+  const law = own ? `ESIGN Act and ${own}` : name ? `ESIGN Act and ${name} UETA` : 'ESIGN Act and the Uniform Electronic Transactions Act';
   return `I agree to sign this quote electronically. My electronic signature is the legal equivalent of my handwritten signature (${law}). I accept the option and price I selected above and the terms of this quote.`;
 }
 
