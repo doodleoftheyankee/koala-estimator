@@ -1,0 +1,156 @@
+import { describe, expect, it } from 'vitest';
+import { SEEDED } from '@/lib/blowerdoor/__fixtures__/settings';
+import { emptyForm, evaluate, newTestSchema, parseBlowerDoorSettings, toCfm50, type BlowerDoorForm, type SavedTest } from '@/lib/blowerdoor';
+import {
+  applyTestResult,
+  blowerDoorHref,
+  contextKey,
+  isUnsent,
+  mergeReadings,
+  newestOf,
+  newLocalTest,
+  newReading,
+  parseContextParams,
+  settledLocalIds,
+  type BlowerDoorContext,
+  type LocalTest,
+} from './blowerDoorCore';
+
+const SETTINGS = parseBlowerDoorSettings(SEEDED).settings;
+const JOB = '0b000000-0000-4000-8000-000000000001';
+const EST = '0e000000-0000-4000-8000-000000000001';
+const ME = '0c000000-0000-4000-8000-000000000001';
+const JOB_CTX: BlowerDoorContext = { kind: 'job', id: JOB, label: 'Pat Lee, 12 Elkton Rd' };
+const EST_CTX: BlowerDoorContext = { kind: 'estimate', id: EST, label: null };
+
+const typed = (patch: Partial<BlowerDoorForm>) => {
+  const form = { ...emptyForm(SETTINGS), preCfm: '6952', postCfm: '3325', postPa: '50.8', ...patch };
+  return { form, e: evaluate({ form, settings: SETTINGS }) };
+};
+
+describe('where the tool was opened from', () => {
+  it('reads ?job= or ?estimate= with an optional label, and nothing else', () => {
+    expect(parseContextParams(`?job=${JOB}&label=Pat%20Lee,%20%2012%20Elkton%20Rd`)).toEqual({ kind: 'job', id: JOB, label: 'Pat Lee, 12 Elkton Rd' });
+    expect(parseContextParams(`?estimate=${EST.toUpperCase()}`)).toEqual({ kind: 'estimate', id: EST, label: null });
+    expect(parseContextParams('?job=not-a-uuid')).toBeNull();
+    expect(parseContextParams('')).toBeNull();
+    expect(parseContextParams(`?job=${JOB}&label=${'x'.repeat(500)}`)!.label).toHaveLength(120);
+  });
+
+  it('links to the tool with a plain URL the service worker can open offline', () => {
+    expect(blowerDoorHref(JOB_CTX)).toBe(`/field/blower-door?job=${JOB}&label=Pat+Lee%2C+12+Elkton+Rd`);
+    expect(blowerDoorHref(EST_CTX)).toBe(`/field/blower-door?estimate=${EST}`);
+    expect(parseContextParams(blowerDoorHref(JOB_CTX).split('?')[1]!)).toEqual(JOB_CTX);
+    expect(contextKey(JOB_CTX)).toBe(`job:${JOB}`);
+    expect(contextKey(null)).toBe('scratch');
+  });
+});
+
+describe('the reading the phone saves', () => {
+  it('is the typed test at the database precision, with a CFM50 the server accepts', () => {
+    const { form, e } = typed({ volume: '20,000', occupants: '3', cost: '2000' });
+    const t = newReading({ id: '0d000000-0000-4000-8000-000000000001', kind: 'test_out', context: JOB_CTX, evaluation: e, program: e.program, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: true })!;
+    expect(t).toMatchObject({ jobId: JOB, estimateId: null, kind: 'test_out', cfm: 3325, pa: 50.8, exponent: 0.65, cfm50: 3290.87, programKey: 'home_performance', airSealingCost: 2000, volume: 20000, occupants: 3, stories: '2', nFactor: 19, basAudit: null });
+    expect(t.program).toMatchObject({ key: 'home_performance', tiers: [{ reduction_pct: 20, rebate: 900 }, { reduction_pct: 30, rebate: 1300 }, { reduction_pct: 40, rebate: 1800 }] });
+    expect(t.result).toMatchObject({ test_in_cfm50: 6952, tier_pct: 40, tier_rebate: 1800, rebate: 1500, capped: true, bas_source: 'estimated', ventilation: 'ok' });
+    expect(newTestSchema.safeParse(t).success).toBe(true);
+  });
+
+  it('rounds a long typed value before working the CFM50 out, so the stored CFM50 matches the stored reading', () => {
+    const { form, e } = typed({ preCfm: '4012.3456', prePa: '-37.777', exponent: '0.6543' });
+    const t = newReading({ id: '0d000000-0000-4000-8000-000000000002', kind: 'test_in', context: EST_CTX, evaluation: e, program: null, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: true })!;
+    expect([t.cfm, t.pa, t.exponent]).toEqual([4012.35, 37.78, 0.654]);
+    expect(Math.abs(t.cfm50 - toCfm50(4012.35, 37.78, 0.654)!)).toBeLessThanOrEqual(0.005);
+    expect(t).toMatchObject({ estimateId: EST, jobId: null, programKey: null, program: null, result: null, stories: null, volume: null });
+  });
+
+  it('never keeps a price for a crew', () => {
+    const { form, e } = typed({ cost: '2000' });
+    const t = newReading({ id: '0d000000-0000-4000-8000-000000000003', kind: 'test_out', context: JOB_CTX, evaluation: e, program: e.program, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: false })!;
+    expect(t.airSealingCost).toBeNull();
+  });
+
+  it('keeps the BAS from the audit when given', () => {
+    const { form, e } = typed({ bas: '2500', volume: '20000' });
+    const t = newReading({ id: '0d000000-0000-4000-8000-000000000004', kind: 'test_out', context: JOB_CTX, evaluation: e, program: e.program, form, recordedAt: '2026-11-19T15:00:00.000Z', includePrice: true })!;
+    expect(t).toMatchObject({ basAudit: 2500, volume: 20000, nFactor: null });
+  });
+
+  it('is nothing when that test has no usable reading, or shows a saved one', () => {
+    const { form, e } = typed({ postCfm: '0' });
+    expect(newReading({ id: 'x', kind: 'test_out', context: JOB_CTX, evaluation: e, program: null, form, recordedAt: '', includePrice: true })).toBeNull();
+    const saved = evaluate({ form, settings: SETTINGS, savedIn: { cfm: 1, pa: 50, exponent: 0.65, cfm50: 1 } });
+    expect(newReading({ id: 'x', kind: 'test_in', context: JOB_CTX, evaluation: saved, program: null, form, recordedAt: '', includePrice: true })).toBeNull();
+  });
+});
+
+const local = (id: string, kind: 'test_in' | 'test_out', at: string, patch: Partial<LocalTest> = {}): LocalTest => {
+  const { form, e } = typed({});
+  const t = newReading({ id, kind, context: JOB_CTX, evaluation: e, program: e.program, form, recordedAt: at, includePrice: true })!;
+  return { ...newLocalTest(t, JOB_CTX, ME, 'Carl Crew', `m-${id}`), ...patch };
+};
+
+describe('a sync answer', () => {
+  const t = local('0d000000-0000-4000-8000-0000000000a1', 'test_out', '2026-11-19T15:00:00.000Z');
+  const now = '2026-11-19T15:05:00.000Z';
+
+  it('marks the reading synced, waiting, retried or refused, and keeps it on the phone', () => {
+    expect(t).toMatchObject({ syncState: 'pending', contextKey: `job:${JOB}`, ownerId: ME });
+    expect(applyTestResult(t, { status: 'applied', id: t.id, recorded_at: now }, now)).toMatchObject({ syncState: 'synced', lastError: null, syncedAt: now });
+    expect(applyTestResult(t, { status: 'waiting' }, now)).toMatchObject({ syncState: 'waiting', lastError: 'Saved on this phone. It goes to the office once this estimate has synced.' });
+    expect(applyTestResult(t, { status: 'error', error: 'No signal.' }, now)).toMatchObject({ syncState: 'error', lastError: 'No signal.' });
+    expect(applyTestResult(t, { status: 'refused', error: 'This job is not assigned to your crew.' }, now)).toMatchObject({ syncState: 'invalid', lastError: 'This job is not assigned to your crew.' });
+    expect(applyTestResult(t, { status: 'rejected', error: 'x' }, now).syncState).toBe('invalid');
+  });
+
+  it('sends again only what can still go: pending, waiting and failed readings', () => {
+    expect(['pending', 'waiting', 'error', 'invalid', 'synced'].filter((s) => isUnsent({ syncState: s as LocalTest['syncState'] }))).toEqual(['pending', 'waiting', 'error']);
+  });
+});
+
+describe('the readings on screen', () => {
+  const server = (id: string, kind: 'test_in' | 'test_out', at: string): SavedTest => ({
+    id,
+    job_id: kind === 'test_out' ? JOB : null,
+    estimate_id: EST,
+    kind,
+    cfm: 6952,
+    pa: 50,
+    exponent: 0.65,
+    cfm50: 6952,
+    program_key: null,
+    program: null,
+    air_sealing_cost: null,
+    bas_audit: null,
+    volume: 20000,
+    occupants: null,
+    stories: null,
+    n_factor: null,
+    recorded_by: ME,
+    recorded_by_name: 'Erin Estimator',
+    recorded_at: at,
+  });
+
+  it("shows the server's copy and the phone's own once each, newest first", () => {
+    const sIn = server('0d000000-0000-4000-8000-0000000000b1', 'test_in', '2026-11-02T14:00:00+00:00');
+    const sent = local('0d000000-0000-4000-8000-0000000000b2', 'test_out', '2026-11-19T14:00:00.000Z', { syncState: 'synced' });
+    const sentOnServer = server(sent.id, 'test_out', '2026-11-19T14:00:00+00:00');
+    const offline = local('0d000000-0000-4000-8000-0000000000b3', 'test_out', '2026-11-19T15:00:00.000Z');
+    const shown = mergeReadings([sentOnServer, sIn], [sent, offline]);
+    expect(shown.map((r) => [r.test.id, r.local?.syncState ?? 'server'])).toEqual([
+      [offline.id, 'pending'],
+      [sent.id, 'server'],
+      [sIn.id, 'server'],
+    ]);
+    expect(newestOf(shown, 'test_out')!.test.id).toBe(offline.id);
+    expect(newestOf(shown, 'test_out')!.test.recorded_by_name).toBe('Carl Crew');
+    expect(newestOf(shown, 'test_in')!.test.recorded_by_name).toBe('Erin Estimator');
+    expect(settledLocalIds([sentOnServer, sIn], [sent, offline])).toEqual([sent.id]);
+  });
+
+  it('keeps a synced reading the server list does not have yet', () => {
+    const sent = local('0d000000-0000-4000-8000-0000000000c1', 'test_in', '2026-11-19T14:00:00.000Z', { syncState: 'synced' });
+    expect(mergeReadings([], [sent]).map((r) => r.test.id)).toEqual([sent.id]);
+    expect(settledLocalIds([], [sent])).toEqual([]);
+  });
+});

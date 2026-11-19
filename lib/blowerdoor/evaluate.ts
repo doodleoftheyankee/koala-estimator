@@ -112,6 +112,8 @@ export interface Evaluation {
   basErrors: { bas: string | null; volume: string | null; occupants: string | null; nFactor: string | null };
   ventilation: VentilationStatus | null;
   volume: number | null;
+  /** The house inputs as read (null when empty or not valid), kept with a saved reading. */
+  house: { basAudit: number | null; occupants: number | null; nFactor: number | null };
   ach50Pre: number | null;
   ach50Post: number | null;
   headline: Headline;
@@ -176,7 +178,8 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
   const occField = readField(form.occupants, RULES.occupants);
   const nfField = form.nFactor.trim() === '' ? ({ state: 'ok', value: settings.nFactor } as FieldValue) : readField(form.nFactor, RULES.nFactor);
   const volume = valueOf(volField);
-  const bas = basFor({ audit: valueOf(basField), volume, occupants: valueOf(occField), stories: form.stories, nFactor: valueOf(nfField) });
+  const house = { basAudit: valueOf(basField), occupants: valueOf(occField), nFactor: valueOf(nfField) };
+  const bas = basFor({ audit: house.basAudit, volume, occupants: house.occupants, stories: form.stories, nFactor: house.nFactor });
   const vent = post && bas.value !== null ? ventilation(post.cfm50, bas.value) : null;
 
   let headline: Headline = { kind: 'enter' };
@@ -204,6 +207,7 @@ export function evaluate({ form, settings, savedIn = null, savedOut = null }: Ev
     basErrors: { bas: errorOf(basField), volume: errorOf(volField), occupants: errorOf(occField), nFactor: errorOf(nfField) },
     ventilation: vent,
     volume,
+    house,
     ach50Pre: pre ? ach50(pre.cfm50, volume) : null,
     ach50Post: post ? ach50(post.cfm50, volume) : null,
     headline,

@@ -196,3 +196,34 @@ export function jobBlowerDoor(rows: readonly SavedTest[], gauge: string): JobBlo
 
 /** The stored JSON of a program, to send with a reading. */
 export const programSnapshot = (p: RebateProgram | null): StoredProgram | null => (p ? toStored({ gauge: '', flowExponent: DEFAULT_EXPONENT, nFactor: DEFAULT_N_FACTOR, programs: [p] }).programs[0]! : null);
+
+// ---------------------------------------------------------------------------------------------
+// The API's answers
+// ---------------------------------------------------------------------------------------------
+
+/** POST /api/blower-door/tests: what happened to one reading. */
+export const testSyncResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('applied'), id: z.guid(), recorded_at: z.string() }),
+  /** The estimate has not synced from the phone yet: send the reading again later. */
+  z.object({ status: z.literal('waiting') }),
+  /** refused: not the caller's job or estimate (now). invalid: values no gauge gives. rejected: someone else's id. error: try again. */
+  z.object({ status: z.enum(['refused', 'invalid', 'rejected', 'error']), error: z.string() }),
+]);
+export type TestSyncResponse = z.output<typeof testSyncResponseSchema>;
+
+/** GET /api/blower-door/tests?job= | ?estimate=: who the readings are for and the saved readings. */
+export const contextResponseSchema = z.object({
+  jobId: z.guid().nullable(),
+  estimateId: z.guid(),
+  label: z.string().nullable(),
+  tests: z.array(savedTestSchema),
+});
+export type ContextResponse = z.output<typeof contextResponseSchema>;
+
+/** GET /api/blower-door/settings. */
+export interface SettingsResponse {
+  settings: BlowerDoorSettings;
+  problems: string[];
+  /** Changes whenever the stored settings do (the ETag). */
+  hash: string;
+}

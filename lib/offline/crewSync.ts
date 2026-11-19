@@ -6,6 +6,7 @@ import { crewJobsResponseSchema, savedActualSchema, serverActualSchema, type Act
 import type { JobStatus } from '@/lib/jobs/status';
 import { crewDb, type LocalActuals } from './crewDb';
 import { applyActualsResult, buildActualsBody, mergeServerJobs, withStatus } from './crewSyncCore';
+import { refreshBlowerDoorSettings, syncBlowerDoor } from './blowerDoor';
 
 const uuid = () => crypto.randomUUID();
 let running: Promise<void> | null = null;
@@ -119,12 +120,18 @@ export async function pullJobs(ownerId: string): Promise<boolean> {
   return true;
 }
 
-/** Full cycle: push edits, pull jobs, and push again if a conflict or merge left rows to send. */
+/**
+ * Full cycle: push edits, pull jobs, and push again if a conflict or merge left rows to send. The
+ * blower door tool's programs are cached and its saved readings (test-outs) sent here too, so a
+ * reading taken with no signal goes out on the crew app's next sync (neither ever throws).
+ */
 export function crewSyncAll(ownerId: string): Promise<void> {
   if (running) return running;
   running = (async () => {
     if (!navigator.onLine) return;
     const again = await pushAll(ownerId);
+    await refreshBlowerDoorSettings();
+    await syncBlowerDoor(ownerId);
     await pullJobs(ownerId);
     if (again) await pushAll(ownerId);
   })().finally(() => {
