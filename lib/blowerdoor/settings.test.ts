@@ -100,7 +100,7 @@ describe('saving settings (the Rebate programs page)', () => {
       fails((s) => {
         s.programs[0]!.tiers[2]!.rebate = 1000;
       }),
-    ).toEqual(['Program 1: a higher tier cannot pay less than a lower one ($1300 then $1000).']);
+    ).toEqual(['Program 1: a higher tier cannot pay less than a lower one ($1,300 then $1,000).']);
   });
 
   it('wants whole dollars', () => {

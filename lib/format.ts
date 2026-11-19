@@ -62,6 +62,9 @@ export const usd = (n: number, cents = false) => (cents ? usd2 : usd0).format(n)
 /** A plain number with thousands separators and at most `digits` decimals: "1,234.6". */
 export const num = (n: number, digits = 0) => n.toLocaleString(LOCALE, { maximumFractionDigits: digits });
 
+/** A number with thousands separators and exactly `digits` decimals: fixed(7.1, 2) = "7.10". */
+export const fixed = (n: number, digits: number) => n.toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
 /** A ratio as a percent with fixed decimals: pct(0.4005) = "40.1%". */
 export const pct = (n: number, digits = 1) => `${(n * 100).toFixed(digits)}%`;
 

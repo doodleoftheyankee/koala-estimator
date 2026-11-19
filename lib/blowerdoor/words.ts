@@ -1,6 +1,6 @@
 // What the blower door tool says: the headline, the next-tier line, the ventilation check and the
 // plain-text summary people paste into the program's portal. Pure; numbers go through lib/format.
-import { formatMoney, num } from '@/lib/format';
+import { fixed, formatMoney, num } from '@/lib/format';
 import { INSTALL_BELOW, ventilation, type BasResult, type TierEvaluation, type VentilationStatus } from './calc';
 import type { Evaluation, Reading } from './evaluate';
 import { formatEffectiveDate, type BlowerDoorSettings, type RebateProgram } from './settings';
@@ -12,7 +12,7 @@ export const paText = (n: number) => num(n, 2);
 /** One decimal: 52.7%. */
 export const pctText = (n: number) => `${(Math.round(n * 10) / 10).toFixed(1)}%`;
 /** ACH50 with two decimals: 7.10. */
-export const achText = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const achText = (n: number) => fixed(n, 2);
 /** A share for the ventilation check, rounded down so "below" never reads 100%: 99%. */
 const sharePct = (ratio: number) => `${Math.floor(ratio * 100 + 1e-9)}%`;
 const money = (n: number) => formatMoney(n);

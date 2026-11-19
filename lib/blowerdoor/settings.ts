@@ -10,6 +10,7 @@
 //   validateBlowerDoorSettings  strict, for saving: every rule the editor enforces, with readable
 //                            messages, returning the JSON to store.
 import { z } from 'zod';
+import { calendarDay, formatDate, formatMoney } from '@/lib/format';
 import { hasAtMostDecimals } from './numbers';
 
 export interface RebateTier {
@@ -116,7 +117,7 @@ const wholeDollars = (label: string) =>
     .number({ error: `${label} must be a number of dollars.` })
     .int(`${label} must be whole dollars (no cents).`)
     .min(0, `${label} cannot be negative.`)
-    .max(LIMITS.rebate, `${label} must be at most $${LIMITS.rebate.toLocaleString('en-US')}.`);
+    .max(LIMITS.rebate, `${label} must be at most ${formatMoney(LIMITS.rebate)}.`);
 
 /** One program, strictly. `n` names it in messages ("Program 2"). */
 function programSchema(n: string) {
@@ -163,7 +164,7 @@ function programSchema(n: string) {
         if (!(b.reduction_pct > a.reduction_pct)) {
           ctx.addIssue({ code: 'custom', message: `${n}: tiers must go up in reduction, lowest first (${a.reduction_pct}% then ${b.reduction_pct}%).` });
         } else if (b.rebate < a.rebate) {
-          ctx.addIssue({ code: 'custom', message: `${n}: a higher tier cannot pay less than a lower one ($${a.rebate} then $${b.rebate}).` });
+          ctx.addIssue({ code: 'custom', message: `${n}: a higher tier cannot pay less than a lower one (${formatMoney(a.rebate)} then ${formatMoney(b.rebate)}).` });
         }
       }
     });
@@ -331,9 +332,8 @@ export function newProgramKey(label: string, taken: readonly string[]): string {
   for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
 }
 
-/** "Nov 1, 2024" for a YYYY-MM-DD date (a calendar date: no time zone moves it). */
+/** "Nov 1, 2024" for a YYYY-MM-DD date (a calendar date: no time zone moves it; lib/format.ts calendarDay). */
 export function formatEffectiveDate(ymd: string | null): string | null {
   if (!ymd || !isYmd(ymd)) return null;
-  const [y, m, d] = ymd.split('-').map(Number) as [number, number, number];
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(Date.UTC(y, m - 1, d)));
+  return formatDate(calendarDay(ymd));
 }
