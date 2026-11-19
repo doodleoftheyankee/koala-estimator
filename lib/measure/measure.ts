@@ -2,7 +2,7 @@
 // gross / cutouts / net square feet from them. Pure. The net becomes the area's sqft.
 import { z } from 'zod';
 import { solveShape, type ShapeInput, type SolvedShape } from './geometry';
-import { formatFeet, parseFeet, parsePitch } from './units';
+import { formatFeet, parseFeet, readPitch, steepPitchNote, type PitchRead } from './units';
 
 /** How the area is measured. */
 export const MEASURE_MODES = ['floor', 'roofline', 'walls'] as const;
@@ -116,6 +116,8 @@ function cutoutArea(c: Cutout): { area: number; errors: string[] } {
 
 const sqftText = (n: number) => Math.round(n).toLocaleString('en-US');
 const pitchText = (rise: number) => `${Math.round(rise * 100) / 100}/12`;
+/** "6/12", or "30° = 6.93/12" for a pitch typed in degrees. */
+const pitchWords = (p: Extract<PitchRead, { ok: true }>) => (p.degrees === null ? pitchText(p.rise) : `${p.degrees}° = ${pitchText(p.rise)}`);
 
 /** Gross, cutouts and net square feet. Any error leaves all three at zero. */
 export function computeMeasurement(m: Measurement): MeasureResult {
@@ -158,20 +160,26 @@ export function computeMeasurement(m: Measurement): MeasureResult {
     const footprint = shape.shape.area;
 
     if (m.mode === 'roofline') {
-      const p1 = parsePitch(m.pitch);
-      if (!m.pitch.trim()) result.errors.push('Enter the roof pitch (e.g. 6/12).');
-      else if (p1 === null) result.errors.push(`Pitch "${m.pitch}" isn't valid. Use rise/12, e.g. 6/12.`);
-      let factor = p1 === null ? 0 : pitchFactor(p1);
-      let how = p1 === null ? '' : `${pitchText(p1)} → ×${factor.toFixed(3)}`;
+      // Rise per 12 or degrees, nothing steeper than 24/12 (lib/measure/units readPitch).
+      const p1 = readPitch(m.pitch, 'Pitch');
+      if (!p1) result.errors.push('Enter the roof pitch (e.g. 6/12 or 30°).');
+      else if (!p1.ok) result.errors.push(p1.error);
+      const r1 = p1?.ok ? p1 : null;
+      let factor = r1 ? pitchFactor(r1.rise) : 0;
+      let how = r1 ? `${pitchWords(r1)} → ×${factor.toFixed(3)}` : '';
+      const steep1 = steepPitchNote(m.pitch, 'Pitch');
+      if (steep1) result.notes.push(steep1);
       if (m.twoSlope) {
-        const p2 = parsePitch(m.pitch2);
+        const p2 = readPitch(m.pitch2, 'Second pitch');
         const split = m.splitPct.trim() ? Number(m.splitPct) : NaN;
-        if (!m.pitch2.trim()) result.errors.push('Enter the second pitch.');
-        else if (p2 === null) result.errors.push(`Second pitch "${m.pitch2}" isn't valid.`);
+        if (!p2) result.errors.push('Enter the second pitch.');
+        else if (!p2.ok) result.errors.push(p2.error);
         if (!(split >= 0 && split <= 100)) result.errors.push('Split must be a percentage from 0 to 100.');
-        if (p1 !== null && p2 !== null && split >= 0 && split <= 100) {
-          factor = (split / 100) * pitchFactor(p1) + (1 - split / 100) * pitchFactor(p2);
-          how = `${split}% at ${pitchText(p1)} + ${100 - split}% at ${pitchText(p2)} → ×${factor.toFixed(3)}`;
+        const steep2 = steepPitchNote(m.pitch2, 'Second pitch');
+        if (steep2) result.notes.push(steep2);
+        if (r1 && p2?.ok && split >= 0 && split <= 100) {
+          factor = (split / 100) * pitchFactor(r1.rise) + (1 - split / 100) * pitchFactor(p2.rise);
+          how = `${split}% at ${pitchWords(r1)} + ${100 - split}% at ${pitchWords(p2)} → ×${factor.toFixed(3)}`;
         }
       }
       if (result.errors.length) return zeroed(result);
@@ -197,6 +205,27 @@ function zeroed(r: MeasureResult): MeasureResult {
 export function measuredSqft(m: Measurement): number | null {
   const r = computeMeasurement(m);
   return r.errors.length || r.net <= 0 ? null : Math.round(r.net);
+}
+
+/**
+ * The area's square feet after its measurement changes (L26). A finished measurement gives its
+ * net. One that is no longer finished takes back the size it gave: when the area's square feet are
+ * the net of the measurement before the change, they go to 0, so the old number is never priced.
+ * A size typed by hand (not the measurement's, or with no finished measurement before) stays.
+ */
+export function sqftAfterMeasurement(sqft: number, before: Measurement | undefined, after: Measurement): number {
+  const now = measuredSqft(after);
+  if (now !== null) return now;
+  const was = before ? measuredSqft(before) : null;
+  return was !== null && Math.round(sqft) === was ? 0 : sqft;
+}
+
+/** Why a measurement has no square feet yet: its first error, or a net of 0. Null when it is finished. */
+export function unfinishedReason(m: Measurement): string | null {
+  const r = computeMeasurement(m);
+  if (r.errors.length) return r.errors[0]!;
+  if (r.net <= 0) return r.notes.find((n) => n.startsWith('Cutouts are larger')) ?? 'The measurement comes to 0 sq ft.';
+  return null;
 }
 
 const SHAPE_WORDS: Record<ShapeInput['kind'], string> = { rect: 'rectangle', L: 'L-shape', T: 'T-shape', U: 'U-shape', custom: 'custom outline' };

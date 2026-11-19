@@ -181,7 +181,7 @@ step('pitch from a photo of the gable, in Measure');
   check((await sheet.getByRole('button', { name: 'Use 6/12' }).count()) === 1, 'Use offers the whole pitch, 6/12');
   await sheet.getByRole('button', { name: 'Use 6.3/12 (as measured)' }).click();
   await sheet.waitFor({ state: 'detached' });
-  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', '"Use 6.3/12 (as measured)" fills the roof pitch');
+  check((await measure.getByLabel('Roof pitch (rise / 12 or degrees)').inputValue()) === '6.3/12', '"Use 6.3/12 (as measured)" fills the roof pitch');
   check((await measure.getByText('×1.129', { exact: true }).count()) === 1, 'and its pitch factor');
   check((await measure.getByRole('button', { name: 'Use 1,363 sq ft' }).count()) === 1, '1,260 sq ft footprint × 1.129 − 60 sq ft chimney → 1,363 sq ft of roof deck');
 
@@ -201,13 +201,30 @@ step('pitch from a photo of the gable, in Measure');
   await page.screenshot({ path: SHOTS + '03a4-pitch-second.png' });
   await sheet.getByRole('button', { name: 'Use 12/12' }).click();
   await sheet.waitFor({ state: 'detached' });
-  check((await measure.getByLabel('Second pitch (rise / 12)').inputValue()) === '12/12', '"Use 12/12" fills the second pitch, not the first');
-  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', 'the first pitch is unchanged');
+  check((await measure.getByLabel('Second pitch (rise / 12 or degrees)').inputValue()) === '12/12', '"Use 12/12" fills the second pitch, not the first');
+  check((await measure.getByLabel('Roof pitch (rise / 12 or degrees)').inputValue()) === '6.3/12', 'the first pitch is unchanged');
   await measure.getByRole('heading', { name: 'Pitch' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: SHOTS + '03a5-pitch-used.png' });
 
   // Back to the attic floor this estimate is priced on.
   await measure.getByRole('switch', { name: 'Two different slopes' }).click();
+  // A pitch typed in degrees is understood; nothing is steeper than 24/12 (L25, RF-06).
+  const pitchBox = measure.getByLabel('Roof pitch (rise / 12 or degrees)');
+  await pitchBox.fill('30 deg');
+  check((await measure.getByText('1,260 sq ft footprint × pitch (30° = 6.93/12 → ×1.155)').count()) === 1, 'a pitch typed as "30 deg" is 6.93/12 (×1.155)');
+  check((await measure.getByRole('button', { name: 'Use 1,395 sq ft' }).count()) === 1, '1,260 sq ft × 1.155 − 60 sq ft chimney → 1,395 sq ft');
+  await pitchBox.fill('100');
+  check(
+    (await measure.getByText('Pitch "100" would be 100/12, steeper than 24/12. Type the rise per 12, e.g. 6/12, or degrees, e.g. 30°.').count()) === 1,
+    'a bare 100 is refused with a hint (it was read as 100/12)',
+  );
+  check((await measure.getByRole('button', { name: 'Done', exact: true }).count()) === 1 && (await measure.getByRole('button', { name: /^Use [\d,]+ sq ft$/ }).count()) === 0, 'and nothing is measured');
+  await pitchBox.fill('30');
+  check((await measure.getByText('Pitch "30" would be 30/12, steeper than 24/12. For degrees, type 30°.').count()) === 1, 'a bare 30 (30/12) is refused, and offers 30°');
+  await measure.getByRole('heading', { name: 'Pitch' }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: SHOTS + '03a6-pitch-30-refused.png' });
+  await measure.getByRole('button', { name: 'Use 30° (6.93/12)' }).click();
+  check((await pitchBox.inputValue()) === '30°' && (await measure.getByRole('button', { name: 'Use 1,395 sq ft' }).count()) === 1, '"Use 30°" puts the degrees in the pitch: 1,395 sq ft');
   await measure.getByRole('radio', { name: 'Floor' }).click();
   await measure.getByRole('button', { name: 'Use 1,200 sq ft' }).click();
   check((await page.getByLabel('Square feet').inputValue()) === '1200', 'back on the floor: 1,200 sq ft');
@@ -682,6 +699,24 @@ await wallSheet.getByLabel('Average wall height').fill('8');
 await wallSheet.getByRole('button', { name: 'Use 1,440 sq ft' }).click();
 check((await page.getByLabel('Square feet').inputValue()) === '1440', 'with an 8 ft height: 1,440 sq ft of wall');
 await page.screenshot({ path: SHOTS + '03i-roof-walls-applied.png', fullPage: true });
+// A broken measurement takes its size back (L26, RF-07): Incomplete, not priced, with Finish measuring.
+{
+  const wallsHeader = page.getByRole('button', { name: /^Exterior walls/ });
+  check((await wallsHeader.getByText('Ready', { exact: true }).count()) === 1, 'the walls area is Ready at 1,440 sq ft');
+  await page.getByRole('button', { name: /Edit measurement/ }).click();
+  await wallSheet.getByLabel('Average wall height').fill('');
+  await wallSheet.getByRole('button', { name: 'Done', exact: true }).click();
+  await wallSheet.waitFor({ state: 'detached' });
+  check((await page.getByLabel('Square feet').inputValue()) === '', 'height cleared: the 1,440 sq ft go back (the box is empty)');
+  check((await wallsHeader.getByText('Incomplete', { exact: true }).count()) === 1 && /0 sq ft, measuring not finished/.test(await wallsHeader.innerText()), 'the area says Incomplete: 0 sq ft, measuring not finished');
+  const unfinishedText = "Exterior walls: the measurement isn't finished, so this area isn't priced. Enter the average wall height.";
+  check((await page.getByText(unfinishedText).count()) === 1, 'and why it is not priced');
+  await page.screenshot({ path: SHOTS + '03i2-walls-measuring-not-finished.png', fullPage: true });
+  await page.getByRole('button', { name: 'Finish measuring' }).click();
+  await wallSheet.getByLabel('Average wall height').fill('8');
+  await wallSheet.getByRole('button', { name: 'Use 1,440 sq ft' }).click();
+  check((await page.getByLabel('Square feet').inputValue()) === '1440' && (await page.getByText(unfinishedText).count()) === 0, '"Finish measuring" opens Measure; 8 ft again is 1,440 sq ft');
+}
 
 step('satellite: a garage starts with every face off');
 await page.getByRole('button', { name: '+ Garage' }).click();
@@ -778,11 +813,13 @@ check((await roof.getByText('Lower roof: garage, porch or addition?').count()) =
 await roof.getByRole('button', { name: 'Close' }).click();
 await lookUpAddress('9 Carport Ct');
 await roof.getByRole('heading', { name: 'Roof faces' }).waitFor({ timeout: 30000 });
-check((await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).getAttribute('aria-checked')) === 'true', 'parts with no roof data are offered, and start on');
+check((await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).getAttribute('aria-checked')) === 'false', 'parts with no roof data are offered, and start off (L28, RF-15)');
 check((await roof.getByText('Parts with no roof data (270 sq ft)').count()) === 1, 'with their size');
-const withCarport = await roof.getByRole('radio', { name: /Attic floor/ }).innerText();
+const withoutCarport = await roof.getByRole('radio', { name: /Attic floor/ }).innerText();
+check(/\b1,990\b/.test(withoutCarport), 'the attic floor starts without the carport: 1,990 sq ft');
+check((await roof.getByText('270 sq ft of the outline has no roof data (a carport or flat part?). It is left out. Turn it on below if it is over the attic.').count()) === 1, 'and the check says it is left out');
 await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).click();
-check((await roof.getByRole('radio', { name: /Attic floor/ }).innerText()) !== withCarport, 'turning them off changes the attic floor');
+check(/\b2,230\b/.test(await roof.getByRole('radio', { name: /Attic floor/ }).innerText()), 'turning them on counts the carport: 2,230 sq ft');
 await roof.getByRole('switch', { name: 'Parts with no roof data: over the attic' }).scrollIntoViewIfNeeded();
 await page.screenshot({ path: SHOTS + '03o-roof-carport.png' });
 await roof.getByRole('button', { name: 'Close' }).click();
@@ -1122,8 +1159,16 @@ await cpg.waitForURL(BASE + '/crew');
 step('office verifies the actuals');
 await op.goto(BASE + '/jobs/' + jobId);
 await op.screenshot({ path: SHOTS + '18-job-actuals.png', fullPage: true });
+check((await op.getByRole('button', { name: 'Mark in progress' }).count()) === 1, 'a completed job not yet verified can still be moved back');
 await op.getByRole('button', { name: 'Verify actuals' }).click();
 await waitForDb(`select bool_and(verified_at is not null)::text from job_actuals where job_id = '${jobId}'`, 'true', 'all actuals verified');
+// A verified job offers no status changes; the owner can Unverify (L37, RF-16).
+await op.goto(BASE + '/jobs/' + jobId);
+await op.getByRole('heading', { name: 'Status' }).waitFor();
+check((await op.getByRole('button', { name: 'Mark in progress' }).count()) === 0 && (await op.getByRole('button', { name: 'Cancel job' }).count()) === 0, 'a verified job offers no status changes');
+check((await op.getByText('Its actuals are verified, so the status stays as it is. To change it, Unverify the actuals below first.').count()) === 1, 'and the Status card says why');
+check((await op.getByRole('button', { name: 'Unverify' }).count()) === 1, 'the owner can Unverify');
+await op.screenshot({ path: SHOTS + '18b-job-verified.png', fullPage: true });
 check(psql(`select count(*) from audit_log where table_name = 'job_actuals'`) !== '0', 'actuals changes are audited');
 
 step('nightly learning run (cron)');

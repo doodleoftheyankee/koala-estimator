@@ -219,6 +219,11 @@ function thin(ring: LatLng[], max = MAX_RING_POINTS): LatLng[] {
   return (k > 1 ? ring.filter((_, i) => i % k === 0) : ring).map(point);
 }
 
+/** The most a pitch under 2/12 (a low slope) is shown as: 1.96 is 1.9/12, never 2/12 (L29). */
+export const LOW_SLOPE_MAX_SHOWN = 1.9;
+/** A rise as it is shown and grouped: whole numbers from 2/12 up, tenths below, never 2 for a low slope. */
+const shownRise = (rise: number) => (rise >= 2 ? Math.round(rise) : Math.min(LOW_SLOPE_MAX_SHOWN, round(rise, 1)));
+
 /** Rise per 12 from a pitch in degrees. */
 export const riseFromDegrees = (deg: number) => 12 * Math.tan((deg * Math.PI) / 180);
 
@@ -246,8 +251,12 @@ function edgeTotals(t: Pick<Takeoff, 'edgeTotalsM'>, edges: readonly RoofEdge[])
 /** The compact result kept from a validated takeoff. */
 export function compactTakeoff(t: Takeoff): RoofResult {
   const segments: RoofSegment[] = t.segments.map((s) => {
-    const rise = s.rise ?? round(riseFromDegrees(s.pitchDeg), 1);
-    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope: s.lowSlope ?? rise < 2, lower: s.lower ?? false, center: s.center ? point(s.center) : null };
+    // Low slope is decided on the rise before rounding, and a low-slope rise worked out from the
+    // angle is never rounded up to 2/12 (L29): 9.45 degrees is 1.997, kept as 1.9.
+    const exact = s.rise ?? riseFromDegrees(s.pitchDeg);
+    const lowSlope = s.lowSlope ?? exact < 2;
+    const rise = s.rise ?? (lowSlope ? Math.min(LOW_SLOPE_MAX_SHOWN, round(exact, 1)) : round(exact, 1));
+    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope, lower: s.lower ?? false, center: s.center ? point(s.center) : null };
   });
   const known = new Set(segments.map((s) => s.n));
   const roofM2 = segments.length ? segments.reduce((sum, s) => sum + s.areaM2, 0) : (t.building.faces?.areaM2 ?? t.building.whole?.areaM2 ?? 0);
@@ -343,12 +352,13 @@ export function deckM2(floorM2: number, included: readonly Pick<RoofSegment, 'ar
 
 /**
  * The main pitch: the rise whose faces cover the most ground, as pitchText says it (whole numbers
- * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12). Null with no faces.
+ * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12, and a low slope is never
+ * counted as 2/12). Null with no faces.
  */
 export function mainPitch(segments: readonly RoofSegment[]): number | null {
   const ground = new Map<number, number>();
   for (const s of segments) {
-    const r = s.rise >= 2 ? Math.round(s.rise) : round(s.rise, 1);
+    const r = shownRise(s.rise);
     ground.set(r, (ground.get(r) ?? 0) + s.groundM2);
   }
   let best: number | null = null;
@@ -391,6 +401,8 @@ export interface RoofFigures {
   /** How many faces are kept. */
   facesKept: number;
   overhangIn: number;
+  /** The parts with no roof data are left out (the choice the figures were worked out with). */
+  unmatchedOut: boolean;
 }
 
 /** The estimator's numbers for a result: exact (unrounded) feet and square feet. */
@@ -416,6 +428,7 @@ export function roofFigures(r: RoofResult, c: RoofChoices): RoofFigures {
     unmatchedSqft: r.unmatchedM2 * SQFT_PER_M2,
     facesKept: kept.length,
     overhangIn: c.overhangIn,
+    unmatchedOut: c.unmatchedOut,
   };
 }
 
@@ -424,9 +437,9 @@ export const roundSqft = (sqft: number) => Math.round(sqft / 10) * 10;
 export const roundFt = (ft: number) => Math.round(ft);
 const comma = (n: number) => n.toLocaleString('en-US');
 
-/** Rise as the estimator says it: 6/12, or 1.5/12 for a low slope. */
+/** Rise as the estimator says it: 6/12, or 1.5/12 for a low slope. Under 2/12 never reads 2/12: 1.96 is 1.9/12 (L29). */
 export function pitchText(rise: number): string {
-  return `${rise >= 2 ? Math.round(rise) : round(rise, 1)}/12`;
+  return `${shownRise(rise)}/12`;
 }
 
 const DIRECTIONS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'] as const;
@@ -485,11 +498,17 @@ export function startPick(measurement: Pick<Measurement, 'mode'> | undefined): R
 export const faceGroup = (job: RoofJob): FaceGroup => (job === 'garage' ? 'garage' : 'house');
 
 /**
- * The starting face choices: Roof Takeoff's own (attic.excluded) for the house; for a garage every
- * face starts off, as do the parts with no roof data, so the number is only what the estimator turns on.
+ * The starting face choices. For the house: the faces Roof Takeoff leaves out (attic.excluded), and
+ * the parts with no roof data (a carport, a flat bit) left out whenever the switch for them is
+ * offered (L28), so they count only when the estimator turns them on; a part too small to offer
+ * stays counted, as Roof Takeoff counts it. For a garage every face starts off, as do the parts
+ * with no roof data, so the number is only what the estimator turns on.
  */
-export function defaultFaces(r: Pick<RoofResult, 'segments' | 'defaultExcluded'>, group: FaceGroup): Pick<RoofChoices, 'excluded' | 'unmatchedOut'> {
-  return group === 'garage' ? { excluded: r.segments.map((s) => s.n), unmatchedOut: true } : { excluded: [...r.defaultExcluded], unmatchedOut: false };
+export function defaultFaces(
+  r: Pick<RoofResult, 'segments' | 'defaultExcluded' | 'unmatchedM2' | 'footprintM2'>,
+  group: FaceGroup,
+): Pick<RoofChoices, 'excluded' | 'unmatchedOut'> {
+  return group === 'garage' ? { excluded: r.segments.map((s) => s.n), unmatchedOut: true } : { excluded: [...r.defaultExcluded], unmatchedOut: showUnmatched(r) };
 }
 
 /** What each kind of area calls the number, and what the face switches mean for it. */
@@ -538,7 +557,16 @@ export function checkOnSite(r: RoofResult, f: RoofFigures, job: RoofJob, confirm
   if (!r.segments.length) out.push('Google has no roof faces for this house, so no faces can be left out.');
   if (showUnmatched(r) && job !== 'walls') {
     const what = `${comma(roundSqft(f.unmatchedSqft))} sq ft of the outline has no roof data (a carport or flat part?).`;
-    out.push(paper ? what : job === 'garage' ? `${what} Turn it on below if it is part of the garage.` : `${what} Turn it off below if it isn't over the ${JOB_WORDS[job].space}.`);
+    const space = JOB_WORDS[job].space;
+    const turn =
+      job === 'garage'
+        ? f.unmatchedOut
+          ? 'Turn it on below if it is part of the garage.'
+          : "Turn it off below if it isn't part of the garage."
+        : f.unmatchedOut
+          ? `It is left out. Turn it on below if it is over the ${space}.`
+          : `Turn it off below if it isn't over the ${space}.`;
+    out.push(paper ? what : `${what} ${turn}`);
   }
   // Roof Takeoff says "Lower-detail imagery. Check the pitch on site." for the same blurry photo: once is enough.
   const theirs = r.quality === 'LOW' ? r.warnings.filter((w) => !/^lower-detail imagery\b/i.test(w)) : r.warnings;

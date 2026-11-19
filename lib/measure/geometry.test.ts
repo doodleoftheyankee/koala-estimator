@@ -69,6 +69,19 @@ describe('custom polygon', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('a self-crossing outline is an error (L27, S2-F15)', () => {
+    // Drawn as a bow tie: corners (0,0) (10,10) (10,0) (0,10).
+    const bowTie = [[0, 0], [10, 10], [10, 0], [0, 10]] as [number, number][];
+    const r = solveCustom({ points: bowTie, closed: true, sides: ['', '', '', ''] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors).toEqual(["The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross."]);
+    // With lengths typed it still crosses: still an error, never an area with a note.
+    expect(solveCustom({ points: bowTie, closed: true, sides: ['14', '10', '14', '10'] }).ok).toBe(false);
+    // The same corners in order are a square.
+    const fixed = solveCustom({ points: [[0, 0], [10, 0], [10, 10], [0, 10]], closed: true, sides: ['', '', '', ''] });
+    expect(fixed.ok && fixed.shape.area).toBeCloseTo(100, 9);
+  });
+
   it('spots a crossed outline', () => {
     expect(selfIntersects([[0, 0], [10, 10], [10, 0], [0, 10]])).toBe(true);
     expect(selfIntersects(square)).toBe(false);

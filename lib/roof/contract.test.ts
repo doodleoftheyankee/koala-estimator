@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkOnSite, compactTakeoff, defaultFaces, M_PER_IN, noteLine, roofFigures, SQFT_PER_M2, FT_PER_M, takeoffSchema } from './lookup';
+import { checkOnSite, compactTakeoff, defaultFaces, M_PER_IN, noteLine, roofFigures, showUnmatched, SQFT_PER_M2, FT_PER_M, takeoffSchema } from './lookup';
 
 const dir = join(import.meta.dirname, '__fixtures__', 'roof-takeoff');
 const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
@@ -25,14 +25,17 @@ describe("Roof Takeoff's answers (its mock houses)", () => {
       const r = compactTakeoff(parsed.data!);
       const a = body.attic;
 
-      // The defaults are Roof Takeoff's: attic.excluded, the parts with no roof data kept.
+      // Roof Takeoff's own choices: attic.excluded, the parts with no roof data kept. The app starts
+      // with the faces Roof Takeoff leaves out, and leaves out the parts with no roof data when it
+      // offers the switch (L28).
       expect(r.defaultExcluded).toEqual(a.excluded);
       expect(r.unmatchedM2).toBe(a.unmatchedM2);
       expect(r.sharedWallM).toBe(a.sharedWallM);
       expect(r.segments.map((s) => s.lower)).toEqual(body.segments.map((s: { lower: boolean }) => s.lower));
+      expect(defaultFaces(r, 'house')).toEqual({ excluded: a.excluded, unmatchedOut: showUnmatched(r) });
 
       const overhangIn = Math.round(a.overhangM / M_PER_IN);
-      const f = roofFigures(r, { overhangIn, ...defaultFaces(r, 'house') });
+      const f = roofFigures(r, { overhangIn, excluded: r.defaultExcluded, unmatchedOut: false });
       // Roof Takeoff rounds to 0.01 m² and 0.001 m.
       expect(Math.abs(f.floorSqft / SQFT_PER_M2 - a.floorM2)).toBeLessThan(0.02);
       if (a.deckM2 === null) expect(f.deckSqft).toBeNull();

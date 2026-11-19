@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import type { AreaDraft } from '@/lib/sync/draft';
 import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type Measurement } from '@/lib/measure/measure';
-import { parsePitch } from '@/lib/measure/units';
+import { degreesSuggestion, readPitch } from '@/lib/measure/units';
 import { num } from '@/lib/format';
 import { Alert, Button, Card, Chips, Field, Input, Toggle } from '@/components/ui';
 import { Camera, Icon, Ruler } from '@/components/daymark';
@@ -14,8 +14,14 @@ import { PitchPhotoSheet } from './PitchPhoto';
 const sq = (n: number) => num(Math.round(n));
 
 function factorText(pitch: string): string {
-  const p = parsePitch(pitch);
-  return p === null ? '' : `×${pitchFactor(p).toFixed(3)}`;
+  const p = readPitch(pitch);
+  return p?.ok ? `×${pitchFactor(p.rise).toFixed(3)}` : '';
+}
+
+/** "6.93/12" for "30°". */
+function degreesRise(degrees: string): string {
+  const p = readPitch(degrees);
+  return p?.ok ? `${Math.round(p.rise * 100) / 100}/12` : '';
 }
 
 /** The two pitch fields, by the words the photo sheet uses for them. */
@@ -24,14 +30,22 @@ type PitchField = keyof typeof PITCH_FIELDS;
 
 /** A pitch field with its factor, and "Pitch from a photo" under it. */
 function PitchInput({ label, value, placeholder, field, onChange, onPhoto }: { label: string; value: string; placeholder: string; field: PitchField; onChange: (v: string) => void; onPhoto: () => void }) {
+  // A bare number read as a very steep roof (or refused as steeper than 24/12) offers its degrees reading.
+  const asDegrees = degreesSuggestion(value);
   return (
     <div className="space-y-2">
       <div className="flex items-end gap-3">
         <Field label={label} className="flex-1">
-          <Input inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+          {/* A text keyboard: a pitch takes "/" and degrees ("30°" or "30 deg"), which a number pad can't type. */}
+          <Input value={value} placeholder={placeholder} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(e) => onChange(e.target.value)} />
         </Field>
         <span className="mb-3 w-20 font-bold text-brand-800">{factorText(value)}</span>
       </div>
+      {asDegrees ? (
+        <Button variant="secondary" className="w-full" onClick={() => onChange(asDegrees)}>
+          Use {asDegrees} ({degreesRise(asDegrees)})
+        </Button>
+      ) : null}
       <Button variant="secondary" className="w-full" onClick={onPhoto} aria-label={`Pitch from a photo, for the ${PITCH_FIELDS[field]}`}>
         <Icon icon={Camera} />
         Pitch from a photo
@@ -120,17 +134,17 @@ export function MeasureSheet({
         {m.mode === 'roofline' ? (
           <Card className="space-y-3">
             <h3 className="font-semibold">Pitch</h3>
-            <PitchInput label="Roof pitch (rise / 12)" value={m.pitch} placeholder="e.g. 6/12" field="pitch" onChange={(pitch) => set({ pitch })} onPhoto={() => setPhotoFor('pitch')} />
+            <PitchInput label="Roof pitch (rise / 12 or degrees)" value={m.pitch} placeholder="e.g. 6/12 or 30°" field="pitch" onChange={(pitch) => set({ pitch })} onPhoto={() => setPhotoFor('pitch')} />
             <Toggle checked={m.twoSlope} onChange={(twoSlope) => set({ twoSlope })} label="Two different slopes" />
             {m.twoSlope ? (
               <>
-                <PitchInput label="Second pitch (rise / 12)" value={m.pitch2} placeholder="e.g. 12/12" field="pitch2" onChange={(pitch2) => set({ pitch2 })} onPhoto={() => setPhotoFor('pitch2')} />
+                <PitchInput label="Second pitch (rise / 12 or degrees)" value={m.pitch2} placeholder="e.g. 12/12 or 45°" field="pitch2" onChange={(pitch2) => set({ pitch2 })} onPhoto={() => setPhotoFor('pitch2')} />
                 <Field label="% of footprint at the first pitch">
                   <Input inputMode="decimal" value={m.splitPct} onChange={(e) => set({ splitPct: e.target.value })} />
                 </Field>
               </>
             ) : null}
-            <p className="text-xs text-slate-500">Roof area = footprint × √(1 + (rise/12)²). Measure skylights on the roof surface.</p>
+            <p className="text-xs text-slate-500">Roof area = footprint × √(1 + (rise/12)²). Nothing steeper than 24/12 (63°). Measure skylights on the roof surface.</p>
           </Card>
         ) : null}
 

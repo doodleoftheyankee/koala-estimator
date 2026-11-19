@@ -12,7 +12,7 @@ import { FactStrip } from '@/components/office';
 import { UNIT_LABELS } from '@/lib/jobs/crew';
 import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
 import { compareActuals, costTotals, signedOption, type CompareRow, type OfficeActual } from '@/lib/jobs/office';
-import { allowedTransitions, JOB_STATUS_LABELS, type JobStatus } from '@/lib/jobs/status';
+import { allowedTransitions, JOB_STATUS_LABELS, VERIFIED_STATUS_TEXT, type JobStatus } from '@/lib/jobs/status';
 import { formatVariance, varianceTone } from '@/lib/jobs/variance';
 import type { ProductCode, ProductUnit } from '@/lib/pricing';
 import { ActionForm, ToggleInput } from '../../admin/pricing/ActionForm';
@@ -69,8 +69,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     driveMinutesEstFallback: job.driveMinutesEst,
   });
   const costs = costTotals(job.actuals);
-  const transitions = allowedTransitions(job.status, profile.role);
   const verifiedCount = job.actuals.filter((a) => a.verifiedAt).length;
+  const transitions = allowedTransitions(job.status, profile.role, verifiedCount);
   const badge = jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart, actualsCount: job.actuals.length, verifiedCount });
   const revenue = option?.price ?? job.revenue;
   const crewOptions = crews.filter((c) => c.active || c.id === job.crewId);
@@ -182,7 +182,13 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <Card>
             <h2 className="mb-1 text-lg font-semibold text-slate-900">Status</h2>
             <p className="mb-3 text-sm text-slate-600">Crews start and complete jobs from the crew app. Change it here when they cannot.</p>
-            {transitions.length === 0 ? <p className="text-sm text-slate-500">No status changes are possible from {JOB_STATUS_LABELS[job.status].toLowerCase()}.</p> : null}
+            {transitions.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                {verifiedCount > 0
+                  ? VERIFIED_STATUS_TEXT[profile.role === 'owner' ? 'owner' : 'office']
+                  : `No status changes are possible from ${JOB_STATUS_LABELS[job.status].toLowerCase()}.`}
+              </p>
+            ) : null}
             <div className="space-y-3">
               {transitions.map((t) => (
                 <ActionForm key={t} action={changeStatus} readOnly={false} submitLabel={ACTION_LABEL[t]} submitVariant={t === 'cancelled' ? 'danger' : 'secondary'}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMeasurement, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, type Measurement } from './measure';
+import { computeMeasurement, measuredSqft, measurementSchema, measurementSummary, newCutout, newMeasurement, pitchFactor, sqftAfterMeasurement, type Measurement } from './measure';
 
 function m(patch: Partial<Measurement> = {}): Measurement {
   return { ...newMeasurement('attic'), shape: { kind: 'rect', dims: { A: '40', B: '30' } }, ...patch };
@@ -21,6 +21,40 @@ describe('computeMeasurement', () => {
     expect(computeMeasurement(m({ mode: 'roofline' })).errors[0]).toMatch(/pitch/);
   });
 
+  it('a pitch typed in degrees is understood; nothing over 24/12 (L25, RF-06, S2-F13)', () => {
+    // 40 x 30 = 1,200 sq ft of footprint.
+    const deg = computeMeasurement(m({ mode: 'roofline', pitch: '30 deg' }));
+    expect(deg.errors).toEqual([]);
+    expect(deg.gross).toBeCloseTo(1200 / Math.cos(Math.PI / 6), 9);
+    expect(Math.round(deg.net)).toBe(1386);
+    expect(deg.basis).toBe('1,200 sq ft footprint × pitch (30° = 6.93/12 → ×1.155)');
+    // A bare 100 was 100/12: 10,072 sq ft. It is refused, with a hint.
+    const hundred = computeMeasurement(m({ mode: 'roofline', pitch: '100' }));
+    expect([hundred.gross, hundred.net]).toEqual([0, 0]);
+    expect(hundred.errors).toEqual(['Pitch "100" would be 100/12, steeper than 24/12. Type the rise per 12, e.g. 6/12, or degrees, e.g. 30°.']);
+    expect(measuredSqft(m({ mode: 'roofline', pitch: '100' }))).toBeNull();
+    // A bare 30 (30/12) is refused and offers 30°.
+    const thirty = computeMeasurement(m({ mode: 'roofline', pitch: '30' }));
+    expect(thirty.net).toBe(0);
+    expect(thirty.errors).toEqual(['Pitch "30" would be 30/12, steeper than 24/12. For degrees, type 30°.']);
+    expect(computeMeasurement(m({ mode: 'roofline', pitch: '30/12' })).errors).toEqual(['Pitch "30/12" is steeper than 24/12. Check the numbers.']);
+    // The second pitch follows the same rules.
+    const two = computeMeasurement(m({ mode: 'roofline', pitch: '6/12', twoSlope: true, pitch2: '45°', splitPct: '50' }));
+    expect(two.gross).toBeCloseTo(1200 * (0.5 * Math.sqrt(1.25) + 0.5 * Math.SQRT2), 9);
+    expect(two.basis).toBe('1,200 sq ft footprint × pitch (50% at 6/12 + 50% at 45° = 12/12 → ×1.266)');
+    expect(computeMeasurement(m({ mode: 'roofline', pitch: '6/12', twoSlope: true, pitch2: '40', splitPct: '50' })).errors).toEqual([
+      'Second pitch "40" would be 40/12, steeper than 24/12. For degrees, type 40°.',
+    ]);
+  });
+
+  it('a bare number that reads as a very steep roof says how it was read (L25)', () => {
+    const r = computeMeasurement(m({ mode: 'roofline', pitch: '18' }));
+    expect(r.errors).toEqual([]);
+    expect(r.notes).toContain('Pitch 18 is read as 18/12, a very steep roof (56.3°). If you meant 18°, type 18°.');
+    expect(computeMeasurement(m({ mode: 'roofline', pitch: '6' })).notes).toEqual([]);
+    expect(computeMeasurement(m({ mode: 'roofline', pitch: '18/12' })).notes).toEqual([]);
+  });
+
   it('walls: outline perimeter (or typed run) × height minus openings', () => {
     const vents = { ...newCutout('walls', 'v'), shape: rect(`16"`, `8"`), qty: '4' };
     const r = computeMeasurement(m({ mode: 'walls', wallHeight: `3'6"`, cutouts: [vents] }));
@@ -39,6 +73,37 @@ describe('computeMeasurement', () => {
   it('flags a bad cutout quantity', () => {
     const r = computeMeasurement(m({ cutouts: [{ ...newCutout('floor', 'c'), shape: rect('1', '1'), qty: '1.5' }] }));
     expect(r.errors[0]).toMatch(/whole number/);
+  });
+});
+
+describe('a broken measurement takes its size back (L26, RF-07, S2-F14)', () => {
+  // Walls: 120 ft of wall, 8 ft high = 960 sq ft.
+  const walls = (wallHeight: string): Measurement => ({ ...newMeasurement('walls'), perimeter: '120', wallHeight });
+
+  it('a measurement that breaks takes back the square feet it gave', () => {
+    expect(measuredSqft(walls('8'))).toBe(960);
+    // Height cleared: the 960 sq ft from the measurement go back to 0.
+    expect(sqftAfterMeasurement(960, walls('8'), walls(''))).toBe(0);
+    expect(sqftAfterMeasurement(960, walls('8'), walls('eight'))).toBe(0);
+    // Finished again: its net.
+    expect(sqftAfterMeasurement(0, walls(''), walls('8'))).toBe(960);
+    expect(sqftAfterMeasurement(960, walls('8'), walls('9'))).toBe(1080);
+  });
+
+  it('a size typed by hand is not the measurement\'s, so it stays', () => {
+    // Typed 1,000 after measuring 960: the estimator's own number.
+    expect(sqftAfterMeasurement(1000, walls('8'), walls(''))).toBe(1000);
+    // A new measurement that was never finished leaves a typed size alone.
+    expect(sqftAfterMeasurement(960, undefined, newMeasurement('walls'))).toBe(960);
+    expect(sqftAfterMeasurement(960, newMeasurement('walls'), walls(''))).toBe(960);
+  });
+
+  it('a self-crossing outline measures nothing (L27)', () => {
+    const bowTie: Measurement = { ...newMeasurement('attic'), shape: { kind: 'custom', dims: {}, custom: { points: [[0, 0], [10, 10], [10, 0], [0, 10]], closed: true, sides: ['', '', '', ''] } } };
+    const r = computeMeasurement(bowTie);
+    expect(r.net).toBe(0);
+    expect(r.errors).toEqual(["The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross."]);
+    expect(measuredSqft(bowTie)).toBeNull();
   });
 });
 
