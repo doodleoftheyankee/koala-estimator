@@ -783,7 +783,10 @@ function priceProductScope(
   const modelQty = mat.unit === 'bag' ? Math.ceil(rawQty - 1e-9) : round1(rawQty);
 
   const setup = findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0;
-  const rate = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
+  // Hours for a number of design units: units x hours per unit x access, multiplied in that order
+  // (as before the money stage: another order rounds a half-cent tie the other way, review A F6).
+  const perUnit = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType });
+  const hoursFor = (units: number) => setup + units * perUnit * access;
 
   let matLine = materialLine(area.id, code, mat, `${mat.name}`, designQty, modelQty, ov);
   // A product sold by the square foot (batts) covers the quantity priced over the waste (F3).
@@ -797,7 +800,7 @@ function priceProductScope(
     // The estimator's quantity is 0: nothing is installed, so no install hours either (unless they
     // typed hours), and the option says nothing of this product (F4).
     warnings.push({ code: 'product_zero', areaId: area.id, tier, message: `${area.name}: ${capitalize(tier)} installs no ${p.label.toLowerCase()} (its quantity is 0).` });
-    const idle = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, setup + designQty * rate, crew, ov, 0);
+    const idle = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, hoursFor(designQty), crew, ov, 0);
     return { lines: [matLine, idle], description: '', cost: matLine.cost + idle.cost, finalR: null, fillsCavity: null, partial: false, none: true };
   }
   const partial = coversPart(covered, area.sqft);
@@ -829,7 +832,7 @@ function priceProductScope(
   const matCost = matLine.cost;
   // Install labor is priced for the quantity priced: a changed quantity moves the hours with it
   // (the model's hours stay the model's). A changed number of hours still wins.
-  const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, setup + designQty * rate, crew, ov, setup + pricedUnits(matLine, designQty, waste) * rate);
+  const labor = laborLine(area.id, 'labor', code, `Install ${p.label.toLowerCase()}`, hoursFor(designQty), crew, ov, hoursFor(pricedUnits(matLine, designQty, waste)));
 
   const rLabel = `R-${fmtR(achievedR)}`;
   let description: string;
@@ -923,7 +926,8 @@ function priceAirSealing(
   const waste = findCoefficient(k, 'waste_factor', { product: code, jobType: area.jobType })?.value ?? 1;
   const qty = round1(designQty * waste);
   const setup = findCoefficient(k, 'setup_hours', { product: code, jobType: area.jobType })?.value ?? 0;
-  const rate = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType }) * access;
+  const perUnit = coeff(k, 'labor_hrs_per_unit', { product: code, jobType: area.jobType });
+  const hoursFor = (units: number) => setup + units * perUnit * access; // in this order (F6)
 
   const lines: PricedLine[] = [];
   let matCost = 0;
@@ -940,7 +944,7 @@ function priceAirSealing(
     none = !(line.qty > 0);
   }
   // A quantity of 0: no air sealing here, and no hours for it unless typed (F4).
-  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', setup + designQty * rate, crew, ov, none ? 0 : setup + units * rate);
+  const labor = laborLine(area.id, 'labor', code, 'Air sealing labor', hoursFor(designQty), crew, ov, none ? 0 : hoursFor(units));
   lines.push(labor);
   if (none) warnings.push({ code: 'product_zero', areaId: area.id, tier, message: `${area.name}: ${capitalize(tier)} installs no air sealing (its quantity is 0).` });
   return {

@@ -610,3 +610,18 @@ RA-F5 Two options with different materials are not "the same work" (OD6). The wo
     Owner decision: OD6.
     Test: "Good (R-19 batts) and Better (R-30 batts) are both shown; Better is no longer hidden as the
     same work".
+
+RA-F6 Install hours are multiplied in the order they were before the money stage (units x hours
+    per unit x access), so a half-cent tie rounds as the model always rounded it (L7: the model's
+    hours stay the model's). The money stage had multiplied units x (hours per unit x access), which
+    at a tie can land a hair under it.
+    Example (seeded): attic 2,625 sq ft, extreme access, to R-49, plus an attic of 275 sq ft,
+      difficult, 67 min drive: 2 + 178.6458 bags x 0.15 h x 1.6 = 44.875 h. Good 44.87 h, $10,810 ->
+      44.88 h, $10,815 (the daymark engine's price).
+    The reviewer's 4,000 attic-only inputs priced with the same bundle by the daymark engine and this
+    one: 3 differed by $5 (q1208 Best $40,000 -> $39,995, q1703 Good $10,810 -> $10,815, q2753 Good
+    $33,595 -> $33,590 after this fix, each now the daymark price); the 43 that still differ are all
+    Best options that no longer remove the insulation there (RA-F9, each with a removal_kept warning).
+    Owner decision: L7 (no price was meant to move).
+    Test: "attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.88 h and
+    $10,815, as daymark priced it".

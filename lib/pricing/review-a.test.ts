@@ -176,3 +176,14 @@ describe('F5 (OD6): two options with different materials are not "the same work"
     ]);
   });
 });
+
+describe('F6 (L7): install hours are the model hours, multiplied in the same order as before the money stage', () => {
+  it('attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.88 h and $10,815, as daymark priced it', () => {
+    const areas = [area({ id: 'a1', sqft: 2625, targetR: 49, accessLevel: 'extreme' }), area({ id: 'a2', name: 'Attic 2', sqft: 275, accessLevel: 'difficult' })];
+    const good = tier(all(estimate({ areas, driveMinutesOneWay: 67 })), 'good');
+    // 2 h setup + 178.6458 bags x 0.15 h x 1.6 = 44.875 h: 44.88 h. Multiplied as 178.6458 x (0.15 x 1.6) it
+    // came to 44.874999… h, 44.87 h and $10,810.
+    expect(good.lines.find((l) => l.kind === 'labor' && l.areaId === 'a1')!.hours).toBe(44.88);
+    expect(good.price).toBe(10815);
+  });
+});
