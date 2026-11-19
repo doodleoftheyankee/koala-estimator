@@ -7,14 +7,17 @@
 import { revalidatePath } from 'next/cache';
 import { failure, success, type ActionResult } from '@/lib/admin/forms';
 import { SETTINGS_KEY, validateBlowerDoorSettings } from '@/lib/blowerdoor';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { getSessionProfile } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 
 const DESCRIPTION = 'Blower door tool: rebate programs, the gauge and its defaults (Rebate programs page)';
+const NOT_OWNER = 'Only the owner can change the rebate programs.';
 
 export async function saveRebatePrograms(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure('Only the owner can change the rebate programs.');
+  // Koala unreachable is not "not allowed" (L36, review B flow-B10): actionRefusal says so.
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal(NOT_OWNER));
 
   const raw = fd.get('settings');
   let input: unknown;
@@ -31,8 +34,8 @@ export async function saveRebatePrograms(_prev: ActionResult | null, fd: FormDat
     .from('app_settings')
     .upsert({ key: SETTINGS_KEY, value: r.value, description: DESCRIPTION, updated_at: new Date().toISOString(), updated_by: profile.userId }, { onConflict: 'key' })
     .select('key');
-  if (write.error) return failure(write.error.code === '42501' ? 'Only the owner can change the rebate programs.' : `Saving failed: ${write.error.message}`);
-  if ((write.data ?? []).length !== 1) return failure('Only the owner can change the rebate programs.');
+  if (write.error) return failure(write.error.code === '42501' ? NOT_OWNER : `Saving failed: ${write.error.message}`);
+  if ((write.data ?? []).length !== 1) return failure(NOT_OWNER);
 
   revalidatePath('/admin/rebates');
   const n = r.value.programs.length;

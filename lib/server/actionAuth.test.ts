@@ -29,7 +29,7 @@ describe('a refused server action says why in words', () => {
 
   it('the server actions use it wherever they refuse a person', async () => {
     const fs = await import('node:fs');
-    for (const f of ['app/admin/pricing/actions.ts', 'app/admin/team/actions.ts', 'app/admin/learning/actions.ts', 'app/jobs/actions.ts', 'app/estimates/actions.ts']) {
+    for (const f of ['app/admin/pricing/actions.ts', 'app/admin/team/actions.ts', 'app/admin/learning/actions.ts', 'app/jobs/actions.ts', 'app/estimates/actions.ts', 'app/admin/rebates/actions.ts']) {
       const text = fs.readFileSync(f, 'utf8');
       expect(text, f).toContain('actionRefusal');
       // Every early "not allowed" return after a session check goes through it.
