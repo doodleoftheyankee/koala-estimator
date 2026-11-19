@@ -957,8 +957,12 @@ step('blower door: the tool opens with no signal, converts, shows the tier and c
   const pressure = page.getByLabel('House pressure (Pa)');
   await flow.nth(0).fill('6952');
   check((await page.getByTestId('bd-badge').innerText()).includes('TEST-IN ONLY'), 'with only the test-in it says so');
-  check((await page.getByText('The test-out must be at or below 5,562 CFM50 for the 20% tier.').count()) === 1, 'and what the first tier needs');
+  // The 20% limit is 5,561.6 CFM50: the largest whole test-out that reaches it is 5,561 (BD-MATH-3).
+  check((await page.getByText('The test-out must be at or below 5,561 CFM50 for the 20% tier.').count()) === 1, 'and what the first tier needs');
   await flow.nth(1).fill('3325');
+  // Typing the gauge's minus sign first is not an error (BD-R8).
+  await pressure.nth(1).fill('-');
+  check((await page.getByText('House pressure: type a number.').count()) === 0, 'a lone minus sign, half typed, is not an error');
   await pressure.nth(1).fill('-50.8');
   await page.getByTestId('bd-big').filter({ hasText: '52.7%' }).waitFor();
   check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'the worked example: 52.7% and the 40% tier, $1,800 on Home Performance');
@@ -1068,12 +1072,25 @@ const leeEstimate = psql("select e.id from estimates e join customers c on c.id 
   await page.getByLabel('House pressure (Pa)').nth(0).fill('50');
   await page.getByLabel('House volume (ft³)').fill('20000');
   await page.getByLabel('Occupants').fill('3');
-  await page.getByRole('button', { name: 'Save test-in' }).click();
+  // This customer is on the Assisted program, and the estimator knows the air sealing price.
+  await page.getByRole('radio', { name: 'Assisted' }).click();
+  await page.getByLabel('Air sealing price ($)').fill('1999');
+  // A double tap (gloves, a slow phone): two clicks before the screen updates save one reading (BD-R6).
+  await page.getByRole('button', { name: 'Save test-in' }).evaluate((b) => {
+    b.click();
+    b.click();
+  });
   await waitForDb(
     `select count(*) || ':' || min(cfm50) || ':' || min(volume) || ':' || bool_and(job_id is null) from blower_door_tests where estimate_id = '${leeEstimate}' and kind = 'test_in'`,
     '1:6952.00:20000.0:true',
-    'the test-in is saved to the estimate, with the house',
+    'the test-in is saved to the estimate, with the house, once after a double tap',
   );
+  check(
+    psql(`select program_key || ':' || air_sealing_cost || ':' || (program->'tiers'->2->>'rebate') from blower_door_tests where estimate_id = '${leeEstimate}' and kind = 'test_in'`) === 'assisted:1999.00:2000',
+    'with the Assisted program (as the franchise has it) and the price',
+  );
+  await page.waitForTimeout(1500);
+  check(psql(`select count(*) from blower_door_tests where estimate_id = '${leeEstimate}'`) === '1', 'and no second reading arrives later');
   await page.getByText('Saved to the estimate', { exact: true }).waitFor({ timeout: 15000 });
   check((await page.getByRole('button', { name: 'Retake test-in' }).count()) === 1, 'a saved reading shows as recorded, with Retake');
 }
@@ -1123,10 +1140,19 @@ step('blower door: the crew lead saves the test-out on the job with no signal');
   await cpg.getByTestId('bd-test_in-cfm50').filter({ hasText: '6,952' }).waitFor({ timeout: 15000 });
   check((await cpg.getByText(/by Eddie Estimator/).count()) === 1, "the crew sees the estimator's test-in, as recorded");
   check((await cpg.getByLabel('Air sealing price ($)').count()) === 0, 'a crew never types the air sealing price');
+  // The program chosen with the test-in carries over to the crew's phone (BD-R2).
+  await cpg.getByTestId('bd-program-from').waitFor();
+  check(
+    (await cpg.getByRole('radio', { name: 'Assisted' }).getAttribute('aria-checked')) === 'true' && (await cpg.getByTestId('bd-program-from').innerText()) === 'Chosen when the test-in was saved.',
+    'the crew tool opens on the program the estimator saved with the test-in',
+  );
+  // The price the estimator saved never reaches the crew's phone (BD-R1).
+  const crewContext = await cpg.evaluate(async (j) => (await fetch(`/api/blower-door/tests?job=${j}`)).json(), jobId);
+  check(crewContext.tests.length === 1 && crewContext.tests.every((t) => t.air_sealing_cost === null), "the crew's copy of the readings carries no air sealing price");
   await cctx.setOffline(true);
   await cpg.getByLabel('Fan flow (CFM)').fill('3325');
   await cpg.getByLabel('House pressure (Pa)').fill('50.8');
-  check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'the crew sees the tier with the saved test-in');
+  check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — $2,000 AIR SEAL REBATE', "the crew sees the tier with the saved test-in, under the test-in's program");
   await cpg.getByRole('button', { name: 'Save test-out' }).click();
   await cpg.getByText('On this phone', { exact: true }).waitFor();
   check(psql(`select count(*) from blower_door_tests where job_id = '${jobId}'`) === '0', 'with no signal the test-out waits on the phone');
@@ -1141,6 +1167,7 @@ step('blower door: the crew lead saves the test-out on the job with no signal');
     `1:3290.87:50.80:${leeEstimate}`,
     'back online, the test-out syncs to the job (and its estimate)',
   );
+  check(psql(`select program_key || ':' || (air_sealing_cost is null) from blower_door_tests where job_id = '${jobId}' and kind = 'test_out'`) === 'assisted:true', 'under the Assisted program, with no price from the crew');
   await cpg.locator('#bd-test_out').getByText('Saved to the job', { exact: true }).waitFor({ timeout: 15000 });
   check((await cpg.locator('#bd-test_in').getByText('Saved to the estimate', { exact: true }).count()) === 1, "the estimator's test-in says it is saved to the estimate");
   // Another sync (the crew app's own, and a reload) sends nothing twice.
@@ -1157,13 +1184,42 @@ check(!/\$\s?\d/.test(await cpg.locator('body').innerText()), 'and sees no price
 await cpg.getByRole('link', { name: 'Go to Jobs' }).click();
 await cpg.waitForURL(BASE + '/crew');
 
+step('a phone an estimator used, then a crew member: offline, /field opens the crew app, not the priced field app');
+{
+  // BD-R4: the blower door tool is a shell every role opens; it must not count as "whose phone".
+  const sctx = await browser.newContext(phone);
+  await sctx.addCookies([sessionCookie(EST)]);
+  const sp = await sctx.newPage();
+  await sp.goto(BASE + '/field');
+  await sp.getByRole('heading', { name: 'Estimates' }).waitFor();
+  await sp.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 20000 });
+  await sp.waitForTimeout(2000);
+  // The estimator's session ends without Sign out; a crew member signs in on the same phone.
+  await sctx.clearCookies();
+  await sctx.addCookies([sessionCookie(CREW)]);
+  await sp.goto(BASE + '/crew');
+  await sp.getByRole('heading', { name: 'Jobs' }).waitFor();
+  await sp.goto(BASE + `/field/blower-door?job=${jobId}`);
+  await sp.getByTestId('bd-test_in-cfm50').waitFor({ timeout: 15000 });
+  await sp.waitForTimeout(1000);
+  await sctx.setOffline(true);
+  await sp.goto(BASE + '/field');
+  await sp.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  const offlineText = await sp.locator('body').innerText();
+  check((await sp.getByRole('button', { name: 'New estimate', exact: true }).count()) === 0 && !/\$\s?\d/.test(offlineText), 'offline, the app opens the crew shell: no estimates, no prices');
+  await sctx.close();
+}
+
 step('blower door: the office job page shows the readings, the tier and the ventilation check');
 {
   await op.goto(BASE + '/jobs/' + jobId);
   await op.getByRole('heading', { name: 'Blower door test' }).waitFor();
-  check((await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,800 AIR SEAL REBATE'), 'the office sees the tier and rebate');
+  // Assisted's 40% tier is $2,000; the estimator's $1,999 price caps it at 75%: $1,499.25 (BD-MATH-1).
+  check((await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,499.25 AIR SEAL REBATE'), "the office sees the tier and rebate, capped by the estimator's price");
   const figures = await op.getByRole('region', { name: 'Blower door figures' }).innerText();
   check(figures.includes('6,952 CFM50') && figures.includes('3,291 CFM50') && figures.includes('52.7%') && /Eddie Estimator/.test(figures) && /Carl Crew/.test(figures), 'both readings with who took them, and the reduction');
+  check(figures.includes('(limited by 75% of $1,999)') && /Assisted/.test(figures), 'with the cap note and the program of each reading');
+  check((await op.getByText('Energize Delaware Assisted Home Performance, as saved with the readings.').count()) === 1 && (await op.getByTestId('job-bd-mismatch').count()) === 0, 'the result is under the Assisted program both readings name');
   check((await op.getByTestId('job-bd-ventilation').innerText()).startsWith('Ventilation OK'), 'and the ventilation check from the house the estimator gave');
   await op.getByRole('heading', { name: 'Blower door test' }).scrollIntoViewIfNeeded();
   await op.screenshot({ path: SHOTS + '18a-job-blower-door.png', fullPage: true });
@@ -1220,6 +1276,7 @@ step('owner edits the rebate programs');
 {
   await op.goto(BASE + '/admin/rebates');
   await op.getByRole('heading', { name: 'Rebate programs' }).waitFor();
+  check((await op.getByRole('switch', { name: /Decide on whole-number CFM50/ }).getAttribute('aria-checked')) === 'false', 'the tool decides on the exact CFM50 until the owner says otherwise');
   const hp = op.getByRole('region', { name: 'Program: Home Performance' });
   const rebates = hp.getByLabel('Rebate ($, whole dollars)');
   await rebates.nth(0).fill('900.50');
