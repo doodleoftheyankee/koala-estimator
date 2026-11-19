@@ -270,3 +270,96 @@ Live golden set (78 estimates, live rows plus the migration's rows): no shown op
 (no live estimate has walls or a depth entered). 20 batt items now name the size priced, at the same
 price: "Fiberglass Batts, R-19, 840 sq ft" -> "Fiberglass Batts to R-19 (6.25 in thick), 840 sq ft";
 rim joists "Fiberglass Batts, R-10" -> "to R-11 (3.5 in thick)" (the least size that reaches code).
+
+=== Stage "measure": measuring guards and job status ===
+
+None of these changes a price formula. They stop a wrong measurement from reaching a price, and
+stop a verified job from changing status. The before -> after numbers are what the estimator or
+the office sees.
+
+L25 A pitch typed in degrees is understood, and nothing steeper than 24/12 is taken.
+    A pitch is rise per 12 ("6", "6/12", "6:12", "3/6") or degrees ("30°", "30 deg", "30 degrees").
+    A pitch over 24/12 (63.4°) is refused. A bare number over 24 says what it would be and how to
+    type degrees. A bare number from 12 to 24 is still read as rise per 12, with a note giving its
+    angle and how to type degrees. The pitch field has a text keyboard and a "Use 30°" button.
+    Examples (footprint 40 x 30 = 1,200 sq ft, roofline):
+      "30 deg": refused ("isn't valid"), 0 sq ft -> 30° = 6.93/12, x1.155, 1,386 sq ft.
+      "100": 100/12, x8.393, 10,072 sq ft -> refused: 'Pitch "100" would be 100/12, steeper than
+        24/12. Type the rise per 12, e.g. 6/12, or degrees, e.g. 30°.'
+      "30": 30/12, x2.693, 3,231 sq ft -> refused: 'Pitch "30" would be 30/12, steeper than 24/12.
+        For degrees, type 30°.' with a "Use 30° (6.93/12)" button.
+      "18": 18/12, 2,163 sq ft, no word -> the same, with 'Pitch 18 is read as 18/12, a very steep
+        roof (56.3°). If you meant 18°, type 18°.'
+      e2e (42 x 30 less a 6 x 10 chimney): "30 deg" -> "Use 1,395 sq ft".
+    The record gave x1.157 for 30°. 1 / cos 30° is 1.1547, so it reads x1.155 here.
+    Owner decision: none needed (audit RF-06, S2-F13; the 24/12 limit is the record's).
+    Tests: lib/measure/units.test.ts "reads a pitch typed in degrees as degrees", "takes nothing
+    steeper than 24/12", "says why a pitch is refused, with a hint", "offers the degrees reading of a
+    bare number that reads as a steep roof"; lib/measure/measure.test.ts "a pitch typed in degrees is
+    understood; nothing over 24/12 (L25, RF-06, S2-F13)", "a bare number that reads as a very steep
+    roof says how it was read (L25)"; e2e pitch step.
+
+L26 A broken measurement takes its size back.
+    When a measurement that gave the area its square feet stops being finished (a size cleared or
+    unreadable, a crossed outline), the area's square feet go back to 0. The area is then Incomplete
+    and not priced, and its card says why, with a "Finish measuring" button. A size typed by hand
+    (not the measurement's) stays. lib/field/measuring.ts measurementChecks() lists these areas,
+    each with a Fix ({ label: 'Finish measuring', target: { step: 'areas', areaId, open: 'measure' } },
+    lib/field/fix.ts) for a Send checklist to use.
+    Example (seeded, 20 min drive): walls 120 ft x 8 ft = 960 sq ft, Ready, Good $1,500 / Better
+      $2,575 / Best $5,270 -> height cleared: was still 960 sq ft, Ready, the same three prices ->
+      0 sq ft, Incomplete, no options, "Exterior walls: the measurement isn't finished, so this area
+      isn't priced. Enter the average wall height." with "Finish measuring".
+      e2e: walls 180 ft x 8 ft = 1,440 sq ft, height cleared -> "0 sq ft, measuring not finished".
+    Owner decision: none needed (audit RF-07, S2-F14).
+    Tests: lib/field/measuring.test.ts "walls 960 sq ft, height cleared: 0 sq ft, Incomplete, not
+    priced, with a Finish measuring fix", "a size typed by hand stays, and an area with no
+    measurement is not a measuring problem", "names the first thing to finish, or a measurement that
+    comes to nothing"; lib/measure/measure.test.ts "a measurement that breaks takes back the square
+    feet it gave", "a size typed by hand is not the measurement's, so it stays"; e2e walls step.
+
+L27 A self-crossing outline is an error with a plain message.
+    Example: custom outline with corners (0,0) (10,10) (10,0) (0,10) (a bow tie): an area of 0 sq ft
+      with the note "The outline crosses itself; the area may be wrong. Redraw it." -> no area, and
+      "The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross."
+    Owner decision: none needed (audit S2-F15).
+    Tests: lib/measure/geometry.test.ts "a self-crossing outline is an error (L27, S2-F15)";
+    lib/measure/measure.test.ts "a self-crossing outline measures nothing (L27)".
+
+L28 Parts of the satellite outline with no roof data (a carport, a flat part) start switched off.
+    Whenever the "Parts with no roof data" switch is offered (over 5% of the footprint and over 5
+    m²), they start left out for every area, not only a garage. A part too small to offer stays
+    counted, as Roof Takeoff counts it. The check under the numbers says it is left out and how to
+    count it.
+    Example (9 Carport Ct, the e2e mock: footprint 242 m², 25 m² with no roof data, face 5 left out,
+      12 in overhang): attic floor 2,230 -> 1,990 sq ft; 2,230 again when the switch is turned on.
+    The record gave 1,960 for "3 Carport Ct". Its mock house is not in the record. On this house the
+      contract formula gives 1,988.3 sq ft, shown as 1,990. The 2,230 before matches the record.
+    Owner decision: none needed (audit RF-15).
+    Tests: lib/roof/lookup.test.ts "a carport Google has no roof faces for is left out until the
+    estimator turns it on", "a part too small to offer stays counted, as Roof Takeoff counts it; the
+    wall run never uses it", "adds a blurry photo, no outline, a rough wall run, no faces and the
+    parts with no roof data" (the left-out wording); lib/roof/contract.test.ts (the formulas still
+    match Roof Takeoff's own choices; the app's default leaves the part out when offered); e2e
+    "parts with no roof data are offered, and start off".
+
+L29 A low slope never reads 2/12.
+    A rise under 2/12 is shown, and grouped for the main pitch, as at most 1.9/12. A rise worked out
+    from the angle is judged low slope before rounding.
+    Examples: rise 1.96: "2/12 (low slope)" -> "1.9/12 (low slope)"; main pitch of faces 1.96 (60 m²),
+      2.4 (50 m²) and 6/12 (100 m²): 2/12 (the 1.96 face counted with the 2.4 face) -> 6/12; a face at
+      9.45° (rise 1.997) with no rise sent: 2/12, not low slope -> 1.9/12, low slope.
+    Owner decision: none needed (audit S3-F22).
+    Tests: lib/roof/lookup.test.ts "low slope reads under 2/12 (L29, S3-F22)", "main pitch: the
+    whole-number rise with the most ground" (its 1.96 / 2.4 / 6 case now expects 6, was 2);
+    lib/roof/roofing.test.ts "a low-slope face never reads 2/12 (L29, S3-F22)".
+
+L37 A verified job offers no status changes; the owner can Unverify.
+    A job with any verified actuals row shows no status buttons. The Status card says why: for the
+    owner, "To change it, Unverify the actuals below first."; for the office, "Only the owner can
+    Unverify them." Unverify stays owner only.
+    Example: completed job, 3 of 3 rows verified, office or owner: "Mark in progress" and "Cancel job"
+      -> none.
+    Owner decision: none needed (audit RF-16).
+    Tests: lib/jobs/status.test.ts "offers no status changes once its actuals are verified", "says
+    why, and that only the owner can Unverify"; e2e "a verified job offers no status changes".
