@@ -120,6 +120,7 @@ export {
   User,
   Users,
   WifiOff,
+  Wind,
   Wrench,
   X,
 } from 'lucide-react';

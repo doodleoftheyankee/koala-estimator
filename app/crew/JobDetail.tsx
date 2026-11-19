@@ -14,6 +14,7 @@ import { useLive } from '@/app/field/hooks';
 import { ActualsForm } from './ActualsForm';
 import { ActualsTag } from './JobList';
 import { useActualsEditor } from './useActualsEditor';
+import { BlowerDoorLink } from '@/app/field/blower-door/BlowerDoorLink';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
 
@@ -171,6 +172,12 @@ export function JobDetail({
         {job.areas.map((a) => (
           <AreaCard key={a.areaId} area={a} />
         ))}
+
+        <BlowerDoorLink
+          context={{ kind: 'job', id, label: [job.customer.name, job.address.street].filter(Boolean).join(', ') || null }}
+          ownerId={profile.userId}
+          hint="Test-out after the air sealing, saved to this job. Works with no signal."
+        />
 
         <div className="flex items-center justify-between gap-2 px-1 pt-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Actuals</h2>

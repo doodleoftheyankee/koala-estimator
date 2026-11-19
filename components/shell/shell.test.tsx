@@ -30,16 +30,17 @@ describe('the app shell', () => {
     }
   });
 
-  it('shows a crew only their jobs', () => {
+  it('shows a crew only their jobs (and the price-free blower door tool)', () => {
     const html = shell('crew');
-    expect(new Set(hrefs(html))).toEqual(new Set(['/crew']));
+    expect(new Set(hrefs(html))).toEqual(new Set(['/crew', '/field/blower-door']));
     expect(html).toContain('>Me<');
     expect(html).not.toMatch(/\$\s?\d/);
   });
 
   it('shows the owner every office page, and Design only in the account menu', () => {
     const html = shell('owner');
-    for (const href of ['/estimates', '/field', '/field/roof', '/jobs', '/admin/pricing', '/admin/learning', '/admin/team', '/design']) expect(hrefs(html)).toContain(href);
+    for (const href of ['/estimates', '/field', '/field/roof', '/field/blower-door', '/jobs', '/admin/pricing', '/admin/rebates', '/admin/learning', '/admin/team', '/design'])
+      expect(hrefs(html)).toContain(href);
     expect(html).toContain('>Insights<');
     expect(html).not.toContain('>Learning<');
     const sidebar = html.slice(html.indexOf('data-shell-sidebar'), html.indexOf('data-shell-content'));

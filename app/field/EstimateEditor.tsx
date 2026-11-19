@@ -30,6 +30,7 @@ import { CustomerStep } from './CustomerStep';
 import { AreasStep } from './AreasStep';
 import { OptionsStep } from './OptionsStep';
 import { SendStep } from './SendStep';
+import { BlowerDoorLink } from './blower-door/BlowerDoorLink';
 
 const STEPS = [
   { key: 'customer', label: 'Customer' },
@@ -294,6 +295,14 @@ export function EstimateEditor({
             <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
           ) : null}
         </fieldset>
+        {/* Outside the fieldset: readings are their own records, so a signed estimate still takes them. */}
+        {step === 'areas' ? (
+          <BlowerDoorLink
+            context={{ kind: 'estimate', id, label: street ? `${name}, ${street}` : name }}
+            ownerId={profile.userId}
+            hint="Test-in at the audit, saved to this estimate. The crew records the test-out on the job."
+          />
+        ) : null}
         {step === 'send' ? (
           <SendStep
             draft={draft}

@@ -5,7 +5,7 @@ import { useSyncExternalStore, type MouseEvent, type ReactNode } from 'react';
 import type { Role } from '@/lib/pricing';
 import { initials, type NavIcon, type NavItem } from '@/lib/nav';
 import { useToast } from '../daymark/Toast';
-import { ChartColumn, FileText, Files, Hammer, Palette, Satellite, Settings, Smartphone, Users, type LucideIcon } from '../daymark/icons';
+import { ChartColumn, FileText, Files, Hammer, ListChecks, Palette, Satellite, Settings, Smartphone, Users, Wind, type LucideIcon } from '../daymark/icons';
 
 export interface ShellProfile {
   fullName: string;
@@ -24,8 +24,10 @@ export const NAV_ICONS: Record<NavIcon, LucideIcon> = {
   allEstimates: Files,
   field: Smartphone,
   roof: Satellite,
+  blowerDoor: Wind,
   jobs: Hammer,
   pricing: Settings,
+  rebates: ListChecks,
   insights: ChartColumn,
   team: Users,
   design: Palette,

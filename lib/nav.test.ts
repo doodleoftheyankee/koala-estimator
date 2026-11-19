@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Role } from '@/lib/pricing';
@@ -38,16 +38,23 @@ describe('the app menu', () => {
       'Estimates /estimates',
       'Field app /field',
       'Roof lookup /field/roof',
+      'Blower door /field/blower-door',
       'Jobs /jobs',
       'Pricing /admin/pricing',
+      'Rebate programs /admin/rebates',
       'Insights /admin/learning',
       'Team /admin/team',
       'Design /design',
     ]);
     expect(allItems(menuFor('office')).map((i) => i.label)).not.toContain('Team');
     expect(menuFor('owner').account.map((i) => i.label)).toEqual(['Design']);
-    expect(allItems(menuFor('estimator')).map((i) => `${i.label} ${i.href}`)).toEqual(['Estimates /field', 'Roof lookup /field/roof', 'All my estimates /estimates']);
-    expect(allItems(menuFor('crew')).map((i) => `${i.label} ${i.href}`)).toEqual(['Jobs /crew']);
+    expect(allItems(menuFor('estimator')).map((i) => `${i.label} ${i.href}`)).toEqual([
+      'Estimates /field',
+      'Roof lookup /field/roof',
+      'Blower door /field/blower-door',
+      'All my estimates /estimates',
+    ]);
+    expect(allItems(menuFor('crew')).map((i) => `${i.label} ${i.href}`)).toEqual(['Jobs /crew', 'Blower door /field/blower-door']);
     for (const role of ROLES) expect(allItems(menuFor(role)).map((i) => i.label)).not.toContain('Learning');
   });
 
@@ -60,6 +67,7 @@ describe('the app menu', () => {
     }
     expect(phoneTabs(menuFor('estimator')).map((i) => i.label)).toEqual(['Estimates', 'Roof lookup']);
     expect(menuFor('crew').moreLabel).toBe('Me');
+    expect(phoneTabs(menuFor('crew')).map((i) => i.label)).toEqual(['Jobs', 'Blower door']);
   });
 
   it('marks only the offline app shells (public/sw.js) as working with no signal', () => {
@@ -71,7 +79,15 @@ describe('the app menu', () => {
   });
 
   it('crews see only their jobs: no page in their menu shows prices', () => {
-    expect(allItems(menuFor('crew')).map((i) => i.href)).toEqual(['/crew']);
+    expect(allItems(menuFor('crew')).map((i) => i.href)).toEqual(['/crew', '/field/blower-door']);
+    // The blower door tool never loads the pricing bundle or reads a price; the rebate amounts it
+    // shows are the programs', and a crew never types the air sealing price.
+    const dir = join(ROOT, 'app', 'field', 'blower-door');
+    for (const f of readdirSync(dir).filter((n) => /\.tsx?$/.test(n) && !n.includes('.test.'))) {
+      const src = readFileSync(join(dir, f), 'utf8');
+      expect(src, f).not.toMatch(/@\/lib\/pricing|getCachedBundle|\/api\/bundle|lib\/offline\/db'|summaryPrice/);
+    }
+    expect(readFileSync(join(dir, 'BlowerDoorTool.tsx'), 'utf8')).toMatch(/!crew \?/);
   });
 });
 
@@ -79,6 +95,7 @@ describe('the current page', () => {
   const owner = allItems(menuFor('owner'));
   it('picks the most specific entry', () => {
     expect(activeHref('/field/roof', owner)).toBe('/field/roof');
+    expect(activeHref('/field/blower-door', owner)).toBe('/field/blower-door');
     expect(activeHref('/field', owner)).toBe('/field');
     expect(activeHref('/jobs/1b2c', owner)).toBe('/jobs');
     expect(activeHref('/admin/learning', owner)).toBe('/admin/learning');

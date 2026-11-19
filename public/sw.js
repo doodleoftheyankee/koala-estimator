@@ -2,6 +2,9 @@
  *
  * Goal: the field app (/field) and the crew app (/crew) open and work with no signal. The Roof
  * lookup page (/field/roof) is its own shell, so with no signal it opens and says it needs one.
+ * The blower door tool (/field/blower-door) is its own price-free shell for every staff role,
+ * crews included: it works fully offline (its data lives in IndexedDB) and reads its job or
+ * estimate from the query, so one cached copy serves every ?job= and ?estimate=.
  *  - On install, precache each app shell and every /_next/static asset it references. A shell
  *    the user's role cannot open (a redirect) is skipped.
  *  - Navigations to a shell path: network-first, fall back to that cached shell. A crew phone
@@ -18,12 +21,12 @@
  *    a crew member never gets someone else's priced /field shell.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
-// Most specific first: /field/roof is not part of the /field shell.
-const SHELLS = ['/field/roof', '/field', '/crew'];
+// Most specific first: /field/roof and /field/blower-door are not part of the /field shell.
+const SHELLS = ['/field/roof', '/field/blower-door', '/field', '/crew'];
 // Offline only: which cached shell may stand in when a shell is missing (price-free shells only).
 const FALLBACK = { '/field': '/crew' };
 
