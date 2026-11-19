@@ -956,6 +956,19 @@ RB-OD12d Nothing blocks or delays a send for the business profile, for any role.
     same live seed now sends: warranty, license/phone left off, consent, prefix); e2e "send: nothing
     about a business profile holds it back" and "the Business profile page is optional".
 
+RB-OD12e Never "call our office" without a number: the signing page's error messages name the
+    office phone when the quote has one, else the estimator's email (lib/quotes/contact.ts reachUs,
+    the same order as the page's OfficeContact). Quote with no office phone, estimator Sam Rivera:
+      declined: "This quote was declined. Please contact our office." -> "This quote was declined.
+      To go ahead, please email Sam Rivera at sam@example.com."
+      expired: "This quote has expired. Please contact our office for an updated quote." -> "This
+      quote has expired. For an updated quote, please email Sam Rivera at sam@example.com."
+      signing failed: "… Please try again or call our office." -> "… Please try again, or email Sam
+      Rivera at sam@example.com." (with an office phone: "…, or call (555) 010-0199.")
+    (The PDF, the emails and the quote page already left a missing phone or license off and pointed
+    to the estimator; review B checked them, and the seeded-rows test now proves it.)
+    Owner decision: OD12. Tests: lib/quotes/contact.test.ts (2 tests).
+
 RB-OD14a The consent sentence names the property's state when it is a real US state, else the shop
     address's state, else no state; it never throws (lib/quotes/consent.ts esignConsent,
     lib/quotes/profile.ts consentState). It no longer reads default_state, which production never had.

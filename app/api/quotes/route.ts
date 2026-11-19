@@ -138,7 +138,7 @@ export async function POST(request: Request) {
     const approvalsUsed = canSendQuote(profile.role, options, bundle.snapshot.settings)
       .problems.map((p) => approvals.find((a) => approvalCovers(a, p)))
       .filter((a): a is PriceApproval => !!a)
-      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, decidedRole: a.decidedRole }));
+      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, loadedCost: a.loadedCost ?? null, decidedRole: a.decidedRole }));
 
     const { settings } = send;
     const admin = createAdminClient();
