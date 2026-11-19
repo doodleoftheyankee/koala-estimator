@@ -380,9 +380,9 @@ describe('recommendPrice', () => {
     expect(r.curve.every((p) => p.price >= 995)).toBe(true);
   });
 
-  it('rounds to cents when rounding is off (as the engine does), and includes a ceiling off the step grid', () => {
+  it('rounds up to whole dollars when rounding is off (as the engine does, L5), and includes a ceiling off the step grid', () => {
     const r = recommendPrice(model({ intercept: 0 }), 1000, f, { ...settings, priceRounding: 0, ceilingMarginPct: 0.2512 })!;
-    expect(r.curve.map((p) => p.price)).toEqual([1333.34, 1335.48]); // always rounded up to the cent
+    expect(r.curve.map((p) => p.price)).toEqual([1334, 1336]); // before: 1333.34 and 1335.48, up to the cent
   });
 
   it('ties go to the lower price', () => {
