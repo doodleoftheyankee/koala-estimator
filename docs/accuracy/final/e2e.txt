@@ -1,0 +1,56 @@
+E2E ON THE MERGED HEAD (claude/accuracy 763bc25; code unchanged since)
+Command: APP_PORT=3560 PGRST_PORT=3561 MOCK_PORT=54760 E2E_DB_NAME=koala_final E2E_KEEP=1 bash scripts/e2e.sh
+The first attempt stopped at the Next.js build's security-upgrade notice; the same command was retried once, nothing upgraded, the notice not followed.
+Checks ok: 356; failed: 0
+
+Steps:
+• open /field
+• create estimate
+• add attic area, measured with the Measure tool, with a photo
+• pitch from a photo of the gable, in Measure
+• AI photo read
+• options
+• a price change that hides an option can be taken back (OD6, review A F1)
+• change a line from the model and explain it
+• send: nothing about a business profile holds it back (OD12; review B flow-B1, review A DOC-3)
+• the Business profile page is optional (OD12)
+• Send checklist: plain words, and a Fix button that goes to the item (L34)
+• a price beyond what the estimator may quote alone: Request approval (L34)
+• the owner approves it from the Estimates page (L34)
+• send
+• back on the list, the sent quote stays Sent, and the waiting total is the sum of its rows
+• a change on the phone while the customer signs, and another estimate made offline (L35)
+• customer signs
+• the phone hears of the signature: signed, read-only, the change not applied; the other estimate syncs (L35)
+• db checks after signing
+• satellite roof lookup from the address
+• roof takeoff on the area: edges on the photo, roofing, materials, print, copy
+• satellite: another area of the same house shares the lookup
+• satellite: a garage starts with every face off
+• satellite: a saved lookup of the same house after a reload
+• satellite: wrong house, tap the right roof
+• satellite: what an unknown address, a house with no roof data, an older Roof Takeoff and a carport look like
+• Roof lookup page: from the estimate list, filled in from a link without a lookup
+• Roof lookup page: Look up
+• Roof lookup page: a recent lookup opens without a new lookup
+• Roof lookup page: Start an estimate here
+• Roof lookup page: an old map-pin link is looked up at the pin
+• Roof lookup page: the right roof tapped, then Start an estimate here
+• Roof lookup page: a roof with 24 faces still prints on one page
+• offline estimate
+• Koala's database unreachable is not a sign-out (L36)
+• owner screens
+• office schedules the job and assigns Crew A
+• crew starts the job on a phone
+• crew enters actuals and completes the job
+• office verifies the actuals
+• nightly learning run (cron)
+• owner learning dashboard
+• office marks an estimate lost from its row menu
+• review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)
+
+Last lines:
+  ok: the phone that has its copy is offered it
+console errors: none
+Screenshots: /tmp/tmp.Cx3VjPbg1A/shots
+Stack left running: http://localhost:3560 (db koala_final). Stop with Ctrl-C.
