@@ -228,6 +228,39 @@ export function unfinishedReason(m: Measurement): string | null {
   return null;
 }
 
+/** A part of the Measure sheet (app/field/measure/MeasureSheet.tsx data-measure-field). */
+export type MeasureField = 'shape' | 'pitch' | 'pitch2' | 'splitPct' | 'wallHeight' | 'perimeter' | `cutout:${string}`;
+
+/**
+ * The part of the Measure sheet that holds unfinishedReason's first thing to finish, in the order
+ * computeMeasurement checks them (cutouts first), so "Finish measuring" can put the cursor there
+ * (review B flow-B12). Cutouts larger than the area: the first cutout. Null when it is finished.
+ */
+export function firstUnfinishedField(m: Measurement): MeasureField | null {
+  const r = computeMeasurement(m);
+  if (!r.errors.length) return r.net > 0 ? null : m.cutouts[0] ? `cutout:${m.cutouts[0].id}` : 'shape';
+  const cut = r.cutoutResults.find((c) => c.errors.length);
+  if (cut) return `cutout:${cut.id}`;
+  const shapeOk = solveShape(m.shape).ok;
+  if (m.mode === 'walls') {
+    if (m.perimeter.trim()) {
+      const p = parseFeet(m.perimeter);
+      if (p === null || p <= 0) return 'perimeter';
+    } else if (!shapeOk) return 'shape';
+    return 'wallHeight';
+  }
+  if (!shapeOk) return 'shape';
+  if (m.mode === 'roofline') {
+    const p1 = readPitch(m.pitch, 'Pitch');
+    if (!p1?.ok) return 'pitch';
+    if (m.twoSlope) {
+      const p2 = readPitch(m.pitch2, 'Second pitch');
+      return p2?.ok ? 'splitPct' : 'pitch2';
+    }
+  }
+  return 'shape';
+}
+
 const SHAPE_WORDS: Record<ShapeInput['kind'], string> = { rect: 'rectangle', L: 'L-shape', T: 'T-shape', U: 'U-shape', custom: 'custom outline' };
 
 /** One line for the area card, e.g. "Measured: L-shape, 2 cutouts". */

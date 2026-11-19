@@ -7,8 +7,11 @@
 //    estimate does not carry (the customer opened it, or it was closed as declined). "Ready"
 //    (complete, not sent yet) shows as Draft.
 //  - Price: a signed quote's signed price; otherwise the recommended option's price (OD1): the
-//    option the estimator picked, the next one shown when the pick is not shown, else Better,
-//    else the first (lib/field/recommended.ts, the same rule as the phone and the quote). The
+//    option the estimator picked, else Better (OD15); when that one is not shown, the nearest one
+//    shown above it, else below (lib/field/recommended.ts, the same rule as the phone and the
+//    quote). The stored options carry only tier and price, so the step the phone and the quote
+//    take first, to the option doing the same work (sameWorkAs), is not seen here; in every golden
+//    and random quote checked it gives the same option (docs/accuracy/after-fixb/headline-changes.txt). The
 //    stored model price is used only when the estimate has no options stored. Nothing is
 //    re-priced here: every figure is a price the server already stored.
 //  - Figures: each tile says exactly what it counts, and lost, declined, expired and void rows

@@ -12,6 +12,7 @@ import { ackSummary } from '@/lib/field/flags';
 import { formatMoney, TIER_LABELS } from '@/lib/format';
 import { recommendedTier } from '@/lib/field/recommended';
 import { fixElementId, type FixTarget } from '@/lib/field/fix';
+import { newEstimatePlace, withPlaceIfBlank } from '@/lib/field/newPlace';
 import {
   Banner,
   Button,
@@ -54,12 +55,15 @@ export function EstimateEditor({
   online,
   onBack,
   requestSync,
+  fillPlace = false,
 }: {
   id: string;
   profile: CachedProfile;
   online: boolean;
   onBack: () => void;
   requestSync: () => void;
+  /** A new estimate started before the phone's first bundle: its town and state come with the bundle (review B flow-B13). */
+  fillPlace?: boolean;
 }) {
   const record = useLive(() => db().estimates.get(id), [id], undefined as LocalEstimate | undefined);
   const bundle = useLive(() => getCachedBundle(), [], null);
@@ -109,8 +113,9 @@ export function EstimateEditor({
     }
   }, [priced, draft, bundle]);
 
-  // The headline price: the recommended option (the one chosen on Options, else Better, else the
-  // first), saved with its option so the list can say which one it is.
+  // The headline price: the recommended option (the one chosen on Options, else Better; when that
+  // one is not shown, the option doing the same work, else the nearest above, else below: OD15),
+  // saved with its option so the list can say which one it is.
   const summary = useMemo(() => {
     const opts = priced?.ok?.options ?? [];
     const rec = recommendedTier(opts, draft?.selectedTier);
@@ -168,6 +173,17 @@ export function EstimateEditor({
     },
     [flush],
   );
+
+  // An estimate started before the phone's first bundle came: once it comes, its town and state,
+  // as a pair, while both are still blank (through update, so nothing being typed is lost).
+  const placeFilled = useRef(false);
+  useEffect(() => {
+    if (!fillPlace || placeFilled.current || !draft || !bundle) return;
+    const place = newEstimatePlace(bundle);
+    if (!place) return;
+    placeFilled.current = true;
+    if (!draft.property.city.trim() && !draft.property.state.trim()) update((d) => withPlaceIfBlank(d, place));
+  }, [fillPlace, draft, bundle, update]);
 
   // Save on leave / app backgrounding so nothing typed is lost. Only unsaved typing is written:
   // saving an untouched estimate would turn a sent quote back into a draft (touch() starts a new
@@ -320,7 +336,16 @@ export function EstimateEditor({
           {step === 'customer' ? <CustomerStep draft={draft} update={update} /> : null}
           {step === 'areas' ? <AreasStep draft={draft} update={update} bundle={bundle} ownerId={profile.userId} focus={focus} /> : null}
           {step === 'options' ? (
-            <OptionsStep draft={draft} update={update} bundle={bundle} priced={priced} flags={flags} profile={profile} online={online} />
+            <OptionsStep
+              draft={draft}
+              update={update}
+              bundle={bundle}
+              priced={priced}
+              flags={flags}
+              profile={profile}
+              online={online}
+              editPrice={focus?.step === 'options' && focus.edit === 'price' ? (focus.tier ?? null) : null}
+            />
           ) : null}
         </fieldset>
         {step === 'send' ? (

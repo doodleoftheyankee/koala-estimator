@@ -398,9 +398,11 @@ L8  The accept sentence, the thank-you page, the signed page's price, the signed
     subject and the body (L8)".
 
 L9  The headline is the recommended option everywhere: the office list, the phone's list, the
-    sync's model_total_price and the quote. Recommended = the option the estimator picked; when the
-    pick is not shown (OD6), the next option shown after it, else the nearest before; with no pick,
-    Better, else the first (lib/field/recommended.ts).
+    sync's model_total_price and the quote. Recommended = the option the estimator picked; with no
+    pick, Better, the implied pick (OD15). When that option is not shown (OD6), the option shown
+    that does the same work, else the nearest one shown above it, else the nearest below
+    (lib/field/recommended.ts; amended by RB-flow-B4: before it, a hidden pick went to the next
+    option shown after it, and with no pick a hidden Better went to the first option shown).
     Examples: office list, no pick, Good $2,375 / Better $4,095 / Best $6,920: $2,375 (the stored
       model price, no option named) -> $4,095 "Better". Live golden set: c6b22b65 (draft, no pick)
       $2,020 -> $2,730 Better; it is the only live estimate whose office headline moves.
@@ -616,7 +618,8 @@ L11 Each material has a usual cost range and where it comes from (materials.typi
       102 times more than the usual $0.06 to $0.24 (Starting range: half to twice the cost on file
       when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is
       right” to save it." Ticked: saved. (15.25 / 0.15, the middle of the range, is 102.) The e2e
-      step puts $0.12 back at its end.
+      step puts $0.12 back at its end. (Amended by RB-flow-B9: the distance is now measured from
+      the nearest edge, and a confirmed cost widens the stored range.)
     Owner decision: the record's default (half to twice the starting cost until real ranges are
     entered).
     Tests: lib/admin/pricingForms.test.ts "a cost 100 times the usual is caught, with the range and
@@ -873,12 +876,16 @@ No customer value (the phone, the checker, the generator):
   Random quotes on the same quotes and checker, engine before -> after these fixes: seed 20261118
     331 -> 0 breaks, seed 7 637 -> 0, seed 99999 621 -> 0 (docs/accuracy/after-fixa/about.txt).
 
-=== Review B fixes and owner decisions OD12-OD16 (review B digest; docs/accuracy/spec/owner-decisions-2.txt; branch claude/accuracy-fixb-docs) ===
+=== Review B fixes and owner decisions OD12-OD16 ===
+
+(One section for both review B fix branches, merged on claude/accuracy: first the documents,
+server, database and security part from claude/accuracy-fixb-docs (RB-OD*, RB-B*, RB-FB*), then the
+screens part from claude/accuracy-fixb-screens (RB-flow-B*), then the integration entries (RB-INT*).)
 
 Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
 verifier) and the owner's round-2 decisions. This part is the documents, server, database, security
-and the Send checklist; the screens part (flow-B4/OD15, B6, B8, B9, B11, B12, B13) has its own
-section from claude/accuracy-fixb-screens. Hard rule 1 holds: a quote already sent keeps its stored
+and the Send checklist; the screens part (flow-B4/OD15, B6, B8, B9, B11, B12, B13) follows
+below, from claude/accuracy-fixb-screens. Hard rule 1 holds: a quote already sent keeps its stored
 document (company, terms, warranty, consent and number are read from the document, never from the
 settings); docs/accuracy/after-fixb/hard-rule-1.txt.
 
@@ -1099,3 +1106,73 @@ Staff-facing words (no quote value changes):
     estimate lost (lib/server/actionAuth.ts actionRefusal; signed out or another role keep the
     action's own words). Tests: lib/server/actionAuth.test.ts (3 tests); e2e "saving Pricing while
     Koala is down says …".
+
+--- Screens part (claude/accuracy-fixb-screens) ---
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier; owner decisions OD12-OD16 in docs/accuracy/spec/owner-decisions-2.txt). Entries from the
+screens branch (claude/accuracy-fixb-screens) are RB-flow-B<n>. Seeded pricing, easy access, 20 min
+drive unless stated.
+
+RB-flow-B4 (OD15, amends L9) With no pick, Better is the implied pick, exactly as when Better is
+    picked. When the recommended option is not shown (OD6), the recommendation moves to the option
+    shown that does the same work, else the nearest one shown above it, else the nearest below.
+    Before: with no pick and Better hidden, the first option shown (Good, the cheapest); a hidden
+    pick went to the next option shown after it. The engine marks the option kept for each option
+    it leaves out as the same work (PricedOption.sameWorkAs), so the phone, the sync and the quote
+    see the same-work step; the office list (stored tier and price only) takes the nearest-above
+    step, which named the same option in every golden and random quote checked.
+    Example (attic 1,386 sq ft at R-0, Best the same work as Better, Better raised to $7,538 above
+      Best's $6,070, no pick): dock, phone list, office list and the quote's RECOMMENDED badge
+      Good $4,195 -> Best $6,070; sync model_total_price Good's model price -> Best's. With Better
+      picked: Best $6,070 before and after.
+    Golden sets: 0 headlines change (synthetic 65, live 78; no estimate there has no pick with Good
+      and Best shown and Better not). Random quotes: 24 of 10,000 (seed 20261118), 50 of 20,000
+      (seed 7), 42 of 20,000 (seed 99999) change, all no pick, Good -> Best; no picked quote
+      changes. Every change with its reason: docs/accuracy/after-fixb/headline-changes.txt.
+    Sent and signed quotes keep their stored recommendedTier (hard rule 1).
+    Owner decision: OD15 (review B flow-B4).
+    Tests: lib/field/recommended.test.ts "OD15 (review B flow-B4): with no pick, Better is the
+    implied pick" (5 tests, 4 fail before the fix: "Better not shown, Good and Best shown: Best, as
+    when Better is picked (was Good, the cheapest)", "a pick that is not shown moves first to the
+    option shown that does the same work", "the engine says which option shown does the work of the
+    hidden Better", "the phone, the office list, the sync and the quote all recommend Best at $6,070
+    (was Good at $4,195)").
+
+RB-flow-B9 (amends L11; owner screen, no customer value) "This cost is right" sticks, and the
+    refusal says how far the cost is from the nearest edge of the usual range. Before: a confirmed
+    cost was saved but the stored range kept it outside, so every later save of the card (a name
+    change, or Save with nothing changed) was refused again until ticked again; and the distance
+    was measured from the middle of the range. Now a cost saved with "This cost is right" outside
+    the range widens the stored range to it (materials.typical_min / typical_max); "N times" is
+    used only from twice the edge, else a percentage.
+    Examples (open-cell, usual $0.06 to $0.24):
+      $0.30 ticked, then saved again unticked: refused every time -> saved; stored range $0.06 to
+        $0.24 -> $0.06 to $0.30.
+      $0.30: "is 2.0 times more than the usual $0.06 to $0.24" -> "is 25% above the usual high of
+        $0.24. The usual range is $0.06 to $0.24 (...)".
+      $0.05: "is 3.0 times less than the usual" -> "is 17% below the usual low of $0.06".
+      $15.25: "is 102 times more than the usual $0.06 to $0.24" -> "is 64 times the usual high of
+        $0.24"; $12: 80 -> 50 times; $0.01: "15 times less" -> "6.0 times less than the usual low
+        of $0.06".
+    No price, quantity or customer word changes. Review B flow-B9.
+    Tests: lib/admin/pricingForms.test.ts "says how far a cost is from the nearest edge: a
+    percentage, "N times" only from twice the edge (review B flow-B9)", "a cost the owner confirmed
+    widens the stored range to it, so the next save is not refused again (review B flow-B9)" (both
+    fail before the fix), "a cost 100 times the usual is caught, with the range and its source"
+    (its expected sentences updated to the new wording); e2e Pricing step "a confirmed $15.25
+    widens the stored usual range …", "saving the card again without ticking is not refused".
+
+RB-flow-B13 (L32, OD14) A new estimate made on a phone's first open starts in the town and state
+    the bundle names, as a pair, like every other new estimate. Before: createEstimate read the
+    cached bundle, which a phone that had never synced did not have yet (/field?new=1 runs before
+    the first sync), so City and State were blank; a moment later the same button gave the town.
+    Now, online with no bundle, a new estimate waits for the bundle at most 3 s ("Starting the
+    estimate"); if it is slower, the estimate starts blank and the editor fills City and State
+    together when the bundle comes, only while both are still blank. Offline it starts blank, as
+    before. A town is never taken without its state (lib/field/newPlace.ts newEstimatePlace).
+    Example (e2e settings, shop address in Newark, DE): /field?new=1 on a fresh phone: City "",
+      State "" -> "Newark", "DE".
+    Review B flow-B13. Tests: lib/field/newPlace.test.ts (4 tests: the pair or nothing, filled only
+    while both are blank, the 3 s wait); e2e "review B screens" step "a phone's first /field?new=1
+    starts in the shop address's town and state".

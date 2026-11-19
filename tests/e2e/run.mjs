@@ -416,6 +416,15 @@ let asked;
     `the checklist names the price, the model price and the range: "${said}"`,
   );
   check((await item.getByRole('button', { name: 'Change the price' }).count()) === 1, 'with a Fix that goes back to the price');
+  // Review B flow-B12: the Fix opens Good's price editor with the cursor in Customer price.
+  await item.getByRole('button', { name: 'Change the price' }).click();
+  await page.locator('#option-good-price').waitFor({ timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement?.id === 'option-good-price', null, { timeout: 5000 }).catch(() => undefined);
+  const focused = await page.evaluate(() => ({ id: document.activeElement?.id ?? '', tag: document.activeElement?.tagName ?? '', value: document.activeElement instanceof HTMLInputElement ? document.activeElement.value : '' }));
+  check(focused.id === 'option-good-price' && focused.value === String(asked), `"Change the price" opens Good's price editor with the cursor in Customer price (${focused.tag}#${focused.id} = ${focused.value}; was BODY)`);
+  await page.screenshot({ path: SHOTS + '05e0-change-the-price-focused.png' });
+  await page.getByRole('button', { name: /^4 Send/ }).click();
+  await item.waitFor();
   check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits');
   await item.getByLabel(/Why this price\?/).fill('Two hatches and baffles the model does not count');
   await item.getByRole('button', { name: 'Request approval' }).click();
@@ -461,6 +470,9 @@ step('the owner approves it from the Estimates page (L34)');
   check(/1 price waiting for approval/.test(await ap.locator('main').innerText()), 'the owner sees one price waiting for approval');
   check(row.includes('Pat Lee') && row.includes(`Good: $${asked.toLocaleString('en-US')}, 30% above the model price of`) && row.includes('Asked by Eddie Estimator') && row.includes('Two hatches and baffles'), 'with the customer, the option, the price against the model price, who asked and why');
   await ap.screenshot({ path: SHOTS + '05f-approval-queue.png', fullPage: true });
+  // Review B flow-B11: the customer link in the queue is a 48 px target.
+  const qb = await queue.getByRole('link', { name: 'Pat Lee' }).boundingBox();
+  check(qb && qb.height >= 48, `the queue's customer link is ${Math.round(qb?.width ?? 0)}x${Math.round(qb?.height ?? 0)} px (was 107x24)`);
   await queue.getByRole('button', { name: `Approve Good at $${asked.toLocaleString('en-US')} for Pat Lee` }).click();
   await queue.waitFor({ state: 'detached', timeout: 15000 });
   check(psql("select status || ':' || decided_role || ':' || (decided_by = '11111111-1111-4111-8111-111111111111') from price_approvals") === 'approved:owner:true', 'the approval is recorded with who decided and in which role');
@@ -908,6 +920,11 @@ await page.screenshot({ path: SHOTS + '03i-roof-walls-applied.png', fullPage: tr
   check((await page.getByText(unfinishedText).count()) === 1, 'and why it is not priced');
   await page.screenshot({ path: SHOTS + '03i2-walls-measuring-not-finished.png', fullPage: true });
   await page.getByRole('button', { name: 'Finish measuring' }).click();
+  // Review B flow-B12: the sheet opens with the cursor in the empty wall height.
+  await wallSheet.getByLabel('Average wall height').waitFor();
+  await page.waitForFunction(() => document.activeElement instanceof HTMLInputElement && document.activeElement.closest('[data-measure-field="wallHeight"]') !== null, null, { timeout: 5000 }).catch(() => undefined);
+  check(await page.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.closest('[data-measure-field="wallHeight"]') !== null), '"Finish measuring" puts the cursor in Average wall height (was the page body)');
+  await page.screenshot({ path: SHOTS + '03i3-finish-measuring-focused.png' });
   await wallSheet.getByLabel('Average wall height').fill('8');
   await wallSheet.getByRole('button', { name: 'Use 1,440 sq ft' }).click();
   check((await page.getByLabel('Square feet').inputValue()) === '1440' && (await page.getByText(unfinishedText).count()) === 0, '"Finish measuring" opens Measure; 8 ft again is 1,440 sq ft');
@@ -1369,7 +1386,7 @@ await cost.fill('15.25');
 await cost.press('Tab');
 const form = cost.locator('xpath=ancestor::form[1]');
 await form.getByRole('button', { name: /save/i }).click();
-await form.getByText(/Not saved\. \$15\.25 per board ft is 102 times more than the usual \$0\.06 to \$0\.24 \(Starting range: half to twice/).waitFor({ timeout: 15000 });
+await form.getByText(/Not saved\. \$15\.25 per board ft is 64 times the usual high of \$0\.24\. The usual range is \$0\.06 to \$0\.24 \(Starting range: half to twice/).waitFor({ timeout: 15000 });
 check(ocsfCost() === ocsfBefore, `a cost 100 times the usual is refused, with the usual range and where it comes from (still ${ocsfBefore})`);
 await form.scrollIntoViewIfNeeded();
 await op.screenshot({ path: SHOTS + '12b-pricing-cost-range.png' });
@@ -1378,10 +1395,27 @@ await form.getByRole('button', { name: /save/i }).click();
 await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
 check(Number(ocsfCost()) === 15.25, 'with "This cost is right" ticked it is saved');
 console.log('  material audit:', psql("select count(*) from audit_log where table_name='materials' and action='UPDATE' and actor_id='11111111-1111-4111-8111-111111111111'"));
-await cost.fill(costWas);
-await form.getByRole('button', { name: /save/i }).click();
-await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+// Review B flow-B9: the confirmed cost widens the usual range, so the card saves again unticked.
+{
+  const ocsfRange = () => psql("select m.typical_min || ' ' || m.typical_max from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default").split(' ').map(Number);
+  const [lo, hi] = ocsfRange();
+  check(lo === 0.06 && hi === 15.25, `a confirmed $15.25 widens the stored usual range to $0.06 to $15.25 (was $0.06 to $0.24): ${lo} to ${hi}`);
+  await op.reload();
+  const again = op.getByLabel(/cost per unit/i).first().locator('xpath=ancestor::form[1]');
+  check((await again.getByRole('switch', { name: /This cost is right/ }).getAttribute('aria-checked')) === 'false', 'after a reload "This cost is right" is not ticked');
+  await again.getByRole('button', { name: /save/i }).click();
+  await again.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+  check((await again.getByText(/Not saved/).count()) === 0 && Number(ocsfCost()) === 15.25, 'saving the card again without ticking is not refused (it was, every time)');
+  // Put the usual range back with the cost.
+  await again.getByLabel('Usual cost, high').fill('0.24');
+}
+const cost2 = op.getByLabel(/cost per unit/i).first();
+const form2 = cost2.locator('xpath=ancestor::form[1]');
+await cost2.fill(costWas);
+await form2.getByRole('button', { name: /save/i }).click();
+await form2.getByText(/Saved/).first().waitFor({ timeout: 15000 });
 await waitForDb("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default", ocsfBefore, `the step puts the open-cell cost back (${ocsfBefore})`);
+await waitForDb("select m.typical_max::float8 from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default", '0.24', 'and its usual high back ($0.24)');
 // A change that would break pricing must be refused and rolled back.
 await op.goto(BASE + '/admin/team');
 await op.screenshot({ path: SHOTS + '13-team.png', fullPage: true });
@@ -1502,6 +1536,137 @@ step('office marks an estimate lost from its row menu');
   await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost: Went with a competitor').waitFor({ timeout: 15000 });
   check((await op.getByRole('button', { name: 'More for Sam Offline' }).count()) === 1 && (await op.getByRole('row', { name: /Sam Offline/ }).getByText('Lost', { exact: true }).count()) === 1, 'the row now says Lost');
   await op.screenshot({ path: SHOTS + '21-estimate-lost.png', fullPage: true });
+}
+
+step('review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)');
+{
+  const FIXB = SHOTS + 'fixb-';
+  // Every visible control smaller than 48 x 48 px (the Daymark minimum, components/daymark/Button.tsx).
+  const smallTargets = (p) =>
+    p.evaluate(() =>
+      [...document.querySelectorAll('a[href], button, select, [role=button], [role=switch], [role=radio]')]
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ el, r }) => r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden')
+        .filter(({ r }) => r.width < 48 || r.height < 48)
+        .map(({ el, r }) => `${(el.textContent || el.getAttribute('aria-label') || el.tagName).trim().replace(/\s+/g, ' ').slice(0, 40)} ${Math.round(r.width)}x${Math.round(r.height)}`),
+    );
+
+  // flow-B13: a phone's first /field?new=1 runs before any bundle is on the phone.
+  const fresh = await browser.newContext(phone);
+  await fresh.addCookies([sessionCookie(EST)]);
+  const fp = await fresh.newPage();
+  fp.on('pageerror', (e) => logs.push('FIXB PAGEERROR ' + e.message));
+  await fp.goto(BASE + '/field?new=1');
+  await fp.getByLabel('City').waitFor({ timeout: 20000 });
+  const town = [await fp.getByLabel('City').inputValue(), await fp.getByLabel('State').inputValue()];
+  check(town[0] === 'Newark' && town[1] === 'DE', `a phone's first /field?new=1 starts in the shop address's town and state: "${town.join('", "')}" (was "", "")`);
+  await fp.getByLabel('First name').fill('Rae');
+  await fp.getByLabel('Last name').fill('Firstopen');
+  await fp.getByLabel('Street address').fill('8 First Open Ln');
+  await fp.getByLabel('ZIP').fill('19711');
+  await fp.screenshot({ path: FIXB + 'b13-first-open-town.png' });
+  await fp.getByRole('button', { name: 'Next' }).click();
+
+  // flow-B6: in Sun+ an empty field's placeholder is grey and italic, never the black of typed text.
+  await fp.getByRole('button', { name: '+ Attic' }).click();
+  await fp.evaluate(() => document.documentElement.setAttribute('data-theme', 'sun'));
+  const look = await fp.getByLabel('Square feet').evaluate((el) => {
+    const ph = getComputedStyle(el, '::placeholder');
+    return { text: getComputedStyle(el).color, placeholder: ph.color, italic: ph.fontStyle, shown: el.getAttribute('placeholder') };
+  });
+  check(look.text !== look.placeholder && look.italic === 'italic', `in Sun+ the empty Square feet's "${look.shown}" is ${look.placeholder} in italics, typed text ${look.text} (both rgb(0, 0, 0) before)`);
+  await fp.screenshot({ path: FIXB + 'b6-sun-placeholders.png', fullPage: true });
+  await fp.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+  // flow-B11: "Use 1,200" under the mismatch sentence is a 48 px button.
+  await fp.getByRole('button', { name: /Measure this area/ }).click();
+  const msheet = fp.getByRole('dialog', { name: /Measure/ });
+  await msheet.getByLabel('A · Width').fill('40');
+  await msheet.getByLabel('B · Depth').fill('30');
+  await msheet.getByRole('button', { name: 'Use 1,200 sq ft' }).click();
+  await fp.getByLabel('Square feet').fill('1000');
+  const use = fp.getByRole('button', { name: 'Use 1,200', exact: true });
+  await use.waitFor();
+  const ub = await use.boundingBox();
+  check(ub && ub.width >= 48 && ub.height >= 48, `"Use 1,200" is ${Math.round(ub?.width ?? 0)}x${Math.round(ub?.height ?? 0)} px (was 71x21)`);
+  const areaSmall = await smallTargets(fp);
+  check(!areaSmall.some((t) => t.startsWith('Use 1,200 ')), 'the small-target scan at 390 px does not list "Use 1,200"');
+  console.log('  other small targets on the Areas step:', areaSmall.join(' | ') || 'none');
+  await use.scrollIntoViewIfNeeded();
+  await fp.screenshot({ path: FIXB + 'b11-use-measured.png' });
+  await use.click();
+  check((await fp.getByLabel('Square feet').inputValue()) === '1200', '"Use 1,200" puts the measured size back');
+
+  // flow-B4 (OD15): no pick, Better priced above Best so it is not shown: Best is recommended, not Good.
+  await fp.getByRole('button', { name: 'Next' }).click();
+  const better = fp.getByRole('group', { name: 'Better option' });
+  await better.getByRole('button', { name: 'Change price' }).click();
+  await better.getByLabel('Customer price').fill('99999');
+  await better.getByLabel('Reason (required)').fill('Checking the recommendation when Better is hidden');
+  await better.getByRole('button', { name: 'Apply', exact: true }).click();
+  await better.getByText('Not shown to the customer', { exact: true }).waitFor();
+  const best = fp.getByRole('group', { name: 'Best option' });
+  check((await best.getByRole('button', { name: 'Recommended (default)' }).count()) === 1, 'with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)');
+  check((await fp.getByRole('group', { name: 'Good option' }).getByRole('button', { name: 'Make recommended' }).count()) === 1, 'and Good is not');
+  const dock = await fp.getByRole('region', { name: 'Estimate actions' }).innerText();
+  const bestPrice = (await best.locator('p.text-2xl').first().innerText()).trim();
+  check(dock.includes(bestPrice) && /best/i.test(dock), `the dock's headline is Best's ${bestPrice}: "${dock.replace(/\s+/g, ' ').slice(0, 60)}"`);
+  await fp.screenshot({ path: FIXB + 'b4-best-recommended.png', fullPage: true });
+  await fresh.close();
+
+  // flow-B11: the estimator's email link on the customer's quote page.
+  const cq = await browser.newContext(phone);
+  const cqp = await cq.newPage();
+  await cqp.goto(link);
+  const contact = cqp.getByRole('region', { name: 'Questions about this quote?' }).first();
+  await contact.waitFor({ timeout: 15000 });
+  const mail = contact.locator('a[href^="mailto:"]').filter({ hasText: '@' }).first();
+  if ((await mail.count()) === 1) {
+    const mb = await mail.boundingBox();
+    check(mb && mb.height >= 48, `the estimator's email link on the quote is ${Math.round(mb?.width ?? 0)}x${Math.round(mb?.height ?? 0)} px (was 100x20)`);
+  } else check(false, "the customer's quote shows the estimator's email link");
+  const quoteSmall = await smallTargets(cqp);
+  console.log('  other small targets on the customer quote:', quoteSmall.join(' | ') || 'none');
+  await contact.scrollIntoViewIfNeeded();
+  await cqp.screenshot({ path: FIXB + 'b11-quote-contact.png' });
+  await cq.close();
+
+  // flow-B9: the refusal says how far the cost is from the nearest edge (office screen, 1280).
+  const pc = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  await pc.addCookies([sessionCookie(OWNER)]);
+  const pp = await pc.newPage();
+  await pp.goto(BASE + '/admin/pricing');
+  const pcost = pp.getByLabel(/cost per unit/i).first();
+  const pform = pcost.locator('xpath=ancestor::form[1]');
+  const ocsfNow = psql("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default");
+  await pcost.fill('0.30');
+  await pform.getByRole('button', { name: /save/i }).click();
+  await pform.getByText(/Not saved\. \$0\.30 per board ft is 25% above the usual high of \$0\.24\. The usual range is \$0\.06 to \$0\.24/).waitFor({ timeout: 15000 });
+  check(psql("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default") === ocsfNow, '$0.30 is "25% above the usual high of $0.24" (was "2.0 times more than the usual"), and not saved');
+  await pform.scrollIntoViewIfNeeded();
+  await pp.screenshot({ path: FIXB + 'b9-cost-from-the-edge.png' });
+  await pc.close();
+
+  // flow-B8: with Koala unreachable, /unreachable offers the phone's copy only when the phone has one.
+  const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+  unreachableStep = true;
+  await rest(true);
+  const none = await browser.newContext(phone);
+  await none.addCookies([sessionCookie(EST)]);
+  const np = await none.newPage();
+  await np.goto(BASE + '/unreachable?next=%2Ffield');
+  await np.getByText('This phone has no saved copy of the app yet; it needs Koala once.').waitFor({ timeout: 15000 });
+  check((await np.getByRole('link', { name: 'Open the estimates on this phone' }).count()) === 0, 'a phone with no saved copy is not offered "Open the estimates on this phone" (it led back to /unreachable: count 1 before)');
+  await np.screenshot({ path: FIXB + 'b8-unreachable-no-copy.png' });
+  await none.close();
+  const own = await ctx.newPage();
+  await own.goto(BASE + '/unreachable?next=%2Ffield');
+  await own.getByRole('link', { name: 'Open the estimates on this phone' }).waitFor({ timeout: 15000 });
+  check((await own.getByText('This phone has no saved copy').count()) === 0, 'the phone that has its copy is offered it');
+  await own.screenshot({ path: FIXB + 'b8-unreachable-with-copy.png' });
+  await own.close();
+  await rest(false);
+  unreachableStep = false;
 }
 
 console.log('console errors:', logs.length ? logs : 'none');

@@ -27,6 +27,7 @@ export function OptionsStep({
   flags,
   profile,
   online,
+  editPrice = null,
 }: {
   draft: EstimateDraft;
   update: Update;
@@ -36,6 +37,8 @@ export function OptionsStep({
   flags: DeviationFlag[];
   profile: CachedProfile;
   online: boolean;
+  /** A "Change the price" Fix: this option's price editor opens, at Customer price (review B flow-B12). */
+  editPrice?: Tier | null;
 }) {
   const settings = bundle?.snapshot.settings;
   const showCosts = profile.role !== 'estimator' || !!settings?.estimatorsSeeCosts;
@@ -140,6 +143,7 @@ export function OptionsStep({
             areaNames={areaNames}
             tiersByKey={tiersByKey}
             advice={advice && winModel ? { advice, model: winModel } : null}
+            startEditing={editPrice === o.tier}
           />
         );
       })}
@@ -165,6 +169,7 @@ export function OptionsStep({
               areaNames={areaNames}
               tiersByKey={tiersByKey}
               advice={null}
+              startEditing={editPrice === o.tier}
             />
           ))}
         </>
@@ -226,6 +231,7 @@ function OptionCard({
   areaNames,
   tiersByKey,
   advice,
+  startEditing = false,
 }: {
   option: PricedOption;
   /**
@@ -251,10 +257,12 @@ function OptionCard({
   areaNames: Map<string, string>;
   tiersByKey: (key: string) => Tier[];
   advice: { advice: PriceAdvice; model: WinModel } | null;
+  /** Open with the price editor showing (a "Change the price" Fix; EstimateEditor then focuses Customer price). */
+  startEditing?: boolean;
 }) {
   const mine = flagsForOption(flags, o);
   const linesToExplain = [...mine.byLine.values()].flat().filter((f) => !isAcknowledged(f, acks)).length;
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   // Open the line details when a change on one of them still needs explaining.
   const [details, setDetails] = useState(linesToExplain > 0);
   const [price, setPrice] = useState<number | null>(override?.price ?? null);
@@ -273,7 +281,7 @@ function OptionCard({
         label="Customer price"
         hint={overrideLimit !== null ? `Estimators can move the price up to ${pct(overrideLimit, 0)} from ${usd(o.modelPrice)}.` : `Model price ${usd(o.modelPrice)}.`}
       >
-        <NumberInput value={price} onValue={setPrice} allowDecimal={false} />
+        <NumberInput id={`option-${tier}-price`} value={price} onValue={setPrice} allowDecimal={false} />
       </Field>
       {price !== null && price < 1 ? <p className="text-xs text-amber-800">Enter a price of $1 or more.</p> : null}
       <Field label="Reason (required)">

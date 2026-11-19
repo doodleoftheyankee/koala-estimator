@@ -21,7 +21,7 @@
  *    says "Can't reach Koala right now"; the cached copy is kept, never deleted for that.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v11';
+const VERSION = 'v12';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;

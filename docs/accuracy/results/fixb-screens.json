@@ -1,0 +1,93 @@
+{
+  "stage": "fixb-screens (review B, flow/screens findings)",
+  "branch": "claude/accuracy-fixb-screens",
+  "base": "origin/claude/accuracy 001050c",
+  "codeHeadCommit": "360e83c (the commits after it add docs only: violation runs, screenshots, results)",
+  "pushed": true,
+  "summary": "Fixed review B flow-B4 (with owner decision OD15), flow-B6, flow-B8, flow-B9, flow-B11, flow-B12 and flow-B13, each reproduced first by a test that failed on 001050c and passes after. OD15: with no pick, Better is the implied pick; a recommended option that is not shown moves to the shown option doing the same work (the engine now marks it on PricedOption.sameWorkAs), else the nearest shown above, else below. Every headline caller (phone dock, cards and list, Send step, office list, sync model_total_price, quote recommendedTier, the checker) goes through lib/field/recommended.ts. Golden sets re-priced from the existing read-only export: no headline changes (both byte-identical to after-fixa); random quotes 24/10,000, 50/20,000, 42/20,000 headlines move, all no pick, Good -> Best (docs/accuracy/after-fixb/headline-changes.txt). Checks: typecheck, lint, 1,665 vitest tests, violations 0 at seeds 20261118, 7 and 99999, and one full e2e run (341 checks, console errors: none) with a new 'review B screens' step.",
+  "fixed": [
+    {
+      "id": "flow-B4",
+      "ownerDecision": "OD15",
+      "commit": "4046e01",
+      "test": "lib/field/recommended.test.ts 'OD15 (review B flow-B4): with no pick, Better is the implied pick' (5 tests; 4 failed before: 'Better not shown, Good and Best shown: Best, as when Better is picked (was Good, the cheapest)', 'a pick that is not shown moves first to the option shown that does the same work', 'the engine says which option shown does the work of the hidden Better', 'the phone, the office list, the sync and the quote all recommend Best at $6,070 (was Good at $4,195)'); e2e 'with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)', \"the dock's headline is Best's $5,270\"",
+      "what": "lib/field/recommended.ts: no pick (or no tier) = Better as the implied pick; a pick not shown goes to options.find(o => o.sameWorkAs includes it), else the nearest shown above, else the nearest below, else the first. lib/pricing/engine.ts shownOptions marks the kept option of each same-work pair (PricedOption.sameWorkAs, transitive; computed in showAll too so shown and showAll options stay deep-equal). The ledger's L9 wording is amended and RB-flow-B4 added. Callers checked: app/field/EstimateEditor.tsx (dock, phone list summary), OptionsStep, SendStep, lib/office/estimates.ts headlinePrice, lib/sync/payload.ts model_total_price, lib/quotes/model.ts recommendedTier, lib/quotes/invariants.ts expectedHeadline/headlineTexts: all call recommendedTier. The office list and the checker see stored tier/price only, so they take the nearest-above step without the same-work step; that names the same option in every golden, production-stored and random quote checked (0 differing in 50,000)."
+    },
+    {
+      "id": "flow-B6",
+      "commit": "14e4b20",
+      "test": "lib/design/contrast.test.ts 'Placeholders look empty (review B flow-B6)' (2 tests) and the new pairs 'Placeholders on plates/wells' in every theme and register (all failed before: no --placeholder token, Sun+ placeholder #000000 = ink); e2e 'in Sun+ the empty Square feet's \"0\" is rgb(75, 85, 99) in italics, typed text rgb(0, 0, 0) (both rgb(0, 0, 0) before)'",
+      "what": "app/globals.css: --placeholder token in Day (#535a61) and both Night blocks (#a0a7ae), #4b5563 (7.56:1 on white) in both Sun+ blocks; --color-placeholder in @theme; base ::placeholder uses it; italic ::placeholder under [data-theme='sun'] and prefers-contrast: more. components/daymark/Form.tsx placeholder:text-ink-3 and app/field/measure/ShapeEditor.tsx placeholder:text-slate-400 -> placeholder:text-placeholder (these utilities overrode the base rule)."
+    },
+    {
+      "id": "flow-B8",
+      "commit": "c801b1e",
+      "test": "components/shell/unreachable.test.tsx (failed before: the link was in the server markup), lib/offline/phoneCopy.test.ts (2 tests); e2e 'a phone with no saved copy is not offered \"Open the estimates on this phone\" (it led back to /unreachable: count 1 before)', 'the phone that has its copy is offered it'",
+      "what": "components/shell/StatePages.tsx: the phone-app link is a small client part that shows the link only after caches.match(href, {ignoreVary}) finds the shell (lib/offline/phoneCopy.ts hasSavedCopy); with none it says 'This phone has no saved copy of the app yet; it needs Koala once.'; nothing shows until the check is done. app/unreachable/page.tsx untouched."
+    },
+    {
+      "id": "flow-B9",
+      "commit": "7984926",
+      "test": "lib/admin/pricingForms.test.ts 'says how far a cost is from the nearest edge …' and 'a cost the owner confirmed widens the stored range to it …' (both failed before), 'a cost 100 times the usual is caught …' (expected sentences updated to the new wording); e2e 'a confirmed $15.25 widens the stored usual range to $0.06 to $15.25', 'saving the card again without ticking is not refused (it was, every time)', '$0.30 is \"25% above the usual high of $0.24\"'",
+      "what": "lib/admin/pricingForms.ts costOutsideRange measures from the nearest edge ('25% above the usual high of $0.24', '17% below the usual low of $0.06', 'just above' under 1%), 'N times' only from twice the edge; new rangeWithConfirmedCost. app/admin/pricing/actions.ts saveMaterial stores the widened range when 'This cost is right' is ticked (3 lines). Ledger RB-flow-B9; L11 annotated."
+    },
+    {
+      "id": "flow-B11",
+      "commit": "3df5397",
+      "test": "app/tap-targets.test.tsx (3 tests, all failed before); e2e '\"Use 1,200\" is 117x48 px (was 71x21)', \"the queue's customer link is 63x48 px (was 107x24)\", \"the estimator's email link on the quote is 100x48 px (was 100x20)\", plus a logged small-target scan at 390 px",
+      "what": "app/field/AreasStep.tsx: 'Use {n}' is a Daymark sm Button (48 px) under the mismatch sentence (MeasureButton exported for the test); app/estimates/ApprovalQueue.tsx customer Link and app/q/[token]/parts.tsx estimator email link get inline-flex min-h-12 items-center."
+    },
+    {
+      "id": "flow-B12",
+      "commit": "7f98c48",
+      "test": "app/field/OptionsStep.test.tsx 'flow-B12: \"Change the price\" opens that option's price editor' (failed before), lib/measure/measure.test.ts 'firstUnfinishedField (review B flow-B12) …' (2 tests, failed before), lib/field/measuring.test.ts and lib/field/sendChecks.test.ts expectations now carry field 'wallHeight' and edit 'price'; e2e '\"Change the price\" opens Good's price editor with the cursor in Customer price (INPUT#option-good-price = 3933; was BODY)', '\"Finish measuring\" puts the cursor in Average wall height (was the page body)'",
+      "what": "lib/field/fix.ts: options target edit?: 'price' (element id option-<tier>-price), areas target field?: MeasureField. lib/field/sendChecks.ts line 218 (one token): the price:<tier> Fix carries edit: 'price'. OptionsStep/OptionCard open that card's price editor (startEditing) and the Customer price input has the id EstimateEditor focuses. lib/measure/measure.ts firstUnfinishedField (in computeMeasurement's order, cutouts first); lib/field/measuring.ts puts it in the Finish measuring target; AreasStep passes it to MeasureSheet (both from the Send Fix and the area card's Finish measuring), which focuses the box it cannot read, else the first empty one, in that part (data-measure-field)."
+    },
+    {
+      "id": "flow-B13",
+      "commit": "3e2544d",
+      "test": "lib/field/newPlace.test.ts (4 tests: the pair or nothing, filled only while both are blank, the 3 s wait; module absent before); e2e \"a phone's first /field?new=1 starts in the shop address's town and state: \\\"Newark\\\", \\\"DE\\\" (was \\\"\\\", \\\"\\\")\"",
+      "what": "app/field/FieldApp.tsx createEstimate: with no cached bundle and a connection, waits for refreshBundle at most 3 s ('Starting the estimate'); lib/field/newPlace.ts newEstimatePlace reads the bundle's business.newEstimate as a pair or nothing (OD14). An estimate that still starts blank is filled by EstimateEditor (fillPlace) through update when the bundle comes, only while City and State are both blank. No docs-fixer helper existed on origin/claude/accuracy-fixb-docs when this was written (it had fe27ed6), so it reads the bundle's existing newEstimate value."
+    }
+  ],
+  "notFixed": [
+    "Not mine (docs fixer, claude/accuracy-fixb-docs): OD12-OD14, DOC-1..3, database-B1..B7, flow-B1, B2, B3, B5, B7, B10, B14.",
+    "Small targets the new scan logged but no review B finding names, left for the integrator: on the customer quote the office phone in the OfficeContact sentence ('(555) 010-0199', 130x22 inline link, app/q/[token]/parts.tsx OfficeContact) - the docs fixer is rewriting OfficeContact for OD12, so editing it here would collide; the same 'inline-flex min-h-12 items-center' fixes it. 'Skip to content' 32x24 (the skip link, visible only on keyboard focus).",
+    "OD15 in the office list and the checker: stored estimate_options carry tier and price only, so the 'same work' step is not visible there; it never differs from 'nearest above' in the golden sets, production's stored rows or 50,000 random quotes. Closing it fully needs the recommended tier stored with the estimate (an additive column the sync writes): a migration, outside this branch.",
+    "lib/learning/observations.ts winObservationFromQuote still falls back to 'better, then the first option' for a stored quote with no recommendedTier (sent before recommendedTier existed): learning only, not a headline, left as is.",
+    "Comments in lib/quotes/model.ts (line 184) and lib/quotes/invariants.ts (line 289) still describe the old rule ('with no pick, Better, else the first'); left untouched to keep lib/quotes/* clean for the docs fixer (behaviour follows recommendedTier)."
+  ],
+  "valueChanges": [
+    "RB-flow-B4 (OD15): no pick, Better not shown, Good and Best shown: headline Good -> Best on the dock, phone list, office list, sync model_total_price and the quote's RECOMMENDED badge. Seeded attic 1,386 sq ft at R-0, Better $7,538: Good $4,195 -> Best $6,070. e2e (attic 1,200 sq ft, Better set to $99,999): Best $5,270 recommended (was Good). Golden sets: 0 of 65 synthetic, 0 of 78 live change. Random: 24/10,000 (seed 20261118), 50/20,000 (7), 42/20,000 (99999), all no pick Good -> Best; e.g. 0f23b856 $7,350 -> $10,730. No picked estimate changes. Sent quotes unchanged.",
+    "RB-flow-B9 (owner screen): open-cell $0.30 against $0.06-$0.24: '2.0 times more than the usual $0.06 to $0.24' -> '25% above the usual high of $0.24. The usual range is $0.06 to $0.24 (...)'; $15.25: '102 times more than' -> '64 times the usual high of $0.24'; $0.05: '3.0 times less than the usual' -> '17% below the usual low of $0.06'. A ticked save of $0.30 stores the range $0.06-$0.24 -> $0.06-$0.30, so the next save is not refused.",
+    "RB-flow-B13: /field?new=1 on a phone with no bundle yet: City/State '' / '' -> 'Newark' / 'DE' (the e2e settings' shop address).",
+    "flow-B6, B8, B11, B12: no price, quantity or customer wording changes (Sun+ placeholder colour/italic; /unreachable shows 'This phone has no saved copy of the app yet; it needs Koala once.' instead of a link that looped; 48 px targets; Fix focus)."
+  ],
+  "checks": {
+    "typecheck": "pass: npm run typecheck (tsc app + scripts/accuracy), 0 errors, on 1157ba7",
+    "lint": "pass: npm run lint, 0 problems, on 1157ba7",
+    "vitest": "pass: 1,665 tests in 87 files (1,636 in 83 files on 001050c); none deleted, skipped or weakened. Expectations changed by the fixes: lib/field/recommended.test.ts ([good,best] with no pick: good -> best, OD15), lib/admin/pricingForms.test.ts (three refusal sentences to the edge wording), lib/field/measuring.test.ts and lib/field/sendChecks.test.ts (Fix targets now carry field 'wallHeight' / edit 'price').",
+    "violations": "npm run accuracy:violations -- 10000 20261118, 20000 7, 20000 99999: 0 on every rule; files byte for byte the same as after-fixa's (docs/accuracy/after-fixb/violations-*.txt)",
+    "golden": "price-golden.ts synthetic and live --with-accuracy-rows (existing export): 0 violations, 0 headline changes, outputs identical to after-fixa",
+    "e2e": "pass: bash scripts/e2e.sh with APP_PORT=3590 PGRST_PORT=3591 MOCK_PORT=54790 E2E_DB_NAME=koala_fixb_screens on 1157ba7 (code = 360e83c): 341 checks ok, console errors: none. The first attempt stopped at the Next.js security-upgrade notice during next build; the same command was retried once and passed (nothing upgraded, the notice not followed). Waited for no other e2e/next build first (none running). Servers stopped by the script; the test database dropped afterwards."
+  },
+  "ledger": "docs/accuracy/ledger.txt: L9 wording amended (OD15); L11 annotated; new section 'Review B fixes and owner decisions OD12-OD16' with RB-flow-B4, RB-flow-B9, RB-flow-B13 (the docs fixer appends its entries under the same heading on its branch)",
+  "migrations": [
+    "None."
+  ],
+  "ownerQuestions": [
+    "OD15 says what happens when Better is hidden. The same rule (a hidden pick moves to the shown option doing the same work, else the nearest above, else below) is applied to a hidden Good or Best pick too, so one rule covers every pick; in every golden and random quote checked it names the same option the old 'next shown after the pick' rule did. Keep it general, or apply the same-work step to Better only?",
+    "flow-B9: a cost confirmed with 'This cost is right' now widens the stored usual range for good (e.g. $0.06-$0.30), so later typos up to that cost are no longer caught. Is that what you want, or should the confirmation only stick for that exact cost?"
+  ],
+  "notesForIntegrator": "Shared files this branch touched that the docs fixer may also touch (merge by hand where both changed): lib/field/sendChecks.ts (one token on the price:<tier> Fix: edit: 'price') and lib/field/sendChecks.test.ts (two expectations gain field: 'wallHeight' / edit: 'price'); lib/field/fix.ts (options target edit?: 'price', areas target field?: MeasureField, an import of MeasureField; the docs fixer adds 'notes' to CustomerField; keep both); app/admin/pricing/actions.ts (saveMaterial: import rangeWithConfirmedCost and store the widened range, 3 lines; the docs fixer edits this file for flow-B10); app/q/[token]/parts.tsx (one className on the estimator email link in ContactCard) and app/estimates/ApprovalQueue.tsx (one className on the customer Link): both are files the docs fixer rewrites for OD12 / flow-B3; tests/e2e/run.mjs (L11 pricing step: new wording regex, the widened-range checks and the range put back; 'Change the price' focus check in the approval step; 'Finish measuring' focus check; the approval queue's 48 px check; a new 'review B screens' step just before the final console-errors line); docs/accuracy/ledger.txt (L9 reworded, L11 annotated, and a section 'Review B fixes and owner decisions OD12-OD16' appended at the end with RB-flow-B4, RB-flow-B9, RB-flow-B13: the docs fixer appends under the same heading, so join the two into one section); public/sw.js VERSION v11 -> v12 (if the docs fixer also bumped it, use one version above both). Files only this branch should have changed: lib/field/recommended.ts(+test), lib/pricing/engine.ts and types.ts (PricedOption.sameWorkAs), lib/office/estimates.ts (comment), app/field/EstimateEditor.tsx, FieldApp.tsx, OptionsStep.tsx(+test), AreasStep.tsx, measure/MeasureSheet.tsx, measure/ShapeEditor.tsx, app/globals.css, components/daymark/Form.tsx, components/shell/StatePages.tsx, lib/offline/phoneCopy.ts, lib/field/newPlace.ts, lib/field/measuring.ts, lib/measure/measure.ts, lib/admin/pricingForms.ts, lib/design/contrast.ts, scripts/accuracy/od15-headlines.ts, app/tap-targets.test.tsx, components/shell/unreachable.test.tsx. flow-B13: lib/field/newPlace.ts newEstimatePlace reads the bundle's business.newEstimate (as a pair or nothing); if the docs fixer's OD14 work adds a town/state helper or reshapes PricingBundle.business (e.g. drops gaps), point newEstimatePlace at it; its test builds the bundle with a cast, so only the read path needs to follow. My e2e step relies on: the e2e settings' shop address giving Newark / DE for a new estimate (as the existing step 'create estimate' does), the signed quote page showing ContactCard with the estimator's email, and /unreachable being public; if OD12/OD14 change those expectations in the main flow, change mine the same way. Not changed (lib/quotes/* kept clean): comments in lib/quotes/model.ts:184 and lib/quotes/invariants.ts:289 still say 'with no pick, Better, else the first'; behaviour already follows recommendedTier. Re-run after merging: npm run typecheck, npm run lint, npx vitest run, npm run accuracy:violations at 10000 20261118 / 20000 7 / 20000 99999 (expect 0), scripts/accuracy/price-golden.ts synthetic and live --with-accuracy-rows (expect the headlines in docs/accuracy/after-fixb/headline-changes.txt: none in the golden sets), scripts/accuracy/od15-headlines.ts if pricing changed, and one full bash scripts/e2e.sh (it retries once past the Next.js security notice).",
+  "screenshots": [
+    "docs/accuracy/after-fixb/screens/b4-best-recommended.png (phone 390: no pick, Better at $99,999 not shown, Best 'Recommended (default)' and the dock's headline)",
+    "docs/accuracy/after-fixb/screens/b6-sun-placeholders.png (phone 390, Sun+: grey italic '0' and 'R-49' placeholders)",
+    "docs/accuracy/after-fixb/screens/b8-unreachable-no-copy.png, b8-unreachable-with-copy.png (phone 390)",
+    "docs/accuracy/after-fixb/screens/b9-cost-from-the-edge.png (office 1280: '$0.30 ... is 25% above the usual high of $0.24')",
+    "docs/accuracy/after-fixb/screens/b11-use-measured.png, b11-quote-contact.png (phone 390), b11-approval-queue.png (office 1280)",
+    "docs/accuracy/after-fixb/screens/b12-change-the-price-focused.png, b12-finish-measuring-focused.png (phone 390)",
+    "docs/accuracy/after-fixb/screens/b13-first-open-town.png (phone 390: Newark, DE on a first open)",
+    "All at deviceScaleFactor 2 (780 px or 2560 px wide files), from the e2e run."
+  ]
+}

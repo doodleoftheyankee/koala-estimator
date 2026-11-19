@@ -114,7 +114,7 @@ export function ApprovalQueue({ items, role, userId }: { items: QueueItem[]; rol
             <li key={it.id} className="space-y-2 py-3" data-approval={it.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <Link href={`/field?e=${encodeURIComponent(it.estimateId)}`} prefetch={false} className="text-[18px] font-bold text-ink underline-offset-2 hover:underline">
+                  <Link href={`/field?e=${encodeURIComponent(it.estimateId)}`} prefetch={false} className="inline-flex min-h-12 items-center text-[18px] font-bold text-ink underline-offset-2 hover:underline">
                     {it.customer}
                   </Link>
                   {it.address ? <p className="text-[15px] font-medium text-ink-2">{it.address}</p> : null}

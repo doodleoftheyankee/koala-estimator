@@ -58,7 +58,7 @@ export function Field({
 
 /** Shared look for text inputs, selects and text areas. */
 export const INPUT_CLASS =
-  'block w-full min-h-[var(--ctl-h)] rounded-control border-solid border-[length:var(--bw)] border-line-strong bg-surface px-3.5 text-[18px] font-semibold text-ink placeholder:font-medium placeholder:text-ink-3 focus:border-ink focus-visible:outline-offset-2 aria-invalid:border-bad disabled:border-line disabled:bg-draft-fill disabled:text-ink-2 read-only:bg-sunken';
+  'block w-full min-h-[var(--ctl-h)] rounded-control border-solid border-[length:var(--bw)] border-line-strong bg-surface px-3.5 text-[18px] font-semibold text-ink placeholder:font-medium placeholder:text-placeholder focus:border-ink focus-visible:outline-offset-2 aria-invalid:border-bad disabled:border-line disabled:bg-draft-fill disabled:text-ink-2 read-only:bg-sunken';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
   return <input className={cx(INPUT_CLASS, className)} {...props} />;

@@ -297,6 +297,12 @@ export interface PricedOption {
   belowFloor: boolean;
   crewDays: number;
   financing: Financing | null;
+  /**
+   * The options OD6 leaves out of what the customer is shown because they do the same work as this
+   * one for as much or more; absent when there are none. An estimator whose pick is one of them is
+   * recommended this option when it is shown (OD15, lib/field/recommended.ts).
+   */
+  sameWorkAs?: Tier[];
 }
 
 export interface PricingWarning {

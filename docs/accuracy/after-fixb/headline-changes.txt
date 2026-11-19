@@ -1,0 +1,74 @@
+HEADLINE CHANGES FROM OD15 (review B flow-B4; branch claude/accuracy-fixb-screens)
+
+The rule (lib/field/recommended.ts, used by the phone's dock, cards, list and Send step, the office
+list, the sync's model_total_price and the customer quote):
+  recommended = the option the estimator picked; with no pick, Better, the implied pick (OD15).
+  When that option is not shown (OD6): the option shown that does the same work (the engine marks
+  it: PricedOption.sameWorkAs), else the nearest option shown above it, else the nearest below.
+Before: a hidden pick went to the next option shown after it, else the nearest before; with no
+pick, Better if shown, else the FIRST option shown (Good, the cheapest, whenever Good was shown).
+
+Random-quote counts: node scripts/accuracy/run.mjs scripts/accuracy/od15-headlines.ts <count> <seed>
+
+How the sets were priced
+  Before: the code of 14cc7e8 (= origin/claude/accuracy 001050c plus the owner decisions file).
+  After:  this branch's lib/field/recommended.ts and lib/pricing/engine.ts.
+  Synthetic: node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts synthetic <out>
+  Live:      node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts live <export dir> <out> <summary> --with-accuracy-rows
+             (the read-only production export already made for the accuracy round; not re-exported)
+
+GOLDEN SETS: NO HEADLINE CHANGES
+  Synthetic (65 estimates): 0 headlines change. Before and after files are byte for byte the same
+    (docs/accuracy/after-fixb/golden-synthetic-after-fixb.json = after-fixa's).
+  Live (78 estimates): 0 headlines change. The full priced output and the committed summary are
+    byte for byte the same (docs/accuracy/after-fixb/golden-live-after-fixb.json = after-fixa's).
+  0 violations on every rule in both, before and after.
+
+  Why nothing moves there: a headline changes only for an estimate with NO pick whose Better is not
+  shown while Good is shown below it and Best above it (it was Good, it is now Best). Neither set
+  has one:
+    Synthetic: Better shown in 56; Better not shown in 7: 6 show only Best and have no pick (Best
+      before and after), 1 shows Good and Best and has Best picked (Best before and after); 2 have
+      no option.
+    Live: Better shown in 66; Better not shown in 12, each showing only Best with Better picked
+      (Best before and after: the next shown after the pick, and the same work).
+    Live stored rows (what the office list reads today): every one of the 78 estimates has Better
+      among its stored options, so no office headline moves either.
+  No picked estimate changes: the "same work" step names the option that the old "next shown
+  after the pick" rule named in every case checked (see below).
+
+RANDOM QUOTES (seeded pricing, the generator of RA-F7; the same quotes before and after)
+  The only change, in every seed: no pick, Better not shown, Good and Best shown: Good -> Best.
+    seed 20261118, 10,000 quotes (9,101 with an option): 24 headlines change, e.g.
+      0f23b856  $7,350 Good -> $10,730 Best;  e656ed79  $3,145 -> $3,448;  bdde6211  $82,279 -> $92,455
+    seed 7, 20,000 quotes (18,067 with an option): 50 change, e.g.
+      6e695e69  $8,170 -> $10,200;  434cde40  $8,725 -> $9,744;  8137142d  $1,750 -> $2,520
+    seed 99999, 20,000 quotes (18,080 with an option): 42 change, e.g.
+      50fe4258  $57,970 -> $80,216;  8aaa51ff  $42,870 -> $140,620;  1b06dcf5  $4,250 -> $4,920
+  Why: Better is the implied pick, and a hidden Better now goes where a picked hidden Better went
+  (Best: the same work, or the next option up). Before, the headline dropped to the cheapest option.
+  A picked estimate never changed: 0 in 50,000 quotes.
+  Better hidden as the same work as Good while Good and Best are both shown (the one case where
+  "same work" and "next shown above" name different options: Good vs Best): 0 in 50,000 quotes.
+  With the seeded templates Good and Better always differ in product or in air sealing.
+
+THE REVIEW'S CASE (lib/field/recommended.test.ts, seeded pricing, 20 min drive)
+  Attic 1,386 sq ft at R-0 (Best is the same work as Better), Better raised to $7,538, above Best
+  ($6,070), so Better is not shown and Best is (Best: sameWorkAs ["better"]).
+    No pick:      dock, phone list, office list, quote RECOMMENDED badge: Good $4,195 -> Best $6,070
+                  sync model_total_price: Good's model price -> Best's model price
+    Better picked: Best $6,070 before and after (the two cases now agree).
+
+WHAT THE OFFICE LIST CANNOT SEE
+  The office list reads the stored options, which keep tier and price only (estimate_options), so it
+  takes the "nearest above, else below" steps without the "same work" step. It names a different
+  option from the phone and the quote only for an estimate whose Better is hidden as the same work
+  as Good while Best is shown: none in either golden set, none in production's stored rows, none in
+  50,000 random quotes. The checker would report such an estimate (same_price_text office_list).
+  Closing it for good needs the recommended tier stored with the estimate (an additive column the
+  sync writes); that is a migration, outside this branch.
+
+SENT AND SIGNED QUOTES (hard rule 1)
+  Unchanged. A sent quote keeps its stored document's recommendedTier; app/api/quotes/route.ts
+  stores selected_tier = the document's recommendedTier at send, so the office shows the option the
+  customer was sent. Only drafts priced from now on, with no pick and Better hidden, move.

@@ -1,0 +1,27 @@
+e2e on 1157ba7 (code 360e83c): bash scripts/e2e.sh, APP_PORT=3590 PGRST_PORT=3591 MOCK_PORT=54790 E2E_DB_NAME=koala_fixb_screens.
+First attempt stopped at the Next.js security-upgrade notice in next build; the same command retried once: EXIT=0, 341 checks ok, console errors: none.
+
+The "(was …)" figures are the review B measurements on 001050c; each fix was first reproduced by a unit test that failed there (docs/accuracy/results/fixb-screens.json).
+The review B screens checks (verbatim from the run):
+ok: "Change the price" opens Good's price editor with the cursor in Customer price (INPUT#option-good-price = 3933; was BODY)
+ok: the queue's customer link is 63x48 px (was 107x24)
+ok: "Finish measuring" puts the cursor in Average wall height (was the page body)
+ok: a confirmed $15.25 widens the stored usual range to $0.06 to $15.25 (was $0.06 to $0.24): 0.06 to 15.25
+ok: after a reload "This cost is right" is not ticked
+ok: saving the card again without ticking is not refused (it was, every time)
+ok: and its usual high back ($0.24)
+• review B screens: a first-open estimate, Better hidden with no pick, Sun+ placeholders, 48 px targets, /unreachable with no saved copy (flow-B13, B4, B6, B11, B9, B8)
+ok: a phone's first /field?new=1 starts in the shop address's town and state: "Newark", "DE" (was "", "")
+ok: in Sun+ the empty Square feet's "0" is rgb(75, 85, 99) in italics, typed text rgb(0, 0, 0) (both rgb(0, 0, 0) before)
+ok: "Use 1,200" is 117x48 px (was 71x21)
+ok: the small-target scan at 390 px does not list "Use 1,200"
+other small targets on the Areas step: Skip to content 32x24
+ok: "Use 1,200" puts the measured size back
+ok: with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)
+ok: and Good is not
+ok: the dock's headline is Best's $5,270: "RECOMMENDED $5,270 BEST Next : Send"
+ok: the estimator's email link on the quote is 100x48 px (was 100x20)
+other small targets on the customer quote: (555) 010-0199 130x22
+ok: $0.30 is "25% above the usual high of $0.24" (was "2.0 times more than the usual"), and not saved
+ok: a phone with no saved copy is not offered "Open the estimates on this phone" (it led back to /unreachable: count 1 before)
+ok: the phone that has its copy is offered it

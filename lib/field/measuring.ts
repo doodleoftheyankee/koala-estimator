@@ -1,7 +1,7 @@
 // What a measurement does to its area (L26, RF-07): a finished one sets the square feet; one that
 // breaks takes back the size it gave, so the area is Incomplete and not priced until it is finished,
 // and the estimator is shown where to finish it. Pure; app/field/AreasStep uses it.
-import { sqftAfterMeasurement, unfinishedReason, type Measurement } from '@/lib/measure/measure';
+import { firstUnfinishedField, sqftAfterMeasurement, unfinishedReason, type Measurement } from '@/lib/measure/measure';
 import { areaSchema, type EstimateDraft } from '@/lib/sync/draft';
 import type { Fix } from './fix';
 
@@ -40,7 +40,8 @@ export function measurementChecks(d: Pick<EstimateDraft, 'areas' | 'measurements
       areaId: a.id,
       ok: false,
       label: `${a.name.trim() || 'This area'}: the measurement isn't finished, so this area isn't priced. ${why}`,
-      fix: { label: 'Finish measuring', target: { step: 'areas', areaId: a.id, open: 'measure' } },
+      // The sheet opens with the cursor in the first thing to finish (review B flow-B12).
+      fix: { label: 'Finish measuring', target: { step: 'areas', areaId: a.id, open: 'measure', field: firstUnfinishedField(m) } },
     });
   }
   return out;
