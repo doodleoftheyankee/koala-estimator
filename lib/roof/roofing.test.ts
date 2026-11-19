@@ -287,6 +287,15 @@ describe('the report and the summary', () => {
     expect(REPORT_FOOTER).toBe('Estimates from Google aerial imagery. Verify on site.');
   });
 
+  it('a low-slope face never reads 2/12 (L29, S3-F22)', () => {
+    const r = crossGable();
+    const low = { ...r, segments: r.segments.map((s) => (s.n === 5 ? { ...s, rise: 1.96, lowSlope: true } : s)) };
+    const d = takeoffData(low, choices(12, [5]), 15, noon);
+    expect(d.faces.find((f) => f.n === 5)).toMatchObject({ pitch: '1.9/12', lowSlope: true });
+    expect(summaryText(d)).toContain('  5. 1.9/12 (low slope), faces south');
+    expect(summaryText(d)).not.toContain('2/12 (low slope)');
+  });
+
   it('lists the warnings and says when the edges were not measured', () => {
     const r = elkton();
     const none = { ...r, edges: [], edgeTotalsM: Object.fromEntries(EDGE_TYPES.map((k) => [k, 0])) as RoofResult['edgeTotalsM'] };

@@ -555,8 +555,25 @@ describe('words', () => {
     // A nearly flat roof is said in tenths, as pitchText says it: 0.5/12, not 1/12 or 0/12.
     expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(0.5);
     expect(mainPitch([seg(1, 0.3, 300)])).toBe(0.3);
-    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(2);
+    // A low-slope face is never counted as 2/12 (L29): 1.96 is 1.9/12, its own pitch, not 2/12 with the 2.4 face.
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(6);
     expect(mainPitch([])).toBeNull();
+  });
+
+  it('low slope reads under 2/12 (L29, S3-F22)', () => {
+    expect(pitchText(1.96)).toBe('1.9/12');
+    expect(pitchText(1.999)).toBe('1.9/12');
+    expect(pitchText(1.94)).toBe('1.9/12');
+    expect(pitchText(1.86)).toBe('1.9/12');
+    expect(pitchText(2)).toBe('2/12');
+    expect(pitchText(2.04)).toBe('2/12');
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50)])).toBe(1.9);
+    expect(pitchText(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50)])!)).toBe('1.9/12');
+    // Worked out from the angle: 9.45 degrees is a rise of 1.997, a low slope that reads 1.9/12.
+    const t = clone(fixture);
+    t.segments = t.segments.map((s) => ({ ...s, pitchDeg: 9.45, rise: undefined, lowSlope: undefined })) as unknown as typeof t.segments;
+    const r = compactTakeoff(takeoffSchema.parse(t));
+    expect(r.segments.every((s) => s.lowSlope && s.rise < 2 && pitchText(s.rise) === '1.9/12')).toBe(true);
   });
 
   it('pitch and direction', () => {

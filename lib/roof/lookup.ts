@@ -219,6 +219,11 @@ function thin(ring: LatLng[], max = MAX_RING_POINTS): LatLng[] {
   return (k > 1 ? ring.filter((_, i) => i % k === 0) : ring).map(point);
 }
 
+/** The most a pitch under 2/12 (a low slope) is shown as: 1.96 is 1.9/12, never 2/12 (L29). */
+export const LOW_SLOPE_MAX_SHOWN = 1.9;
+/** A rise as it is shown and grouped: whole numbers from 2/12 up, tenths below, never 2 for a low slope. */
+const shownRise = (rise: number) => (rise >= 2 ? Math.round(rise) : Math.min(LOW_SLOPE_MAX_SHOWN, round(rise, 1)));
+
 /** Rise per 12 from a pitch in degrees. */
 export const riseFromDegrees = (deg: number) => 12 * Math.tan((deg * Math.PI) / 180);
 
@@ -246,8 +251,12 @@ function edgeTotals(t: Pick<Takeoff, 'edgeTotalsM'>, edges: readonly RoofEdge[])
 /** The compact result kept from a validated takeoff. */
 export function compactTakeoff(t: Takeoff): RoofResult {
   const segments: RoofSegment[] = t.segments.map((s) => {
-    const rise = s.rise ?? round(riseFromDegrees(s.pitchDeg), 1);
-    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope: s.lowSlope ?? rise < 2, lower: s.lower ?? false, center: s.center ? point(s.center) : null };
+    // Low slope is decided on the rise before rounding, and a low-slope rise worked out from the
+    // angle is never rounded up to 2/12 (L29): 9.45 degrees is 1.997, kept as 1.9.
+    const exact = s.rise ?? riseFromDegrees(s.pitchDeg);
+    const lowSlope = s.lowSlope ?? exact < 2;
+    const rise = s.rise ?? (lowSlope ? Math.min(LOW_SLOPE_MAX_SHOWN, round(exact, 1)) : round(exact, 1));
+    return { n: s.n, rise, azimuthDeg: s.azimuthDeg, areaM2: s.areaM2, groundM2: s.groundM2, lowSlope, lower: s.lower ?? false, center: s.center ? point(s.center) : null };
   });
   const known = new Set(segments.map((s) => s.n));
   const roofM2 = segments.length ? segments.reduce((sum, s) => sum + s.areaM2, 0) : (t.building.faces?.areaM2 ?? t.building.whole?.areaM2 ?? 0);
@@ -343,12 +352,13 @@ export function deckM2(floorM2: number, included: readonly Pick<RoofSegment, 'ar
 
 /**
  * The main pitch: the rise whose faces cover the most ground, as pitchText says it (whole numbers
- * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12). Null with no faces.
+ * from 2/12 up, tenths below, so a nearly flat roof is 0.3/12, not 0/12, and a low slope is never
+ * counted as 2/12). Null with no faces.
  */
 export function mainPitch(segments: readonly RoofSegment[]): number | null {
   const ground = new Map<number, number>();
   for (const s of segments) {
-    const r = s.rise >= 2 ? Math.round(s.rise) : round(s.rise, 1);
+    const r = shownRise(s.rise);
     ground.set(r, (ground.get(r) ?? 0) + s.groundM2);
   }
   let best: number | null = null;
@@ -424,9 +434,9 @@ export const roundSqft = (sqft: number) => Math.round(sqft / 10) * 10;
 export const roundFt = (ft: number) => Math.round(ft);
 const comma = (n: number) => n.toLocaleString('en-US');
 
-/** Rise as the estimator says it: 6/12, or 1.5/12 for a low slope. */
+/** Rise as the estimator says it: 6/12, or 1.5/12 for a low slope. Under 2/12 never reads 2/12: 1.96 is 1.9/12 (L29). */
 export function pitchText(rise: number): string {
-  return `${rise >= 2 ? Math.round(rise) : round(rise, 1)}/12`;
+  return `${shownRise(rise)}/12`;
 }
 
 const DIRECTIONS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'] as const;
