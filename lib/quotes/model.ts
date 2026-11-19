@@ -183,8 +183,9 @@ export function buildQuoteDocument(args: {
       price: o.price,
       financing: o.financing,
     })),
-    // Only an option the quote carries can be recommended (OD1): the estimator's pick, or when it
-    // is not shown (OD6) the next option shown; with no pick, Better, else the first (lib/field/recommended.ts).
+    // Only an option the quote carries can be recommended (OD1): the estimator's pick, with no pick
+    // Better (OD15); when that one is not shown (OD6), the option shown doing the same work, else the
+    // nearest shown above it, else the nearest below (lib/field/recommended.ts).
     recommendedTier: recommendedTier(args.options, draft.selectedTier)?.tier ?? null,
     notes: draft.notes?.trim() || null,
     terms: args.terms,

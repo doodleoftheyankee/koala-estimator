@@ -286,7 +286,8 @@ export function headlineInputFor(draft: EstimateDraft, priced: PricedEstimate, b
 
 /**
  * The headline every list should show (OD1): the recommended option's price, recommended being
- * the option the estimator picked, else Better, else the first option (lib/field/recommended.ts).
+ * the option the estimator picked, else Better (OD15), moved to a shown option when that one is not
+ * shown (lib/field/recommended.ts).
  */
 export function expectedHeadline(h: HeadlineInput): { tier: Tier; price: number } | null {
   if (h.signedPrice !== null) {
