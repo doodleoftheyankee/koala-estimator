@@ -7,6 +7,7 @@ import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
+import { recommendedTier } from '@/lib/field/recommended';
 import { profileGapsSentence } from '@/lib/quotes/profile';
 import { formatDateTime, usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
@@ -54,6 +55,8 @@ export function SendStep({
   // The business profile's gaps, as the phone last downloaded them (the server checks again on send: L30).
   const profileGaps = bundle?.business?.gaps ?? [];
   const canFixProfile = profile.role === 'owner' || profile.role === 'office';
+  // The option the quote will recommend (OD1): the pick, the next one shown if it is hidden, else Better.
+  const recommended = recommendedTier(options, draft.selectedTier)?.tier ?? null;
 
   const checks: Array<{ ok: boolean; label: string }> = [
     { ok: !blocker, label: blocker ?? 'Customer, address and areas complete' },
@@ -206,7 +209,7 @@ export function SendStep({
               <li key={o.tier} className="flex justify-between text-sm">
                 <span>
                   {o.label}
-                  {draft.selectedTier === o.tier ? <Icon icon={Star} size="xs" label="Recommended" className="ml-1 inline-block fill-current align-[-2px]" /> : null}
+                  {recommended === o.tier ? <Icon icon={Star} size="xs" label="Recommended" className="ml-1 inline-block fill-current align-[-2px]" /> : null}
                 </span>
                 <span className="font-semibold">{usd(o.price)}</span>
               </li>

@@ -63,6 +63,8 @@ await page.screenshot({ path: SHOTS + '01-list.png' });
 
 step('create estimate');
 await page.getByRole('button', { name: 'New estimate', exact: true }).click();
+// No town in the business profile yet: a new estimate starts in the shop address's town (L32).
+check((await page.getByLabel('City').inputValue()) === 'Newark' && (await page.getByLabel('State').inputValue()) === 'DE', 'a new estimate starts in the town of the shop address in the settings');
 await page.getByLabel('First name').fill('Pat');
 await page.getByLabel('Last name').fill('Lee');
 await page.getByLabel('Email').fill('pat@example.com');
@@ -278,11 +280,56 @@ const after = await page.locator('p.text-2xl').allTextContents();
 console.log('  prices after the change', after);
 check(after.every((p, i) => num(p) > num(prices[i])), 'more labor raises every option that has the line');
 
-step('send');
+step('send: not while the business profile has a gap (L30)');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.waitForTimeout(3500); // let auto-sync run
 await page.screenshot({ path: SHOTS + '05a-send-step.png', fullPage: true });
 console.log('  send checklist:', (await page.locator('body').innerText()).split('\n').filter((l) => l.trim()).slice(0, 40).join(' | '));
+// The seeded settings have a placeholder warranty and no license, phone or state.
+const GAPS = 'The business profile is not finished: add the license number, the office phone, the state and the warranty.';
+check((await page.getByText(GAPS, { exact: true }).count()) === 1, 'the Send checklist says the business profile is not finished, and what it needs');
+check((await page.getByText('Ask the owner or the office to finish the business profile.').count()) === 1, 'and tells the estimator who can finish it');
+check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'Send waits for the profile');
+const gateEst = psql("select id from estimates order by created_at desc limit 1");
+{
+  const res = await ctx.request.post(BASE + '/api/quotes', { data: { estimateId: gateEst, expectedPrices: {} } });
+  const body = await res.json();
+  check(res.status() === 409 && body.error === 'setup_incomplete' && body.message === GAPS, `the server refuses to send it too: ${res.status()} ${body.error}`);
+  check(psql(`select count(*) from quotes where estimate_id = '${gateEst}'`) === '0', 'and no quote was made');
+}
+
+step('the owner finishes the business profile (L30, L31)');
+const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.test' };
+{
+  const bctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await bctx.addCookies([sessionCookie(OWNER)]);
+  const bp = await bctx.newPage();
+  bp.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
+  bp.on('console', (m) => m.type() === 'error' && logs.push(`${m.text()} (${m.location().url})`));
+  await bp.goto(BASE + '/admin/business');
+  check((await bp.getByText(GAPS, { exact: true }).count()) === 1, 'the Business profile page names the same gaps');
+  await bp.screenshot({ path: SHOTS + '05b-business-profile-gaps.png', fullPage: true });
+  await bp.getByLabel('License number').fill('HIC 77-0042');
+  await bp.getByLabel('Office phone').fill('(555) 010-0199');
+  await bp.getByLabel('State').fill('de');
+  await bp.getByLabel('Warranty').fill('Two years on workmanship. Materials carry the maker’s warranty.');
+  await bp.getByRole('button', { name: 'Save the business profile' }).click();
+  await bp.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+  await bp.reload();
+  check((await bp.getByText('Everything a quote needs is filled in.').count()) === 1, 'once saved, everything a quote needs is filled in');
+  const preview = await bp.locator('main').innerText();
+  check(preview.includes('(ESIGN Act and Delaware UETA)') && /KN-\d{4}-0001-v1/.test(preview), 'the page shows the signing sentence with the state and how quote numbers read');
+  check(psql("select value #>> '{}' from app_settings where key = 'default_state'") === 'DE', 'the state is saved as its two capitals');
+  await bp.screenshot({ path: SHOTS + '05c-business-profile.png', fullPage: true });
+  await bctx.close();
+}
+// The phone learns the profile is finished with its next download (here: opening the app again).
+await page.reload();
+await page.getByRole('button', { name: /^4 Send/ }).click();
+await page.getByText('Business profile finished (name, phone, license, warranty and terms)').waitFor({ timeout: 15000 });
+check(true, 'the phone sees the finished profile with its next download');
+
+step('send');
 await page.getByRole('button', { name: /Send quote to customer/ }).click();
 await page.getByText(/Quote v1 sent/).waitFor({ timeout: 30000 });
 const link = await page.locator('a[href*="/q/"]').first().getAttribute('href');
@@ -316,6 +363,21 @@ const cp = await cust.newPage();
 cp.on('pageerror', (e) => logs.push('CUSTOMER PAGEERROR ' + e.message));
 await cp.goto(link);
 await cp.screenshot({ path: SHOTS + '06-customer-quote.png', fullPage: true });
+{
+  // The number comes from the counter (L12), "Valid until" is the business-zone day the link stops (L13),
+  // and the signing sentence names the profile's state (L31).
+  const year = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }).slice(0, 4);
+  const number = psql(`select snapshot->'document'->>'quoteNumber' from quotes where estimate_id = '${estId}'`);
+  check(number === `KN-${year}-0001-v1`, `the first quote of the year is number 0001: ${number}`);
+  check((await cp.getByText(number, { exact: true }).count()) > 0, 'the customer sees that number');
+  check(
+    psql(`select (snapshot->'document'->>'validUntil') = to_char(expires_at at time zone 'America/New_York', 'YYYY-MM-DD') from quotes where estimate_id = '${estId}'`) === 't',
+    '"Valid until" is the business-zone date the link stops working',
+  );
+  check((await cp.getByText(/\(ESIGN Act and Delaware UETA\)/).count()) === 1, 'the signing sentence names the state in the business profile');
+  const accept = (await cp.getByText(/^You are accepting/).innerText()).trim();
+  check(/ for \$[\d,]+\.$/.test(accept), `the accept sentence reads the price in whole dollars: "${accept}"`);
+}
 const signBar = cp.getByRole('complementary', { name: 'Your choice' });
 check(/better/i.test(await signBar.innerText()) && (await cp.getByRole('radio', { checked: true }).innerText()).includes((await signBar.innerText()).match(/\$[\d,]+/)?.[0] ?? '?'), 'the sign bar shows the recommended option and its price');
 await cp.getByRole('button', { name: 'Review and sign' }).click();
@@ -333,6 +395,12 @@ await cp.getByRole('button', { name: /^Sign and accept/ }).click();
 // The thank-you heading (the quote's terms also say "signed", so plain text would match too early).
 await cp.getByRole('heading', { name: /thank you/i }).waitFor({ timeout: 30000 });
 await cp.screenshot({ path: SHOTS + '07-signed.png', fullPage: true });
+{
+  // Email is not set up in this stack, so nothing says it was emailed (L33); the price is whole dollars (L8).
+  const thanks = await cp.locator('main').innerText();
+  check(thanks.includes('Download your signed copy below.') && !/emailed/i.test(thanks), 'with email not set up, the thank-you page points to the download, not to an email');
+  check(/You accepted .* for \$[\d,]+\. /.test(thanks) && !/\$[\d,]+\.\d\d/.test(thanks), 'and reads the price in whole dollars');
+}
 
 step('db checks after signing');
 check(psql("select count(*) from estimate_lines where is_overridden and override_reason like 'Low clearance%'") !== '0', 'overridden line synced with its reason');
@@ -340,6 +408,7 @@ check(psql("select count(*) from deviation_flags where ack_note like 'Knee walls
 check(psql("select count(*) from jobs") === '1', 'signing created a job');
 console.log('  estimate:', psql("select status, selected_tier from estimates"));
 console.log('  quote:', psql("select version, status, signed_tier, signed_price, signer_name, signed_pdf_path is not null from quotes"));
+check(psql("select esign_audit->>'consentText' like '%(ESIGN Act and Delaware UETA)%' from quotes where status = 'signed'") === 't', 'the e-sign record keeps the sentence the customer agreed to');
 console.log('  events:', psql("select string_agg(event, ',' order by id) from quote_events"));
 console.log('  audit:', psql("select string_agg(distinct action, ',') from audit_log where action like '%.%'"));
 
@@ -944,7 +1013,6 @@ console.log('  db after reconnect:', psql("select count(*) || ' estimates; ' || 
 await page.screenshot({ path: SHOTS + '10-synced-list.png' });
 
 step('owner screens');
-const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.test' };
 const octx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await octx.addCookies([sessionCookie(OWNER)]);
 const op = await octx.newPage();
@@ -952,13 +1020,18 @@ op.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
 await op.goto(BASE + '/estimates');
 await op.screenshot({ path: SHOTS + '11-estimates.png', fullPage: true });
 {
-  // The office list shows the price it always has: the recommended option's price, else the
-  // stored model price (Sam Offline has no recommended option). Its figures add up exactly the
-  // rows they name.
+  // The office list shows the recommended option's price (OD1, L9): the pick, else Better (Sam
+  // Offline has no pick), the same option the phone and the quote recommend. Its figures add up
+  // exactly the rows they name.
   const money = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
-  const headline = Number(psql("select coalesce((select o.price from estimate_options o where o.estimate_id = e.id and o.tier = e.selected_tier), e.model_total_price) from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Offline'"));
+  const headline = Number(psql("select o.price from estimates e join customers c on c.id = e.customer_id join estimate_options o on o.estimate_id = e.id and o.tier = coalesce(e.selected_tier, 'better') where c.last_name = 'Offline'"));
   const offlineRow = op.getByRole('row', { name: /Sam Offline/ });
-  check((await offlineRow.innerText()).includes(money(headline)), `the office list shows the stored price ${money(headline)} (recommended option, else the model price)`);
+  check(psql("select selected_tier is null from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Offline'") === 't', 'Sam Offline has no option picked');
+  check((await offlineRow.innerText()).includes(money(headline)) && /better/i.test(await offlineRow.innerText()), `the office list shows Better's price ${money(headline)}, the recommended option`);
+  check(
+    psql("select e.model_total_price = o.model_price from estimates e join customers c on c.id = e.customer_id join estimate_options o on o.estimate_id = e.id and o.tier = 'better' where c.last_name = 'Offline'") === 't',
+    'and the stored model total is the recommended option\'s model price',
+  );
   const signedSum = Number(psql("select sum(signed_price) from quotes where status = 'signed'"));
   const figures = await op.getByRole('region', { name: 'Figures for this list' }).innerText();
   check(figures.includes(money(signedSum)) && /1 quote, signed by the customer/.test(figures), `the Signed figure is the signed quotes' total, ${money(signedSum)}`);
