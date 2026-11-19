@@ -13,9 +13,9 @@ import { CircleCheck } from '@/components/daymark/icons';
 import { priceEstimate } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
-import { ESIGN_CONSENT } from './consent';
+import { consentFor, esignConsent, LEGACY_ESIGN_CONSENT } from './consent';
 import { financingLine } from './email';
-import { buildQuoteDocument, formatUsd, type Branding, type QuoteDocument } from './model';
+import { buildQuoteDocument, isLegacyDocument, quoteMoney, sentenceMoney, type Branding, type QuoteDocument } from './model';
 
 const html = (el: ReactElement) => renderToStaticMarkup(el);
 
@@ -41,13 +41,23 @@ function makeDoc(branding: Branding = BRAND): QuoteDocument {
     draft: d,
     options: priced.options,
     version: 1,
+    quoteNumber: 'AA-2026-0001-v1',
     issuedAt: new Date('2026-10-20T12:00:00Z'),
     validDays: 30,
     branding,
     estimator: { name: 'Sam Rivera', email: 'sam@acme.example' },
     terms: 'Terms as the franchise wrote them.',
     warranty: 'Warranty as the franchise wrote it.',
+    consent: esignConsent('IL'),
   });
+}
+
+/** The same document as one sent before the accuracy round (no format, no consent of its own). */
+function sentBefore(doc: QuoteDocument): QuoteDocument {
+  const copy: Partial<QuoteDocument> = { ...doc };
+  delete copy.format;
+  delete copy.consent;
+  return copy as QuoteDocument;
 }
 
 /** The page's option views, built the way page.tsx builds them. */
@@ -74,6 +84,8 @@ function form(doc: QuoteDocument, opts: Partial<{ options: QuoteOptionView[]; ti
       pdfHref: '/api/public/quotes/x/pdf',
       quoteNumber: doc.quoteNumber,
       validUntil: doc.validUntil,
+      consentText: consentFor(doc),
+      centsInSentences: isLegacyDocument(doc),
       intro: createElement(QuoteIntro, { doc }),
       contacts: createElement(ContactCard, { estimator: doc.estimator, branding: doc.branding }),
     }),
@@ -86,9 +98,12 @@ const HIVIS_FILL = /class="[^"]*(?<![\w:-])bg-hivis(?![\w-])/g;
 describe('quote page figures come from the quote, formatted as before', () => {
   it('whole dollars and exact cents match the PDF and the old page', () => {
     for (const n of [0, 5, 999.5, 3220, 4094.08, 5060, 12345.67]) {
-      expect(price(n)).toBe(formatUsd(n));
-      expect(priceExact(n)).toBe(formatUsd(n, true));
+      expect(price(n)).toBe(quoteMoney(n));
+      // Cents only in the sentences of a quote sent before the accuracy round (L8, hard rule 1).
+      expect(priceExact(n)).toBe(sentenceMoney({}, n));
     }
+    expect(priceExact(5060)).toBe('$5,060.00');
+    expect(price(5060)).toBe('$5,060');
   });
 
   it('the intro says when the quote was issued, as the PDF does (RC-6)', () => {
@@ -228,17 +243,27 @@ describe('the open quote', () => {
     expect(out).toContain('As low as $102/mo for 60 months at 9.99% APR, subject to credit approval. Financing through Lender.');
   });
 
-  it('keeps the signing form legally identical', () => {
+  it('keeps the signing form legally identical, with the quote\'s own consent sentence and one price (L8, L31)', () => {
     const out = form(doc);
     const better = doc.options.find((o) => o.tier === 'better')!;
-    expect(out).toContain(ESIGN_CONSENT.replace(/'/g, '&#x27;'));
+    expect(out).toContain(esignConsent('IL').replace(/'/g, '&#x27;'));
     expect(out.match(/type="checkbox"/g)).toHaveLength(1);
     expect(out).toContain('Your full name');
     expect(out).toContain('autoComplete="name"');
     expect(out).toContain('aria-label="Signature pad: draw your signature with your finger or mouse"');
     expect(out).toContain(`Sign and accept ${price(better.price)}`);
-    expect(out).toContain(priceExact(better.price));
+    expect(out).toContain(`for <strong class="font-extrabold">${price(better.price)}</strong>.`);
+    expect(out).not.toContain(priceExact(better.price));
     expect(out.match(/<canvas/g)).toHaveLength(1);
+  });
+
+  it('a quote sent before keeps its sentence and its cents in the accept sentence (hard rule 1)', () => {
+    const old = sentBefore(doc);
+    const out = form(old);
+    const better = old.options.find((o) => o.tier === 'better')!;
+    expect(out).toContain(LEGACY_ESIGN_CONSENT.replace(/'/g, '&#x27;'));
+    expect(out).toContain(`for <strong class="font-extrabold">${priceExact(better.price)}</strong>.`);
+    expect(out).toContain(`Sign and accept ${price(better.price)}`);
   });
 
   it('the signature pad stays paper-white in every theme (Day, quiet, on the pad itself)', () => {
@@ -251,9 +276,9 @@ describe('the open quote', () => {
     for (const s of ['Acme Attics of Springfield', '(555) 010-0199', 'License HIC 77-0042', 'Sam Rivera', 'Robin Vale', '9 Elm Ct, Springfield, IL 62701', doc.quoteNumber]) {
       expect(out).toContain(s);
     }
-    // The consent text is the legal library's (lib/quotes/consent.ts), not this page's.
-    const page = out.replace(ESIGN_CONSENT.replace(/'/g, '&#x27;'), '');
-    expect(page).not.toMatch(/Newark|Delaware|\(302\)|Koala Insulation/);
+    // The consent text is the quote's own (from the business profile's state), not this page's.
+    expect(out).toContain('Illinois UETA');
+    expect(out).not.toMatch(/Newark|Delaware|\(302\)|Koala Insulation/);
   });
 });
 
@@ -323,10 +348,16 @@ describe('closed states', () => {
     expect(html(createElement(ContactCard, { estimator: doc.estimator, branding: none }))).not.toContain(BRAND.company);
   });
 
-  it('a signed quote shows the signed price to the cent', () => {
+  it('a signed quote shows the signed price in whole dollars, as the PDF does (L8)', () => {
     const out = html(createElement(SignedSummary, { tier: 'better', label: 'Air Seal + Blown Cellulose', price: 5060 }));
-    expect(out).toContain('$5,060.00');
+    expect(out).toContain('$5,060<');
+    expect(out).not.toContain('$5,060.00');
     expect(out).toContain('Signed');
+  });
+
+  it('a quote sent before shows its signed price to the cent, as it did (hard rule 1)', () => {
+    const out = html(createElement(SignedSummary, { tier: 'better', label: 'Air Seal + Blown Cellulose', price: 5060, cents: true }));
+    expect(out).toContain('$5,060.00');
   });
 
   it('warranty and terms are the franchise’s own words, with the PDF', () => {

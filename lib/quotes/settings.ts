@@ -71,10 +71,17 @@ export function quoteSettingsFromRows(rows: Array<{ key: string; value: unknown 
 }
 
 export async function loadQuoteSettings(supabase: SupabaseClient): Promise<QuoteSettings> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('key, value')
-    .in('key', ['branding', 'quote_terms', 'warranty_text', 'quote_valid_days']);
+  return quoteSettingsFromRows(await loadQuoteSettingRows(supabase));
+}
+
+/**
+ * Every setting a quote is built from: what quoteSettingsFromRows reads, and the business profile
+ * (lib/quotes/profile.ts: the state, the town, the quote number prefix and the shop address).
+ */
+export const QUOTE_SETTING_KEYS = ['branding', 'quote_terms', 'warranty_text', 'quote_valid_days', 'default_city', 'default_state', 'quote_number_prefix', 'shop_address'] as const;
+
+export async function loadQuoteSettingRows(supabase: SupabaseClient): Promise<Array<{ key: string; value: unknown }>> {
+  const { data, error } = await supabase.from('app_settings').select('key, value').in('key', [...QUOTE_SETTING_KEYS]);
   if (error) throw new Error(`Loading quote settings failed: ${error.message}`);
-  return quoteSettingsFromRows((data ?? []) as Array<{ key: string; value: unknown }>);
+  return (data ?? []) as Array<{ key: string; value: unknown }>;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { draftSchema, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { withDraftDefaults } from './draft';
 
-const base = () => newDraft(new Date('2026-10-20T12:00:00Z'), () => crypto.randomUUID());
+const base = () => newDraft(new Date('2026-10-20T12:00:00Z'), () => crypto.randomUUID(), { city: 'Springfield', state: 'IL' });
 
 /** A draft as the Phase 1 app stored it: no lineOverrides, no deviationAcks. */
 function legacyDraft(): EstimateDraft {

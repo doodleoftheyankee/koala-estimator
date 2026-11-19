@@ -7,6 +7,7 @@ import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
+import { profileGapsSentence } from '@/lib/quotes/profile';
 import { formatDateTime, usd } from '@/lib/format';
 import { Alert, Button, Card } from '@/components/ui';
 import { Check, Circle, Icon, Star } from '@/components/daymark';
@@ -16,7 +17,7 @@ type SendResult =
   | { kind: 'idle' }
   | { kind: 'busy'; msg: string }
   | { kind: 'done'; url: string; emailed: boolean; version: number }
-  | { kind: 'error'; msg: string; reasons?: string[] }
+  | { kind: 'error'; msg: string; reasons?: string[]; profile?: boolean }
   /** The server found changes from the model without a note (409 unacknowledged_flags). */
   | { kind: 'flags'; msg: string; flags: Array<{ key: string; message: string }> };
 
@@ -50,6 +51,9 @@ export function SendStep({
   const blocker = syncBlocker(draft);
   const policy = bundle && options.length ? canSendQuote(profile.role, options, bundle.snapshot.settings) : null;
   const pendingFlags = unacknowledgedFlags(flags, draft.deviationAcks);
+  // The business profile's gaps, as the phone last downloaded them (the server checks again on send: L30).
+  const profileGaps = bundle?.business?.gaps ?? [];
+  const canFixProfile = profile.role === 'owner' || profile.role === 'office';
 
   const checks: Array<{ ok: boolean; label: string }> = [
     { ok: !blocker, label: blocker ?? 'Customer, address and areas complete' },
@@ -61,6 +65,10 @@ export function SendStep({
       label: pendingFlags.length
         ? `Every change from the model is explained (${pendingFlags.length} still ${pendingFlags.length === 1 ? 'needs' : 'need'} a note)`
         : 'Every change from the model is explained',
+    },
+    {
+      ok: profileGaps.length === 0,
+      label: profileGaps.length ? profileGapsSentence(profileGaps) : 'Business profile finished (name, phone, license, warranty and terms)',
     },
     { ok: online, label: online ? 'Online' : 'Offline. Sending needs a connection; your work is saved.' },
   ];
@@ -113,6 +121,8 @@ export function SendStep({
           setResult({ kind: 'error', msg: 'Prices changed since this phone last downloaded pricing. Review the Options tab, then send again.' });
         } else if (body.error === 'policy') {
           setResult({ kind: 'error', msg: 'This quote needs approval before it can be sent.', reasons: body.reasons });
+        } else if (body.error === 'setup_incomplete') {
+          setResult({ kind: 'error', msg: `Not sent. ${body.message ?? 'The business profile is not finished.'}`, profile: true });
         } else setResult({ kind: 'error', msg: body.message ?? body.error ?? 'Sending failed.' });
         return;
       }
@@ -143,6 +153,20 @@ export function SendStep({
             </li>
           ))}
         </ul>
+        {profileGaps.length ? (
+          <div className="mt-3">
+            <Alert tone="amber">
+              <p>Quotes go out with the company&rsquo;s name, phone, license, warranty and terms, so none can be sent until they are filled in.</p>
+              {canFixProfile ? (
+                <a className="mt-2 inline-flex min-h-12 items-center font-semibold underline" href="/admin/business">
+                  Open the business profile
+                </a>
+              ) : (
+                <p className="mt-1">Ask the owner or the office to finish the business profile.</p>
+              )}
+            </Alert>
+          </div>
+        ) : null}
         {policy && !policy.ok ? (
           <div className="mt-3">
             <Alert tone="amber">
@@ -195,6 +219,15 @@ export function SendStep({
       {result.kind === 'error' ? (
         <Alert tone="red">
           <p>{result.msg}</p>
+          {result.profile ? (
+            canFixProfile ? (
+              <a className="mt-1 inline-flex min-h-12 items-center font-semibold underline" href="/admin/business">
+                Open the business profile
+              </a>
+            ) : (
+              <p className="mt-1">Ask the owner or the office to finish the business profile.</p>
+            )
+          ) : null}
           {result.reasons?.length ? (
             <ul className="mt-1 list-disc pl-4">
               {result.reasons.map((r) => (

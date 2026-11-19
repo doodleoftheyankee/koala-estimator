@@ -13,9 +13,9 @@
 // list cannot quietly go stale: when a surface changes, change its entry and priceTexts with it.
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SignForm } from '@/app/q/[token]/SignForm';
+import { SignedThanks, SignForm } from '@/app/q/[token]/SignForm';
 import { SignedSummary } from '@/app/q/[token]/parts';
-import { longDate, monthlyFigure, priceExact, tierName, type QuoteOptionView } from '@/app/q/[token]/quote-view';
+import { longDate, monthlyFigure, tierName, type QuoteOptionView } from '@/app/q/[token]/quote-view';
 import { businessDate, formatDateLong, formatMoney } from '@/lib/format';
 import { recommendedTier } from '@/lib/field/recommended';
 import { headlinePrice } from '@/lib/office/estimates';
@@ -23,8 +23,9 @@ import type { EstimateInput, PricedEstimate, PricingBundle, Tier } from '@/lib/p
 import { dollarsText, type Violation } from '@/lib/pricing/invariants';
 import type { EstimateDraft } from '@/lib/sync/draft';
 import { buildSyncPayload } from '@/lib/sync/payload';
+import { consentFor, esignConsent } from './consent';
 import { financingLine, officeSignedNotice, optionName, quoteEmail, signedConfirmationEmail } from './email';
-import { buildQuoteDocument, formatUsd, type QuoteDocument } from './model';
+import { buildQuoteDocument, counterQuoteNumber, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument } from './model';
 import { quoteSettingsFromRows } from './settings';
 
 export interface PriceSurface {
@@ -46,7 +47,7 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'option',
     file: 'app/q/[token]/SignForm.tsx',
-    line: 230,
+    line: 229,
     snippet: '{price(option.price)}',
     how: 'rendered',
   },
@@ -55,7 +56,7 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'option',
     file: 'app/q/[token]/SignForm.tsx',
-    line: 515,
+    line: 560,
     snippet: '`Sign and accept ${price(selected.price)}`',
     how: 'rendered',
   },
@@ -64,8 +65,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'option',
     file: 'app/q/[token]/SignForm.tsx',
-    line: 483,
-    snippet: '{priceExact(selected.price)}</strong>.',
+    line: 528,
+    snippet: '{centsInSentences ? priceExact(selected.price) : price(selected.price)}</strong>.',
     how: 'rendered',
   },
   signed_page: {
@@ -73,8 +74,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'signed',
     file: 'app/q/[token]/SignForm.tsx',
-    line: 441,
-    snippet: 'for {priceExact(selected.price)}.',
+    line: 370,
+    snippet: 'for {centsInSentences ? priceExact(option.price) : price(option.price)}.',
     how: 'rendered',
   },
   pdf: {
@@ -82,8 +83,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'option',
     file: 'lib/quotes/pdf.tsx',
-    line: 109,
-    snippet: '{formatUsd(option.price)}',
+    line: 106,
+    snippet: '{quoteMoney(option.price)}',
     how: 'formatter',
   },
   signed_pdf: {
@@ -91,8 +92,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'signed',
     file: 'lib/quotes/pdf.tsx',
-    line: 193,
-    snippet: '{formatUsd(signature.price, true)}',
+    line: 192,
+    snippet: '{sentenceMoney(doc, signature.price)}',
     how: 'formatter',
   },
   quote_email: {
@@ -100,8 +101,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'option',
     file: 'lib/quotes/email.ts',
-    line: 137,
-    snippet: 'formatUsd(o.price)',
+    line: 135,
+    snippet: 'quoteMoney(o.price)',
     how: 'rendered',
   },
   signed_email: {
@@ -109,8 +110,8 @@ export const PRICE_SURFACES = {
     audience: 'customer',
     reads: 'signed',
     file: 'lib/quotes/email.ts',
-    line: 174,
-    snippet: 'Price: <strong>${escapeHtml(formatUsd(price, true))}</strong><br>Property',
+    line: 172,
+    snippet: 'Price: <strong>${escapeHtml(sentenceMoney(doc, price))}</strong><br>Property',
     how: 'rendered',
   },
   office_email: {
@@ -118,8 +119,8 @@ export const PRICE_SURFACES = {
     audience: 'office',
     reads: 'signed',
     file: 'lib/quotes/email.ts',
-    line: 196,
-    snippet: '`Quote signed: ${doc.customer.name} - ${formatUsd(price)} (${doc.quoteNumber})`',
+    line: 194,
+    snippet: '`Quote signed: ${doc.customer.name} - ${quoteMoney(price)} (${doc.quoteNumber})`',
     how: 'rendered',
   },
   jobs_list: {
@@ -210,6 +211,8 @@ function signingPageText(doc: QuoteDocument, tier: Tier): string {
         pdfHref: '/quote.pdf',
         quoteNumber: doc.quoteNumber,
         validUntil: doc.validUntil,
+        consentText: consentFor(doc),
+        centsInSentences: isLegacyDocument(doc),
         intro: null,
         contacts: null,
       }),
@@ -233,7 +236,13 @@ export function priceTexts(doc: QuoteDocument, tier: Tier): Partial<Record<Surfa
   const signedMail = signedConfirmationEmail(doc, tier, option.price, 'https://example.com/signed.pdf');
   const officeMail = officeSignedNotice(doc, tier, option.price, '00000000-0000-4000-8000-000000000000');
   const subjectMoney = officeMail.subject.match(new RegExp(MONEY.source, 'g')) ?? ['(no amount in the subject)'];
-  const signedSummary = plainText(renderToStaticMarkup(createElement(SignedSummary, { tier, label: option.label, price: option.price })));
+  const legacy = isLegacyDocument(doc);
+  const signedSummary = plainText(renderToStaticMarkup(createElement(SignedSummary, { tier, label: option.label, price: option.price, cents: legacy })));
+  const thanks = plainText(
+    renderToStaticMarkup(
+      createElement(SignedThanks, { quoteNumber: doc.quoteNumber, name: 'Sample Customer', option, centsInSentences: legacy, emailed: true, pdfHref: '/quote.pdf', contacts: null }),
+    ),
+  );
   return {
     quote_page: uniq([
       moneyAfter(page, `${tierName(tier)} · Your choice`),
@@ -241,11 +250,10 @@ export function priceTexts(doc: QuoteDocument, tier: Tier): Partial<Record<Surfa
     ]),
     sign_button: [moneyAfter(page, 'Sign and accept')],
     accept_sentence: [moneyAfter(page, 'You are accepting')],
-    // The thank-you sentence is shown only after signing (component state), so it is read with
-    // the formatter it calls; the signed summary beside it is rendered.
-    signed_page: uniq([priceExact(option.price), MONEY.exec(signedSummary)?.[0] ?? '(no amount in the signed summary)']),
-    pdf: [formatUsd(option.price)],
-    signed_pdf: [formatUsd(option.price, true)],
+    // The thank-you after signing (SignedThanks, rendered) and the signed page's summary.
+    signed_page: uniq([moneyAfter(thanks, 'You accepted'), MONEY.exec(signedSummary)?.[0] ?? '(no amount in the signed summary)']),
+    pdf: [quoteMoney(option.price)],
+    signed_pdf: [sentenceMoney(doc, option.price)],
     quote_email: uniq([moneyAfter(plainText(quoteMail.html), anchor), moneyAfter(quoteMail.text, `- ${anchor}: `)]),
     signed_email: uniq([moneyAfter(plainText(signedMail.html), 'Price:'), moneyAfter(signedMail.text, 'Price:')]),
     office_email: uniq([...subjectMoney, moneyAfter(plainText(officeMail.html), 'Price:'), moneyAfter(officeMail.text, 'Price:')]),
@@ -407,19 +415,24 @@ export function sampleDraft(args: { id: string; input: EstimateInput; selectedTi
   };
 }
 
-/** The quote document the send route would build for this draft and these options (lib/quotes/model.ts, for real). */
+/**
+ * The quote document the send route would build for this draft and these options (lib/quotes/model.ts,
+ * for real), with a sample counter number and the consent sentence for a sample state.
+ */
 export function sampleQuote(draft: EstimateDraft, priced: PricedEstimate, issuedAt: Date | string, validDays: number): QuoteDocument {
   const settings = quoteSettingsFromRows([]);
   return buildQuoteDocument({
     draft,
     options: priced.options,
     version: 1,
+    quoteNumber: counterQuoteNumber('Q', 2026, 1, 1),
     issuedAt: new Date(issuedAt),
     validDays,
     branding: settings.branding,
     estimator: { name: 'Sample Estimator', email: null },
     terms: settings.terms,
     warranty: settings.warranty,
+    consent: esignConsent('PA'),
   });
 }
 

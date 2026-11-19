@@ -2,25 +2,32 @@
 // document or the franchise settings. Nothing here computes a price; every figure is formatted
 // from a value the pricing engine already put in the quote. Tested in lib/quotes/quote-page.test.ts.
 import type { Financing, Tier } from '@/lib/pricing';
-import { formatDate, formatDateLong, formatMoney, TIER_LABELS } from '@/lib/format';
-import type { Branding, QuoteOptionDoc } from '@/lib/quotes/model';
+import { calendarDay, formatDate, formatDateLong, formatDateTime, formatMoney, TIER_LABELS } from '@/lib/format';
+import { isLegacyDocument, quoteMoney, type Branding, type QuoteDocument, type QuoteOptionDoc } from '@/lib/quotes/model';
 
 export const tierName = (tier: Tier): string => TIER_LABELS[tier];
 
-/** Whole dollars, as the quote's option cards and its PDF show them ("$5,060"). */
-export const price = (n: number): string => formatMoney(n, { cents: 'never' });
+/** Whole dollars, as every price on a quote shows ("$5,060"; OD4): option cards, items, the PDF. */
+export const price = quoteMoney;
 
-/** Dollars and cents, for the legal sentences ("for $5,060.00"). */
+/**
+ * Dollars and cents ("for $5,060.00"): how the legal sentences of a quote sent before the
+ * accuracy round read, and still read (hard rule 1). New quotes print whole dollars there (L8).
+ */
 export const priceExact = (n: number): string => formatMoney(n, { cents: 'always' });
 
-/** A quote date. Date-only values ("2026-12-18") are read at noon UTC so the day never shifts. */
-function quoteDay(iso: string): string {
-  return iso.length === 10 ? `${iso}T12:00:00Z` : iso;
-}
-/** "Dec 18, 2026" (tiles). */
-export const shortDate = (iso: string): string => formatDate(quoteDay(iso));
+/** "Dec 18, 2026" (tiles). Date-only values ("2026-12-18") are read as that day. */
+export const shortDate = (iso: string): string => formatDate(calendarDay(iso));
 /** "December 18, 2026" (sentences). */
-export const longDate = (iso: string): string => formatDateLong(quoteDay(iso));
+export const longDate = (iso: string): string => formatDateLong(calendarDay(iso));
+
+/**
+ * When an expired quote's link stopped working, for its page (L13, OD11): the real date and time in
+ * the business zone ("Dec 17, 2026 · 9:30 PM"). A quote sent before the accuracy round said its
+ * printed "Valid until" date there and still does (hard rule 1).
+ */
+export const expiredOn = (doc: Pick<QuoteDocument, 'format' | 'validUntil'>, expiresAt: string): string =>
+  isLegacyDocument(doc) ? longDate(doc.validUntil) : formatDateTime(expiresAt);
 
 /** A tel: link for a phone number as the franchise typed it. */
 export const telHref = (phone: string): string => `tel:${phone.replace(/[^\d+]/g, '')}`;

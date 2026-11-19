@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LocalEstimate, SyncState } from '@/lib/offline/db';
 import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
-import { quoteNumber } from '@/lib/quotes/model';
+import { legacyQuoteNumber } from '@/lib/quotes/model';
 import {
   boardCounts,
   bySection,
@@ -122,10 +122,19 @@ describe('toRow', () => {
   });
 
   it('gives the quote number the customer sees, and the send time as the activity', () => {
+    // A quote sent before the counter (OD10): its number was never kept on the phone, so the old one is shown.
     const e = estimate({ status: 'sent', lastQuote: { quoteId: uuid(), version: 2, sentAt: '2026-11-17T14:12:00Z' } });
     const r = toRow(e, NOW);
-    expect(r.quoteNumber).toBe(quoteNumber(e.id, 2, new Date('2026-11-17T14:12:00Z')));
+    expect(r.quoteNumber).toBe(legacyQuoteNumber(e.id, 2, new Date('2026-11-17T14:12:00Z')));
     expect(r.activity).toBe('Quote v2 sent Nov 17 · 9:12 AM');
+  });
+
+  it('shows and finds the number a quote was sent with, from the counter (L12, OD10)', () => {
+    const e = estimate({ status: 'sent', lastQuote: { quoteId: uuid(), version: 1, sentAt: '2026-11-17T14:12:00Z', quoteNumber: 'KN-2026-0042-v1' } });
+    const r = toRow(e, NOW);
+    expect(r.quoteNumber).toBe('KN-2026-0042-v1');
+    expect(matchesSearch(r, '0042')).toBe(true);
+    expect(matchesSearch(r, 'kn 2026 0042')).toBe(true);
   });
 
   it('says when a sent quote has been changed since, instead of calling it sent', () => {

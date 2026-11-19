@@ -3,13 +3,14 @@ import { priceEstimate } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
 import { escapeHtml, financingLine, officeSignedNotice, quoteEmail, signedConfirmationEmail } from './email';
-import { buildQuoteDocument, DEFAULT_BRAND_COLOR, formatUsd } from './model';
+import { esignConsent } from './consent';
+import { buildQuoteDocument, DEFAULT_BRAND_COLOR, quoteMoney, type QuoteDocument } from './model';
 import { quoteSettingsFromRows } from './settings';
 
 const EVIL = '<script>alert("x")</script>';
 
 function makeDoc(firstName = 'Pat') {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'));
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, { city: 'Springfield', state: 'IL' });
   d.customer = { ...d.customer, firstName, lastName: 'Lee & Sons', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic'), sqft: 1000 }];
@@ -18,14 +19,24 @@ function makeDoc(firstName = 'Pat') {
     draft: d,
     options: priced.options,
     version: 1,
+    quoteNumber: 'Q-2026-0001-v1',
     issuedAt: new Date('2026-10-20T12:00:00Z'),
     validDays: 30,
     branding: { company: 'Koala', license: 'DE-123', phone: '302-555-0100', email: null, website: null, primaryColor: DEFAULT_BRAND_COLOR, logoUrl: null },
     estimator: { name: 'Sam', email: 'sam@example.com' },
     terms: 'T',
     warranty: 'W',
+    consent: esignConsent('IL'),
   });
 }
+
+/** The same document as one sent before the accuracy round (no format): it prints as it did then. */
+const sentBefore = (doc: QuoteDocument): QuoteDocument => {
+  const copy: Partial<QuoteDocument> = { ...doc };
+  delete copy.format;
+  delete copy.consent;
+  return copy as QuoteDocument;
+};
 
 describe('escapeHtml', () => {
   it('escapes the five HTML-significant characters', () => {
@@ -46,8 +57,8 @@ describe('quote email templates', () => {
     expect(t.html).toContain(`href="${url}"`);
     expect(t.text).toContain(url);
     for (const o of doc.options) {
-      expect(t.html).toContain(formatUsd(o.price));
-      expect(t.text).toContain(formatUsd(o.price));
+      expect(t.html).toContain(quoteMoney(o.price));
+      expect(t.text).toContain(quoteMoney(o.price));
     }
   });
 
@@ -67,21 +78,32 @@ describe('quote email templates', () => {
     expect(t.html).not.toContain('href="javascript:');
   });
 
-  it('signed confirmation includes the price, option and PDF link', () => {
+  it('signed confirmation includes the price in whole dollars, the option and the PDF link (L8)', () => {
     const doc = makeDoc();
     const o = doc.options.find((x) => x.tier === 'better')!;
     const t = signedConfirmationEmail(doc, 'better', o.price, 'https://x.example/pdf');
-    expect(t.html).toContain(formatUsd(o.price, true));
+    expect(t.html).toContain(`Price: <strong>${quoteMoney(o.price)}</strong>`);
     expect(t.html).toContain(escapeHtml(o.label));
     expect(t.html).toContain('https://x.example/pdf');
-    expect(t.text).toContain(formatUsd(o.price, true));
+    expect(t.text).toContain(`Price: ${quoteMoney(o.price)}\n`);
+    expect(t.text).not.toMatch(/\$[\d,]+\.\d\d/);
   });
 
-  it('office notice links to the estimate and shows the price', () => {
+  it('a quote sent before the accuracy round confirms its signed price to the cent, as it did (hard rule 1)', () => {
+    const doc = sentBefore(makeDoc());
+    const o = doc.options.find((x) => x.tier === 'better')!;
+    const t = signedConfirmationEmail(doc, 'better', o.price, 'https://x.example/pdf');
+    expect(t.text).toContain(`Price: ${quoteMoney(o.price)}.00`);
+    expect(officeSignedNotice(doc, 'good', 1234.5, 'x').text).toContain('Price: $1,234.50');
+  });
+
+  it('office notice links to the estimate and shows the price, the same in the subject and the body (L8)', () => {
     const doc = makeDoc();
-    const t = officeSignedNotice(doc, 'good', 1234.5, '0b6f2d1e-0000-4000-8000-000000000000');
+    const t = officeSignedNotice(doc, 'good', 4780, '0b6f2d1e-0000-4000-8000-000000000000');
     expect(t.html).toContain('/field?e=0b6f2d1e-0000-4000-8000-000000000000');
-    expect(t.text).toContain('$1,234.50');
+    expect(t.subject).toContain('- $4,780 (');
+    expect(t.text).toContain('Price: $4,780\n');
+    expect(t.html).toContain('Price: <strong>$4,780</strong>');
   });
 });
 

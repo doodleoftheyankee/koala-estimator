@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
 import { TIERS } from '@/lib/pricing';
-import { ESIGN_CONSENT } from '@/lib/quotes/consent';
+import { consentFor } from '@/lib/quotes/consent';
 import { officeSignedNotice, sendEmail, signedConfirmationEmail } from '@/lib/quotes/email';
 import { findQuoteByToken, isExpired } from '@/lib/quotes/lookup';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
@@ -104,7 +104,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
         esign_audit: {
           ip,
           userAgent,
-          consentText: ESIGN_CONSENT,
+          // The sentence the customer saw beside the checkbox: the quote's own (L31), or for a quote
+          // sent before quotes carried one, the sentence it was sent with.
+          consentText: consentFor(doc),
           documentSha256: quote.pdf_sha256,
           signedPdfSha256: sha256Hex(signedPdf),
           signatureSha256: sha256Hex(png),
@@ -127,27 +129,28 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
     const est = await admin.from('estimates').update({ status: 'signed', selected_tier: tier }).eq('id', quote.estimate_id);
     if (est.error) console.error('[sign] updating the estimate failed', est.error.message);
 
-    // Emails are best-effort: the signature is already recorded.
+    // Emails are best-effort: the signature is already recorded. The page says the signed copy was
+    // emailed only when it really was (L33).
+    let emailed = false;
     try {
       const pdfUrl = `${serverEnv.appUrl()}/api/public/quotes/${token}/pdf`;
-      const jobs: Array<Promise<unknown>> = [];
-      if (doc.customer.email) {
-        jobs.push(
-          sendEmail({
+      const customer = doc.customer.email
+        ? sendEmail({
             to: doc.customer.email,
             ...signedConfirmationEmail(doc, tier, option.price, pdfUrl),
             attachments: [{ filename: `${doc.quoteNumber}-signed.pdf`, content: signedPdf }],
-          }),
-        );
-      }
+          })
+        : Promise.resolve({ sent: false });
       const office = serverEnv.officeNotifyEmail();
+      const jobs: Array<Promise<unknown>> = [customer];
       if (office) jobs.push(sendEmail({ to: office, ...officeSignedNotice(doc, tier, option.price, quote.estimate_id) }));
-      await Promise.allSettled(jobs);
+      const [sent] = await Promise.allSettled(jobs);
+      emailed = sent?.status === 'fulfilled' && (sent.value as { sent: boolean }).sent === true;
     } catch (e) {
       console.error('[sign] email failed', e instanceof Error ? e.message : e);
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, emailed });
   } catch (e) {
     console.error('[sign] failed', e instanceof Error ? e.message : e);
     return NextResponse.json({ error: 'We could not record your signature. Please try again or call our office.' }, { status: 500 });

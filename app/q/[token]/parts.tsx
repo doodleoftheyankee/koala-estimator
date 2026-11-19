@@ -14,7 +14,7 @@ import { Download, Globe, Icon, Mail, Phone, type LucideIcon } from '@/component
 import { formatPhone } from '@/lib/format';
 import type { Tier } from '@/lib/pricing';
 import { DEFAULT_BRAND_COLOR, type Branding, type QuoteDocument } from '@/lib/quotes/model';
-import { initials, licenseLine, longDate, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
+import { initials, licenseLine, longDate, price as wholeDollars, priceExact, shortDate, telHref, tierName, webHref } from './quote-view';
 
 /** The page column: one column on phones, the wide two-column grid from 1024px. */
 export const PAGE = 'mx-auto w-full max-w-2xl px-4 lg:max-w-6xl';
@@ -295,8 +295,12 @@ export function PdfLink({ href, children }: { href: string; children: ReactNode 
   );
 }
 
-/** What was signed: the option, its name and the signed price (to the cent, as on the PDF). */
-export function SignedSummary({ tier, label, price }: { tier: Tier | null; label: string | null; price: number | null }) {
+/**
+ * What was signed: the option, its name and the signed price, in whole dollars as on the PDF (L8).
+ * `cents`: a quote sent before the accuracy round showed the signed price to the cent, and still
+ * does (hard rule 1).
+ */
+export function SignedSummary({ tier, label, price, cents = false }: { tier: Tier | null; label: string | null; price: number | null; cents?: boolean }) {
   return (
     <div className="plate p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -304,7 +308,7 @@ export function SignedSummary({ tier, label, price }: { tier: Tier | null; label
         <StatusBadge status="signed" />
       </div>
       {label ? <p className="mt-2 text-[20px] leading-tight font-extrabold text-ink">{label}</p> : null}
-      {price !== null ? <span className="gauge mt-3 block text-[44px] text-ink">{priceExact(price)}</span> : null}
+      {price !== null ? <span className="gauge mt-3 block text-[44px] text-ink">{cents ? priceExact(price) : wholeDollars(price)}</span> : null}
     </div>
   );
 }

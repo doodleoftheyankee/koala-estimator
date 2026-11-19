@@ -151,6 +151,14 @@ export interface PricingBundle {
   snapshot: PricingSnapshot;
   coefficientSet: CoefficientSet;
   winModel: WinModel | null;
+  /**
+   * What the phone needs to know about the business profile (app/api/bundle, lib/quotes/profile.ts
+   * businessInfo): the gaps that stop a quote from being sent, and the town and state a new
+   * estimate starts in. Outside the pricing hash: it never changes a price.
+   */
+  business?: { gaps: string[]; newEstimate: { city: string; state: string } };
+  /** The ETag the bundle was served with (the pricing hash and the business info), for the next refresh. */
+  etag?: string;
 }
 
 // ---------------------------------------------------------------------------

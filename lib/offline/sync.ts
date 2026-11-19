@@ -65,7 +65,9 @@ async function pushAll(): Promise<void> {
 export async function refreshBundle(): Promise<PricingBundle | null> {
   const cached = await getCachedBundle();
   try {
-    const res = await fetch('/api/bundle', { headers: cached ? { 'If-None-Match': `"${cached.hash}"` } : {} });
+    // The bundle's own ETag covers the pricing hash and the business profile; a bundle cached before
+    // it carried one is fetched again.
+    const res = await fetch('/api/bundle', { headers: cached ? { 'If-None-Match': cached.etag ?? `"${cached.hash}"` } : {} });
     if (res.status === 401) throw new AuthRequiredError('Signed out');
     if (res.status === 304) return cached;
     if (!res.ok) return cached;

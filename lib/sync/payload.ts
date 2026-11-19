@@ -3,6 +3,7 @@
 import type { PricedEstimate, PricingBundle } from '@/lib/pricing';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { acknowledgedNote } from '@/lib/field/flags';
+import { recommendedTier } from '@/lib/field/recommended';
 import { priceableAreas, type EstimateDraft } from './draft';
 
 export interface SyncPayload {
@@ -21,7 +22,9 @@ export function buildSyncPayload(
   opts: { pricedOffline: boolean; uuid?: () => string; flags?: DeviationFlag[] },
 ): SyncPayload {
   const uuid = opts.uuid ?? (() => crypto.randomUUID());
-  const selected = priced.options.find((o) => o.tier === draft.selectedTier) ?? priced.options[0] ?? null;
+  // The headline the lists show is the recommended option's (OD1); its model price is the model total.
+  const rec = recommendedTier(priced.options, draft.selectedTier);
+  const selected = rec ? (priced.options.find((o) => o.tier === rec.tier) ?? null) : null;
   // Server-only statuses (sent/viewed/signed/...) are never set by the client.
   const status = draft.status === 'ready' ? 'ready' : 'draft';
 

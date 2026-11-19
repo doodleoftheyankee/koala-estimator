@@ -82,10 +82,15 @@ describe('headlinePrice', () => {
     expect(headlinePrice({ selectedTier: 'better', options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
   });
 
-  it('falls back to the stored model price when no option is recommended, as before Daymark (RC-1)', () => {
-    // Choosing Better instead would change the figure in the Price column; that is the accuracy round's call.
-    expect(headlinePrice({ selectedTier: null, options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 2375, tier: null, signed: false });
-    expect(headlinePrice({ selectedTier: 'nonsense', options, modelTotalPrice: 2375, signedPrice: null }).price).toBe(2375);
+  it('with no pick, shows Better, the option every other list and the quote recommend (OD1, L9)', () => {
+    // Before: the stored model price ($2,375, the first option's), with no option named.
+    expect(headlinePrice({ selectedTier: null, options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
+    expect(headlinePrice({ selectedTier: 'nonsense', options, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
+  });
+
+  it('when the pick is no longer shown, shows the next option shown (OD1, OD6, L9)', () => {
+    const shown = options.filter((o) => o.tier !== 'good');
+    expect(headlinePrice({ selectedTier: 'good', options: shown, modelTotalPrice: 2375, signedPrice: null })).toEqual({ price: 4095, tier: 'better', signed: false });
   });
 
   it('falls back to the stored model price when the recommended option has no price', () => {

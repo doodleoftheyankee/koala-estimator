@@ -13,7 +13,7 @@
 //    else to show).
 import type { Role } from '@/lib/pricing';
 
-export type NavIcon = 'estimates' | 'allEstimates' | 'field' | 'roof' | 'jobs' | 'pricing' | 'insights' | 'team' | 'design';
+export type NavIcon = 'estimates' | 'allEstimates' | 'field' | 'roof' | 'jobs' | 'pricing' | 'business' | 'insights' | 'team' | 'design';
 
 export interface NavItem {
   href: string;
@@ -51,6 +51,7 @@ const FIELD_APP: NavItem = { href: '/field', label: 'Field app', icon: 'field', 
 const ROOF_LOOKUP: NavItem = { href: '/field/roof', label: 'Roof lookup', icon: 'roof', phone: 'more', group: 'work', hint: 'Measure any roof from the satellite photo', offline: true };
 const JOBS: NavItem = { href: '/jobs', label: 'Jobs', icon: 'jobs', phone: 'tab', group: 'work', hint: 'Schedule crews and check their actuals' };
 const PRICING: NavItem = { href: '/admin/pricing', label: 'Pricing', icon: 'pricing', phone: 'more', group: 'admin', hint: 'Prices, materials, crews and quote text' };
+const BUSINESS: NavItem = { href: '/admin/business', label: 'Business profile', icon: 'business', phone: 'more', group: 'admin', hint: 'Name, phone, license, warranty and terms on every quote' };
 const INSIGHTS: NavItem = { href: '/admin/learning', label: 'Insights', icon: 'insights', phone: 'more', group: 'admin', hint: 'How finished jobs compare with their estimates' };
 const TEAM: NavItem = { href: '/admin/team', label: 'Team', icon: 'team', phone: 'more', group: 'admin', hint: 'Invite people and set their crews' };
 const DESIGN: NavItem = { href: '/design', label: 'Design', icon: 'design', phone: 'more', group: 'admin', hint: 'Every colour, size and part of the app' };
@@ -58,13 +59,13 @@ const DESIGN: NavItem = { href: '/design', label: 'Design', icon: 'design', phon
 const MENUS: Record<Role, RoleMenu> = {
   owner: {
     roleLabel: ROLE_LABELS.owner,
-    main: [OFFICE_ESTIMATES, FIELD_APP, ROOF_LOOKUP, JOBS, PRICING, INSIGHTS, TEAM],
+    main: [OFFICE_ESTIMATES, FIELD_APP, ROOF_LOOKUP, JOBS, PRICING, BUSINESS, INSIGHTS, TEAM],
     account: [DESIGN],
     moreLabel: 'More',
   },
   office: {
     roleLabel: ROLE_LABELS.office,
-    main: [OFFICE_ESTIMATES, FIELD_APP, ROOF_LOOKUP, JOBS, PRICING, INSIGHTS],
+    main: [OFFICE_ESTIMATES, FIELD_APP, ROOF_LOOKUP, JOBS, PRICING, BUSINESS, INSIGHTS],
     account: [DESIGN],
     moreLabel: 'More',
   },

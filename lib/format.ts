@@ -130,6 +130,25 @@ const fmtDateLong = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZO
 const fmtDayMonth = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, month: 'short', day: 'numeric' });
 const fmtTime = new Intl.DateTimeFormat(LOCALE, { timeZone: BUSINESS_TIME_ZONE, hour: 'numeric', minute: '2-digit' });
 const fmtYmd = new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+const fmtAudit = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: BUSINESS_TIME_ZONE,
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+  timeZoneName: 'short',
+});
+
+/**
+ * A value that is either an instant or a calendar day stored without a time ("2026-12-17", such as
+ * a quote's "Valid until"). A calendar day is read at noon UTC, so it formats as that same day in
+ * any business zone; pass it through this before formatting. Instants are unchanged.
+ */
+export function calendarDay(at: DateInput): DateInput {
+  return typeof at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(at) ? `${at}T12:00:00Z` : at;
+}
 
 /** "Nov 17, 2026". */
 export function formatDate(at: DateInput): string {
@@ -165,6 +184,12 @@ export function formatDateTime(at: DateInput): string {
 export function formatShortDateTime(at: DateInput): string {
   const d = toDate(at);
   return d ? `${clean(fmtDayMonth.format(d))} · ${clean(fmtTime.format(d))}` : DASH;
+}
+
+/** "November 17, 2026 at 7:41:07 PM EST": a signature's moment on a signed quote, to the second and with the zone. */
+export function formatAuditTime(at: DateInput): string {
+  const d = toDate(at);
+  return d ? fmtAudit.format(d) : DASH;
 }
 
 /** The business-zone calendar date of an instant, YYYY-MM-DD. */

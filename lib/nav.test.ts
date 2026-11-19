@@ -40,6 +40,7 @@ describe('the app menu', () => {
       'Roof lookup /field/roof',
       'Jobs /jobs',
       'Pricing /admin/pricing',
+      'Business profile /admin/business',
       'Insights /admin/learning',
       'Team /admin/team',
       'Design /design',

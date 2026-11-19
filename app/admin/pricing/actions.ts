@@ -73,6 +73,8 @@ async function verifyOrRestore(db: Db, restore: () => Promise<void>): Promise<Ac
     return failure(`This change would break pricing: ${errorMessage(e)}${note}`);
   }
   revalidatePath(PATH);
+  // The business profile page shows the same settings (branding, warranty, terms).
+  revalidatePath('/admin/business');
   return success();
 }
 

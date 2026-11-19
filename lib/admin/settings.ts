@@ -1,6 +1,8 @@
 // Business settings (app_settings) as the admin UI sees them: labels, input kinds, and the
 // parser that turns a submitted form into jsonb values. Pure, so it is unit-tested.
 import { z } from 'zod';
+import { stateName } from '@/lib/quotes/consent';
+import { QUOTE_PREFIX_PATTERN } from '@/lib/quotes/model';
 import {
   booleanField,
   fractionToPercent,
@@ -28,6 +30,8 @@ export interface ScalarSetting {
 
 /** Scalar settings, grouped as they appear on the page. */
 export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings: ReadonlyArray<ScalarSetting> }> = [
+  // The quote text (warranty, terms) and the branding are on the Business profile page
+  // (app/admin/business), with the rest of what every quote prints.
   {
     id: 'margins',
     title: 'Margins and overhead',
@@ -55,14 +59,15 @@ export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings
       { key: 'shop_address', label: 'Shop address', kind: 'text', hint: 'Origin for drive-time estimates' },
     ],
   },
-  {
-    id: 'quote-text',
-    title: 'Quote text',
-    settings: [
-      { key: 'quote_terms', label: 'Quote terms', kind: 'textarea', hint: 'Printed on every quote' },
-      { key: 'warranty_text', label: 'Warranty', kind: 'textarea', hint: 'Printed on the quote PDF' },
-    ],
-  },
+];
+
+/** The business profile's own settings (app/admin/business), besides the branding fields. */
+export const PROFILE_SETTINGS: ReadonlyArray<ScalarSetting> = [
+  { key: 'default_city', label: 'Town', kind: 'text' },
+  { key: 'default_state', label: 'State', kind: 'text' },
+  { key: 'quote_number_prefix', label: 'Quote number prefix', kind: 'text' },
+  { key: 'warranty_text', label: 'Warranty', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
+  { key: 'quote_terms', label: 'Terms', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
 ];
 
 export const BRANDING_FIELDS = [
@@ -77,6 +82,7 @@ export const BRANDING_FIELDS = [
 /** Readable names, used as the description when a "PLACEHOLDER — ..." description is cleared. */
 export const SETTING_LABELS: Record<string, string> = {
   ...Object.fromEntries(SETTING_GROUPS.flatMap((g) => g.settings.map((s) => [s.key, s.label]))),
+  ...Object.fromEntries(PROFILE_SETTINGS.map((s) => [s.key, s.label])),
   financing: 'Financing partner and terms',
   branding: 'Quote PDF branding',
 };
@@ -103,6 +109,14 @@ const scalarSchemas: Record<string, z.ZodType<Json>> = {
   shop_address: textField('Shop address', 300),
   quote_terms: textField('Quote terms', 10_000),
   warranty_text: textField('Warranty', 10_000),
+  // The business profile (lib/quotes/profile.ts). A blank town is stored as "" (the shop address's town is used).
+  default_city: optionalTextField('Town', 60).transform((v) => v ?? ''),
+  default_state: textField('State', 2)
+    .transform((v) => v.toUpperCase())
+    .refine((v) => stateName(v) !== null, 'State must be a US state, two letters such as PA'),
+  quote_number_prefix: textField('Quote number prefix', 6)
+    .transform((v) => v.toUpperCase())
+    .refine((v) => QUOTE_PREFIX_PATTERN.test(v), 'Quote number prefix must be 1 to 6 letters or digits'),
 };
 
 const financingSchema = z.object({

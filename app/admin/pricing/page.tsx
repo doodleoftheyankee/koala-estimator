@@ -7,7 +7,6 @@ import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
 import {
-  BRANDING_FIELDS,
   displayValue,
   objectFieldText,
   SETTING_GROUPS,
@@ -254,12 +253,17 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
   const placeholderKeys = new Set(placeholderSettings.map((s) => s.key));
   const flaggedMaterials = config.materials.filter((m) => m.needs_owner_input);
   const flaggedCrews = config.crews.filter((c) => c.needs_owner_input);
+  // What every quote prints (branding, warranty, terms) is on the Business profile page.
+  const onProfilePage = (key: string) => key === 'branding' || key === 'warranty_text' || key === 'quote_terms';
   const todo = [
-    ...placeholderSettings.map((s) => ({ href: '#business', text: `Setting: ${SETTING_LABELS[s.key] ?? humanize(s.key)}` })),
+    ...placeholderSettings.map((s) => ({
+      href: onProfilePage(s.key) ? '/admin/business' : '#business',
+      text: `${onProfilePage(s.key) ? 'Business profile' : 'Setting'}: ${SETTING_LABELS[s.key] ?? humanize(s.key)}`,
+    })),
     ...flaggedMaterials.map((m) => ({ href: '#materials', text: `Material: ${m.name} (${productById.get(m.product_id)?.label ?? 'product'})` })),
     ...flaggedCrews.map((c) => ({ href: '#crews', text: `Crew: ${c.name}` })),
     // Customers see the office phone on every quote and are told to call it when a quote is closed.
-    ...(objectFieldText(settingObject(map, 'branding'), 'phone').trim() ? [] : [{ href: '#business', text: 'Branding: office phone for customers' }]),
+    ...(objectFieldText(settingObject(map, 'branding'), 'phone').trim() ? [] : [{ href: '/admin/business', text: 'Business profile: office phone for customers' }]),
   ];
 
   const productOrder = (m: Material) => PRODUCTS.indexOf(productById.get(m.product_id)!.code);
@@ -331,9 +335,15 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
           </Card>
           <Card>
             <h3 className="mb-3 font-semibold text-slate-900">
-              Branding {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
+              Business profile {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
             </h3>
-            <BrandingForm map={map} readOnly={readOnly} />
+            <p className="text-sm text-slate-600">
+              The company name, license, office phone, warranty and terms on every quote, and the prefix of its number, are on the{' '}
+              <a href="/admin/business" className="font-semibold text-brand-800 underline">
+                Business profile
+              </a>{' '}
+              page. A quote cannot be sent until they are filled in.
+            </p>
           </Card>
         </div>
       </section>
@@ -695,33 +705,3 @@ function FinancingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean 
   );
 }
 
-function BrandingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean }) {
-  const brand = settingObject(map, 'branding');
-  const color = objectFieldText(brand, 'primary_color');
-  return (
-    <ActionForm action={saveSettings} readOnly={readOnly}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {BRANDING_FIELDS.map((f) => (
-          <TextField
-            key={f.key}
-            label={f.label}
-            name={`branding.${f.key}`}
-            type={f.type}
-            required={f.key === 'company'}
-            defaultValue={objectFieldText(brand, f.key)}
-            placeholder={f.key === 'primary_color' ? '#0f766e' : undefined}
-            hint={
-              f.key === 'primary_color' && /^#[0-9a-fA-F]{6}$/.test(color) ? (
-                <span className="inline-flex items-center gap-1">
-                  <span aria-hidden className="inline-block h-3 w-3 rounded-sm ring-1 ring-slate-300" style={{ backgroundColor: color }} /> Current color
-                </span>
-              ) : f.key === 'primary_color' ? (
-                'Hex color, e.g. #0f766e'
-              ) : undefined
-            }
-          />
-        ))}
-      </div>
-    </ActionForm>
-  );
-}

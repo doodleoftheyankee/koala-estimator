@@ -93,7 +93,9 @@ export const draftSchema = z.object({
   rowVersion: z.number().int().positive().nullable(),
   bundleHash: z.string().nullable(),
   lastQuote: z
-    .object({ quoteId: z.uuid(), version: z.number().int(), sentAt: z.iso.datetime() })
+    // quoteNumber: the number the quote was sent with (from the counter, OD10); quotes sent before
+    // it was kept here have none, and the phone shows their old number (lib/quotes/model.ts legacyQuoteNumber).
+    .object({ quoteId: z.uuid(), version: z.number().int(), sentAt: z.iso.datetime(), quoteNumber: z.string().max(60).optional() })
     .nullable()
     .optional(),
 });
@@ -107,7 +109,11 @@ export const syncableDraftSchema = draftSchema.refine((d) => d.areas.length > 0,
   path: ['areas'],
 });
 
-export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID()): EstimateDraft {
+/**
+ * A new estimate. `place` is the town and state it starts in, from the business profile (else the
+ * shop address, else blank: lib/quotes/profile.ts newEstimateDefaults, L32); no town is typed in here.
+ */
+export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID(), place: { city: string; state: string } = { city: '', state: '' }): EstimateDraft {
   const ts = now.toISOString();
   return {
     id: uuid(),
@@ -115,7 +121,7 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     createdAt: ts,
     updatedAt: ts,
     customer: { id: uuid(), firstName: '', lastName: '', email: '', phone: '', smsConsent: false, emailConsent: true },
-    property: { id: uuid(), street: '', city: 'Newark', state: 'DE', zip: '', yearBuilt: null, utility: null, homeType: null },
+    property: { id: uuid(), street: '', city: place.city, state: place.state, zip: '', yearBuilt: null, utility: null, homeType: null },
     areas: [],
     crewId: null,
     driveMinutesOneWay: null,

@@ -6,10 +6,12 @@ import { serverEnv } from '@/lib/env';
 import { canSendQuote, priceEstimate, TIERS, type PricedOption, type Tier } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import { acknowledgedNote, unacknowledgedFlags } from '@/lib/field/flags';
+import { esignConsent } from '@/lib/quotes/consent';
 import { quoteEmail, sendEmail } from '@/lib/quotes/email';
-import { buildQuoteDocument } from '@/lib/quotes/model';
+import { buildQuoteDocument, businessYear, counterQuoteNumber, quoteNumberBase, quoteValidUntil } from '@/lib/quotes/model';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
-import { loadQuoteSettings } from '@/lib/quotes/settings';
+import { businessProfileGaps, profileGapsSentence, profileValue } from '@/lib/quotes/profile';
+import { loadQuoteSettingRows, quoteSettingsFromRows } from '@/lib/quotes/settings';
 import { newQuoteToken, sha256Hex } from '@/lib/quotes/token';
 import { authorize } from '@/lib/server/auth';
 import { loadPricingBundle } from '@/lib/server/bundle';
@@ -83,6 +85,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'The saved estimate is incomplete. Sync it from the phone and try again.' }, { status: 400 });
     }
     const draft: EstimateDraft = parsed.data;
+
+    // Nothing goes out while the business profile has a gap (L30): no PLACEHOLDER warranty, no
+    // quote without the office phone or license, no consent sentence without the state.
+    const settingRows = await loadQuoteSettingRows(supabase);
+    const gaps = businessProfileGaps(settingRows);
+    if (gaps.length) {
+      return NextResponse.json(
+        { error: 'setup_incomplete', message: profileGapsSentence(gaps), gaps: gaps.map((g) => ({ key: g.key, label: g.label })) },
+        { status: 409 },
+      );
+    }
+
     const customerEmail = draft.customer.email?.trim();
     if (!customerEmail) {
       return NextResponse.json({ error: "Add the customer's email address before sending the quote." }, { status: 400 });
@@ -124,30 +138,47 @@ export async function POST(request: Request) {
     const policy = canSendQuote(profile.role, options, bundle.snapshot.settings);
     if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons }, { status: 403 });
 
-    const settings = await loadQuoteSettings(supabase);
+    const settings = quoteSettingsFromRows(settingRows);
     const admin = createAdminClient();
 
     const { data: last, error: lastErr } = await admin
       .from('quotes')
-      .select('version')
+      .select('version, quote_number:snapshot->document->>quoteNumber')
       .eq('estimate_id', estimateId)
       .order('version', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (lastErr) throw new Error(`Reading quote versions failed: ${lastErr.message}`);
-    const version = ((last as { version: number } | null)?.version ?? 0) + 1;
+    const previous = last as { version: number; quote_number: string | null } | null;
+    const version = (previous?.version ?? 0) + 1;
 
     const now = new Date();
+    // The quote number (OD10): a new version keeps the estimate's number (a number sent before the
+    // counter included); a first quote takes the next number of the business year from the counter.
+    const base = previous?.quote_number ? quoteNumberBase(previous.quote_number) : null;
+    let quoteNumber: string;
+    if (base) quoteNumber = `${base}-v${version}`;
+    else {
+      const year = businessYear(now);
+      const { data: counter, error: counterErr } = await admin.rpc('next_quote_number', { year });
+      if (counterErr || typeof counter !== 'number') throw new Error(`Numbering the quote failed: ${counterErr?.message ?? 'no number returned'}`);
+      quoteNumber = counterQuoteNumber(profileValue(settingRows, 'quote_number_prefix'), year, counter, version);
+    }
+
+    const { expiresAt } = quoteValidUntil(now, settings.validDays);
     const document = buildQuoteDocument({
       draft,
       options,
       version,
+      quoteNumber,
       issuedAt: now,
       validDays: settings.validDays,
       branding: settings.branding,
       estimator: { name: profile.fullName, email: profile.email },
       terms: settings.terms,
       warranty: settings.warranty,
+      // The state is in the profile (no gaps above), so the sentence names its e-sign law (L31).
+      consent: esignConsent(profileValue(settingRows, 'default_state')),
     });
 
     const pdf = await renderQuotePdf(document);
@@ -156,7 +187,6 @@ export async function POST(request: Request) {
     if (upload.error) throw new Error(`Storing the quote PDF failed: ${upload.error.message}`);
 
     const { token, hash } = newQuoteToken();
-    const expiresAt = new Date(now.getTime() + settings.validDays * 86_400_000);
 
     const { data: inserted, error: insErr } = await admin
       .from('quotes')
@@ -208,7 +238,7 @@ export async function POST(request: Request) {
       status: 'sent',
       // The row_version trigger bumps by one on this update.
       rowVersion: estimate.row_version + 1,
-      lastQuote: { quoteId, version, sentAt },
+      lastQuote: { quoteId, version, sentAt, quoteNumber: document.quoteNumber },
     };
     const { data: updated, error: updErr } = await admin
       .from('estimates')

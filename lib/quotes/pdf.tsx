@@ -4,9 +4,9 @@
 /* eslint-disable jsx-a11y/alt-text */
 import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer';
 import type { Tier } from '@/lib/pricing';
-import { BUSINESS_TIME_ZONE } from '@/lib/format';
+import { calendarDay, formatAuditTime, formatDateLong } from '@/lib/format';
 import { financingLine } from './email';
-import { DEFAULT_BRAND_COLOR, formatUsd, type QuoteDocument, type QuoteOptionDoc } from './model';
+import { DEFAULT_BRAND_COLOR, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument, type QuoteOptionDoc } from './model';
 
 export interface PdfSignature {
   signerName: string;
@@ -58,27 +58,26 @@ const s = StyleSheet.create({
   footerRight: { position: 'absolute', bottom: 20, left: 40, right: 40, textAlign: 'right', fontSize: 8.5, color: '#64748b' },
 });
 
-function formatDate(iso: string): string {
-  const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: BUSINESS_TIME_ZONE });
-}
+/** "December 17, 2026" (lib/format.ts, the business zone; a stored calendar day reads as that day). */
+const formatDate = (iso: string): string => formatDateLong(calendarDay(iso));
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZone: BUSINESS_TIME_ZONE,
-    timeZoneName: 'short',
-  });
-}
+/**
+ * An option with more lines than this may run past one page, so it is allowed to break; any
+ * shorter option is kept on one page (L39).
+ */
+export const KEEP_TOGETHER_MAX_LINES = 18;
 
-function OptionSection({ option, color, recommended }: { option: QuoteOptionDoc; color: string; recommended: boolean }) {
+/**
+ * One option: its title bar, bullets, lines, total and financing. `keepTogether` (documents sent
+ * from the accuracy round on, L39) keeps the whole block on one page, so an option's lines are
+ * never split from its title or total; an option too long for a page still breaks.
+ */
+export function OptionSection({ option, color, recommended, keepTogether = false }: { option: QuoteOptionDoc; color: string; recommended: boolean; keepTogether?: boolean }) {
+  const together = keepTogether && option.items.length + option.bullets.length <= KEEP_TOGETHER_MAX_LINES;
   return (
-    <View style={s.option}>
+    // No wrap prop at all unless kept together: react-pdf lays out an explicit `wrap={undefined}`
+    // differently from none, and a document sent before must lay out exactly as it did (hard rule 1).
+    <View style={s.option} {...(together ? { wrap: false } : {})}>
       <View style={[s.optionHead, { backgroundColor: color }]} wrap={false} minPresenceAhead={90}>
         <Text style={s.optionTitle}>
           {TIER_NAMES[option.tier]}: {option.label}
@@ -101,12 +100,12 @@ function OptionSection({ option, color, recommended }: { option: QuoteOptionDoc;
           <View key={i} style={s.item} wrap={false}>
             <Text style={s.colArea}>{it.areaName}</Text>
             <Text style={s.colDesc}>{it.description}</Text>
-            <Text style={s.colPrice}>{formatUsd(it.price)}</Text>
+            <Text style={s.colPrice}>{quoteMoney(it.price)}</Text>
           </View>
         ))}
         <View style={s.total} wrap={false}>
           <Text style={s.totalText}>
-            {TIER_NAMES[option.tier]} total: {formatUsd(option.price)}
+            {TIER_NAMES[option.tier]} total: {quoteMoney(option.price)}
           </Text>
         </View>
         {option.financing ? <Text style={s.financing}>{financingLine(option.financing)}</Text> : null}
@@ -120,6 +119,8 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
   const color = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(b.primaryColor) ? b.primaryColor : DEFAULT_BRAND_COLOR;
   const contact = [b.phone, b.email, b.website].filter((x): x is string => !!x);
   const signedOption = signature ? doc.options.find((o) => o.tier === signature.tier) : undefined;
+  // A quote sent before the accuracy round prints as it did then (hard rule 1).
+  const legacy = isLegacyDocument(doc);
 
   return (
     <Document title={`Quote ${doc.quoteNumber}`} author={b.company} subject="Insulation quote" creator={b.company} producer={b.company}>
@@ -164,7 +165,7 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
         </Text>
 
         {doc.options.map((o) => (
-          <OptionSection key={o.tier} option={o} color={color} recommended={o.tier === doc.recommendedTier} />
+          <OptionSection key={o.tier} option={o} color={color} recommended={o.tier === doc.recommendedTier} keepTogether={!legacy} />
         ))}
 
         {doc.notes ? (
@@ -190,17 +191,18 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
                 Option accepted: <Text style={s.bold}>{signedOption ? `${TIER_NAMES[signature.tier]}: ${signedOption.label}` : TIER_NAMES[signature.tier]}</Text>
               </Text>
               <Text style={s.para}>
-                Price: <Text style={s.bold}>{formatUsd(signature.price, true)}</Text>
+                Price: <Text style={s.bold}>{sentenceMoney(doc, signature.price)}</Text>
               </Text>
               <Image src={{ data: Buffer.from(signature.imagePng), format: 'png' }} style={s.sigImage} />
               <Text>Signed electronically by {signature.signerName}</Text>
-              <Text style={s.small}>Date: {formatDateTime(signature.signedAt)}</Text>
+              <Text style={s.small}>Date: {formatAuditTime(signature.signedAt)}</Text>
               <Text style={s.small}>IP address: {signature.ip ?? 'not recorded'}</Text>
             </>
           ) : (
             <>
               <View style={s.sigLine} />
-              <Text style={s.para}>Sign online at the link in your email.</Text>
+              {/* The link may have been sent by text or by hand when email is not set up (L33). */}
+              <Text style={s.para}>{legacy ? 'Sign online at the link in your email.' : 'Sign online at the link we sent you.'}</Text>
             </>
           )}
         </View>

@@ -11,7 +11,7 @@
 //    saved price.
 import type { LocalEstimate, SyncState } from '@/lib/offline/db';
 import type { Tier } from '@/lib/pricing';
-import { quoteNumber } from '@/lib/quotes/model';
+import { legacyQuoteNumber } from '@/lib/quotes/model';
 import { priceableAreas } from '@/lib/sync/draft';
 import { businessDate, formatShortDateTime, relativeTime, TIER_LABELS } from '@/lib/format';
 
@@ -149,7 +149,8 @@ export function toRow(e: LocalEstimate, now: Date): EstimateRow {
     priceLabel: price === null ? null : tier ? TIER_LABELS[tier] : 'Recommended',
     unpriceable: priceableAreas(d).length === 0,
     activity: activityLine(e, status, now),
-    quoteNumber: q ? quoteNumber(d.id, q.version, new Date(q.sentAt)) : null,
+    // The number the quote was sent with; a quote sent before the phone kept it has its old number.
+    quoteNumber: q ? (q.quoteNumber ?? legacyQuoteNumber(d.id, q.version, new Date(q.sentAt))) : null,
     updatedAt: e.updatedAt,
     section: daySection(e.updatedAt, now),
   };

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { db, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
+import { db, getCachedBundle, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
 import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
 import { newDraft } from '@/lib/sync/draft';
 import { menuFor, phoneTabs } from '@/lib/nav';
@@ -49,7 +49,10 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, []);
 
   const createEstimate = useCallback(async () => {
-    const draft = newDraft();
+    // A new estimate starts in the business profile's town (else the shop address's, else blank:
+    // L32), as the phone last downloaded it, so it works offline too.
+    const place = (await getCachedBundle())?.business?.newEstimate;
+    const draft = newDraft(new Date(), undefined, place);
     await db().estimates.put(newLocalEstimate(draft, profile.userId));
     go({ kind: 'edit', id: draft.id });
   }, [go, profile.userId]);

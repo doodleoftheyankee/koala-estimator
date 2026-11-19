@@ -6,8 +6,10 @@ import type { LocalEstimate } from './db';
 import { applySyncResult, mergeRemote, resolveConflict, syncBlocker, touch } from './syncCore';
 
 const NOW = '2026-10-20T12:00:00.000Z';
+/** New drafts start in the business profile's town (L32); these tests' estimates are in this one. */
+const TOWN = { city: 'Springfield', state: 'IL' };
 function complete(): EstimateDraft {
-  const d = newDraft(new Date(NOW));
+  const d = newDraft(new Date(NOW), undefined, TOWN);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee' };
   d.property = { ...d.property, street: '1 Main', zip: '19711' };
   d.areas = [{ ...newArea('attic'), sqft: 900 }];

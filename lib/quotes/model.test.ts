@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { priceEstimate } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { newArea, newDraft, toEstimateInput } from '@/lib/sync/draft';
-import { buildQuoteDocument, DEFAULT_BRAND_COLOR, formatUsd, quoteNumber } from './model';
+import { esignConsent } from './consent';
+import { buildQuoteDocument, DEFAULT_BRAND_COLOR, DOCUMENT_FORMAT, quoteMoney, sentenceMoney } from './model';
 import { hashQuoteToken, isWellFormedToken, newQuoteToken } from './token';
 
 describe('quote document', () => {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'));
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), undefined, { city: 'Springfield', state: 'IL' });
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   // Old insulation in place (R-19), so Best removes it and all three options step up (OD6).
@@ -16,12 +17,14 @@ describe('quote document', () => {
     draft: d,
     options: priced.options,
     version: 2,
+    quoteNumber: 'Q-2026-0007-v2',
     issuedAt: new Date('2026-10-20T12:00:00Z'),
     validDays: 30,
     branding: { company: 'Koala', license: null, phone: null, email: null, website: null, primaryColor: DEFAULT_BRAND_COLOR, logoUrl: null },
     estimator: { name: 'Sam', email: null },
     terms: 'T',
     warranty: 'W',
+    consent: esignConsent('IL'),
   });
   const doc = buildQuoteDocument(docArgs());
 
@@ -50,16 +53,20 @@ describe('quote document', () => {
 
   it('computes validity, number and recommended tier', () => {
     expect(doc.validUntil).toBe('2026-11-19');
-    expect(doc.quoteNumber).toBe(quoteNumber(d.id, 2, new Date('2026-10-20T12:00:00Z')));
-    expect(doc.quoteNumber).toMatch(/^KN-2026-[0-9A-F]{6}-v2$/);
+    expect(doc.quoteNumber).toBe('Q-2026-0007-v2');
     expect(doc.recommendedTier).toBe('better');
     expect(doc.customer.name).toBe('Pat Lee');
-    expect(doc.property.line2).toBe('Newark, DE 19711');
+    expect(doc.property.line2).toBe('Springfield, IL 19711');
+    expect(doc.format).toBe(DOCUMENT_FORMAT);
+    expect(doc.consent).toContain('(ESIGN Act and Illinois UETA)');
   });
 
-  it('formats dollars', () => {
-    expect(formatUsd(5420)).toBe('$5,420');
-    expect(formatUsd(12.5, true)).toBe('$12.50');
+  it('formats dollars: whole dollars on a quote; cents in sentences only on a quote sent before (L8)', () => {
+    expect(quoteMoney(5420)).toBe('$5,420');
+    expect(quoteMoney(12.5)).toBe('$13');
+    expect(sentenceMoney(doc, 4780)).toBe('$4,780');
+    expect(sentenceMoney({}, 4780)).toBe('$4,780.00');
+    expect(sentenceMoney({}, 12.5)).toBe('$12.50');
   });
 });
 

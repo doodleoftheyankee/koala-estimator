@@ -6,13 +6,14 @@
 //    as on the estimator's phone (lib/field/estimateList.ts); the latest quote only adds what the
 //    estimate does not carry (the customer opened it, or it was closed as declined). "Ready"
 //    (complete, not sent yet) shows as Draft.
-//  - Price: a signed quote's signed price; otherwise the price of the option the estimator
-//    recommended (selected); otherwise the stored model price. This is the order the list has
-//    always used. Whether an estimate with no recommended option should show Better instead (as
-//    the field app's dock does) is a value change and belongs to the accuracy round. Nothing is
+//  - Price: a signed quote's signed price; otherwise the recommended option's price (OD1): the
+//    option the estimator picked, the next one shown when the pick is not shown, else Better,
+//    else the first (lib/field/recommended.ts, the same rule as the phone and the quote). The
+//    stored model price is used only when the estimate has no options stored. Nothing is
 //    re-priced here: every figure is a price the server already stored.
 //  - Figures: each tile says exactly what it counts, and lost, declined, expired and void rows
 //    are never in a money total.
+import { recommendedTier } from '@/lib/field/recommended';
 import { formatShortDateTime, TIER_LABELS } from '@/lib/format';
 import { TIERS, type Tier } from '@/lib/pricing';
 import { ESTIMATE_STATUSES } from '@/lib/sync/draft';
@@ -79,10 +80,9 @@ export interface HeadlinePrice {
 }
 
 /**
- * The row's headline price: the signed price, else the price of the option the estimator
- * recommended (selected), else the stored `model_total_price`. Same order as before Daymark, so
- * the figure in the Price column is unchanged. The model price has no option name, because it is
- * not always the recommended option's price.
+ * The row's headline price: the signed price, else the recommended option's price (OD1, the same
+ * option the phone and the customer's quote recommend), else, for an estimate with no options
+ * stored, the stored `model_total_price` (with no option name).
  */
 export function headlinePrice(args: {
   selectedTier: string | null;
@@ -92,8 +92,10 @@ export function headlinePrice(args: {
 }): HeadlinePrice {
   const selected = isTier(args.selectedTier) ? args.selectedTier : null;
   if (isPrice(args.signedPrice)) return { price: args.signedPrice, tier: selected, signed: true };
-  const pick = selected ? (args.options ?? []).find((o) => o.tier === selected) : undefined;
-  if (pick && isPrice(pick.price)) return { price: pick.price, tier: selected, signed: false };
+  const priced = (args.options ?? []).filter((o): o is { tier: Tier; price: number } => isTier(o.tier) && isPrice(o.price));
+  const rec = recommendedTier(priced, selected);
+  const pick = rec ? priced.find((o) => o.tier === rec.tier) : undefined;
+  if (pick) return { price: pick.price, tier: pick.tier, signed: false };
   return { price: isPrice(args.modelTotalPrice) ? args.modelTotalPrice : null, tier: null, signed: false };
 }
 

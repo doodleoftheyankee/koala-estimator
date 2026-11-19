@@ -5,12 +5,14 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CircleCheck, Clock, Files, Lock } from '@/components/daymark/icons';
+import { consentFor } from '@/lib/quotes/consent';
 import { financingLine } from '@/lib/quotes/email';
 import { isExpired, type PublicQuoteRow } from '@/lib/quotes/lookup';
+import { isLegacyDocument } from '@/lib/quotes/model';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getQuote } from './data';
 import { ClosedState, ContactCard, NotesCard, OfficeContact, PdfLink, QuoteIntro, ReachUsAction, SignedSummary, TermsCard } from './parts';
-import { longDate, monthlyFigure, type QuoteOptionView } from './quote-view';
+import { expiredOn, longDate, monthlyFigure, type QuoteOptionView } from './quote-view';
 import { SignForm } from './SignForm';
 
 export const dynamic = 'force-dynamic';
@@ -57,6 +59,8 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
   const pdfHref = `/api/public/quotes/${token}/pdf`;
   const contacts = <ContactCard estimator={doc.estimator} branding={doc.branding} />;
   const reachUs = <ReachUsAction branding={doc.branding} estimator={doc.estimator} />;
+  // A quote sent before the accuracy round reads its sentences with cents, as it always did (hard rule 1).
+  const legacy = isLegacyDocument(doc);
 
   if (quote.status === 'signed') {
     const opt = quote.signed_tier ? doc.options.find((o) => o.tier === quote.signed_tier) : undefined;
@@ -71,7 +75,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
         aside={contacts}
       >
         <p>Your quote was signed{quote.signed_at ? ` on ${longDate(quote.signed_at)}` : ''}.</p>
-        {quote.signed_tier ? <SignedSummary tier={quote.signed_tier} label={opt?.label ?? null} price={signedPrice} /> : null}
+        {quote.signed_tier ? <SignedSummary tier={quote.signed_tier} label={opt?.label ?? null} price={signedPrice} cents={legacy} /> : null}
         <p>
           We will contact you shortly to schedule the work. Questions? <OfficeContact branding={doc.branding} estimator={doc.estimator} capital />.
         </p>
@@ -103,7 +107,7 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
     return (
       <ClosedState quoteNumber={doc.quoteNumber} icon={Clock} tone="warn" title="This quote has expired" action={reachUs} aside={contacts}>
         <p>
-          This quote expired on {longDate(doc.validUntil)}. Prices may have changed; for an updated quote, <OfficeContact branding={doc.branding} estimator={doc.estimator} />.
+          This quote expired on {expiredOn(doc, quote.expires_at)}. Prices may have changed; for an updated quote, <OfficeContact branding={doc.branding} estimator={doc.estimator} />.
         </p>
       </ClosedState>
     );
@@ -130,6 +134,8 @@ export default async function QuotePage({ params }: { params: Promise<{ token: s
       pdfHref={pdfHref}
       quoteNumber={doc.quoteNumber}
       validUntil={doc.validUntil}
+      consentText={consentFor(doc)}
+      centsInSentences={legacy}
       intro={<QuoteIntro doc={doc} />}
       contacts={contacts}
       contactsAside={<ContactCard estimator={doc.estimator} branding={doc.branding} headingId="contact-heading-aside" />}

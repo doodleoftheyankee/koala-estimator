@@ -15,7 +15,6 @@ import { Field, Input } from '@/components/daymark/Form';
 import { SignLabel } from '@/components/daymark/Gauge';
 import { Check, CircleCheck, Icon, Info, Signature, Star } from '@/components/daymark/icons';
 import type { Tier } from '@/lib/pricing';
-import { ESIGN_CONSENT } from '@/lib/quotes/consent';
 import { ClosedState, PAGE, SectionTitle, TWO_COLUMNS, SignedSummary, PdfLink } from './parts';
 import { price, priceExact, shortDate, tierName, type QuoteOptionView } from './quote-view';
 
@@ -334,6 +333,47 @@ function SignBar({ option, validUntil, hidden, onReview }: { option: QuoteOption
   );
 }
 
+/**
+ * The thank-you after signing: what was signed, at what price, and what happens next. It says the
+ * signed copy was emailed only when the email really went out (L33); otherwise it points to the
+ * download below.
+ */
+export function SignedThanks({
+  quoteNumber,
+  name,
+  option,
+  centsInSentences,
+  emailed,
+  pdfHref,
+  contacts,
+}: {
+  quoteNumber: string;
+  name: string;
+  option: Pick<QuoteOptionView, 'tier' | 'label' | 'price'>;
+  centsInSentences: boolean;
+  emailed: boolean;
+  pdfHref: string;
+  contacts: ReactNode;
+}) {
+  return (
+    <ClosedState
+      quoteNumber={quoteNumber}
+      icon={CircleCheck}
+      tone="ok"
+      titleId="signed-title"
+      title={`Thank you, ${name}!`}
+      action={<PdfLink href={pdfHref}>Download your signed quote (PDF)</PdfLink>}
+      aside={contacts}
+    >
+      <SignedSummary tier={option.tier} label={option.label} price={option.price} cents={centsInSentences} />
+      <p>
+        You accepted {tierName(option.tier)}: {option.label} for {centsInSentences ? priceExact(option.price) : price(option.price)}.{' '}
+        {emailed ? 'We emailed you a copy and will contact you shortly to schedule the work.' : 'Download your signed copy below. We will contact you shortly to schedule the work.'}
+      </p>
+    </ClosedState>
+  );
+}
+
 export function SignForm({
   token,
   options,
@@ -342,6 +382,8 @@ export function SignForm({
   pdfHref,
   quoteNumber,
   validUntil,
+  consentText,
+  centsInSentences = false,
   intro,
   contacts,
   contactsAside,
@@ -354,6 +396,13 @@ export function SignForm({
   pdfHref: string;
   quoteNumber: string;
   validUntil: string;
+  /** The e-sign consent sentence the quote was sent with (lib/quotes/consent.ts consentFor). */
+  consentText: string;
+  /**
+   * The accept and thank-you sentences print the price with cents: only for a quote sent before
+   * the accuracy round, which read that way (hard rule 1). New quotes read whole dollars (L8).
+   */
+  centsInSentences?: boolean;
   /** Quote number, title, customer and the info tiles (server-rendered). */
   intro: ReactNode;
   /** Who to ask (server-rendered), also shown once the quote is signed. */
@@ -369,7 +418,7 @@ export function SignForm({
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<{ emailed: boolean } | null>(null);
   const [signInView, setSignInView] = useState(false);
   const signRef = useRef<HTMLElement>(null);
   const optionsRef = useRef<HTMLElement>(null);
@@ -413,12 +462,12 @@ export function SignForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tier: selected.tier, signerName: name.trim(), signaturePng: signature, consent: true }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; emailed?: boolean };
       if (!res.ok || !data.ok) {
         setError(data.error ?? 'Something went wrong. Please try again.');
         return;
       }
-      setDone(true);
+      setDone({ emailed: data.emailed === true });
       window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
     } catch {
       setError('Could not reach the server. Check your connection and try again.');
@@ -429,21 +478,15 @@ export function SignForm({
 
   if (done && selected) {
     return (
-      <ClosedState
+      <SignedThanks
         quoteNumber={quoteNumber}
-        icon={CircleCheck}
-        tone="ok"
-        titleId="signed-title"
-        title={`Thank you, ${name.trim()}!`}
-        action={<PdfLink href={pdfHref}>Download your signed quote (PDF)</PdfLink>}
-        aside={contacts}
-      >
-        <SignedSummary tier={selected.tier} label={selected.label} price={selected.price} />
-        <p>
-          You accepted {tierName(selected.tier)}: {selected.label} for {priceExact(selected.price)}. We emailed you a copy and will contact you shortly to
-          schedule the work.
-        </p>
-      </ClosedState>
+        name={name.trim()}
+        option={selected}
+        centsInSentences={centsInSentences}
+        emailed={done.emailed}
+        pdfHref={pdfHref}
+        contacts={contacts}
+      />
     );
   }
 
@@ -482,7 +525,7 @@ export function SignForm({
                   <strong className="font-extrabold">
                     {tierName(selected.tier)}: {selected.label}
                   </strong>{' '}
-                  for <strong className="font-extrabold">{priceExact(selected.price)}</strong>.
+                  for <strong className="font-extrabold">{centsInSentences ? priceExact(selected.price) : price(selected.price)}</strong>.
                 </p>
                 {options.length > 1 ? (
                   <Button variant="ghost" size="sm" onClick={changeOption} className="-mb-2 -ml-4 underline underline-offset-4">
@@ -509,7 +552,7 @@ export function SignForm({
                   className="mt-0.5 h-6 w-6 shrink-0 cursor-pointer"
                   style={{ accentColor: 'var(--ink)' }}
                 />
-                <span>{ESIGN_CONSENT}</span>
+                <span>{consentText}</span>
               </label>
               {error ? <Banner tone="bad">{error}</Banner> : null}
               <div>

@@ -5,12 +5,14 @@ import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { draftSchema, newArea, newDraft, priceableAreas, syncableDraftSchema, toEstimateInput, type EstimateDraft } from './draft';
 import { buildSyncPayload } from './payload';
 
+/** New drafts start in the business profile's town (L32); these tests' estimates are in this one. */
+const TOWN = { city: 'Springfield', state: 'IL' };
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function filledDraft() {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid, TOWN);
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com', phone: '302-555-0100' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic', uuid), sqft: 1000 }];
@@ -20,7 +22,7 @@ function filledDraft() {
 
 describe('draft', () => {
   it('a new draft is valid but not syncable until it has an area', () => {
-    const d = newDraft(new Date(), uuid);
+    const d = newDraft(new Date(), uuid, TOWN);
     expect(draftSchema.safeParse({ ...d, customer: { ...d.customer, firstName: 'A', lastName: 'B' }, property: { ...d.property, street: 'x', zip: '19711' } }).success).toBe(true);
     expect(syncableDraftSchema.safeParse(d).success).toBe(false);
     expect(syncableDraftSchema.safeParse(filledDraft()).success).toBe(true);
@@ -92,10 +94,13 @@ describe('buildSyncPayload', () => {
     expect(ready.estimate.status).toBe('ready');
   });
 
-  it('uses the selected tier for the model total, falling back to the first option', () => {
-    const better = buildSyncPayload({ ...d, selectedTier: 'better' }, priced, bundle, { pricedOffline: false, uuid });
-    expect(better.estimate.model_total_price).toBe(priced.options.find((o) => o.tier === 'better')!.modelPrice);
-    expect(p.estimate.model_total_price).toBe(priced.options[0]!.modelPrice);
+  it('the model total is the recommended option\'s: the pick, else Better (OD1, L9)', () => {
+    const good = buildSyncPayload({ ...d, selectedTier: 'good' }, priced, bundle, { pricedOffline: false, uuid });
+    expect(good.estimate.model_total_price).toBe(priced.options.find((o) => o.tier === 'good')!.modelPrice);
+    // No pick: Better, as the lists and the quote recommend it (was the first option, Good).
+    expect(p.estimate.selected_tier).toBeNull();
+    expect(p.estimate.model_total_price).toBe(priced.options.find((o) => o.tier === 'better')!.modelPrice);
+    expect(p.estimate.model_total_price).not.toBe(priced.options[0]!.modelPrice);
   });
 
   it('turns empty contact fields into nulls', () => {
