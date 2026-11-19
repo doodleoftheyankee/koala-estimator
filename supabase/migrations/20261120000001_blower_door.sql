@@ -269,6 +269,10 @@ begin
       case when r.job_id is not null then 'This job is not assigned to your crew.' else 'This estimate is not yours.' end);
   end if;
 
+  -- A crew never sends a price (crews are never shown one), so a price sent by a crew is not kept:
+  -- it would move the cost cap the office sees for the job (release review C SEC-1).
+  if has_role('crew') then r.air_sealing_cost := null; end if;
+
   -- When it was taken, as the phone says (never in the future).
   v_at := least(coalesce(r.recorded_at, now()), now());
 

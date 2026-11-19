@@ -444,3 +444,33 @@ do $$ begin
   assert has_table_privilege('service_role', 'blower_door_tests', 'insert'), 'the server keeps its access';
 end $$;
 \echo '  ok (release: readings table privileges)'
+
+-- Release review C SEC-1: a crew never sends a price (the crew phone shows none and sends none),
+-- and the function does not take one from a crew either: a crafted reading with an air sealing
+-- price is stored without it, so it cannot move the cost cap the office sees for the job.
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'crewa', false);
+do $$ declare r jsonb; begin
+  r := sync_blower_door_test('d5000000-0000-0000-0000-0000000000c1',
+         pg_temp.reading('b5000000-0000-0000-0000-0000000000c1', 'test_out', current_setting('bd.job1'), null,
+                         '{"air_sealing_cost": 1000000}'));
+  assert r->>'status' = 'applied', 'the crew''s test-out is saved';
+end $$;
+reset role;
+do $$ begin
+  assert (select air_sealing_cost from blower_door_tests where id = 'b5000000-0000-0000-0000-0000000000c1') is null,
+    'a crew cannot set the air sealing price';
+  assert (select recorded_by from blower_door_tests where id = 'b5000000-0000-0000-0000-0000000000c1') = '00000000-0000-0000-0000-0000000005a5',
+    'the reading is the crew''s';
+end $$;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'office', false);
+do $$ declare c jsonb; begin
+  c := blower_door_context(current_setting('bd.job1')::uuid, null);
+  assert (select count(*) from jsonb_array_elements(c->'tests') x where x->>'air_sealing_cost' is not null) = 1,
+    'the only priced reading on the job is still the estimator''s test-in';
+  assert (select x->>'air_sealing_cost' from jsonb_array_elements(c->'tests') x where x->>'id' = 'b5000000-0000-0000-0000-000000000001') = '2400.00',
+    'at the estimator''s price';
+end $$;
+reset role;
+\echo '  ok (release review C: a crew cannot set the air sealing price)'

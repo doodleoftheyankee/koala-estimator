@@ -44,7 +44,7 @@ const bodySchema = z.object({ mutationId: z.guid(), test: z.unknown() });
 const reply = (body: TestSyncResponse, status = 200) => NextResponse.json(body, { status });
 
 export async function POST(request: NextRequest) {
-  const { error } = await authorize(...ROLES);
+  const { profile, error } = await authorize(...ROLES);
   if (error) return error;
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return reply({ status: 'invalid', error: 'Malformed reading.' }, 400);
@@ -54,8 +54,11 @@ export async function POST(request: NextRequest) {
     return reply({ status: 'invalid', error: msg || 'Malformed reading.' }, 422);
   }
 
+  // A crew never sends a price (the crew phone shows none); one sent anyway is dropped here, and
+  // sync_blower_door_test drops it too (release review C SEC-1).
+  const reading = profile.role === 'crew' ? { ...test.data, airSealingCost: null } : test.data;
   const supabase = await createClient();
-  const { data, error: rpcError } = await supabase.rpc('sync_blower_door_test', { p_mutation_id: body.data.mutationId, p_test: toRpcTest(test.data) });
+  const { data, error: rpcError } = await supabase.rpc('sync_blower_door_test', { p_mutation_id: body.data.mutationId, p_test: toRpcTest(reading) });
   if (rpcError) {
     if (rpcError.code === '28000') return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
     // A deactivated or re-roled account: keep the reading on the phone.
