@@ -730,11 +730,19 @@ RA-F4 A product with a quantity of 0 is not sold as work. A material quantity is
     Random quotes (the generator now draws a quantity or hours of 0 on 5% of line changes): labels_
       match_work product_not_installed (new) 23 -> 0, finite_amounts zero_work_item (new) 3 -> 0;
       quotes with no option shown 897 -> 899 (two quotes whose every option was emptied).
+    Follow-ups found by the full runs (seed 7): a product at 0 is no work when options are compared
+      (OD6): crawlspace 800 sq ft with Best's air sealing set to 0: Best was shown and Better hidden
+      ("costs the same as Best"), both selling the same single item -> Best hidden as "the same work
+      as Better", Better shown. And work with a cost never prints at $0: attic 0.3 sq ft at R-19,
+      removal hours set to 0 (disposal $0.11): "Remove and dispose of existing insulation (0.3 sq ft)"
+      $0 -> $1, travel and setup $1 less, the total unchanged.
     Owner decision: R3 (a quantity is what is installed), L15. The Phase 2 note "a zero override is
     valid (e.g. materials already on site)" no longer holds under R3; material on site is a price
     change.
     Tests: "walls 2x4, Good dense-pack set to 0 bags: …", "0 bags and 0 hours on every option: no $0
-    work item …", "rim joist 200 sq ft, Best set to 0 board ft: …"; lib/field/lineOverrides.test.ts
+    work item …", "rim joist 200 sq ft, Best set to 0 board ft: …", "crawlspace 800 sq ft, Best's air
+    sealing set to 0: Best is the same work as Better …", "a removal with a cost never prints at $0 …";
+    lib/field/lineOverrides.test.ts
     "refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)";
     lib/accuracy/invariants.test.ts "review A F4: a product with a quantity of 0 is not sold as work".
 

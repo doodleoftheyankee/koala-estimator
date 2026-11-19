@@ -151,6 +151,30 @@ describe('F4: a product priced at 0 is not sold as work', () => {
   });
 });
 
+describe('F4 follow-ups: an option is judged by the work it sells', () => {
+  it('crawlspace 800 sq ft, Best\'s air sealing set to 0: Best is the same work as Better, so it is not shown', () => {
+    const crawl = area({ id: 'c1', jobType: 'crawlspace', name: 'Crawlspace', sqft: 800 });
+    const input = estimate({ areas: [crawl], lineOverrides: { [lineKey('c1', 'air_sealing', 'material')]: { qty: 0, reason: 'Counted on site', tier: 'best' } } });
+    expect(work(tier(all(input), 'best'))).toEqual(work(tier(all(input), 'better')));
+    const r = shown(input);
+    // Before: Best shown next to Better with the same single item (the air sealing lines, at 0, still counted as work).
+    expect(r.options.map((o) => o.tier)).not.toContain('best');
+    expect(r.warnings.find((w) => w.code === 'option_hidden' && w.tier === 'best')!.message).toMatch(/same work as Better/);
+    expect(violations(input)).toEqual([]);
+  });
+
+  it('a removal with a cost never prints at $0: attic 0.3 sq ft at R-19, removal hours set to 0, disposal $0.11', () => {
+    const tiny = area({ id: 'a1', sqft: 0.3, currentR: 19, existingMaterial: 'Spray foam' });
+    const input = estimate({ areas: [tiny], lineOverrides: { [lineKey('a1', 'removal', 'removal')]: { hours: 0, reason: 'Crew estimate', tier: null } } });
+    const best = tier(all(input), 'best');
+    const removal = best.customerItems.find((i) => i.description.startsWith('Remove'))!;
+    // Before: "Remove and dispose of existing insulation (0.3 sq ft)" $0.
+    expect(removal.price).toBe(1);
+    expect(best.customerItems.reduce((a, i) => a + i.price, 0)).toBe(best.price);
+    expect(violations(input)).toEqual([]);
+  });
+});
+
 describe('F5 (OD6): two options with different materials are not "the same work"', () => {
   // The owner sets the crawlspace Better template to R-30 batts and prices them above the R-19 batt.
   const snap: PricingSnapshot = structuredClone(snapshot);

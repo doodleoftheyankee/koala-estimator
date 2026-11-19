@@ -114,12 +114,14 @@ export function priceEstimate(
 /**
  * What an option does, as a string: every area line it prices, with the material and the quantity
  * of each material line (an R-19 batt and an R-30 batt over the same floor are not the same work:
- * review A F5). Two options with the same signature do the same work for the customer (hours and
- * travel follow from the work).
+ * review A F5). A product whose quantity is 0 is not work (review A F4): its lines are left out.
+ * Two options with the same signature do the same work for the customer (hours and travel follow
+ * from the work).
  */
 export function workSignature(option: Pick<PricedOption, 'lines'>): string {
+  const none = new Set(option.lines.filter((l) => l.kind === 'material' && l.key !== null && !(l.qty > 0)).map((l) => `${l.areaId}|${l.product}`));
   return option.lines
-    .filter((l) => l.key !== null)
+    .filter((l) => l.key !== null && !none.has(`${l.areaId}|${l.product}`))
     .map((l) => (l.kind === 'material' ? `${l.key}=${l.materialId}:${l.qty}` : l.key!))
     .sort()
     .join(';');
@@ -562,7 +564,9 @@ function priceTier(
  *  - "Price adjustment": the estimator's price change, plus or minus.
  */
 function customerLines(groups: ScopeGroup[], markup: number, costPrice: number, adjustedPrice: number, price: number): CustomerItem[] {
-  const work = groups.map((g) => Math.max(0, Math.floor(money(g.cost * markup) + 1e-9)));
+  // Work with a cost never prints at $0: under a dollar it is $1, taken from travel and setup
+  // (a tiny area's removal at 0 hours still has its disposal: review A F4).
+  const work = groups.map((g) => (g.cost > 0 ? Math.max(1, Math.floor(money(g.cost * markup) + 1e-9)) : 0));
   let travel = costPrice - sum(work);
   // Never happens with real numbers (items round down, the price rounds up); kept so a line can
   // never be negative and the items always add up.
