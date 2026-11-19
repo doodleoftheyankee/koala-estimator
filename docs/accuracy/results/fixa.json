@@ -1,0 +1,211 @@
+{
+  "stage": "fixa (review A fixes)",
+  "branch": "claude/accuracy-fixa",
+  "base": "e88c305 (origin/claude/accuracy when the branch was cut); the flow stage's final origin/claude/accuracy 587ce69 merged in at 045e107 (only the ledger conflicted: both appended a section)",
+  "codeHeadCommit": "0aa7931 (the commits after it change docs only)",
+  "pushed": true,
+  "summary": "Fixed every confirmed and plausible engine finding of review A (F1-F13), the verifier's missed M1 and M2, and DOC-4, each with a test that failed on the code first and passes after, and a ledger entry under 'Review A fixes' in docs/accuracy/ledger.txt. The phone keeps every option the customer is not shown on the Options step, collapsed, with the reason, Change price, Remove price change and Details (F1, M2), and the card the quote highlights always says so (F10). The engine: batts and air sealing say the area their quantity covers, batts above the area are cut to it (F3); a quantity of 0 installs and sells nothing, and the phone refuses it (F4); two materials are not the same work (F5); install hours multiply as before the money stage (F6); an option's own removal never leaves less R than is there (F9); a tiny area never reads 0 sq ft (F12); a depth the form does not show is not priced (M1). The checker: the generator draws the same quotes whatever the engine (F7); a hidden option must be rightly hidden (F8); new kinds area_not_covered, product_not_installed, zero_work_item, ends_below_existing, wrongly_hidden, none_shown. Learning: wall actuals no longer move attic prices (F2). The dense-pack citation names one card (F13). The PDF keeps an option on one page only when it fits one (DOC-4). On the same quotes, the engine before these fixes breaks the new rules 331 times at seed 20261118 (and 637 at seed 7, 621 at seed 99999); after, every rule is 0 at all three seeds. Both golden sets are byte for byte as after the quotes stage (no option total, title, bullet, item or shown/hidden change). F11 ended as the flow stage's L23c (checker float epsilon only; R-32.7 and R-13 stay); rounding a cavity-capped R down is an owner question. Out of scope and untouched: DOC-1, DOC-2, DOC-3, the email From fallback, the Send checklist, the send route, sendChecks.ts and approvals; DOC-5, DOC-6 and DOC-7 were refuted.",
+  "fixed": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "commit": "e1fe40b",
+      "what": "app/field/OptionsStep.tsx prices with showAll too and shows every option priced but not shown under 'Not shown to the customer': a collapsed card with the option_hidden reason, the estimator's price and reason, Change price, Remove price change and Details (line editing); no Make recommended; the reason no longer repeats at the top. A line change lists every option with the line, shown or not.",
+      "tests": [
+        "app/field/OptionsStep.test.tsx 'Good set to $4,500, above Better ($4,390): Good is not shown to the customer, but its card stays, collapsed, with Remove price change'",
+        "app/field/OptionsStep.test.tsx 'an option hidden with no change of the estimator (Best repeats Better) can still be priced: Change price, no Remove'",
+        "e2e step 'a price change that hides an option can be taken back (OD6, review A F1)': 3 checks ok"
+      ]
+    },
+    {
+      "id": "M2",
+      "severity": "part of F1",
+      "commit": "e1fe40b",
+      "what": "Every hidden tier with an override gets its card, not only the one a warning names.",
+      "tests": [
+        "app/field/OptionsStep.test.tsx 'Better then set to $9,000 on the one card left: Better is hidden too, and both hidden cards keep their price change (M2)'"
+      ]
+    },
+    {
+      "id": "F3",
+      "severity": "high",
+      "commit": "ed2b91f",
+      "what": "A sq-ft material (batts, air sealing) covers qty / waste; the item says 'N of M sq ft' when it covers part of the area, and a bullet claiming every leak sealed goes; batts above the whole area are cut to it with override_capped; air sealing above the area is kept (knee walls, L7) and the item says the sq ft priced. Checker kind labels_match_work area_not_covered.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'F3 (R3): a batt or air-sealing quantity says the area it covers' (5 tests)",
+        "lib/accuracy/invariants.test.ts 'labels_match_work (review A F3): the area an item states is the area its quantity covers' (3 tests)"
+      ]
+    },
+    {
+      "id": "M1",
+      "severity": "high",
+      "commit": "a6daf4f",
+      "what": "lib/sync/draft.ts hasDepthField, withJobType (clears the depth when the job type changes to one with no depth field; AreasStep uses it) and priceableAreas (leaves out a depth stored on attic or commercial areas, so drafts saved before also price right; the phone, sync, send route and approvals all price through it).",
+      "tests": [
+        "lib/sync/payload.test.ts 'a cavity depth goes with the job type: changed to attic, an area keeps no hidden depth (review A M1)'",
+        "lib/sync/payload.test.ts 'a depth stored on an attic (a draft saved before the fix) is not priced: the attic prices to R-49, not to a 3.5 in \"cavity\" (review A M1)'"
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "medium (verifier)",
+      "commit": "1efda3e",
+      "what": "lib/learning/calibrate.ts fitWaste fits the shared waste cell only on rows of job types with no waste cell of their own; with none, the shared cell keeps its value. Ledger L21 annotated; it is now true.",
+      "tests": [
+        "lib/learning/calibrate.test.ts 'calibrate: wall actuals do not move attic prices (L21, review A F2)' (3 tests; two failed before: 1.188 and 1.117)"
+      ]
+    },
+    {
+      "id": "F4",
+      "severity": "medium",
+      "commit": "0c65c84, follow-ups 0aa7931",
+      "what": "A product with a material quantity of 0 installs nothing: no item, no title or bullet words, no install hours unless typed, a product_zero warning, lines kept for Details; an option with no work is not shown (option_hidden 'it installs nothing'); the phone refuses a material quantity of 0 (lib/field/lineOverrides.ts). Follow-ups found by the seed 7 run: a product at 0 is left out of the OD6 work signature, and a work item with a cost is at least $1. Checker kinds labels_match_work product_not_installed and finite_amounts zero_work_item; the generator draws a 0 on 5% of line changes.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'F4: a product priced at 0 is not sold as work' (3 tests)",
+        "lib/pricing/review-a.test.ts 'F4 follow-ups: an option is judged by the work it sells' (2 tests)",
+        "lib/field/lineOverrides.test.ts 'refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)'",
+        "lib/accuracy/invariants.test.ts 'review A F4: a product with a quantity of 0 is not sold as work' (2 tests)"
+      ]
+    },
+    {
+      "id": "F5",
+      "severity": "medium",
+      "commit": "bc5a488",
+      "what": "engine workSignature keys a material line by its material as well as its quantity.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'Good (R-19 batts) and Better (R-30 batts) are both shown; Better is no longer hidden as the same work'"
+      ]
+    },
+    {
+      "id": "F9",
+      "severity": "medium",
+      "commit": "0d09347",
+      "what": "When an option's removal comes from its template (not removalNeeded) and the option would end the area below the R there, the removal is not priced (the option keeps what is there), with a removal_kept warning. Checker kind options_step_up ends_below_existing.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'F9: an option never removes what is there to leave the area with less R (unless removal is required)' (4 tests)",
+        "lib/accuracy/invariants.test.ts 'options_step_up (review A F9): an option never leaves an area with less R than it has' (2 tests)"
+      ]
+    },
+    {
+      "id": "DOC-4",
+      "severity": "medium (verifier)",
+      "commit": "565fda7",
+      "what": "lib/quotes/pdf.tsx estimateOptionHeight (errs high); an option is kept together only when it has 18 lines or fewer and its estimated height is at most 640 of the page's 708 pt. Legacy documents unchanged.",
+      "tests": [
+        "lib/quotes/quotes-stage.test.ts '7 attics with 80-character names: react-pdf never squeezes an option into a page (it did, overlapping the first page)' (real render, console.warn spy)",
+        "lib/quotes/quotes-stage.test.ts '8 attics with 55-character names: no option is squeezed either'",
+        "the existing 'no option starts on one page and ends on the next' still passes",
+        "rendered and looked at: docs/accuracy/after-fixa/doc4-*.png"
+      ]
+    },
+    {
+      "id": "F6",
+      "severity": "low",
+      "commit": "007d48f",
+      "what": "Install hours = setup + units x rate x access, multiplied left to right as before the money stage, for the model and for a changed quantity (product scope and air sealing). The reviewer's 3 attic-only $5 moves are back to the daymark prices; the 43 attic-only inputs that still differ from daymark are all RA-F9 removal_kept.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.88 h and $10,815, as daymark priced it'"
+      ]
+    },
+    {
+      "id": "F7",
+      "severity": "low",
+      "commit": "4686d01",
+      "what": "lib/pricing/__fixtures__/random.ts draws areas, crew, drive, pick, whether the estimator changes something, dates and validity from the seed in a fixed number of draws; the changes come from a per-quote stream with a fixed number of draws per tier and line change. The baseline engine and checker were re-run on the same quotes (docs/accuracy/after-fixa/violations-b708d67-same-quotes-20261118.txt); ledger and checker.txt wording corrected.",
+      "tests": [
+        "lib/accuracy/invariants.test.ts 'draw the same areas, crews, drives, picks and dates whatever the engine returns (review A F7)'"
+      ]
+    },
+    {
+      "id": "F8",
+      "severity": "low",
+      "commit": "41dfdfb",
+      "what": "lib/pricing/invariants.ts checkHiddenRightly (options_step_up kinds wrongly_hidden, none_shown) over the showAll result (PricedQuote.all), wired into checkPricedQuote, violations.ts and golden.ts.",
+      "tests": [
+        "lib/accuracy/invariants.test.ts 'options_step_up (review A F8): an option the customer is not shown was rightly hidden' (4 tests)"
+      ]
+    },
+    {
+      "id": "F10",
+      "severity": "low",
+      "commit": "1edbe25",
+      "what": "'Highlighted on the quote' shows on whichever card recommendedTier gives; a pick that is not shown reads 'Recommended (your pick is not shown)'.",
+      "tests": [
+        "app/field/OptionsStep.test.tsx 'F10 (OD1, OD6): the card the quote highlights says so, whichever option it is' (2 tests)"
+      ]
+    },
+    {
+      "id": "F11",
+      "severity": "low",
+      "commit": "10812fd then c8b5900",
+      "what": "Checker: explicit float epsilon (FLOAT_EPS, the same text as the flow stage's L23c, so the merge was clean); seed 99999 is 0. This branch first also stated a cavity-capped R rounded down (R-32.6, R-12.9) as the reviewer suggested; that was taken back to agree with the flow stage's L23c and ledger L18 (R-values said to 0.1 rounded half up). Owner question recorded.",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best closed-cell: R-32.7, and no violation'",
+        "lib/pricing/phase1.test.ts L23c tests from the flow stage"
+      ]
+    },
+    {
+      "id": "F12",
+      "severity": "low",
+      "commit": "3d89ea6",
+      "what": "fmtSqft: two significant digits under 1 sq ft; a model quantity to 0.1 is at least 0.1 for a positive need (so a tiny area's air sealing is not taken for an estimator's 0).",
+      "tests": [
+        "lib/pricing/review-a.test.ts 'attic 0.04 sq ft (the form takes any size above 0): \"0.04 sq ft\", not \"0 sq ft\"; 0.3 sq ft still reads 0.3'"
+      ]
+    },
+    {
+      "id": "F13",
+      "severity": "low (plausible)",
+      "commit": "0a4fb2e",
+      "what": "Docs and a migration comment only: the source is the Greenfiber SANCTUARY card (Rev E, 01/23; read through a web search summary, greenfiber.com is not reachable from this session): dry dense-pack at 3.5 pcf, 2x4 35.0 sq ft per bag at 16 in o.c. (33.8 at 24 in), 2x6 22.3 (21.6); 122.5 is the 16 in o.c. figure; INS765 is another product. No value changes.",
+      "tests": []
+    }
+  ],
+  "notFixed": [
+    "Out of scope by instruction (for the final fixer, after the flow stage): DOC-1, DOC-2, DOC-3, the email From fallback (missed in the documents review), the Send checklist, the send route, sendChecks.ts and approvals.",
+    "Refuted by the verifier, nothing done: DOC-5, DOC-6, DOC-7.",
+    "F11's engine half (state a cavity-capped R rounded down): taken back to agree with the flow stage's L23c and ledger L18, which say R-values to 0.1 rounded half up (3.5 in of open-cell, R-12.95, reads R-13). Left as an owner question.",
+    "F8's note that lib/quotes/invariants.ts expectedHeadline's comment ('else Better, else the first option') omits the 'pick not shown -> next shown' case: comment only, behaviour equals recommendedTier; left because that file was being changed by the flow stage.",
+    "F13: whether to price dense-pack at 16 or 24 in o.c. and the bag weight are owner questions; no value changed.",
+    "M1 / F9: the engine still reads a depth on an attic or commercial area (only the app's inputs drop it); whether an attic floor's joist depth should ever cap blown fill is an owner question.",
+    "docs/accuracy/spec/round1-fixer-result.json and docs/accuracy/results/cavity.json still say wall actuals no longer move attic prices (R4); they are records of earlier stages and were not rewritten. Ledger L21 is annotated and RA-F2 makes it true."
+  ],
+  "valueChanges": [
+    "RA-F3 crawlspace 800 sq ft, Good batts set to 100 sq ft: 'Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft' -> '…, 95 of 800 sq ft', $1,500 unchanged; 1,600 sq ft of batts: 1,600 priced, item $3,902, Good $4,275 -> 840 sq ft (the whole area), item $2,080, Good $2,270, with an override_capped warning.",
+    "RA-F3 attic 1,000 sq ft, air sealing set to 500 sq ft on Better: '(1,000 sq ft)' -> '(500 of 1,000 sq ft)', $4,090 unchanged; Best loses 'Full air sealing before new insulation'. Air sealing set to 1,500 sq ft (knee walls): '(1,000 sq ft)' -> '(1,500 sq ft)', $4,685 and 9.5 h unchanged.",
+    "RA-M1 attic 1,000 sq ft, R-0, with a 3.5 in depth left from walls: Good $1,500 'Blown Cellulose to R-12.6' -> $2,995 'Blown Cellulose to Code' (R-49); Better $1,635 -> $4,390. At R-11: Good not offered, Better $1,500, Best $4,085 -> Good $2,385, Better $3,805, Best $6,655.",
+    "RA-F9 attic R-38 cellulose, target R-30: Best $5,025 'Remove, Air Seal + Cellulose' (removes R-38, installs R-30) -> keeps the R-38 and air seals, the same work as Better ($1,500 'Air Sealing'), not shown, with a removal_kept warning. Attic R-49 with a 7.25 in depth: Best $4,840 ending at R-26.1 -> not shown.",
+    "RA-F4 walls 1,000 sq ft 2x4, Good set to 0 bags: Good $1,500 'Dense-Pack Cellulose', item 'Blown Cellulose to R-0 (~0\" added)' $134 -> Good not shown. Rim joist 200 sq ft, Best set to 0 board ft: Best $1,500 'Closed-Cell Spray Foam to R-0' -> Better $1,500 'Open-Cell Spray Foam to R-10'. 0 bags and 0 h everywhere: a $0 work item -> none. Crawlspace 800 sq ft with Best's air sealing at 0: Best shown, Better hidden -> Better shown, Best hidden as the same work. Attic 0.3 sq ft, removal hours 0: removal item $0 -> $1 (travel $1 less, total unchanged).",
+    "RA-F5 (an owner's setup: crawlspace Better = R-30 batts at $1.10): Better $2,830 hidden as 'the same work as Good' -> shown. Seeded setup: nothing moves.",
+    "RA-F6 attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.87 h $10,810 -> 44.88 h $10,815 (daymark's price); reviewer's q1208 Best $40,000 -> $39,995, q2753 Good $33,595 -> $33,590.",
+    "RA-F12 attic 0.04 sq ft: '…, 0 sq ft' -> '…, 0.04 sq ft'; air sealing '(0 sq ft)' -> '(0.04 sq ft)', material 0 -> 0.1 sq ft; $1,500 unchanged.",
+    "RA-F2 learning only: 200 wall jobs at 1.30 moved the shared cellulose waste cell 1.08 -> 1.188 (attic 1,000 sq ft to R-49: 74 -> 81 bags once promoted); now it stays 1.08. No price moves today.",
+    "RA-DOC-4 PDF layout only: 7 attics with 80-character names, Better kept together and squeezed over page 1 (3 pages) -> Better runs across pages 1-2, readable (4 pages). No amount or text changes.",
+    "Golden sets: none. Synthetic (65) and live (78) are byte for byte the after-quotes files (option totals, titles, bullets, items, shown/hidden, headlines); docs/accuracy/after-fixa/about.txt says why."
+  ],
+  "checks": {
+    "typecheck": "pass: npm run typecheck, 0 errors, on 0aa7931",
+    "lint": "pass: npm run lint, 0 problems, on 0aa7931",
+    "vitest": "pass: 1,631 tests in 83 files on 0aa7931 (1,588 in 81 files on the flow stage's 587ce69); none deleted, skipped or weakened. Expectations changed: lib/pricing/overrides.test.ts title of 'a zero override is valid' (comment only, same assertions).",
+    "testDb": "pass: npm run test:db, all database tests passed, on 0aa7931",
+    "violations": "0 on every rule: 10,000 at seed 20261118, 20,000 at seed 7, 20,000 at seed 99999 (docs/accuracy/after-fixa/violations-*.txt). Same quotes with the engine before these fixes: seed 20261118 options_step_up 140, labels_match_work 188, finite_amounts 3; seed 7 275, 361, 1; seed 99999 291, 330, 0 (violations-before-fixa-*.txt).",
+    "e2e": "pass: bash scripts/e2e.sh (APP_PORT=3570 PGRST_PORT=3571 MOCK_PORT=54770 E2E_DB_NAME=koala_fixa) on 0aa7931: 322 ok, console errors none, EXIT 0, including the new step 'a price change that hides an option can be taken back (OD6, review A F1)'. The Next.js build stopped at the security-upgrade notice on the first try of each run; the same command was retried once each time; nothing was upgraded. Servers stopped and the e2e database dropped.",
+    "golden": "re-priced with scripts/accuracy/price-golden.ts on 0aa7931 from the read-only export already on disk (no new production read): synthetic 65 and live 78, 0 violations on every rule; both files identical to after-quotes; docs/accuracy/after-fixa/. The flow stage's report.ts on this branch gives the same report.json, 0 unexplained."
+  },
+  "ledger": "docs/accuracy/ledger.txt, section 'Review A fixes': RA-F3, RA-M1, RA-F9, RA-F4, RA-F5, RA-F6, RA-F11, RA-F12, RA-F2, RA-F13, RA-DOC-4 (L20 and L21 annotated; the generator note under 'Checker' corrected for F7)",
+  "migrations": [
+    "None added. supabase/migrations/20261119000001_accuracy.sql: the dense-pack comment now cites one card (RA-F13); no SQL changed."
+  ],
+  "ownerQuestions": [
+    "F9: when an option's own removal would leave less R than is there, keep what is there (done: the option keeps it, and is usually then the same as Better and not shown), or skip the option outright?",
+    "M1/F9: should an attic floor's joist depth ever cap blown fill (the engine still reads a depth on any job type; the phone no longer sends one for attics)?",
+    "F11: should an R that the cavity caps be said rounded down (2x4 open-cell R-12.9, not R-13) so it never reads above what the cavity holds, even by the 0.05 of rounding? Today: rounded half up (L18, L23c).",
+    "F13: price dense-pack walls at 16 in o.c. (122.5 sq ft x in per bag, today) or 24 in o.c. (118.3)? And confirm the bag weight in the row name ('25 lb').",
+    "F4: a quantity of 0 now means nothing installed (R3). Material already on site is a price change; the phone says so. Keep?"
+  ],
+  "notesForNextStage": "This branch already contains the flow stage (587ce69 merged at 045e107): merging it into claude/accuracy should fast-forward or merge cleanly. The ledger has the flow section then 'Review A fixes'. public/sw.js is v11. Scratch evidence (not in git): before/after violation runs, the reviewer's daymark comparison and PDF renders under /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/fixa/. Remaining review A items for the final fixer: DOC-1, DOC-2, DOC-3 and the email From fallback.",
+  "screenshots": [
+    "docs/accuracy/after-fixa/f1-option-not-shown.png (phone: Good priced above Better, its collapsed card under 'Not shown to the customer')",
+    "docs/accuracy/after-fixa/doc4-before-page1.png, doc4-after-page1.png, doc4-after-page2.png"
+  ]
+}

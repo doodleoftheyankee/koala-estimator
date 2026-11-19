@@ -1,0 +1,41 @@
+Accuracy check: 20,000 random quotes, seed 7, seeded pricing (lib/pricing/__fixtures__/seeded-rows.json), bundle 5ecebe2c0f390417.
+Options priced: 52,670; shown to the customer: 43,911; quotes with no option: 1,933.
+A quote counts once per rule it breaks; violations count every break (per option, area or surface).
+
+| Invariant | Quotes | Violations | By kind |
+|---|---|---|---|
+| items_add_up | 0 (0.0%) | 0 |  |
+| same_work_same_price | 0 (0.0%) | 0 |  |
+| options_step_up | 274 (1.4%) | 275 | ends_below_existing 275 |
+| labels_match_work | 276 (1.4%) | 361 | area_not_covered 310, product_not_installed 51 |
+| cavity_not_overfilled | 0 (0.0%) | 0 |  |
+| finite_amounts | 1 (0.0%) | 1 | zero_work_item 1 |
+| same_price_text | 0 (0.0%) | 0 |  |
+| valid_until_is_expiry | 0 (0.0%) | 0 |  |
+
+Price surfaces read (same_price_text kinds):
+  quote_page: quote page (chosen option and its total), app/q/[token]/SignForm.tsx:229 (rendered)
+  sign_button: sign button, app/q/[token]/SignForm.tsx:560 (rendered)
+  accept_sentence: accept sentence ("You are accepting … for …"), app/q/[token]/SignForm.tsx:528 (rendered)
+  signed_page: signed page ("You accepted … for …" and the signed price), app/q/[token]/SignForm.tsx:370 (rendered)
+  pdf: quote PDF option total, lib/quotes/pdf.tsx:108 (formatter)
+  signed_pdf: signed PDF price, lib/quotes/pdf.tsx:194 (formatter)
+  quote_email: quote email, lib/quotes/email.ts:135 (rendered)
+  signed_email: signed confirmation email, lib/quotes/email.ts:172 (rendered)
+  office_email: office "quote signed" email, lib/quotes/email.ts:194 (rendered)
+  jobs_list: jobs list signed price, app/jobs/page.tsx:335 (formatter)
+  job_page: job page option price, app/jobs/[id]/page.tsx:112 (formatter)
+  office_list: office estimates list headline, app/estimates/page.tsx:409 (formatter)
+  field_card: estimator's phone list headline, app/field/EstimateList.tsx:303 (formatter)
+
+Examples:
+options_step_up:
+  [ends_below_existing] dcc6610b best: best removes Attic's R-60 and ends at R-38.3
+  [ends_below_existing] a03c360f best: best removes Attic's R-49 and ends at R-38.3
+labels_match_work:
+  [area_not_covered] 21cceccd best: "Air sealing of the rim, penetrations and gaps in the floor above (1,003 sq ft)" but the quantity priced covers 825.8 sq ft
+  [area_not_covered] 26ec4409 best: "Air sealing of the rim, penetrations and gaps in the floor above (1,420 sq ft)" but the quantity priced covers 2180.6 sq ft
+  [product_not_installed] d4246010 good: "Blown Cellulose to R-0 (~0" added), 45,700 sq ft" but the quantity priced is 0
+  [product_not_installed] 9b55ecc4 good: "Blown Fiberglass to R-0 (~0" added), 16,044 sq ft" but the quantity priced is 0
+finite_amounts:
+  [zero_work_item] f36dd948 best: item "Remove and dispose of existing insulation (0.3 sq ft)" is $0

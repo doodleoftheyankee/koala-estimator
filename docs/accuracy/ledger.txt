@@ -848,3 +848,27 @@ RA-DOC-4 (L39) An option is kept on one page only when it fits one. L39 kept tog
     an option into a page …", "8 attics with 55-character names: no option is squeezed either"
     (both render the real PDF and fail before the fix with react-pdf's "bigger than available page
     height"); "no option starts on one page and ends on the next" still passes.
+
+No customer value (the phone, the checker, the generator):
+  RA-F1, RA-M2 The phone keeps every option the customer is not shown on the Options step, collapsed
+    under "Not shown to the customer", with the reason, the estimator's price, Change price, Remove
+    price change and Details; it cannot be made the recommended option. Example (seeded attic 1,000 sq
+    ft): Good set to $4,500 above Better $4,390: the Good card disappeared, and with it the only
+    control that could undo the change -> Good's card stays, and Remove price change brings it back at
+    $2,995. Tests: app/field/OptionsStep.test.tsx (3 tests); e2e "a price change that hides an option
+    can be taken back (OD6, review A F1)".
+  RA-F10 The card the quote highlights says "Highlighted on the quote" whichever option it is (rim
+    joist 150 sq ft, only Best shown: no badge -> badge); a pick that is not shown reads "Recommended
+    (your pick is not shown)", not "(default)". Tests: app/field/OptionsStep.test.tsx (2 tests).
+  RA-F7 The random generator draws the same areas, crews, drives, picks and dates whatever the
+    engine or the prices; the estimator's changes come from each quote's own stream. The baseline
+    engine and checker (b708d67) re-run on the same 10,000 quotes:
+    docs/accuracy/after-fixa/violations-b708d67-same-quotes-20261118.txt. Test: lib/accuracy/
+    invariants.test.ts "draw the same areas, crews, drives, picks and dates whatever the engine
+    returns (review A F7)".
+  RA-F8 The checker reads the showAll result too: a hidden option with work must do the same work as
+    another for as much or more, or cost no less than the next option shown above it (kinds
+    wrongly_hidden, none_shown). Tests: lib/accuracy/invariants.test.ts "options_step_up (review A F8):
+    an option the customer is not shown was rightly hidden" (4 tests).
+  Random quotes on the same quotes and checker, engine before -> after these fixes: seed 20261118
+    331 -> 0 breaks, seed 7 637 -> 0, seed 99999 621 -> 0 (docs/accuracy/after-fixa/about.txt).
