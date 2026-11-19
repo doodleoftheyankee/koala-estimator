@@ -1,0 +1,44 @@
+{
+ "stage": "money",
+ "branch": "claude/accuracy-money",
+ "base": "origin/claude/accuracy a7c9581",
+ "codeHeadCommit": "10f5b12",
+ "pushed": true,
+ "summary": "Rebuilt the engine's money lines and option rules (L1-L7, L14-L17) on lib/pricing/engine.ts. Each work item is priced from its own cost (cost x (1 + overhead) / (1 - target margin), rounded down to the dollar), so the same work costs the same in every option; the rest of the model price is a 'Travel and setup' line, the minimum job top-up a 'Minimum job charge' line and an estimator's price a 'Price adjustment' line. CustomerItem.kind is 'work' | 'travel' | 'minimum' | 'adjustment'; every line is whole dollars and the lines add up to the price. Price overrides round to the dollar, the price step is at least $1 (engine and price advice), and an override under $1 is ignored with an override_too_low warning (Apply waits for $1 or more). Install labor follows a changed quantity (model hours unchanged). OD6: priceEstimate(input, snapshot, coeffs, opts?: { showAll }) leaves out duplicates and options that do not step up, each with an option_hidden warning; stepUp and workSignature are exported. Titles and bullets come from the work priced; air-sealing words per job type; areas under 10 sq ft keep one decimal. Callers: the phone's option cards list each line with its price; the quote document carries each line's kind and never recommends an option it does not carry; the customer page shows job lines without an empty area label; the design sheet keeps three sample options; service worker cache v6 so phones load the new engine. The phone and the server call the same priceEstimate with the same defaults, so the prices the phone sends with a quote equal the ones the server stores. Every record example reproduces with today's seeded pricing except L2 (its numbers need the dense-pack bag from L20; with that coverage the engine gives the record's exact $1,254 + $186 + $60) and L4 (the record's random quote is not re-runnable; a seeded example is in the ledger).",
+ "commits": [
+  "8dbcc5d Engine money lines: items from their own cost, travel, minimum and adjustment lines; OD6 option rules",
+  "46e021a Every quote adds up: travel, minimum and price changes on their own lines; options that do not step up are not shown",
+  "10f5b12 Price advice uses the engine's whole-dollar step; ledger for the money stage (L1-L7, L14-L17)"
+ ],
+ "valueChanges": [
+  "L1 OD2: removal in attic 1,200 sq ft R-19 Good $2,720.15 / Better $2,735.84 -> $2,483 in both; Good travel and setup $557; totals unchanged (Good $6,385, Better $8,010). Matches the record.",
+  "L2 OD2: walls 1,000 2x4 Good one item $1,500 -> $820 + travel $190 + minimum job charge $490 with today's seeded bag; the record's $1,254 + $186 + $60 needs L20's 122.5 sq ft x in dense-pack bag (verified in a test).",
+  "L3 OD3: attic 900 R-19 Better at $3,000: $2,373.44 + $626.56 -> $2,153 + $568 + travel $374 + price adjustment -$95. Matches the record.",
+  "L4 OD4: garage 1,002 (difficult) + crawlspace 368 Best: printed $6,154 + $2,072 + $283 = $8,509 under $8,510 -> $5,482 + $1,846 + $252 + travel $930 = $8,510. The record's own example (Better $14,994 under $14,995) is not re-runnable.",
+  "L5 OD4: Good $4,321.50 -> $4,322; deviation note '$7,224.50' -> '$7,225'; price rounding 0: $2,990.92 -> $2,991; price advice with rounding 0: $1,333.34 -> $1,334.",
+  "L6 R7: attic 900 Good $0.40: printed $0 -> $2,735 plus an override_too_low warning; Apply disabled under $1. Matches the record.",
+  "L7 R3: hand fixture Good 58 -> 70 bags: labor 10 h -> 11.72 h priced (+$68.80); learning estHours 18.88 -> 19.81 for 95 bags. Matches the record.",
+  "L14 OD6: attic 1,200 R-0 Best $5,160 (same as Better) -> not shown with option_hidden; rim joist 150 sq ft all at $1,500 -> only Best; a quote's picked option that is not shown is no longer marked recommended (best -> better).",
+  "L15: 'Blown Cellulose to Code' -> 'Blown Cellulose to R-30' (code bullet removed); attic at R-60 Better -> 'Air Sealing'; crawlspace R-19 Best -> 'Air Sealing'; package bullets only from areas with work.",
+  "L16: crawlspace air sealing 'top plates, penetrations and bypasses' -> 'the rim, penetrations and gaps in the floor above'.",
+  "L17: attic 0.3 sq ft '0 sq ft' -> '0.3 sq ft'.",
+  "Test data only: hand fixture cellulose bag $14 -> $22 so Good stays below Better under OD6."
+ ],
+ "checks": {
+  "typecheck": "pass (tsc --noEmit)",
+  "lint": "pass (eslint .)",
+  "vitest": "pass: 1,441 tests in 74 files (1,403 at a7c9581 + 38 new); coverage thresholds met (all files 99.2% lines, 96.7% branches). No test deleted or skipped; tests whose numbers the value changes move were updated to the new exact numbers.",
+  "testDb": "pass (npm run test:db; no SQL changed)",
+  "e2e": "pass on 10f5b12: 244 ok, 0 FAIL, console errors none, EXIT 0 (APP_PORT 3410, PGRST_PORT 3411, MOCK_PORT 54710, koala_ac_money). The build stopped once at the Next.js security-upgrade notice; the same command was retried once; nothing was upgraded.",
+  "failBefore": "lib/pricing/phase1.test.ts run against the base engine (a7c9581): 26 of 31 fail; the 5 that pass are guards ($1 is a price, 'to Code' at code, own hours win, hiding never changes a price, the same-work property). Other value-change tests fail before by construction (updated expectations).",
+  "violations": "not run: the accuracy checker is being built on another branch; this stage's property tests cover items add up, whole dollars, same work same price and OD6 step-up on random inputs"
+ },
+ "ledger": "docs/accuracy/ledger.txt (stage money section)",
+ "notDone": [
+  "L9 (headline everywhere): sync payload model_total_price still uses the selected option, else the first; the office list is unchanged (it reads stored shown options). Left to the headline/quote stage.",
+  "Quote document and PDF: job lines print with a blank area column; full quote layout (grouping, travel line styling) is for the quote-document stage.",
+  "No migration in this stage; insulation items (L18-L23b) are another stage's.",
+  "L4's record example could not be re-run (its random inputs are not in the record)."
+ ],
+ "notesForNextStage": "API: priceEstimate(input, snapshot, coeffs, opts?: { showAll?: boolean }); exports stepUp, workSignature, priceStep, PriceEstimateOptions, CUSTOMER_ITEM_KINDS, CustomerItemKind. Warnings added: option_hidden, override_too_low. Job-level customer items have areaId null and areaName ''. QuoteOptionDoc.items[].kind is optional: quotes sent before it have none, read missing as 'work'. Money: work = floor(money(cost x markup)); travel = roundUp(loaded / (1 - m), priceStep) - sum(work); minimum = adjustedPrice - that; adjustment = price - adjustedPrice. Labels/bullets: optionText/areaLabel/areaBullets in engine.ts; AreaWork.primary.finalR is the R reached, a hook for L23's 'Fills the full cavity'. Primary item description text is unchanged except sq ft formatting (L17). Tests on seeded pricing use lib/pricing/__fixtures__/migrationSeed.ts (seededSnapshot, seededCoefficients, seededArea, seededEstimate), generated from a fresh migrated database through lib/server/snapshot makeBundle; when the checker's seeded.ts lands, phase1.test.ts can switch to it and this file can go. The hand fixture (seed.ts) cellulose is $22. Math tests wrap priceEstimate with showAll. public/sw.js is v6: if another branch bumps it, take the higher value and bump once more. Environment: a symlinked node_modules in a worktree makes the Turbopack build fail ('Could not find the Next.js package'); a hard-linked copy (cp -al ../koala-estimator/node_modules node_modules) works."
+}
