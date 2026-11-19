@@ -597,3 +597,16 @@ RA-F4 A product with a quantity of 0 is not sold as work. A material quantity is
     work item …", "rim joist 200 sq ft, Best set to 0 board ft: …"; lib/field/lineOverrides.test.ts
     "refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)";
     lib/accuracy/invariants.test.ts "review A F4: a product with a quantity of 0 is not sold as work".
+
+RA-F5 Two options with different materials are not "the same work" (OD6). The work signature that
+    finds duplicates names each material line's material as well as its quantity, so an R-19 batt
+    and an R-30 batt over the same floor are different options.
+    Example (an owner's setup, not the seeded one: crawlspace Better set to R-30 batts at $1.10 per sq
+      ft; crawlspace 800 sq ft): Good $2,270 and Best $4,660 shown, Better hidden as "the same work as
+      Good for more ($2,830 against $2,270)" -> Good $2,270, Better $2,830 "Fiberglass Batts to R-30
+      (10 in thick)", Best $4,660 all shown.
+    Seeded setup: nothing moves (random quotes: options shown 22,113 before and after; the golden sets
+    are unchanged by this fix).
+    Owner decision: OD6.
+    Test: "Good (R-19 batts) and Better (R-30 batts) are both shown; Better is no longer hidden as the
+    same work".

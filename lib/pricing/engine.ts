@@ -112,14 +112,15 @@ export function priceEstimate(
 // ---------------------------------------------------------------------------
 
 /**
- * What an option does, as a string: every area line it prices, with the quantity of each
- * material. Two options with the same signature do the same work for the customer (hours and
+ * What an option does, as a string: every area line it prices, with the material and the quantity
+ * of each material line (an R-19 batt and an R-30 batt over the same floor are not the same work:
+ * review A F5). Two options with the same signature do the same work for the customer (hours and
  * travel follow from the work).
  */
 export function workSignature(option: Pick<PricedOption, 'lines'>): string {
   return option.lines
     .filter((l) => l.key !== null)
-    .map((l) => (l.kind === 'material' ? `${l.key}=${l.qty}` : l.key!))
+    .map((l) => (l.kind === 'material' ? `${l.key}=${l.materialId}:${l.qty}` : l.key!))
     .sort()
     .join(';');
 }

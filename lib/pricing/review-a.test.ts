@@ -150,3 +150,29 @@ describe('F4: a product priced at 0 is not sold as work', () => {
     expect(violations(input)).toEqual([]);
   });
 });
+
+describe('F5 (OD6): two options with different materials are not "the same work"', () => {
+  // The owner sets the crawlspace Better template to R-30 batts and prices them above the R-19 batt.
+  const snap: PricingSnapshot = structuredClone(snapshot);
+  Object.assign(snap.tierTemplates.find((x) => x.jobType === 'crawlspace' && x.tier === 'better')!, {
+    label: 'Fiberglass Batts R-30',
+    primaryProduct: 'batts',
+    targetR: 30,
+    includeAirSealing: false,
+  });
+  snap.materials.find((m) => m.rValue === 30)!.costPerUnit = 1.1;
+  const input = estimate({ areas: [area({ id: 'c1', jobType: 'crawlspace', name: 'Crawlspace', sqft: 800 })] });
+
+  it('Good (R-19 batts) and Better (R-30 batts) are both shown; Better is no longer hidden as the same work', () => {
+    expect(work(tier(all(input, snap), 'good'))[0]).toContain('R-19');
+    expect(work(tier(all(input, snap), 'better'))[0]).toContain('R-30');
+    const r = shown(input, snap);
+    // Before: "Better is not shown to the customer: it is the same work as Good for more ($2,830 against $2,270)."
+    expect(r.warnings.filter((w) => w.code === 'option_hidden')).toEqual([]);
+    expect(r.options.map((o) => [o.tier, o.price])).toEqual([
+      ['good', 2270],
+      ['better', 2830],
+      ['best', 4660],
+    ]);
+  });
+});
