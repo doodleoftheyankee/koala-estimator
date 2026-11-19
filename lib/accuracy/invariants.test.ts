@@ -86,7 +86,8 @@ describe('seeded pricing fixture (the rows every migration leaves in a new datab
   it('is a valid pricing setup that keeps only the pricing settings', () => {
     expect(seededRows.settings.map((s) => s.key).sort()).toEqual([...PRICING_SETTING_KEYS].sort());
     expect(() => parseSettings(seededRows.settings)).not.toThrow();
-    expect(JSON.stringify(seededRows)).not.toMatch(/branding|Newark|Delaware|\(302\)/);
+    // No free text kept: the only text setting is the default crew's id (no branding, terms or franchise text).
+    expect(seededRows.settings.filter((st) => typeof st.value === 'string').map((st) => st.key)).toEqual(['default_crew_id']);
     expect(seededBundle.snapshot.defaultCrewId).toBe(seededRows.crews[0]!.id);
     // A fixed build time: the bundle and its hash are the same on every run.
     expect(bundleFromRows(seededRows).hash).toBe(seededBundle.hash);
@@ -501,7 +502,7 @@ describe('same_price_text (S1-F1, OD1, OD4): one price, one reading, in whole do
 });
 
 describe('valid_until_is_expiry (S1-F8, OD11): "Valid until" is the last day the link works', () => {
-  // The evening send: sent 2026-11-18 at 02:30 UTC (9:30 PM the evening before in New York), for
+  // The evening send: sent 2026-11-18 at 02:30 UTC (9:30 PM the evening before in the business time zone), for
   // 30 days. The link works until 2026-12-18 02:30 UTC, which is Dec 17 in the business zone.
   const sent = '2026-11-18T02:30:00.000Z';
   it('the link expiry is the send time plus the days, as the send route stores it', () => {

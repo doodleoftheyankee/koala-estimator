@@ -407,12 +407,13 @@ export function checkCavityNotOverfilled({ input, priced, snapshot, coefficients
       if (!(added > 0)) continue;
       const existing = existingThickness(a, o);
       if (existing + added > depth + THICKNESS_TOLERANCE_IN) {
+        const priced = addedThickness(o, a, snapshot, coefficients);
         out.push({
           invariant: 'cavity_not_overfilled',
           kind: a.depthIn === null ? 'overfilled_no_depth' : 'overfilled',
           tier: o.tier,
           areaId: a.id,
-          detail: `${a.name}: ${fmt(existing, 1)} in already there + ${fmt(added, 1)} in added in a ${fmt(depth, 2)} in cavity${a.depthIn === null ? ' (no depth entered: a 2x4 wall)' : ''}`,
+          detail: `${a.name}: ${fmt(existing, 1)} in already there + ${fmt(priced, 1)} in added in a ${fmt(depth, 2)} in cavity${a.depthIn === null ? ' (no depth entered: a 2x4 wall)' : ''}`,
         });
       }
     }

@@ -63,7 +63,6 @@ const lines = [
   '',
   'Examples:',
   tallyExamples(tally),
-  '',
-  `(${((Date.now() - started) / 1000).toFixed(1)} s)`,
 ];
 console.log(lines.join('\n'));
+console.error(`(${((Date.now() - started) / 1000).toFixed(1)} s)`);
