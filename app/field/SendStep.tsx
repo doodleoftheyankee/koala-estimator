@@ -1,9 +1,9 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { priceEstimate, type PriceApproval, type PricingBundle } from '@/lib/pricing';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
-import { refreshBundle, syncEstimate } from '@/lib/offline/sync';
+import { isReachable, onReachChange, refreshBundle, syncEstimate } from '@/lib/offline/sync';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
 import { recommendedTier } from '@/lib/field/recommended';
@@ -19,7 +19,7 @@ type SendResult =
   | { kind: 'idle' }
   | { kind: 'busy'; msg: string }
   | { kind: 'done'; url: string; emailed: boolean; version: number }
-  | { kind: 'error'; msg: string; reasons?: string[]; profile?: boolean }
+  | { kind: 'error'; msg: string; reasons?: string[] }
   /** The server found changes from the model without a note (409 unacknowledged_flags). */
   | { kind: 'flags'; msg: string; flags: Array<{ key: string; message: string }> };
 
@@ -63,6 +63,7 @@ function toRow(a: unknown): unknown {
     price: x.price,
     model_price: x.modelPrice,
     below_floor: x.belowFloor,
+    loaded_cost: x.loadedCost ?? null,
     status: x.status,
     decided_role: x.decidedRole ?? null,
     note: x.note ?? null,
@@ -99,6 +100,8 @@ export function SendStep({
   onFix: (target: FixTarget) => void;
 }) {
   const [result, setResult] = useState<SendResult>({ kind: 'idle' });
+  // Signal is not enough: while Koala does not answer, Send and Request approval wait (review B flow-B2).
+  const reachable = useSyncExternalStore(onReachChange, isReachable, () => true);
   const options = priced?.ok?.options ?? [];
   const pendingFlags = unacknowledgedFlags(flags, draft.deviationAcks);
   const { approvals, reload } = useApprovals(record.id, online, draft.rowVersion !== null);
@@ -112,9 +115,8 @@ export function SendStep({
     settings: bundle?.snapshot.settings ?? null,
     approvals,
     pendingFlags: pendingFlags.length,
-    // The business profile's gaps, as the phone last downloaded them (the server checks again on send: L30).
-    profileGaps: bundle?.business?.gaps ?? [],
     online,
+    reachable,
   });
   const canSend = !locked && checks.every((c) => c.ok) && record.syncState !== 'conflict';
 
@@ -174,8 +176,6 @@ export function SendStep({
         } else if (body.error === 'policy') {
           setResult({ kind: 'error', msg: 'This quote needs approval before it can be sent.', reasons: body.reasons });
           void reload();
-        } else if (body.error === 'setup_incomplete') {
-          setResult({ kind: 'error', msg: `Not sent. ${body.message ?? 'The business profile is not finished.'}`, profile: true });
         } else setResult({ kind: 'error', msg: body.message ?? body.error ?? 'Sending failed.' });
         return;
       }
@@ -233,7 +233,7 @@ export function SendStep({
               onRequest={requestApproval}
               onCheckAgain={reload}
               disabled={locked || result.kind === 'busy'}
-              online={online}
+              online={online && reachable}
               flagMessages={c.id === 'flags' && !c.ok ? pendingFlags.map((f) => `${f.message}${ackState(f, draft.deviationAcks).status === 'stale' ? ' Check your earlier note, then confirm or edit it.' : ''}`) : []}
             />
           ))}
@@ -261,15 +261,6 @@ export function SendStep({
       {result.kind === 'error' ? (
         <Alert tone="red">
           <p>{result.msg}</p>
-          {result.profile ? (
-            profile.role === 'owner' || profile.role === 'office' ? (
-              <a className="mt-1 inline-flex min-h-12 items-center font-semibold underline" href="/admin/business">
-                Open the business profile
-              </a>
-            ) : (
-              <p className="mt-1">Ask the owner or the office to finish the business profile.</p>
-            )
-          ) : null}
           {result.reasons?.length ? (
             <ul className="mt-1 list-disc pl-4">
               {result.reasons.map((r) => (

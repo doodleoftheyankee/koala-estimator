@@ -193,7 +193,7 @@ export function EstimateEditor({
       const el = id ? document.getElementById(id) : null;
       if (!el) return;
       el.scrollIntoView({ block: 'center' });
-      if (el instanceof HTMLInputElement) el.focus({ preventScroll: true });
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [focus, step]);

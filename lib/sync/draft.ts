@@ -110,8 +110,8 @@ export const syncableDraftSchema = draftSchema.refine((d) => d.areas.length > 0,
 });
 
 /**
- * A new estimate. `place` is the town and state it starts in, from the business profile (else the
- * shop address, else blank: lib/quotes/profile.ts newEstimateDefaults, L32); no town is typed in here.
+ * A new estimate. `place` is the town and state it starts in: the shop address's, as a pair, else
+ * blank (lib/quotes/profile.ts newEstimateDefaults, L32, OD14); no town is typed in here.
  */
 export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID(), place: { city: string; state: string } = { city: '', state: '' }): EstimateDraft {
   const ts = now.toISOString();

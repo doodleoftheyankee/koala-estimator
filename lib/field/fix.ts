@@ -3,8 +3,8 @@
 // (lib/field/sendChecks) use these targets; app/field/EstimateEditor follows them.
 import type { Tier } from '@/lib/pricing';
 
-/** A customer or address field on the Customer step. */
-export type CustomerField = 'firstName' | 'lastName' | 'email' | 'street' | 'city' | 'state' | 'zip';
+/** A customer or address field on the Customer step, or the notes for the quote (review B flow-B5). */
+export type CustomerField = 'firstName' | 'lastName' | 'email' | 'street' | 'city' | 'state' | 'zip' | 'notes';
 
 export type FixTarget =
   /** Open the Customer step at this field. */

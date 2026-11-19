@@ -17,6 +17,10 @@ WORK="$(mktemp -d)"; export E2E_STORAGE="$WORK/storage" E2E_SHOTS="$WORK/shots";
 # Ports and the database name can be changed so several copies can run side by side
 # (E2E_KEEP=1 leaves the stack running after the flow, for screenshots).
 APP_PORT="${APP_PORT:-3000}"; PGRST_PORT="${PGRST_PORT:-3001}"; export MOCK_PORT="${MOCK_PORT:-54321}"; DB_NAME="${E2E_DB_NAME:-koala_e2e}"
+# Postgres folds an unquoted name to lower case; use that name everywhere, so E2E_DB_NAME=koala_revB_db
+# creates and connects to koala_revb_db (review B database-B7 / flow-B14).
+DB_NAME="$(printf '%s' "$DB_NAME" | tr '[:upper:]' '[:lower:]')"
+if ! [[ "$DB_NAME" =~ ^[a-z_][a-z0-9_]*$ ]]; then echo "E2E_DB_NAME must be letters, digits and _ (got '$DB_NAME')" >&2; exit 2; fi
 BASE="${DATABASE_URL%%\?*}"; QUERY="${DATABASE_URL#"$BASE"}"; export E2E_DB_URL="${BASE%/*}/$DB_NAME$QUERY"
 pids=(); cleanup() { for p in "${pids[@]}"; do pkill -P "$p" 2>/dev/null || true; kill "$p" 2>/dev/null || true; done; }; trap cleanup EXIT
 
@@ -25,6 +29,10 @@ D() { psql "$E2E_DB_URL" -q -v ON_ERROR_STOP=1 "$@"; }
 D -f tests/sql/00_supabase_stub.sql
 for f in supabase/migrations/*.sql; do D -f "$f"; done
 D -f tests/sql/01_grants.sql
+# The grants are production's (review B database-B5): signed-in users cannot take quote numbers,
+# read the counters or write price requests themselves.
+GRANTS="$(D -tA -c "select has_function_privilege('authenticated', 'next_quote_number(int)', 'execute') or has_table_privilege('authenticated', 'quote_number_counters', 'select') or has_table_privilege('authenticated', 'price_approvals', 'insert')")"
+if [ "$GRANTS" != f ]; then echo "The test database grants signed-in users more than production does" >&2; exit 2; fi
 D -c "do \$\$ begin create role authenticator login noinherit; exception when duplicate_object then null; end \$\$" -c "grant anon, authenticated, service_role to authenticator"
 D -c "insert into auth.users (id, email) select (u->>'id')::uuid, u->>'email' from jsonb_array_elements('$(cat tests/e2e/users.json)'::jsonb) u"
 D -c "insert into profiles (id, role, full_name, email) select (u->>'id')::uuid, (u->>'role')::user_role, u->>'name', u->>'email' from jsonb_array_elements('$(cat tests/e2e/users.json)'::jsonb) u"

@@ -137,7 +137,8 @@ export function orderFor(roofSqft: number, wastePct: number): Order {
 // The takeoff as a report or a summary
 // ---------------------------------------------------------------------------------------------
 
-export const COMPANY = 'Koala Insulation of Newark';
+/** The name on every roof takeoff report and summary: the brand (OD12), for every franchise's estimators. */
+export const COMPANY = 'Koala Insulation';
 export const LOW_SLOPE_LABEL = 'Low-slope roof (under 2/12, not shingles)';
 export const NO_SHINGLES = 'No shingle area: flat or low-slope roof.';
 /** "Squares", or "Squares (2/12 and up)" when low-slope faces were kept out. */

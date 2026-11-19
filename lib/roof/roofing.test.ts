@@ -287,6 +287,12 @@ describe('the report and the summary', () => {
     expect(REPORT_FOOTER).toBe('Estimates from Google aerial imagery. Verify on site.');
   });
 
+  // Review B flow-B7, owner decision OD12: every franchise's estimators see the brand, not one franchise's name.
+  it('the report and the summary name Koala Insulation, no franchise town', () => {
+    expect(COMPANY).toBe('Koala Insulation');
+    expect(summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon)).startsWith('Koala Insulation: roof takeoff\n')).toBe(true);
+  });
+
   it('a low-slope face never reads 2/12 (L29, S3-F22)', () => {
     const r = crossGable();
     const low = { ...r, segments: r.segments.map((s) => (s.n === 5 ? { ...s, rise: 1.96, lowSlope: true } : s)) };

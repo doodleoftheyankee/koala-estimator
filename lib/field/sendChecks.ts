@@ -2,10 +2,10 @@
 // in plain words, one item per problem, each with a Fix button that opens the right place (or a
 // Request approval for a price beyond the estimator's own range). It replaces the first schema
 // message ("Too small: expected number to be >0") with the area or field it is about. Pure; the
-// send route applies the same rules on the server (lib/pricing/policy, lib/quotes/profile).
+// send route applies the same rules on the server (lib/pricing/policy). Nothing about a business
+// profile is on it: there is no form to finish before sending (owner decision OD12).
 import { canSendQuote, type PolicyProblem, type PriceApproval, type PricedOption, type PricingSettings, type Role, type Tier } from '@/lib/pricing';
 import { latestByTier } from '@/lib/quotes/approvals';
-import { profileGapsSentence } from '@/lib/quotes/profile';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { areaSchema, draftSchema, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { JOB_TYPE_LABELS, num } from '@/lib/format';
@@ -43,16 +43,17 @@ export interface SendCheckInput {
   approvals?: readonly PriceApproval[];
   /** Changes from the model still without a note. */
   pendingFlags: number;
-  /** The business profile's gaps, as they read in a sentence ("the office phone"). */
-  profileGaps: readonly string[];
+  /** The phone has signal (navigator.onLine). */
   online: boolean;
+  /** Koala answers (lib/offline/sync isReachable): signal alone is not enough to send (review B flow-B2). */
+  reachable: boolean;
 }
 
 const TIER_WORDS: Record<Tier, string> = { good: 'Good', better: 'Better', best: 'Best' };
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 export function sendChecks(input: SendCheckInput): SendCheck[] {
-  const { draft, options, role, settings, approvals = [], pendingFlags, profileGaps, online } = input;
+  const { draft, options, role, settings, approvals = [], pendingFlags, online, reachable } = input;
   const checks: SendCheck[] = [...customerChecks(draft), ...areaChecks(draft)];
 
   const priceable = draft.areas.filter((a) => areaSchema.safeParse(a).success);
@@ -85,16 +86,13 @@ export function sendChecks(input: SendCheckInput): SendCheck[] {
       : { id: 'flags', ok: true, label: 'Every change from the model is explained' },
   );
 
-  const canFixProfile = role === 'owner' || role === 'office';
   checks.push(
-    profileGaps.length
-      ? canFixProfile
-        ? { id: 'profile', ok: false, label: profileGapsSentence([...profileGaps]), fix: { label: 'Open the business profile', target: { step: 'business' } } }
-        : { id: 'profile', ok: false, label: `${profileGapsSentence([...profileGaps])} Ask the owner or the office to finish it.` }
-      : { id: 'profile', ok: true, label: 'Business profile finished' },
+    !online
+      ? { id: 'online', ok: false, label: 'Offline. Sending needs a connection; your work is saved.' }
+      : !reachable
+        ? { id: 'online', ok: false, label: "Can't reach Koala right now. Sending needs Koala; your work is saved." }
+        : { id: 'online', ok: true, label: 'Online' },
   );
-
-  checks.push(online ? { id: 'online', ok: true, label: 'Online' } : { id: 'online', ok: false, label: 'Offline. Sending needs a connection; your work is saved.' });
   return checks;
 }
 
@@ -181,7 +179,7 @@ function otherCheck(d: EstimateDraft): SendCheck {
   const top = String(path[0] ?? '');
   if (top === 'lineOverrides' || top === 'overrides' || top === 'deviationAcks' || top === 'driveMinutesOneWay')
     return { id: 'other', ok: false, label: 'A change on the Options step is not finished (a reason may be too short).', fix: { label: 'Open Options', target: { step: 'options' } } };
-  if (top === 'notes') return { id: 'other', ok: false, label: 'The notes for the quote are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'firstName' } } };
+  if (top === 'notes') return { id: 'other', ok: false, label: 'The notes for the quote are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'notes' } } };
   return { id: 'other', ok: false, label: 'Something on this estimate is not finished.', fix: { label: 'Check the customer', target: { step: 'customer', field: 'firstName' } } };
 }
 
@@ -196,7 +194,7 @@ function priceChecks(role: Role, options: readonly PricedOption[], settings: Pri
     const usedApproval = canSendQuote(role, [...options], settings).problems.some((p) => p.kind === 'below_floor' || p.kind === 'over_limit');
     return [{ id: 'price', ok: true, label: usedApproval ? 'Prices within your limits or approved' : 'Prices within your limits' }];
   }
-  const current = Object.fromEntries(options.map((o) => [o.tier, { price: o.price, modelPrice: o.modelPrice }]));
+  const current = Object.fromEntries(options.map((o) => [o.tier, { price: o.price, modelPrice: o.modelPrice, loadedCost: o.loadedCost }]));
   const latest = latestByTier(approvals, current);
   return policy.problems.map((p) => problemCheck(p, latest));
 }

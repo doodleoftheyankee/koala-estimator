@@ -14,7 +14,8 @@ export const serverEnv = {
   serviceRoleKey: () => required('SUPABASE_SERVICE_ROLE_KEY', process.env.SUPABASE_SERVICE_ROLE_KEY),
   appUrl: () => (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
   resendApiKey: () => process.env.RESEND_API_KEY || null,
-  quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation of Newark <onboarding@resend.dev>',
+  /** The sender of quote emails; unset, the brand (OD12: no franchise name in code). */
+  quoteFromEmail: () => process.env.QUOTE_FROM_EMAIL || 'Koala Insulation <onboarding@resend.dev>',
   officeNotifyEmail: () => process.env.OFFICE_NOTIFY_EMAIL || null,
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || null,
   /** The Roof Takeoff service behind the satellite lookup: only its /api is used (no trailing slash). */

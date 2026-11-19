@@ -872,3 +872,230 @@ No customer value (the phone, the checker, the generator):
     an option the customer is not shown was rightly hidden" (4 tests).
   Random quotes on the same quotes and checker, engine before -> after these fixes: seed 20261118
     331 -> 0 breaks, seed 7 637 -> 0, seed 99999 621 -> 0 (docs/accuracy/after-fixa/about.txt).
+
+=== Review B fixes and owner decisions OD12-OD16 (review B digest; docs/accuracy/spec/owner-decisions-2.txt; branch claude/accuracy-fixb-docs) ===
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier) and the owner's round-2 decisions. This part is the documents, server, database, security
+and the Send checklist; the screens part (flow-B4/OD15, B6, B8, B9, B11, B12, B13) has its own
+section from claude/accuracy-fixb-screens. Hard rule 1 holds: a quote already sent keeps its stored
+document (company, terms, warranty, consent and number are read from the document, never from the
+settings); docs/accuracy/after-fixb/hard-rule-1.txt.
+
+The documents were made safe before the gate was removed (review B database-B3 = flow-B1: deleting
+the gate as the code stood printed "PLACEHOLDER" and made every send throw on the consent sentence,
+because production has no default_state). Production's rows, read with a SELECT on 2026-11-19:
+branding {"company":"Koala Insulation of Newark","license":null,"phone":null,...} (description
+"PLACEHOLDER — PDF branding"), quote_terms naming "Koala Insulation of Newark" (description
+"... PLACEHOLDER, owner to replace"), warranty_text "Workmanship warranty — PLACEHOLDER, owner to
+replace.", shop_address "Newark, DE 19711", no default_city, no default_state; every one still the seed.
+
+RB-OD12a Every quote names "Koala Insulation". The accuracy migration's new last section replaces the
+    branding setting only where it is still exactly the seed (company "Koala Insulation of Newark",
+    license, phone, colour and logo null), and clears its PLACEHOLDER description; DEFAULT_COMPANY
+    (lib/quotes/settings.ts) is "Koala Insulation". A branding value the owner saved (any field) is kept.
+      Quote email subject: "Your insulation quote from Koala Insulation of Newark (KN-2026-0001-v1)" ->
+      "Your insulation quote from Koala Insulation (KN-2026-0001-v1)"; the masthead, PDF header and
+      footer "Koala Insulation of Newark | KN-2026-0001-v1" -> "Koala Insulation | KN-2026-0001-v1".
+    Owner decision: OD12 (review A DOC-1, DOC-6). Tests: tests/sql/41_owner_decisions.test.sql (seed
+    replaced; owner value kept; second run changes nothing); lib/quotes/owner-decisions-2.test.ts "a
+    quote, its PDF (real render), its email and its page from those rows …", "defaults: Koala
+    Insulation, …", "the migration writes the same words the code prints"; lib/quotes/email.test.ts
+    "falls back to defaults" ('Koala Insulation of Newark' -> 'Koala Insulation').
+
+RB-OD12b The terms name no town. The seeded terms (only when exactly the seed) and DEFAULT_TERMS:
+      "A signed quote authorizes Koala Insulation of Newark to schedule the work." ->
+      "A signed quote authorizes Koala Insulation to schedule the work." (the rest word for word).
+    Owner decision: OD12. Tests: as RB-OD12a (both branches in 41_owner_decisions.test.sql, including
+    terms with one word changed, which are the owner's and kept).
+
+RB-OD13 The warranty line reads exactly "Limited lifetime warranty". The stored seed "Workmanship
+    warranty — PLACEHOLDER, owner to replace." (only that exact value) is replaced by the migration,
+    and DEFAULT_WARRANTY "Workmanship warranty details are available from our office." -> "Limited
+    lifetime warranty". No other warranty terms, years or conditions were written.
+      Production's next quote: Warranty "Workmanship warranty — PLACEHOLDER, owner to replace." (what
+      it would have printed with the gate gone) -> "Limited lifetime warranty".
+    Owner decision: OD13 (review B database-B3, flow-B1 (a)). Tests: 41_owner_decisions.test.sql;
+    owner-decisions-2.test.ts "production's rows before the migration step …" and the seeded-rows test.
+
+RB-OD12c Any stored text that says PLACEHOLDER is not filled in: the warranty, the terms and every
+    branding field (company, license, phone, email, website, colour, logo) fall back to the default
+    or are left off. lib/quotes/settings.ts quoteSettingsFromRows.
+      License "PLACEHOLDER": the gate refused the send (with the gate simply deleted it would have
+      printed "License PLACEHOLDER" under the company) -> sent, with no license line; company
+      "PLACEHOLDER company" -> "Koala Insulation".
+    Owner decision: OD12 (flow-B1 (4)). Test: owner-decisions-2.test.ts "any stored text that says
+    PLACEHOLDER is not filled in …".
+
+RB-OD12d Nothing blocks or delays a send for the business profile, for any role.
+      POST /api/quotes on the seeded settings: 409 setup_incomplete "The business profile is not
+      finished: add the license number, the office phone, the state and the warranty." -> the quote
+      is sent (e2e: KN-<year>-0001-v1 to Pat Lee).
+      Send checklist: "The business profile is not finished: add … Ask the owner or the office to
+      finish it." (estimator), the same with "Open the business profile" (owner, office), "Business
+      profile finished" -> no business-profile item (lib/field/sendChecks.ts); the 'profile' gaps are
+      gone from /api/bundle (business is { newEstimate } only) and the setup_incomplete branch and its
+      link from app/field/SendStep.tsx (review A DOC-3: the office could not finish it anyway).
+      /admin/business: the amber "The business profile is not finished … Until then no quote can be
+      sent" and the green "Everything a quote needs is filled in." -> "Optional. Quotes go out without
+      it: they say Koala Insulation, and leave off anything not filled in here. …"; its Town and State
+      fields are gone (OD14); the fields show what quotes print today (a PLACEHOLDER shows as the
+      default). It stays an owner page (office reads it), in the menu, linked from no warning.
+      /admin/pricing: "Needs owner input" no longer lists "Business profile: Quote PDF branding /
+      Warranty / Terms" or "Business profile: office phone for customers"; the Business profile card
+      "… A quote cannot be sent until they are filled in." -> "… It is optional: quotes say Koala
+      Insulation and leave off what is not filled in." (no Placeholder badge). Menu hint "Name, phone,
+      license, warranty and terms on every quote" -> "Optional: office phone, license, warranty and
+      terms on quotes".
+    businessProfileGaps, profileGapsSentence and the 'business' Fix target's only producer are gone.
+    Owner decision: OD12 (review A DOC-1, DOC-3; review B flow-B1 (d)). Tests: lib/field/sendChecks.test.ts
+    "no business-profile item for any role …" (the old "changes from the model need a note; the
+    business profile; offline" keeps its note and offline items); app/field/SendStep.test.tsx (3 roles,
+    a cached bundle that still carries gaps; fails before on all three); owner-decisions-2.test.ts "no
+    part of the app carries the gate or its words"; lib/quotes/quotes-stage.test.ts L30 block (the
+    same live seed now sends: warranty, license/phone left off, consent, prefix); e2e "send: nothing
+    about a business profile holds it back" and "the Business profile page is optional".
+
+RB-OD12e Never "call our office" without a number: the signing page's error messages name the
+    office phone when the quote has one, else the estimator's email (lib/quotes/contact.ts reachUs,
+    the same order as the page's OfficeContact). Quote with no office phone, estimator Sam Rivera:
+      declined: "This quote was declined. Please contact our office." -> "This quote was declined.
+      To go ahead, please email Sam Rivera at sam@example.com."
+      expired: "This quote has expired. Please contact our office for an updated quote." -> "This
+      quote has expired. For an updated quote, please email Sam Rivera at sam@example.com."
+      signing failed: "… Please try again or call our office." -> "… Please try again, or email Sam
+      Rivera at sam@example.com." (with an office phone: "…, or call (555) 010-0199.")
+    (The PDF, the emails and the quote page already left a missing phone or license off and pointed
+    to the estimator; review B checked them, and the seeded-rows test now proves it.)
+    Owner decision: OD12. Tests: lib/quotes/contact.test.ts (2 tests).
+
+RB-OD14a The consent sentence names the property's state when it is a real US state, else the shop
+    address's state, else no state; it never throws (lib/quotes/consent.ts esignConsent,
+    lib/quotes/profile.ts consentState). It no longer reads default_state, which production never had.
+      Property 12 Elkton Rd, Newark, DE: "(ESIGN Act and Delaware UETA)" (unchanged, e2e).
+      Property state "XX", shop "100 Main St, Springfield, IL 62701": "(ESIGN Act and Illinois UETA)".
+      No state anywhere: send threw "Not a US state: " (500) -> "(ESIGN Act and the Uniform Electronic
+      Transactions Act)".
+    The sentence is stored with the quote as before (L31), and quotes sent before keep theirs.
+    Owner decision: OD14 (review B database-B3, flow-B1 (b)). Tests: owner-decisions-2.test.ts "a code
+    that is not a state (or none) …", "the property's state when it is a real state, else the shop
+    address's, else neutral"; quotes-stage.test.ts L31 (esignConsent('XX') threw -> the acts by name).
+
+RB-OD14b A new estimate starts in the town and state of the shop address as a pair, else both blank
+    (lib/quotes/profile.ts newEstimateDefaults); a town from one place is never paired with a state
+    from another.
+      default_state PA saved, shop "Newark, DE 19711": "Newark, PA" -> "Newark, DE".
+      default_city "Bear", default_state DE, shop "Springfield, IL 62701": "Bear, DE" -> "Springfield, IL".
+      Production (shop "Newark, DE 19711", no town or state saved): Newark, DE, unchanged (e2e).
+    Owner decision: OD14 (review A DOC-2). Tests: owner-decisions-2.test.ts "the shop address when it
+    parses, else both blank …"; quotes-stage.test.ts L32 ('Bear, DE' -> 'Springfield, IL').
+
+RB-B1c A quote number never starts with a blank or a bad prefix: a stored quote_number_prefix that is
+    not 1 to 6 capitals or digits falls back to KN (OD16 keeps KN).
+      Prefix "" : "-2026-0001-v1" -> "KN-2026-0001-v1"; "k-n": "k-n-2026-0001-v1" -> "KN-2026-0001-v1".
+    Owner decisions: OD12, OD16 (flow-B1 (c)). Test: owner-decisions-2.test.ts "a stored prefix that is
+    not 1 to 6 capitals or digits falls back to 'KN' (OD16)".
+
+RB-B7 No franchise name in the email sender or the roof takeoff (hard rule 3).
+      lib/env.ts sender with QUOTE_FROM_EMAIL unset: "Koala Insulation of Newark <onboarding@resend.dev>"
+      -> "Koala Insulation <onboarding@resend.dev>"; .env.example "Koala Insulation of Newark
+      <quotes@yourdomain.com>" -> "Koala Insulation <quotes@yourdomain.com>".
+      Roof takeoff summary "Koala Insulation of Newark: roof takeoff" -> "Koala Insulation: roof
+      takeoff"; report header and footer "Koala Insulation of Newark · Roof takeoff" -> "Koala
+      Insulation · Roof takeoff" (lib/roof/roofing.ts COMPANY).
+      Customer step, electric utility suggestions (estimator only, never on a quote): the fixed list
+      "Delmarva Power, City of Newark, Delaware Electric Co-op, DEMEC municipal" -> the names this
+      phone's estimates already use, most used first (lib/field/utilities.ts).
+    Owner decision: OD12; review B flow-B7. Tests: lib/env.test.ts "defaults to Koala Insulation";
+    lib/roof/roofing.test.ts "the report and the summary name Koala Insulation, no franchise town";
+    lib/field/utilities.test.ts; lib/franchise-text.test.ts (fails before with 6 literals in
+    CustomerStep, env, settings and roofing); e2e "Copy summary copies the takeoff as text, under the brand".
+    Hard rule 3 scan (lib/franchise-text.test.ts): every string, template and JSX text literal in app/,
+    lib/ and components/ (tests, lib/demo and __fixtures__ aside), read with the TypeScript parser, for
+    /Koala Insulation of|Newark|Delaware|\(302\)/. Documented exceptions: lib/quotes/consent.ts
+    LEGACY_ESIGN_CONSENT (the sentence quotes sent before were signed under, kept word for word by
+    hard rule 1) and STATE_NAMES (every state's name). Comments that use a Newark address as an
+    example are not literals and stay.
+
+RB-B2 A price approval is bound to the loaded cost it was asked at (review B database-B2). Changing
+    line quantities or hours after the decision raises the cost but leaves the price and the model
+    price as they were, so the old approval used to cover the send. Now price_approvals.loaded_cost
+    (additive, nullable, frozen by the guard trigger) is written by the server from its own pricing,
+    lib/pricing/policy.ts approvalCovers refuses an approval whose cost is lower than the option's
+    now (or missing), and a price below the floor is covered only by an owner approval given for a
+    price below the floor. The phone shows such a price as needing a new request.
+      Seed fixture, Good: the owner approves $3,500 at a 7.2% margin (cost $3,249.20); labour hours x4
+      -> cost $4,938.40, margin -41%: sent -> refused, "Only the owner can approve $3,500", Request
+      approval offered again. The owner approves $4,500 as over the limit (27.8%, above the floor);
+      hours x3 -> 0.9%, below the 25% floor: sent -> refused.
+      Send checklist: a waiting or approved request asked at the lower cost: "Waiting for the owner or
+      the office to approve $X" / covered -> Request approval (status none).
+    No price changes; only which approvals let a price through. A request still pending at the same
+    price but an older cost is a separate request (the one-pending index includes the cost).
+    Tests: lib/pricing/support.test.ts "an owner approval does not cover the same price after a
+    line-hours override raises the cost", "an owner over-limit approval (belowFloor false) does not
+    cover a below-floor problem at the same price", "a cost that went down is still covered; an
+    approval with no recorded cost covers nothing", "the problem carries the loaded cost"; the
+    existing "an approved price can be sent …" passes with the cost recorded; lib/quotes/approvals.test.ts
+    "the newest request at the price, model price and a cost no higher …"; lib/field/sendChecks.test.ts
+    "an approval asked at a lower cost: the phone offers Request approval again"; tests/sql/41
+    (column, frozen on decision, kept on re-run, same price at a higher cost is its own request);
+    e2e "the request keeps the loaded cost the option had when it was asked".
+
+RB-B4 Price requests are written by the server only (review B database-B4). The migration revokes
+    insert on price_approvals from authenticated; /api/approvals POST checks the role, prices the
+    request (checkApprovalRequest, through the asker's own access), confirms can_edit_estimate, then
+    writes it with the service role, requested_by the asker. What the owner sees (price, model price,
+    cost, "Below the floor margin") is always the server's.
+      An estimator posting {good, $3,500, model $5,420, below_floor false} straight to the database:
+      stored, and shown to the owner without the "Below the floor margin" tag -> refused (403, nothing stored).
+    Tests: tests/sql/40_accuracy.test.sql (the L34 block: the estimator's and the office's own inserts
+    are refused; the server writes the requests; the rest of the block unchanged), tests/sql/41
+    "an estimator's direct insert is refused (insufficient_privilege)"; e2e "a request written
+    straight to the database with the estimator's token is refused". The Request approval -> owner
+    approves -> sent path still passes in the e2e.
+
+RB-B3 The owner's queue holds only requests that still mean something (review B flow-B3). A request
+    whose estimate is signed, lost or void, or whose option has another price, is gone, or costs more
+    now, is left out (lib/quotes/approvals.ts isLiveRequest; 200 rows read so stale ones do not crowd
+    out live ones), and PATCH /api/approvals/[id] answers 409 for a signed estimate.
+      Lee Measure asked for Good $5,175, then sent Good at $4,500 and the customer signed: "NEEDS YOU ·
+      1 price waiting for approval · Good: $5,175, 25% above …" with Approve and Decline -> no queue;
+      PATCH approved -> 409 {error: 'signed', message: 'The customer already signed this quote.'}.
+    Tests: lib/quotes/approvals.test.ts "the owner's queue drops stale requests" (4 tests, including
+    decisionRefusal); e2e "deciding a request on a signed estimate: 409 signed", "the owner's queue
+    leaves it out".
+
+RB-B5 (test fidelity, no app value) The test databases get production's grants (review B database-B5).
+    tests/sql/00_supabase_stub.sql sets the default privileges production has (pg_default_acl read on
+    2026-11-19: tables all, sequences usage/select/update, functions execute, to anon, authenticated
+    and service_role), and tests/sql/01_grants.sql no longer grants everything again after the
+    migrations. tests/sql/40_accuracy.test.sql checks the grants before any re-run of the migration
+    (fails before with "first run: a signed-in user may not take a quote number"); scripts/e2e.sh
+    stops if signed-in users may take quote numbers, read the counters or insert price requests.
+    Every SQL test file passes with the real grants (nothing else relied on the blanket ones).
+
+RB-B7db (tooling) scripts/e2e.sh lower-cases E2E_DB_NAME and refuses a name that is not letters,
+    digits and _ (review B database-B7 = flow-B14). E2E_DB_NAME=koala_fixB_Check: exit 2 ('database
+    "koala_fixB_Check" does not exist') -> runs on koala_fixb_check.
+
+Staff-facing words (no quote value changes):
+  RB-FB2 The Send checklist uses Koala's reachability, not only the signal (review B flow-B2). With
+    signal but Koala's database not answering (REST 503, the banner "Can't reach Koala right now."):
+    "✓ Online" and "Everything the quote needs is here." with Send enabled -> "Can't reach Koala right
+    now. Sending needs Koala; your work is saved." (to do), Send and Request approval disabled. No
+    signal still reads "Offline. Sending needs a connection; your work is saved." SendStep reads
+    lib/offline/sync isReachable itself (no new props through FieldApp or EstimateEditor).
+    Tests: lib/field/sendChecks.test.ts "signal but Koala unreachable: the online item says so …";
+    e2e "the Send checklist says Koala cannot be reached, not \"Online\"", "and Send waits while Koala
+    cannot be reached".
+  RB-FB5 "Shorten the notes" goes to the notes box (review B flow-B5): target customer/firstName ->
+    customer/notes (#customer-notes); the notes box gets maxLength 5,000 (the draft's own limit) and
+    the Fix focus also focuses a text area. Test: lib/field/sendChecks.test.ts "notes too long: the
+    Fix goes to the notes box".
+  RB-FB10 A server action refused while Koala cannot be reached says so (review B flow-B10): saving
+    Pricing as the owner with the database down, "Only the owner can change pricing." -> "Can't reach
+    Koala right now. Nothing was saved." The same for Team, Insights (learning), Jobs and marking an
+    estimate lost (lib/server/actionAuth.ts actionRefusal; signed out or another role keep the
+    action's own words). Tests: lib/server/actionAuth.test.ts (3 tests); e2e "saving Pricing while
+    Koala is down says …".

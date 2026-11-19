@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { serverEnv } from '@/lib/env';
 import { errorMessage, failure, formToObject, parseWith, success, type ActionResult } from '@/lib/admin/forms';
 import { inviteForm, isEmailTakenError, memberForm, ROLE_LABELS, selfEditError, type TeamRole } from '@/lib/admin/team';
@@ -15,7 +16,7 @@ const PATH = '/admin/team';
 
 export async function inviteMember(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure(NOT_OWNER);
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal(NOT_OWNER));
 
   const parsed = parseWith(inviteForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -65,7 +66,7 @@ export async function inviteMember(_prev: ActionResult | null, fd: FormData): Pr
 
 export async function updateMember(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure(NOT_OWNER);
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal(NOT_OWNER));
 
   const parsed = parseWith(memberForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
@@ -90,7 +91,7 @@ export async function updateMember(_prev: ActionResult | null, fd: FormData): Pr
  */
 export async function updateCrewMembership(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure(NOT_OWNER);
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal(NOT_OWNER));
 
   const db = await createClient();
   const crews = await db.from('crews').select('id');

@@ -13,3 +13,11 @@ create or replace function auth.uid() returns uuid language sql stable as $$
 $$;
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+-- Supabase's default privileges on the public schema, as production has them (pg_default_acl, read
+-- with a SELECT on 2026-11-19): every table, sequence and function a migration creates is granted to
+-- the API roles at creation, and a migration's own revoke then holds. tests/sql/01_grants.sql used to
+-- grant everything again after the migrations, which undid those revokes (review B database-B5).
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant usage, select, update on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;

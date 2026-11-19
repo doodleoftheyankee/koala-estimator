@@ -119,7 +119,8 @@ describe('financingLine', () => {
 describe('quoteSettingsFromRows', () => {
   it('falls back to defaults', () => {
     const s = quoteSettingsFromRows([]);
-    expect(s.branding.company).toBe('Koala Insulation of Newark');
+    // OD12: the brand, no franchise town (was 'Koala Insulation of Newark').
+    expect(s.branding.company).toBe('Koala Insulation');
     expect(s.branding.primaryColor).toBe(DEFAULT_BRAND_COLOR);
     expect(s.validDays).toBe(30);
     expect(s.terms.length).toBeGreaterThan(10);

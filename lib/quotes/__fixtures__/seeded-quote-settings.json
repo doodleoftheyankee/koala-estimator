@@ -1,0 +1,41 @@
+{
+    "rows": [
+        {
+            "key": "branding",
+            "value": {
+                "phone": null,
+                "company": "Koala Insulation",
+                "license": null,
+                "logo_path": null,
+                "primary_color": null
+            },
+            "description": "Quote PDF branding"
+        },
+        {
+            "key": "quote_number_prefix",
+            "value": "KN",
+            "description": "Quote number prefix: quote numbers read PREFIX-YEAR-0001-v1"
+        },
+        {
+            "key": "quote_terms",
+            "value": "Quote valid for the period shown. A signed quote authorizes Koala Insulation to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.",
+            "description": "Terms printed on every quote"
+        },
+        {
+            "key": "quote_valid_days",
+            "value": 30,
+            "description": "Quote expiry"
+        },
+        {
+            "key": "shop_address",
+            "value": "Newark, DE 19711",
+            "description": "Origin for drive-time lookups — PLACEHOLDER, set the shop address"
+        },
+        {
+            "key": "warranty_text",
+            "value": "Limited lifetime warranty",
+            "description": "Warranty text on the quote PDF"
+        }
+    ],
+    "about": "app_settings rows a quote is built from, as every migration in supabase/migrations leaves them in a new database (scripts/accuracy/seeded-quote-settings.sh)"
+}

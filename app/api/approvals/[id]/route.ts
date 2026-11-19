@@ -1,10 +1,11 @@
 // PATCH /api/approvals/[id]  { decision: 'approved' | 'declined', note? }
 // The owner or the office decides a waiting price request (L34). The database decides who may
 // (price_approvals RLS: never your own request; below the floor margin, the owner only) and records
-// who decided, in which role and when; this route says why in words when it refuses.
+// who decided, in which role and when; this route says why in words when it refuses, and refuses a
+// request on an estimate the customer already signed (review B flow-B3: 409 signed).
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { APPROVAL_COLUMNS, approvalFromRow } from '@/lib/quotes/approvals';
+import { APPROVAL_COLUMNS, approvalFromRow, decisionRefusal } from '@/lib/quotes/approvals';
 import { authorize } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -28,14 +29,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (readError) return NextResponse.json({ error: 'failed', message: readError.message }, { status: 500 });
   const current = approvalFromRow(before);
   if (!current) return NextResponse.json({ error: 'not_found', message: 'Request not found.' }, { status: 404 });
-  if (current.status !== 'pending') {
-    return NextResponse.json({ error: 'decided', message: `This request was already ${current.status}.`, approval: current }, { status: 409 });
-  }
-  if (current.requestedBy === profile.userId) {
-    return NextResponse.json({ error: 'own_request', message: 'You asked for this price, so someone else decides it.' }, { status: 403 });
-  }
-  if (current.belowFloor && profile.role !== 'owner') {
-    return NextResponse.json({ error: 'owner_only', message: 'Only the owner can decide a price below the floor margin.' }, { status: 403 });
+  const { data: est, error: estError } = await db.from('estimates').select('status').eq('id', current.estimateId).maybeSingle();
+  if (estError) return NextResponse.json({ error: 'failed', message: estError.message }, { status: 500 });
+  const refusal = decisionRefusal({ approval: current, estimateStatus: (est as { status: string } | null)?.status ?? null, role: profile.role, userId: profile.userId });
+  if (refusal) {
+    return NextResponse.json({ error: refusal.error, message: refusal.message, ...(refusal.error === 'decided' ? { approval: current } : {}) }, { status: refusal.status });
   }
 
   const { data, error: updError } = await db

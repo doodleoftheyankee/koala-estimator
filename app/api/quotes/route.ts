@@ -7,12 +7,11 @@ import { approvalCovers, canSendQuote, priceEstimate, TIERS, type PriceApproval,
 import { loadApprovals } from '@/lib/quotes/approvals';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import { acknowledgedNote, unacknowledgedFlags } from '@/lib/field/flags';
-import { esignConsent } from '@/lib/quotes/consent';
 import { quoteEmail, sendEmail } from '@/lib/quotes/email';
 import { buildQuoteDocument, businessYear, counterQuoteNumber, quoteNumberBase, quoteValidUntil } from '@/lib/quotes/model';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
-import { businessProfileGaps, profileGapsSentence, profileValue } from '@/lib/quotes/profile';
-import { loadQuoteSettingRows, quoteSettingsFromRows } from '@/lib/quotes/settings';
+import { quoteSettingsForSend } from '@/lib/quotes/profile';
+import { loadQuoteSettingRows } from '@/lib/quotes/settings';
 import { newQuoteToken, sha256Hex } from '@/lib/quotes/token';
 import { authorize } from '@/lib/server/auth';
 import { loadPricingBundle } from '@/lib/server/bundle';
@@ -87,16 +86,11 @@ export async function POST(request: Request) {
     }
     const draft: EstimateDraft = parsed.data;
 
-    // Nothing goes out while the business profile has a gap (L30): no PLACEHOLDER warranty, no
-    // quote without the office phone or license, no consent sentence without the state.
-    const settingRows = await loadQuoteSettingRows(supabase);
-    const gaps = businessProfileGaps(settingRows);
-    if (gaps.length) {
-      return NextResponse.json(
-        { error: 'setup_incomplete', message: profileGapsSentence(gaps), gaps: gaps.map((g) => ({ key: g.key, label: g.label })) },
-        { status: 409 },
-      );
-    }
+    // No business form to fill in (OD12): nothing about the settings stops a send. What nobody
+    // entered prints its default ("Koala Insulation", "Limited lifetime warranty") or is left off,
+    // a PLACEHOLDER text counts as not entered, and the consent sentence names the property's state,
+    // else the shop address's, else no state (OD14).
+    const send = quoteSettingsForSend(await loadQuoteSettingRows(supabase), draft.property.state);
 
     const customerEmail = draft.customer.email?.trim();
     if (!customerEmail) {
@@ -144,9 +138,9 @@ export async function POST(request: Request) {
     const approvalsUsed = canSendQuote(profile.role, options, bundle.snapshot.settings)
       .problems.map((p) => approvals.find((a) => approvalCovers(a, p)))
       .filter((a): a is PriceApproval => !!a)
-      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, decidedRole: a.decidedRole }));
+      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, loadedCost: a.loadedCost ?? null, decidedRole: a.decidedRole }));
 
-    const settings = quoteSettingsFromRows(settingRows);
+    const { settings } = send;
     const admin = createAdminClient();
 
     const { data: last, error: lastErr } = await admin
@@ -170,7 +164,8 @@ export async function POST(request: Request) {
       const year = businessYear(now);
       const { data: counter, error: counterErr } = await admin.rpc('next_quote_number', { year });
       if (counterErr || typeof counter !== 'number') throw new Error(`Numbering the quote failed: ${counterErr?.message ?? 'no number returned'}`);
-      quoteNumber = counterQuoteNumber(profileValue(settingRows, 'quote_number_prefix'), year, counter, version);
+      // A stored prefix that is not 1 to 6 capitals or digits falls back to KN (OD16), never '-2026-…'.
+      quoteNumber = counterQuoteNumber(send.prefix, year, counter, version);
     }
 
     const { expiresAt } = quoteValidUntil(now, settings.validDays);
@@ -185,8 +180,8 @@ export async function POST(request: Request) {
       estimator: { name: profile.fullName, email: profile.email },
       terms: settings.terms,
       warranty: settings.warranty,
-      // The state is in the profile (no gaps above), so the sentence names its e-sign law (L31).
-      consent: esignConsent(profileValue(settingRows, 'default_state')),
+      // The sentence the customer signs under, stored with the quote (L31, OD14).
+      consent: send.consent,
     });
 
     const pdf = await renderQuotePdf(document);

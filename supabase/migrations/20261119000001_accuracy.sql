@@ -432,3 +432,88 @@ drop policy if exists price_approvals_decide on price_approvals;
 create policy price_approvals_decide on price_approvals for update
   using (has_role('owner', 'office') and status = 'pending' and requested_by <> auth.uid())
   with check (has_role('owner', 'office') and requested_by <> auth.uid() and (not below_floor or has_role('owner')));
+
+-- =============================================================================
+-- Review B, owner decisions OD12 and OD13 (docs/accuracy/spec/owner-decisions-2.txt): no business
+-- form to fill in. Every quote names "Koala Insulation", and the warranty line reads "Limited
+-- lifetime warranty". Only a value that is still exactly the seed is replaced (with the seed's
+-- PLACEHOLDER description); a value the owner saved is never overwritten, and a second run changes
+-- nothing. origin/main reads the same keys and prints the new words the same way.
+-- =============================================================================
+update app_settings
+   set value = value || '{"company": "Koala Insulation"}'::jsonb,
+       description = case when description = 'PLACEHOLDER — PDF branding' then 'Quote PDF branding' else description end
+ where key = 'branding'
+   and value = '{"company": "Koala Insulation of Newark", "license": null, "phone": null, "primary_color": null, "logo_path": null}'::jsonb;
+
+update app_settings
+   set value = to_jsonb('Quote valid for the period shown. A signed quote authorizes Koala Insulation to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.'::text),
+       description = case when description = 'Terms printed on every quote — PLACEHOLDER, owner to replace' then 'Terms printed on every quote' else description end
+ where key = 'quote_terms'
+   and value = to_jsonb('Quote valid for the period shown. A signed quote authorizes Koala Insulation of Newark to schedule the work. Final price may change only if hidden conditions are found; any change requires your written approval.'::text);
+
+update app_settings
+   set value = to_jsonb('Limited lifetime warranty'::text)
+ where key = 'warranty_text'
+   and value = to_jsonb('Workmanship warranty — PLACEHOLDER, owner to replace.'::text);
+
+-- =============================================================================
+-- Review B, price approvals (docs/accuracy/ledger.txt, "Review B fixes"). Additive like the rest:
+-- origin/main never reads price_approvals.
+-- =============================================================================
+
+-- database-B2: an approval is bound to the loaded cost it was asked at. Changing line quantities or
+-- hours after the decision raises the cost but leaves the price and the model price as they were;
+-- the approval then no longer covers the price (lib/pricing/policy.ts approvalCovers), so the
+-- estimator asks again. Nullable: a request recorded without it covers nothing.
+alter table price_approvals add column if not exists loaded_cost numeric(12,2);
+comment on column price_approvals.loaded_cost is
+  'The option''s loaded cost (direct cost plus overhead) when the price was asked; the approval covers the price only while the cost is no higher.';
+alter table price_approvals drop constraint if exists price_approvals_loaded_cost;
+alter table price_approvals add constraint price_approvals_loaded_cost check (loaded_cost is null or loaded_cost >= 0);
+-- One pending request per estimate, option, price and cost (the same price asked at a higher cost
+-- is a new question).
+drop index if exists price_approvals_one_pending;
+create unique index price_approvals_one_pending on price_approvals (estimate_id, tier, price, coalesce(loaded_cost, -1)) where status = 'pending';
+
+-- What was asked, the cost included, is frozen once asked; only the decision is recorded.
+create or replace function tg_price_approval_guard() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  if tg_op = 'INSERT' then
+    -- A request made with a user's token is always the asker's own and starts pending.
+    if auth.uid() is not null then
+      new.requested_by := auth.uid();
+      new.requested_at := now();
+      new.status := 'pending';
+      new.decided_by := null;
+      new.decided_role := null;
+      new.decided_at := null;
+      new.decision_note := null;
+    end if;
+    return new;
+  end if;
+  if old.status <> 'pending' then
+    raise exception 'price approval %: a decision cannot be changed', old.id;
+  end if;
+  if new.estimate_id is distinct from old.estimate_id or new.tier is distinct from old.tier
+     or new.price is distinct from old.price or new.model_price is distinct from old.model_price
+     or new.below_floor is distinct from old.below_floor or new.loaded_cost is distinct from old.loaded_cost
+     or new.note is distinct from old.note
+     or new.requested_by is distinct from old.requested_by or new.requested_at is distinct from old.requested_at then
+    raise exception 'price approval %: only the decision can be recorded, not what was asked', old.id;
+  end if;
+  if new.status <> 'pending' then
+    new.decided_by := coalesce(auth.uid(), new.decided_by);
+    new.decided_role := coalesce(auth_role(), new.decided_role);
+    new.decided_at := now();
+  end if;
+  return new;
+end $$;
+
+-- database-B4: signed-in users cannot write requests themselves. The server writes each one after
+-- pricing it (app/api/approvals, with the service role), so the price, model price, cost and
+-- below-the-floor flag the owner decides on are the server's, never the asker's. Reading (RLS:
+-- price_approvals_staff_read) and deciding (price_approvals_decide) are unchanged.
+revoke insert on table price_approvals from authenticated;
+

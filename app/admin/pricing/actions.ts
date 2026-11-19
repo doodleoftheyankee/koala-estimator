@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { loadPricingBundle } from '@/lib/server/bundle';
 import {
   errorMessage,
@@ -104,7 +105,7 @@ interface SettingRow {
 
 export async function saveSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db, userId } = owner;
 
   const parsed = parseSettingsForm(formToObject(fd));
@@ -172,7 +173,7 @@ export async function saveSettings(_prev: ActionResult | null, fd: FormData): Pr
 
 export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const form = formToObject(fd);
@@ -263,7 +264,7 @@ async function defaultCrewId(db: Db): Promise<string | null> {
 
 export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(crewForm, formToObject(fd));
@@ -307,7 +308,7 @@ export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promis
 
 export async function addCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(newCrewForm, formToObject(fd));
@@ -346,7 +347,7 @@ interface TierBefore {
 
 export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseTierForm(formToObject(fd));
@@ -423,7 +424,7 @@ export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData
 
 export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(codeRequirementForm, formToObject(fd));
@@ -465,7 +466,7 @@ export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormDa
 
 export async function saveProduct(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(productForm, formToObject(fd));

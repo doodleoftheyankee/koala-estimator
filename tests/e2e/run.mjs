@@ -67,7 +67,7 @@ await page.screenshot({ path: SHOTS + '01-list.png' });
 
 step('create estimate');
 await page.getByRole('button', { name: 'New estimate', exact: true }).click();
-// No town in the business profile yet: a new estimate starts in the shop address's town (L32).
+// A new estimate starts in the town and state of the shop address in the settings (L32, OD14).
 check((await page.getByLabel('City').inputValue()) === 'Newark' && (await page.getByLabel('State').inputValue()) === 'DE', 'a new estimate starts in the town of the shop address in the settings');
 await page.getByLabel('First name').fill('Pat');
 await page.getByLabel('Last name').fill('Lee');
@@ -319,29 +319,26 @@ const after = await page.locator('p.text-2xl').allTextContents();
 console.log('  prices after the change', after);
 check(after.every((p, i) => num(p) > num(prices[i])), 'more labor raises every option that has the line');
 
-step('send: not while the business profile has a gap (L30)');
+step('send: nothing about a business profile holds it back (OD12; review B flow-B1, review A DOC-3)');
 await page.getByRole('button', { name: 'Next' }).click();
 await page.waitForTimeout(3500); // let auto-sync run
 await page.screenshot({ path: SHOTS + '05a-send-step.png', fullPage: true });
 console.log('  send checklist:', (await page.locator('body').innerText()).split('\n').filter((l) => l.trim()).slice(0, 40).join(' | '));
-// The seeded settings have a placeholder warranty and no license, phone or state.
-const GAPS = 'The business profile is not finished: add the license number, the office phone, the state and the warranty.';
-{
-  const item = page.locator('li[data-check="profile"]');
-  const text = await item.innerText();
-  check((await item.getAttribute('data-ok')) === 'no' && text.includes(GAPS), 'the Send checklist says the business profile is not finished, and what it needs');
-  check(text.includes('Ask the owner or the office to finish it.') && (await item.getByRole('button').count()) === 0, 'and tells the estimator who can finish it (no button an estimator cannot use)');
-}
-check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'Send waits for the profile');
+// The seeded settings have no license, phone or state (and production's still hold the PLACEHOLDER
+// warranty seed): no checklist item, sentence or link asks anyone to finish a business profile.
+check((await page.locator('li[data-check="profile"]').count()) === 0, 'the Send checklist has no business-profile item');
+check(!/business profile/i.test(await page.locator('main').innerText()), 'and nothing on the Send step mentions a business profile');
+check(await page.getByRole('button', { name: /Send quote to customer/ }).isEnabled(), 'Send is ready with the seeded settings, nothing filled in');
 const gateEst = psql("select id from estimates order by created_at desc limit 1");
 {
+  // The server goes straight past the settings to the price check (no 409 setup_incomplete).
   const res = await ctx.request.post(BASE + '/api/quotes', { data: { estimateId: gateEst, expectedPrices: {} } });
   const body = await res.json();
-  check(res.status() === 409 && body.error === 'setup_incomplete' && body.message === GAPS, `the server refuses to send it too: ${res.status()} ${body.error}`);
-  check(psql(`select count(*) from quotes where estimate_id = '${gateEst}'`) === '0', 'and no quote was made');
+  check(res.status() === 409 && body.error === 'pricing_changed', `the server does not refuse it for the settings (wrong expected prices on purpose): ${res.status()} ${body.error}`);
+  check(psql(`select count(*) from quotes where estimate_id = '${gateEst}'`) === '0', 'and no quote was made by that check');
 }
 
-step('the owner finishes the business profile (L30, L31)');
+step('the Business profile page is optional (OD12)');
 const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.test' };
 {
   const bctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -350,27 +347,18 @@ const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.
   bp.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
   bp.on('console', (m) => m.type() === 'error' && logs.push(`${m.text()} (${m.location().url})`));
   await bp.goto(BASE + '/admin/business');
-  check((await bp.getByText(GAPS, { exact: true }).count()) === 1, 'the Business profile page names the same gaps');
-  await bp.screenshot({ path: SHOTS + '05b-business-profile-gaps.png', fullPage: true });
-  await bp.getByLabel('License number').fill('HIC 77-0042');
-  await bp.getByLabel('Office phone').fill('(555) 010-0199');
-  await bp.getByLabel('State').fill('de');
-  await bp.getByLabel('Warranty').fill('Two years on workmanship. Materials carry the maker’s warranty.');
-  await bp.getByRole('button', { name: 'Save the business profile' }).click();
-  await bp.getByText(/Saved/).first().waitFor({ timeout: 15000 });
-  await bp.reload();
-  check((await bp.getByText('Everything a quote needs is filled in.').count()) === 1, 'once saved, everything a quote needs is filled in');
-  const preview = await bp.locator('main').innerText();
-  check(preview.includes('(ESIGN Act and Delaware UETA)') && /KN-\d{4}-0001-v1/.test(preview), 'the page shows the signing sentence with the state and how quote numbers read');
-  check(psql("select value #>> '{}' from app_settings where key = 'default_state'") === 'DE', 'the state is saved as its two capitals');
-  await bp.screenshot({ path: SHOTS + '05c-business-profile.png', fullPage: true });
+  const main = await bp.locator('main').innerText();
+  check(main.includes('Optional. Quotes go out without it') && !/not finished|no quote can be sent/i.test(main), 'the page says it is optional, and names no gap');
+  // By name: the license field's hint mentions "the company name", so a label match finds two.
+  check((await bp.locator('input[name="branding.company"]').inputValue()) === 'Koala Insulation', 'the company quotes print is Koala Insulation');
+  check((await bp.locator('textarea[name="warranty_text"]').inputValue()) === 'Limited lifetime warranty', 'the warranty quotes print is "Limited lifetime warranty"');
+  check((await bp.locator('[name="default_state"], [name="default_city"]').count()) === 0, 'no town or state to fill in (OD14)');
+  check(/KN-\d{4}-0001-v1/.test(main) && main.includes('New estimates start in: Newark, DE'), 'it shows how quote numbers read and where new estimates start (the shop address)');
+  await bp.screenshot({ path: SHOTS + '05b-business-profile-optional.png', fullPage: true });
+  await bp.goto(BASE + '/admin/pricing');
+  check(!/Business profile:/.test(await bp.locator('main').innerText()), 'the Pricing page lists nothing about the business profile to fill in');
   await bctx.close();
 }
-// The phone learns the profile is finished with its next download (here: opening the app again).
-await page.reload();
-await page.getByRole('button', { name: /^4 Send/ }).click();
-await page.locator('li[data-check="profile"][data-ok="yes"]').getByText('Business profile finished').waitFor({ timeout: 15000 });
-check(true, 'the phone sees the finished profile with its next download');
 
 step('Send checklist: plain words, and a Fix button that goes to the item (L34)');
 {
@@ -443,6 +431,20 @@ let asked;
   check(self.status() === 403, `an estimator cannot approve it: ${self.status()}`);
   const again = await ctx.request.post(BASE + '/api/approvals', { data: { estimateId: psql('select estimate_id from price_approvals'), tier: 'good', price: asked } });
   check(again.ok() && (await again.json()).already === true && psql('select count(*) from price_approvals') === '1', 'asking twice keeps one request');
+  // Review B database-B2: the request keeps the loaded cost it was asked at (the server's pricing).
+  check(
+    psql("select a.loaded_cost is not null and a.loaded_cost = o.loaded_cost from price_approvals a join estimate_options o on o.estimate_id = a.estimate_id and o.tier = a.tier") === 't',
+    'the request keeps the loaded cost the option had when it was asked',
+  );
+  // Review B database-B4: the estimator's own token cannot write a request straight to the database.
+  {
+    const res = await ctx.request.post(`http://localhost:${process.env.MOCK_PORT}/rest/v1/price_approvals`, {
+      headers: { apikey: 'anon', Authorization: `Bearer ${sign({ sub: EST.id, role: 'authenticated', aud: 'authenticated' })}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      data: { estimate_id: psql('select estimate_id from price_approvals'), tier: 'best', price: 1000, model_price: 9000, below_floor: false, requested_by: EST.id },
+    });
+    check(res.status() === 401 || res.status() === 403, `a request written straight to the database with the estimator's token is refused: ${res.status()}`);
+    check(psql('select count(*) from price_approvals') === '1', 'and nothing was written');
+  }
 }
 
 step('the owner approves it from the Estimates page (L34)');
@@ -539,7 +541,12 @@ await cp.screenshot({ path: SHOTS + '06-customer-quote.png', fullPage: true });
     psql(`select (snapshot->'document'->>'validUntil') = to_char(expires_at at time zone 'America/New_York', 'YYYY-MM-DD') from quotes where estimate_id = '${estId}'`) === 't',
     '"Valid until" is the business-zone date the link stops working',
   );
-  check((await cp.getByText(/\(ESIGN Act and Delaware UETA\)/).count()) === 1, 'the signing sentence names the state in the business profile');
+  check((await cp.getByText(/\(ESIGN Act and Delaware UETA\)/).count()) === 1, "the signing sentence names the property's state (OD14)");
+  // Built from the seeded settings (OD12, OD13): the brand, the warranty, nothing left blank.
+  const quoteText = await cp.locator('body').innerText();
+  check(quoteText.includes('Koala Insulation') && !/Koala Insulation of/.test(quoteText), 'the quote names Koala Insulation');
+  check(quoteText.includes('Limited lifetime warranty'), 'its warranty reads "Limited lifetime warranty"');
+  check(!/placeholder/i.test(quoteText) && !/\bLicen[sc]e\b/.test(quoteText) && !/\bCall\b/.test(quoteText), 'no PLACEHOLDER, no empty License line, no "Call" without a number');
   const accept = (await cp.getByText(/^You are accepting/).innerText()).trim();
   check(/ for \$[\d,]+\.$/.test(accept), `the accept sentence reads the price in whole dollars: "${accept}"`);
 }
@@ -596,6 +603,23 @@ check(psql("select count(*) from jobs") === '1', 'signing created a job');
 console.log('  estimate:', psql("select status, selected_tier from estimates"));
 console.log('  quote:', psql("select version, status, signed_tier, signed_price, signer_name, signed_pdf_path is not null from quotes"));
 check(psql("select esign_audit->>'consentText' like '%(ESIGN Act and Delaware UETA)%' from quotes where status = 'signed'") === 't', 'the e-sign record keeps the sentence the customer agreed to');
+{
+  // Review B flow-B3: a request still waiting on an estimate the customer signed is not decided, and
+  // the owner's queue does not show it.
+  const signedEst = psql("select estimate_id from quotes where status = 'signed' limit 1");
+  psql(`insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by) values ('${signedEst}', 'best', 9999, 9000, false, 1000, '${EST.id}')`);
+  const stale = psql(`select id from price_approvals where estimate_id = '${signedEst}' and status = 'pending'`);
+  const octx3 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await octx3.addCookies([sessionCookie(OWNER)]);
+  const res = await octx3.request.patch(BASE + `/api/approvals/${stale}`, { data: { decision: 'approved' } });
+  const body = await res.json();
+  check(res.status() === 409 && body.error === 'signed' && body.message === 'The customer already signed this quote.', `deciding a request on a signed estimate: ${res.status()} ${body.error}`);
+  const qp = await octx3.newPage();
+  await qp.goto(BASE + '/estimates');
+  check((await qp.getByRole('list', { name: 'Prices waiting for approval' }).count()) === 0, "the owner's queue leaves it out (no 'Needs you' for a signed quote)");
+  check(psql(`select status from price_approvals where id = '${stale}'`) === 'pending', 'and it was not decided');
+  await octx3.close();
+}
 console.log('  events:', psql("select string_agg(event, ',' order by id) from quote_events"));
 console.log('  audit:', psql("select string_agg(distinct action, ',') from audit_log where action like '%.%'"));
 
@@ -756,7 +780,8 @@ await page.emulateMedia({ media: 'print' });
 check((await report.isVisible()) && !(await roof.isVisible()), 'in print, only the report shows');
 const reportText = (await report.innerText()).replace(/\s+/g, ' ');
 for (const bit of [
-  'KOALA INSULATION OF NEWARK · ROOF TAKEOFF',
+  // The brand, every franchise (review B flow-B7, OD12).
+  'KOALA INSULATION · ROOF TAKEOFF',
   '12 Elkton Rd, Newark, DE 19711, USA',
   'Medium-detail aerial photo from Jun 2023.',
   'Attic floor 1,970 sq ft',
@@ -803,7 +828,7 @@ check((await page.evaluate(() => window.__printedAs)) === 'Roof takeoff - 12 Elk
 await roof.getByRole('button', { name: /Copy summary/ }).click();
 await roof.getByText('Summary copied. Paste it into a note, text or email.').waitFor();
 const copied = await page.evaluate(() => navigator.clipboard.readText());
-check(copied.startsWith('Koala Insulation of Newark: roof takeoff\n12 Elkton Rd, Newark, DE 19711, USA\n'), 'Copy summary copies the takeoff as text');
+check(copied.startsWith('Koala Insulation: roof takeoff\n12 Elkton Rd, Newark, DE 19711, USA\n'), 'Copy summary copies the takeoff as text, under the brand (review B flow-B7)');
 check(
   copied.includes('Order with 15% waste: 27⅔ squares (83 bundles)') &&
     copied.includes('Low-slope roof (under 2/12, not shingles): 160 sq ft') &&
@@ -1222,6 +1247,12 @@ await page.screenshot({ path: SHOTS + '10-synced-list.png' });
 step("Koala's database unreachable is not a sign-out (L36)");
 {
   const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+  // Review B flow-B10: Pricing is open in the owner's browser when Koala stops answering.
+  const pctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await pctx.addCookies([sessionCookie(OWNER)]);
+  const pp = await pctx.newPage();
+  await pp.goto(BASE + '/admin/pricing');
+  await pp.getByRole('button', { name: 'Save', exact: true }).first().waitFor();
   unreachableStep = true;
   await rest(true);
   await page.goto(BASE + '/field');
@@ -1230,6 +1261,20 @@ step("Koala's database unreachable is not a sign-out (L36)");
   check(new URL(page.url()).pathname === '/field', 'opening /field with the database down opens the field app from the phone, not the sign-in page');
   check((await page.getByText('Pat Lee').count()) > 0 && (await page.getByText('Your work is saved on this phone. It syncs when Koala is back.').count()) === 1, "with the phone's estimates and \"Can't reach Koala right now\"");
   await page.screenshot({ path: SHOTS + '10b-field-unreachable.png' });
+  {
+    // Review B flow-B2: with signal but no Koala, the Send checklist does not say "Online", and Send waits.
+    await page.getByRole('button', { name: /Kim Pending/ }).first().click();
+    await page.getByRole('button', { name: /^4 Send/ }).click();
+    const item = page.locator('li[data-check="online"]');
+    await item.waitFor();
+    check(
+      (await item.getAttribute('data-ok')) === 'no' && (await item.innerText()).includes("Can't reach Koala right now. Sending needs Koala; your work is saved."),
+      `the Send checklist says Koala cannot be reached, not "Online": "${(await item.innerText()).trim()}"`,
+    );
+    check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits while Koala cannot be reached');
+    await page.screenshot({ path: SHOTS + '10b2-send-unreachable.png' });
+    await page.getByRole('button', { name: 'Back to estimates' }).click();
+  }
   const api = await ctx.request.get(BASE + '/api/estimates');
   const body = await api.json();
   check(api.status() === 503 && body.error === 'unreachable' && /Can't reach Koala right now/.test(body.message), `APIs answer 503, not "signed out": ${api.status()} ${body.error}`);
@@ -1241,8 +1286,22 @@ step("Koala's database unreachable is not a sign-out (L36)");
   check(at.pathname === '/unreachable' && at.searchParams.get('next') === '/estimates', `an office page goes to /unreachable, keeping the page: ${at.pathname}${at.search}`);
   check((await up.getByRole('heading', { name: 'Can’t reach Koala right now' }).count()) === 1 && (await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/estimates', 'it says so, with Try again back to the page');
   await up.screenshot({ path: SHOTS + '10c-unreachable-page.png' });
+  {
+    await pp.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await pp.getByText("Can't reach Koala right now. Nothing was saved.").first().waitFor({ timeout: 20000 });
+    check((await pp.getByText('Only the owner can change pricing.').count()) === 0, "saving Pricing while Koala is down says \"Can't reach Koala right now. Nothing was saved.\", not \"Only the owner can change pricing.\"");
+    await pp.screenshot({ path: SHOTS + '10d-pricing-save-unreachable.png' });
+    await pctx.close();
+  }
   await up.goto(BASE + '/unreachable?next=//evil.example/x');
   check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next= is only ever a path on this site');
+  // Review B database-B1: dot segments that resolve to "//host" do not leave the site either.
+  await up.goto(BASE + '/unreachable?next=%2F.%2F%2Fevil.example%2Fx');
+  check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next=/.//evil.example/x is not a way off the site (Try again goes to /)');
+  {
+    const res = await uctx.request.get(BASE + '/login?next=/a&next=/b', { maxRedirects: 0 });
+    check(res.status() === 200, `a repeated next= on the sign-in page opens it (was a 500): ${res.status()}`);
+  }
   const signedOut = await browser.newContext();
   const sp = await signedOut.newPage();
   await sp.goto(BASE + '/estimates');

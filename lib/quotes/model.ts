@@ -124,6 +124,9 @@ export function quoteNumberBase(quoteNumber: string): string | null {
 /** The prefix in front of every quote number: the quote_number_prefix setting, 1 to 6 capitals or digits. */
 export const QUOTE_PREFIX_PATTERN = /^[A-Z0-9]{1,6}$/;
 
+/** The prefix when the setting is missing or not one (OD16: the one quotes already carry). */
+export const DEFAULT_QUOTE_PREFIX = 'KN';
+
 // ---------------------------------------------------------------------------
 // Validity (OD11)
 // ---------------------------------------------------------------------------

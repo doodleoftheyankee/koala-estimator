@@ -21,6 +21,8 @@ export interface PolicyProblem {
   /** below_floor / over_limit: the price asked (whole dollars) and the model price. */
   price?: number;
   modelPrice?: number;
+  /** below_floor / over_limit: the option's loaded cost (direct cost plus overhead) at this price. */
+  loadedCost?: number;
   /** below_floor / over_limit: the lowest price the floor margin allows. */
   floor?: number;
   /** The range an estimator may quote alone (estimators only). */
@@ -52,6 +54,12 @@ export interface PriceApproval {
   modelPrice: number;
   /** Below the floor margin when it was asked (only the owner may approve it). */
   belowFloor: boolean;
+  /**
+   * The option's loaded cost when it was asked (review B database-B2). The approval covers the price
+   * only while the cost is no higher: changed line quantities or hours that raise it need a new
+   * request. Null for a request recorded without it, which covers nothing.
+   */
+  loadedCost?: number | null;
   status: 'pending' | 'approved' | 'declined';
   /** The role of whoever decided, recorded by the database (null while pending). */
   decidedRole: Role | null;
@@ -88,11 +96,16 @@ export function estimatorRange(
   return min <= max ? { min, max } : null;
 }
 
-/** Does this approval let the price through? Approved, same option, exact price and model price, by a role that may. */
-export function approvalCovers(a: PriceApproval, p: Pick<PolicyProblem, 'tier' | 'kind' | 'price' | 'modelPrice'>): boolean {
+/**
+ * Does this approval let the price through? Approved, same option, exact price and model price, at a
+ * loaded cost no higher than the one it was asked at (review B database-B2), by a role that may; a
+ * price below the floor only by an approval the owner gave for a price below the floor.
+ */
+export function approvalCovers(a: PriceApproval, p: Pick<PolicyProblem, 'tier' | 'kind' | 'price' | 'modelPrice' | 'loadedCost'>): boolean {
   if (a.status !== 'approved' || a.tier !== p.tier || p.price === undefined || p.modelPrice === undefined) return false;
   if (Math.abs(a.price - p.price) > 0.005 || Math.abs(a.modelPrice - p.modelPrice) > 0.005) return false;
-  if (p.kind === 'below_floor') return a.decidedRole === 'owner';
+  if (a.loadedCost === null || a.loadedCost === undefined || p.loadedCost === undefined || p.loadedCost > a.loadedCost + 0.005) return false;
+  if (p.kind === 'below_floor') return a.decidedRole === 'owner' && a.belowFloor;
   if (p.kind === 'over_limit') return a.decidedRole === 'owner' || a.decidedRole === 'office';
   return false;
 }
@@ -138,7 +151,7 @@ function problemForPrice(role: Role, o: PricedOption, settings: PricingSettings)
       : range
         ? ` You can quote ${dollars(range.min)} to ${dollars(range.max)} on your own (estimators may change it up to ${percent(settings.estimatorOverrideLimitPct)}).`
         : ` With these changes no price you can quote on your own (within ${percent(settings.estimatorOverrideLimitPct)} of the model price) clears the ${percent(settings.floorMarginPct)} floor margin.`;
-  const base = { tier: o.tier, price: o.price, modelPrice: o.modelPrice, floor, ...(range ? { range } : {}) };
+  const base = { tier: o.tier, price: o.price, modelPrice: o.modelPrice, loadedCost: o.loadedCost, floor, ...(range ? { range } : {}) };
   if (o.belowFloor && role !== 'owner') {
     return {
       ...base,

@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionProfile, type SessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { failure, formToObject, parseWith, success, UNIQUE_VIOLATION, type ActionResult } from '@/lib/admin/forms';
 import { actualCosts, actualForm, actualValues, excludeForm, jobIdForm, scheduleForm, statusForm, valuesChanged } from '@/lib/jobs/forms';
 import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
@@ -25,7 +26,7 @@ function refresh(jobId: string) {
 
 export async function saveSchedule(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
-  if (!s) return failure(NOT_STAFF);
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
   const parsed = parseWith(scheduleForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { id, crew_id, scheduled_start, scheduled_days } = parsed.data;
@@ -38,7 +39,7 @@ export async function saveSchedule(_prev: ActionResult | null, fd: FormData): Pr
 
 export async function changeStatus(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
-  if (!s) return failure(NOT_STAFF);
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
   const parsed = parseWith(statusForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { id, status, confirm } = parsed.data;
@@ -61,7 +62,7 @@ export async function changeStatus(_prev: ActionResult | null, fd: FormData): Pr
  */
 export async function saveActual(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
-  if (!s) return failure(NOT_STAFF);
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
   const parsed = parseWith(actualForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const f = parsed.data;
@@ -111,7 +112,7 @@ export async function saveActual(_prev: ActionResult | null, fd: FormData): Prom
 
 export async function verifyActuals(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
-  if (!s) return failure(NOT_STAFF);
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
   const parsed = parseWith(jobIdForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { id } = parsed.data;
@@ -135,7 +136,7 @@ export async function verifyActuals(_prev: ActionResult | null, fd: FormData): P
 
 export async function unverifyActuals(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure('Only the owner can unverify actuals.');
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal('Only the owner can unverify actuals.'));
   const parsed = parseWith(jobIdForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { id } = parsed.data;
@@ -149,7 +150,7 @@ export async function unverifyActuals(_prev: ActionResult | null, fd: FormData):
 
 export async function setExcluded(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await staff();
-  if (!s) return failure(NOT_STAFF);
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
   const parsed = parseWith(excludeForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { job_id, id, exclude, reason } = parsed.data;

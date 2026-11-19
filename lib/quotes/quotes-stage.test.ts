@@ -7,9 +7,10 @@
 //  L9   the headline is the recommended option everywhere; a pick that is gone gives the next one
 //  L12  quote numbers from a counter, the year in the business time zone
 //  L13  "Valid until" is the business-zone date of the last moment the link works
-//  L30  no quote goes out while the business profile has a gap
-//  L31  new quotes' consent sentence names the profile's state
-//  L32  new estimates start in the profile's town, else the shop address's, else blank
+//  L30  (replaced by owner decision OD12: no business form, nothing blocks a send; see
+//       lib/quotes/owner-decisions-2.test.ts) the seed's gaps no longer stop a quote
+//  L31  new quotes' consent sentence names a state (OD14: the property's, else the shop's, else none)
+//  L32  new estimates start in the shop address's town and state (OD14), else blank
 //  L33  honest wording when email is not set up, and on the PDF
 //  L39  each option block on the PDF stays on one page
 // Hard rule 1 runs through all of it: a quote sent before the stage prints exactly as it did.
@@ -228,8 +229,10 @@ describe('L13: "Valid until" is the last day the link works (S1-F8, OD11, RF-11)
   });
 });
 
-describe('L30: no quote goes out while the business profile has a gap (RF-01)', () => {
-  // The live seed: a placeholder warranty, no phone, no license, no state.
+describe('L30, as owner decision OD12 changed it: the seed\'s gaps no longer stop a quote (RF-01, review B flow-B1)', () => {
+  // The live seed: a placeholder warranty, no phone, no license, no state. L30 refused to send with
+  // these four gaps; the owner decided there is no form to fill in (OD12), so they are filled by
+  // defaults or left off instead, and PLACEHOLDER never reaches a customer either way.
   const live = [
     { key: 'branding', value: { company: 'A franchise', license: null, phone: null, primary_color: null, logo_path: null } },
     { key: 'quote_terms', value: 'Quote valid for the period shown.' },
@@ -238,47 +241,46 @@ describe('L30: no quote goes out while the business profile has a gap (RF-01)', 
     { key: 'quote_number_prefix', value: 'KN' },
   ];
 
-  it('names every gap in one plain sentence; a finished profile has none', async () => {
+  it('the old gaps are not gaps: the warranty prints "Limited lifetime warranty", license and phone are left off, the consent names a state', async () => {
     const p = (await import('./profile')) as typeof import('./profile');
-    const gaps = p.businessProfileGaps(live);
-    expect(gaps.map((g) => g.key)).toEqual(['branding.license', 'branding.phone', 'default_state', 'warranty_text']);
-    expect(p.profileGapsSentence(gaps)).toBe('The business profile is not finished: add the license number, the office phone, the state and the warranty.');
-    const done = [
-      ...live.filter((r) => r.key !== 'branding' && r.key !== 'warranty_text'),
-      { key: 'branding', value: { company: 'A franchise', license: 'HIC 77-0042', phone: '(555) 010-0199' } },
-      { key: 'warranty_text', value: 'Two years on workmanship.' },
-      { key: 'default_state', value: 'IL' },
-    ];
-    expect(p.businessProfileGaps(done)).toEqual([]);
-    expect(p.businessProfileGaps([...done, { key: 'default_state', value: 'XX' }].filter((r, i, a) => a.findLastIndex((x) => x.key === r.key) === i)).map((g) => g.key)).toEqual(['default_state']);
-    expect(p.businessProfileGaps([...done.filter((r) => r.key !== 'quote_number_prefix'), { key: 'quote_number_prefix', value: 'k-n' }]).map((g) => g.key)).toEqual(['quote_number_prefix']);
+    expect('businessProfileGaps' in p).toBe(false);
+    const send = p.quoteSettingsForSend(live, 'IL');
+    expect(send.settings.warranty).toBe('Limited lifetime warranty');
+    expect(send.settings.branding).toMatchObject({ company: 'A franchise', license: null, phone: null });
+    expect(send.settings.terms).toBe('Quote valid for the period shown.');
+    expect(send.prefix).toBe('KN');
+    expect(send.consent).toBe(CONSENT_IL);
+    // A bad prefix does not stop it either: it falls back to KN (OD16).
+    expect(p.quoteSettingsForSend([...live.filter((r) => r.key !== 'quote_number_prefix'), { key: 'quote_number_prefix', value: 'k-n' }], 'IL').prefix).toBe('KN');
   });
 });
 
-describe('L31: the consent sentence names the profile\'s state; a quote sent before keeps its own (RF-01, rule 4)', () => {
-  it('"(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and <the profile\'s state> UETA)"', async () => {
+describe('L31: the consent sentence names a state; a quote sent before keeps its own (RF-01, rule 4; OD14)', () => {
+  it('"(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and <the state> UETA)", and no state -> the acts by name', async () => {
     const c = (await import('./consent')) as Record<string, unknown>;
     expect(c.esignConsent, 'esignConsent').toBeTypeOf('function');
     const esignConsent = c.esignConsent as (s: string) => string;
     const consentFor = c.consentFor as (d: Partial<QuoteDocument>) => string;
     expect(esignConsent('IL')).toBe(CONSENT_IL);
     expect(esignConsent('pa')).toContain('(ESIGN Act and Pennsylvania UETA)');
-    expect(() => esignConsent('XX')).toThrow();
+    // OD14: it never throws (production has no state setting); with no state it names the acts.
+    expect(esignConsent('XX')).toContain('(ESIGN Act and the Uniform Electronic Transactions Act)');
     expect(consentFor(makeDoc())).toBe(CONSENT_IL);
     expect(consentFor(sentBefore(makeDoc()))).toContain('(ESIGN Act and Delaware UETA)');
   });
 });
 
-describe('L32: a new estimate starts in the profile\'s town, else the shop address\'s, else blank (RF-17)', () => {
+describe('L32: a new estimate starts in the shop address\'s town and state, else blank (RF-17, OD14)', () => {
   it('no town is typed into the code', () => {
     const d = newDraft(new Date('2026-11-18T12:00:00Z'));
     expect(d.property.city).toBe('');
     expect(d.property.state).toBe('');
   });
 
-  it('the profile, then the shop address', async () => {
+  it('the shop address, as a pair (OD14: no town or state form; review A DOC-2)', async () => {
     const p = (await import('./profile')) as typeof import('./profile');
-    expect(p.newEstimateDefaults([{ key: 'default_city', value: 'Bear' }, { key: 'default_state', value: 'de' }, { key: 'shop_address', value: 'Springfield, IL 62701' }])).toEqual({ city: 'Bear', state: 'DE' });
+    // L32 took a town saved on the profile first ("Bear, DE"); OD14 takes the shop address's pair only.
+    expect(p.newEstimateDefaults([{ key: 'default_city', value: 'Bear' }, { key: 'default_state', value: 'de' }, { key: 'shop_address', value: 'Springfield, IL 62701' }])).toEqual({ city: 'Springfield', state: 'IL' });
     expect(p.newEstimateDefaults([{ key: 'shop_address', value: 'Springfield, IL 62701' }])).toEqual({ city: 'Springfield', state: 'IL' });
     expect(p.newEstimateDefaults([{ key: 'shop_address', value: '12 Main St, Springfield, IL' }])).toEqual({ city: 'Springfield', state: 'IL' });
     expect(p.newEstimateDefaults([])).toEqual({ city: '', state: '' });

@@ -4,6 +4,7 @@ import { priceEstimate, type PriceApproval, type PricedOption } from '@/lib/pric
 import { seededCoefficients, seededSnapshot } from '@/lib/pricing/__fixtures__/seeded';
 import { syncBlocker } from '@/lib/offline/syncCore';
 import { newArea, newDraft, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
+import { fixElementId } from './fix';
 import { withMeasurement } from './measuring';
 import { sendChecks, type SendCheckInput } from './sendChecks';
 
@@ -24,7 +25,7 @@ const price = (d: EstimateDraft): PricedOption[] => {
   return areas.length ? priceEstimate({ ...toEstimateInput(d), areas }, seededSnapshot, seededCoefficients).options : [];
 };
 function input(d: EstimateDraft, over: Partial<SendCheckInput> = {}): SendCheckInput {
-  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, profileGaps: [], online: true, ...over };
+  return { draft: d, options: price(d), role: 'estimator', settings: seededSnapshot.settings, approvals: [], pendingFlags: 0, online: true, reachable: true, ...over };
 }
 const failing = (i: SendCheckInput) => sendChecks(i).filter((c) => !c.ok);
 
@@ -40,7 +41,6 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
       `${price(complete()).length} options priced`,
       'Prices within your limits',
       'Every change from the model is explained',
-      'Business profile finished',
       'Online',
     ]);
   });
@@ -114,7 +114,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     const good = price(d).find((o) => o.tier === 'good')!;
     const asked = Math.round(good.modelPrice * 1.2);
     d.overrides = { good: { price: asked, reason: 'Attic access through a closet' } };
-    const a: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, status: 'pending', decidedRole: null, requestedAt: '2026-11-19T15:01:00Z' };
+    const a: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, loadedCost: good.loadedCost, status: 'pending', decidedRole: null, requestedAt: '2026-11-19T15:01:00Z' };
     expect(failing(input(d, { approvals: [a] }))[0]!.approval).toMatchObject({ status: 'pending' });
     const declined = { ...a, status: 'declined' as const, decidedRole: 'owner' as const, decisionNote: 'Too low for a full removal' };
     expect(failing(input(d, { approvals: [declined] }))[0]!.approval).toMatchObject({ status: 'declined', decisionNote: 'Too low for a full removal' });
@@ -122,6 +122,24 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     const checks = sendChecks(input(d, { approvals: [declined, approved] }));
     expect(checks.every((c) => c.ok)).toBe(true);
     expect(checks.find((c) => c.id === 'price')!.label).toBe('Prices within your limits or approved');
+  });
+
+  // Review B database-B2: line changes after the decision raised the cost, so the approval no longer
+  // covers the price; the phone offers Request approval again instead of a stale "approved".
+  it('an approval asked at a lower cost: the phone offers Request approval again (review B database-B2)', () => {
+    const d = complete();
+    const good = price(d).find((o) => o.tier === 'good')!;
+    const asked = Math.round(good.modelPrice * 1.2);
+    d.overrides = { good: { price: asked, reason: 'Attic access through a closet' } };
+    const approved: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, loadedCost: good.loadedCost - 300, status: 'approved', decidedRole: 'owner', requestedAt: '2026-11-19T15:01:00Z' };
+    const check = failing(input(d, { approvals: [approved] })).find((c) => c.id === 'price:good');
+    expect(check?.approval).toMatchObject({ tier: 'good', price: asked, status: 'none' });
+    expect(check?.approval).not.toHaveProperty('approvalId');
+    // A request still waiting, asked at the lower cost, is not this price's question any more either.
+    const waiting = { ...approved, status: 'pending' as const, decidedRole: null };
+    expect(failing(input(d, { approvals: [waiting] })).find((c) => c.id === 'price:good')?.approval).toMatchObject({ status: 'none' });
+    // At the cost it was asked at, the waiting request still shows.
+    expect(failing(input(d, { approvals: [{ ...waiting, loadedCost: good.loadedCost }] })).find((c) => c.id === 'price:good')?.approval).toMatchObject({ status: 'pending' });
   });
 
   it('a price change needs a reason before anything else', () => {
@@ -132,18 +150,48 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     ]);
   });
 
-  it('changes from the model need a note; the business profile; offline', () => {
+  it('changes from the model need a note; offline', () => {
     const d = complete();
-    const est = failing(input(d, { pendingFlags: 2, profileGaps: ['the license number', 'the office phone'], online: false }));
+    const est = failing(input(d, { pendingFlags: 2, online: false }));
     expect(est.map((c) => [c.label, c.fix])).toEqual([
       ['2 changes from the model need a short note.', { label: 'Explain', target: { step: 'options' } }],
-      ['The business profile is not finished: add the license number and the office phone. Ask the owner or the office to finish it.', undefined],
       ['Offline. Sending needs a connection; your work is saved.', undefined],
     ]);
-    const owner = failing(input(d, { role: 'owner', profileGaps: ['the warranty'] }));
-    expect(owner.map((c) => [c.label, c.fix])).toEqual([
-      ['The business profile is not finished: add the warranty.', { label: 'Open the business profile', target: { step: 'business' } }],
-    ]);
+  });
+
+  // Review B flow-B5: "Shorten the notes" opened the Customer step at First name, with the notes box
+  // out of view below.
+  it('notes too long: the Fix goes to the notes box (review B flow-B5)', () => {
+    const d = { ...complete(), notes: 'x'.repeat(5001) };
+    const item = failing(input(d)).find((c) => c.id === 'other');
+    expect(item?.label).toBe('The notes for the quote are too long.');
+    expect(item?.fix).toEqual({ label: 'Shorten the notes', target: { step: 'customer', field: 'notes' } });
+    expect(fixElementId(item!.fix!.target)).toBe('customer-notes');
+  });
+
+  // Review B flow-B2: the phone has signal but Koala does not answer. The checklist said "Online" and
+  // "Everything the quote needs is here" under a "Can't reach Koala right now" banner.
+  it('signal but Koala unreachable: the online item says so and the checklist is not done (review B flow-B2)', () => {
+    const checks = sendChecks(input(complete(), { online: true, reachable: false }));
+    expect(checks.find((c) => c.id === 'online')).toEqual({ id: 'online', ok: false, label: "Can't reach Koala right now. Sending needs Koala; your work is saved." });
+    expect(checks.every((c) => c.ok)).toBe(false);
+    expect(failing(input(complete(), { online: true, reachable: false })).map((c) => c.id)).toEqual(['online']);
+    // No signal at all still reads as offline.
+    expect(sendChecks(input(complete(), { online: false, reachable: false })).find((c) => c.id === 'online')?.label).toBe('Offline. Sending needs a connection; your work is saved.');
+  });
+
+  // Owner decision OD12 (review A DOC-1, DOC-3; review B flow-B1): there is no business form to
+  // finish, so the checklist has no business-profile item for any role, and a phone whose cached
+  // bundle still carries the old gaps is not held back by them.
+  it('no business-profile item for any role: nothing about the profile stops a send (OD12)', () => {
+    for (const role of ['estimator', 'office', 'owner'] as const) {
+      const checks = sendChecks(input(complete(), { role }));
+      expect(checks.every((c) => c.ok), role).toBe(true);
+      expect(checks.map((c) => c.id), role).not.toContain('profile');
+      expect(checks.map((c) => c.label).join(' '), role).not.toMatch(/business profile/i);
+    }
+    const stale = { ...input(complete()), profileGaps: ['the license number'] } as SendCheckInput;
+    expect(sendChecks(stale).every((c) => c.ok)).toBe(true);
   });
 
   it('every failing item has a way on: a Fix, a Request approval, or it says who to ask', () => {
@@ -152,7 +200,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     d.areas.push({ ...newArea('rim_joist'), sqft: 0 }, { ...newArea('garage'), name: '', sqft: 300 });
     d.overrides = { good: { price: 100, reason: '' } };
     for (const role of ['estimator', 'office', 'owner'] as const) {
-      for (const c of failing(input(d, { role, pendingFlags: 1, profileGaps: ['the terms'] }))) {
+      for (const c of failing(input(d, { role, pendingFlags: 1 }))) {
         expect(c.fix || c.approval || /Ask the owner|Offline/.test(c.label), `${role}: ${c.label}`).toBeTruthy();
         expect(c.label).not.toMatch(/expected|Too small|Too big|Invalid|undefined|NaN/);
       }

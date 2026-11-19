@@ -3,14 +3,17 @@
 //   GET  /api/approvals                the requests waiting for a decision (owner and office)
 //   POST /api/approvals                an estimator (or the office) asks for one option's price:
 //                                      { estimateId, tier, price, note? }
-// The request is checked against the estimate as the server prices it (lib/server/approvals.ts) and
-// written as the signed-in user, so the database's rules apply (price_approvals RLS).
+// The request is checked against the estimate as the server prices it (lib/server/approvals.ts), and
+// only then written, by the server (review B database-B4): signed-in users cannot insert into
+// price_approvals themselves, so the price, model price, loaded cost and below-floor flag the owner
+// sees are always the server's, never typed in by the asker.
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { TIERS } from '@/lib/pricing';
 import { APPROVAL_COLUMNS, approvalFromRow, approvalsFromRows, loadApprovals } from '@/lib/quotes/approvals';
 import { checkApprovalRequest } from '@/lib/server/approvals';
 import { authorize } from '@/lib/server/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -49,10 +52,15 @@ export async function POST(request: NextRequest) {
   const { estimateId, tier, price, note } = body.data;
   const db = await createClient();
   try {
+    // The estimate is read through the asker's own access (RLS): one they cannot see is not found.
     const check = await checkApprovalRequest(db, profile.role, estimateId, tier, price);
     if (!check.ok) return NextResponse.json({ error: check.error, message: check.message }, { status: check.status });
+    // And it must be one they may edit (the same rule the database's insert policy names).
+    const { data: canEdit, error: canEditError } = await db.rpc('can_edit_estimate', { p_estimate: estimateId });
+    if (canEditError) throw new Error(canEditError.message);
+    if (canEdit !== true) return NextResponse.json({ error: 'forbidden', message: 'You cannot ask for a price on this estimate.' }, { status: 403 });
     const { problem } = check;
-    const { data, error: insError } = await db
+    const { data, error: insError } = await createAdminClient()
       .from('price_approvals')
       .insert({
         estimate_id: estimateId,
@@ -60,14 +68,18 @@ export async function POST(request: NextRequest) {
         price: problem.price,
         model_price: problem.modelPrice,
         below_floor: problem.kind === 'below_floor',
+        // The cost it is asked at: the approval covers the price only while the cost is no higher (database-B2).
+        loaded_cost: problem.loadedCost ?? null,
         note: note || null,
         requested_by: profile.userId,
       })
       .select(APPROVAL_COLUMNS)
       .single();
     if (insError?.code === '23505') {
-      // Already asked: the request waiting is the answer.
-      const waiting = (await loadApprovals(db, estimateId)).find((a) => a.status === 'pending' && a.tier === tier && a.price === problem.price);
+      // Already asked, at this price and cost: the request waiting is the answer.
+      const waiting = (await loadApprovals(db, estimateId)).find(
+        (a) => a.status === 'pending' && a.tier === tier && a.price === problem.price && a.loadedCost === (problem.loadedCost ?? null),
+      );
       return NextResponse.json({ approval: waiting ?? null, already: true });
     }
     if (insError) {

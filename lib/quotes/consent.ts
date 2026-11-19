@@ -4,14 +4,14 @@
 import type { QuoteDocument } from './model';
 
 /**
- * The sentence quotes carried before the business profile named the state (documents sent before
- * the accuracy round, Nov 2026, have no consent of their own). Kept word for word so those quotes
+ * The sentence quotes carried before quotes named their own state (documents sent before the
+ * accuracy round, Nov 2026, have no consent of their own). Kept word for word so those quotes
  * are still signed under the sentence they were sent with; new quotes never use it.
  */
 export const LEGACY_ESIGN_CONSENT =
   'I agree to sign this quote electronically. My electronic signature is the legal equivalent of my handwritten signature (ESIGN Act and Delaware UETA). I accept the option and price I selected above and the terms of this quote.';
 
-/** US states and DC by postal code, for the state the business profile names. */
+/** US states and DC by postal code, for the state a consent sentence names. */
 export const STATE_NAMES: Readonly<Record<string, string>> = {
   AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut',
   DE: 'Delaware', DC: 'District of Columbia', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois',
@@ -29,13 +29,14 @@ export function stateName(code: string | null | undefined): string | null {
 }
 
 /**
- * The consent sentence for a new quote, naming the state in the business profile (the profile
- * cannot send a quote without one: lib/quotes/profile.ts). Throws for a code that is not a state.
+ * The consent sentence for a new quote (OD14): naming the e-sign law of the state given (the
+ * property's state, else the shop address's: lib/quotes/profile.ts consentState), or, with no
+ * state, the federal and uniform acts by name. Never throws: a send never waits for a state.
  */
-export function esignConsent(stateCode: string): string {
+export function esignConsent(stateCode: string | null | undefined): string {
   const name = stateName(stateCode);
-  if (!name) throw new Error(`Not a US state: ${stateCode}`);
-  return `I agree to sign this quote electronically. My electronic signature is the legal equivalent of my handwritten signature (ESIGN Act and ${name} UETA). I accept the option and price I selected above and the terms of this quote.`;
+  const law = name ? `ESIGN Act and ${name} UETA` : 'ESIGN Act and the Uniform Electronic Transactions Act';
+  return `I agree to sign this quote electronically. My electronic signature is the legal equivalent of my handwritten signature (${law}). I accept the option and price I selected above and the terms of this quote.`;
 }
 
 /** The sentence a quote is signed under: its own, or for a quote sent before quotes carried one, the sentence it was sent with. */

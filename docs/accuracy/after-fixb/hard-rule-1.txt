@@ -1,0 +1,46 @@
+HARD RULE 1 AFTER REVIEW B (documents, server, database; branch claude/accuracy-fixb-docs, Nov 19 2026)
+
+Review B and owner decisions OD12-OD14 change what NEW quotes print (company "Koala Insulation",
+"Limited lifetime warranty", terms naming no town, the consent sentence's state, a missing license or
+phone left off) and the stored seed values (the accuracy migration's new last section, only where a
+value is still exactly the seed). None of it reaches a quote already sent: a stored quote's company,
+license, phone, terms, warranty, consent sentence, number, dates, items and prices are read from its
+own document (quotes.snapshot->document), never from the settings, and the sign route still signs it
+under its own sentence (consentFor). This file repeats the quotes stage's proof
+(docs/accuracy/after-quotes/hard-rule-1.txt) on this branch's final code.
+
+What was rendered
+  The same 77 stored production quotes, the same read-only export
+  (scratchpad accuracy/golden/live-quote-docs.json; manifest md5 2ca0d61ee3371b8dfa44c572dc8a9ca7,
+  198,319 characters, 77 quotes; file md5 15914e91c59ace3fbfd9b0d8cae9ef91), through the same,
+  unchanged scripts/accuracy/render-stored.ts and render-run.mjs (last changed in ca8a57b): every
+  customer page in every state, every PDF (pdftotext -layout) and every email. 2,926 files per run.
+
+1. Against the quotes stage's before set (rendered from 7c6b08c in the early hours of Nov 19)
+     node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts <export> <after>
+     diff -r <scratchpad>/accuracy/quotes/render-before <after>
+   2,926 files compared: 2,922 identical, 4 different. The 4 are page-stored.html and page-stored.txt
+   of two quotes that were "viewed" with links that stopped working at 05:53 and 05:58 UTC on Nov 19
+   (73c7a4a8…, b7925437…), after that set was rendered and before this one: their page in its stored
+   state is now the expired page. Each of the 4 is byte-identical to the same quote's page-expired
+   file in the before set. Nothing a document prints changed; the clock moved.
+
+2. Against the same before code rendered now (7c6b08c, git archive, same clock)
+     2,926 files compared, 0 differences.
+
+3. Against the live site's code (origin/main c0ae5f1; the quotes stage's render-live set)
+   The PDFs (unsigned and signed for each option) and the three emails of each stored quote:
+   1,386 files compared, 0 differences.
+
+Also: this branch's base (001050c) rendered the same day: 0 differences from the final code.
+
+How the code keeps it (unchanged mechanism, new inputs)
+  - quoteSettingsFromRows (the new defaults and the PLACEHOLDER rule) and quoteSettingsForSend run
+    only when a new quote is built (app/api/quotes); a stored document is never rebuilt.
+  - esignConsent's new state-neutral sentence is only for new quotes; a stored quote with no consent
+    of its own keeps LEGACY_ESIGN_CONSENT, word for word (consentFor).
+  - The migration rewrites app_settings rows only; no quote, quote snapshot, PDF or e-sign record is
+    touched (tests/sql/41_owner_decisions.test.sql).
+  - The sign route's new error wording (RB-OD12e) is an API message, not part of a sent document.
+  - Approvals now record their loaded cost; the stored "approvals" of quotes sent before keep theirs
+    as they are (nothing reads a cost from them).
