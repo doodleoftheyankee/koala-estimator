@@ -7,11 +7,11 @@
 import { z } from 'zod';
 import {
   achText,
-  capNote,
   cfmText,
   headlineWords,
   jobBlowerDoor,
   KIND_LABELS,
+  officeTierFact,
   paText,
   parseBlowerDoorSettings,
   programOf,
@@ -22,7 +22,7 @@ import {
   type SavedTest,
 } from '@/lib/blowerdoor';
 import { blowerDoorHref } from '@/lib/offline/blowerDoorCore';
-import { formatDateTime, formatMoney, num } from '@/lib/format';
+import { formatDateTime, num } from '@/lib/format';
 import { Banner, CircleCheck, Icon, OctagonAlert, Tag, Wind } from '@/components/daymark';
 import { FactStrip, TABLE } from '@/components/office';
 import type { createClient } from '@/lib/supabase/server';
@@ -111,14 +111,8 @@ function Result({
   const vent = ventilationFor(e);
   /** The current test-in and test-out show the CFM50 that agrees with the tier; earlier ones are whole. */
   const shownCfm50 = (t: SavedTest) => (t === testIn ? (s.pre50 ?? cfmText(t.cfm50)) : t === testOut ? (s.post50 ?? cfmText(t.cfm50)) : cfmText(t.cfm50));
-  const tierFact =
-    e.program && e.rebate && e.tiers
-      ? e.tiers.hit
-        ? `${num(e.tiers.hit.reductionPct, 1)}% tier · ${formatMoney(e.rebate.amount)}${capNote(e)}`
-        : `Below ${num(e.tiers.rows[0]?.tier.reductionPct ?? 0, 1)}% · no rebate`
-      : e.program
-        ? 'Waiting for the test-out'
-        : 'No program saved with the readings';
+  // With no price saved with any reading, "up to" the tier amount, before the cost cap (release review C FLOW-1).
+  const tierFact = officeTierFact(e);
   const ventFact = vent ? (vent.tone === 'ok' ? 'OK, above BAS' : vent.tone === 'warn' ? 'Recommend ventilation' : 'Install ventilation') : e.bas.value !== null ? 'Waiting for the test-out' : 'No BAS given';
   return (
     <>

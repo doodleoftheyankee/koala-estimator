@@ -169,7 +169,32 @@ describe("the job's price and program, whoever took each reading", () => {
   it('decides on whole CFM50 when the franchise says so', () => {
     const near = saved({ id: '0d000000-0000-4000-8000-0000000000d4', kind: 'test_out', cfm: 5576, pa: 50.2, cfm50: 5561.55 });
     const testIn = saved({ id: '0d000000-0000-4000-8000-0000000000d5', kind: 'test_in', job_id: null });
-    expect(headlineWords(jobBlowerDoor([testIn, near], 'G').evaluation!).badge).toBe('20% TIER — $900 AIR SEAL REBATE');
+    expect(headlineWords(jobBlowerDoor([testIn, near], 'G').evaluation!).badge).toBe('20% TIER — UP TO $900 AIR SEAL REBATE');
     expect(headlineWords(jobBlowerDoor([testIn, near], 'G', { wholeCfm50: true }).evaluation!).badge).toBe('BELOW 20% — NO AIR SEAL REBATE YET');
+  });
+});
+
+describe('release review C FLOW-1: the office card never gives the bare tier amount as the rebate when no price was saved', () => {
+  // A signed job with no estimator test-in: the crew took both readings, neither with a price.
+  const crewIn = saved({ id: '0d000000-0000-4000-8000-0000000000f1', kind: 'test_in', cfm: 4800, cfm50: 4800 });
+  const crewOut = saved({ id: '0d000000-0000-4000-8000-0000000000f2', kind: 'test_out', cfm: 3500, cfm50: 3500, recorded_at: '2026-11-19T14:00:00+00:00' });
+
+  it('no price with either reading: "up to $900", before the 75% cost cap', async () => {
+    const words = (await import('./index')) as Record<string, unknown>;
+    expect(words.officeTierFact, 'officeTierFact').toBeTypeOf('function');
+    const tierFact = words.officeTierFact as (e: unknown) => string;
+    const e = jobBlowerDoor([crewIn, crewOut], 'G').evaluation!;
+    expect(e.cost).toBeNull();
+    expect(headlineWords(e).badge).toBe('20% TIER — UP TO $900 AIR SEAL REBATE');
+    expect(tierFact(e)).toBe('20% tier · up to $900 (before the 75% cost cap: no air sealing price saved)');
+    expect(tierFact(e)).toMatch(/75% cost cap/);
+  });
+
+  it('with the price saved, the capped amount: $516, limited by 75% of $688', async () => {
+    const { officeTierFact } = (await import('./index')) as unknown as { officeTierFact: (e: unknown) => string };
+    const e = jobBlowerDoor([crewIn, { ...crewOut, air_sealing_cost: 688 }], 'G').evaluation!;
+    expect(headlineWords(e).badge).toBe('20% TIER — $516 AIR SEAL REBATE');
+    expect(officeTierFact(e)).toBe('20% tier · $516 (limited by 75% of $688)');
+    expect(capNote(e)).toBe(' (limited by 75% of $688)');
   });
 });

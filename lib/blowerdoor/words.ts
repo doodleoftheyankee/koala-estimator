@@ -140,7 +140,7 @@ export function headlineWords(e: Evaluation): HeadlineWords {
     case 'test-in-only':
       return { tone: 'neutral', badge: 'TEST-IN ONLY', big: cfmText(h.pre50), unit: 'CFM50 before', line: 'Enter the test-out after the work.' };
     case 'tier':
-      return { tone: 'pass', badge: `${h.tierPct}% TIER — ${money(h.amount)} AIR SEAL REBATE`, big, unit: null, line: flow };
+      return { tone: 'pass', badge: `${h.tierPct}% TIER — ${capNotApplied(e) ? 'UP TO ' : ''}${money(h.amount)} AIR SEAL REBATE`, big, unit: null, line: flow };
     case 'below':
       return { tone: 'fail', badge: `BELOW ${h.lowestPct}% — NO AIR SEAL REBATE YET`, big, unit: null, line: flow };
     case 'no-program':
@@ -238,6 +238,35 @@ export function capNote(e: Evaluation): string {
   return ` (limited by ${num(e.program.costCapPct, 2)}% of ${money(e.cost)})`;
 }
 
+/**
+ * True when a tier is reached and the program caps the rebate at a share of the air sealing price,
+ * but no price is known here (a crew phone never has one; the office has none when no reading was
+ * saved with one): the tier amount is then only the most the program pays, and every place that
+ * shows it says "up to" (release review C DOC-4, FLOW-1).
+ */
+export function capNotApplied(e: Evaluation): boolean {
+  return !!(e.program && e.program.costCapPct !== null && e.cost === null && e.rebate && e.tiers?.hit);
+}
+
+/** After an amount the cost cap was not applied to: " (before the 75% cost cap)". */
+export function uncappedNote(e: Evaluation): string {
+  return capNotApplied(e) ? ` (before the ${num(e.program!.costCapPct!, 2)}% cost cap)` : '';
+}
+
+/**
+ * The office job card's tier line: "40% tier · (amount) (limited by 75% of (the price))", or with
+ * no price saved with any reading "20% tier · up to (the tier amount) (before the 75% cost cap: no
+ * air sealing price saved)" (release review C FLOW-1).
+ */
+export function officeTierFact(e: Evaluation): string {
+  if (!e.program) return 'No program saved with the readings';
+  if (!e.rebate || !e.tiers) return 'Waiting for the test-out';
+  if (!e.tiers.hit) return `Below ${num(e.tiers.rows[0]?.tier.reductionPct ?? 0, 1)}% · no rebate`;
+  const tier = `${num(e.tiers.hit.reductionPct, 1)}% tier · `;
+  if (capNotApplied(e)) return `${tier}up to ${money(e.rebate.amount)} (before the ${num(e.program.costCapPct!, 2)}% cost cap: no air sealing price saved)`;
+  return `${tier}${money(e.rebate.amount)}${capNote(e)}`;
+}
+
 const readLine = (shown: string, r: Reading) => `${shown} CFM50 (read ${cfmText(r.cfm)} CFM at ${paText(r.pa)} Pa)`;
 
 /**
@@ -257,7 +286,7 @@ export function summaryText(e: Evaluation, settings: Pick<BlowerDoorSettings, 'g
   if (e.program && e.tiers && e.rebate) {
     lines.push(
       e.tiers.hit
-        ? `Air sealing tier: ${e.tiers.hit.reductionPct}% improvement — rebate ${money(e.rebate.amount)}${capNote(e)}`
+        ? `Air sealing tier: ${e.tiers.hit.reductionPct}% improvement — rebate ${capNotApplied(e) ? 'up to ' : ''}${money(e.rebate.amount)}${capNote(e)}${uncappedNote(e)}`
         : `Air sealing tier: below ${e.tiers.rows[0]?.tier.reductionPct ?? 0}% — no rebate yet`,
     );
   }

@@ -113,7 +113,8 @@ describe('the worked example', () => {
     expect(e.reductionPct).toBeCloseTo(52.66, 2);
     expect(e.tiers!.hit).toEqual({ reductionPct: 40, rebate: 1800 });
     expect(e.rebate).toEqual({ tierAmount: 1800, amount: 1800, cap: null, capped: false });
-    expect(headlineWords(e)).toEqual({ tone: 'pass', badge: '40% TIER — $1,800 AIR SEAL REBATE', big: '52.7%', unit: null, line: '6,952 → 3,291 CFM50' });
+    // No price typed: the most the tier pays, before the 75% cost cap (release review C DOC-4).
+    expect(headlineWords(e)).toEqual({ tone: 'pass', badge: '40% TIER — UP TO $1,800 AIR SEAL REBATE', big: '52.7%', unit: null, line: '6,952 → 3,291 CFM50' });
     expect(nextTierLine(e.tiers, true)).toBe('Top tier reached with 880 CFM50 to spare.');
   });
 
@@ -128,7 +129,7 @@ describe('the worked example', () => {
   it('pays the Assisted amount on the Assisted program', () => {
     const a = run({ ...WORKED, programKey: 'assisted' });
     expect(a.program!.label).toBe('Assisted');
-    expect(headlineWords(a).badge).toBe('40% TIER — $2,000 AIR SEAL REBATE');
+    expect(headlineWords(a).badge).toBe('40% TIER — UP TO $2,000 AIR SEAL REBATE');
   });
 
   it('also gives the reduction from the raw gauge readings', () => {
@@ -144,7 +145,7 @@ describe('the worked example', () => {
         'Test-in: 6,952 CFM50 (read 6,952 CFM at 50 Pa)',
         'Test-out: 3,291 CFM50 (read 3,325 CFM at 50.8 Pa)',
         'Reduction: 52.7% (3,661 CFM50)',
-        'Air sealing tier: 40% improvement — rebate $1,800',
+        'Air sealing tier: 40% improvement — rebate up to $1,800 (before the 75% cost cap)',
         'BAS: 1,796 CFM50 (estimated) — above BAS, no mechanical ventilation needed',
         'ACH50: 20.86 -> 9.87',
       ].join('\n'),
@@ -167,7 +168,7 @@ describe('tiers', () => {
     expect(t.hit).toEqual({ reductionPct: 20, rebate: 900 });
     expect(t.next).toEqual({ tier: { reductionPct: 30, rebate: 1300 }, limit: 700, need: 100 });
     const onScreen = run({ preCfm: '1000', postCfm: '800' });
-    expect(headlineWords(onScreen).badge).toBe('20% TIER — $900 AIR SEAL REBATE');
+    expect(headlineWords(onScreen).badge).toBe('20% TIER — UP TO $900 AIR SEAL REBATE');
     expect(nextTierLine(onScreen.tiers, true)).toBe('Need 100 more CFM50 of reduction to reach the 30% tier.');
   });
 
@@ -488,7 +489,7 @@ describe('the numbers on screen agree with the decision (BD-MATH-3)', () => {
   it('a test-out that reaches 20% by a fraction never reads the same as one that misses it', () => {
     // 5,576 CFM at 50.2 Pa is 5,561.55 CFM50: under the 5,561.6 limit.
     const e = run({ preCfm: '6952', postCfm: '5576', postPa: '50.2' });
-    expect(headlineWords(e)).toMatchObject({ badge: '20% TIER — $900 AIR SEAL REBATE', big: '20.0%' });
+    expect(headlineWords(e)).toMatchObject({ badge: '20% TIER — UP TO $900 AIR SEAL REBATE', big: '20.0%' });
     const s = shownNumbers(e);
     expect(s.post50).toBe('5,561.5');
     expect(s.limits[0]).toBe('5,561.6');
@@ -497,7 +498,7 @@ describe('the numbers on screen agree with the decision (BD-MATH-3)', () => {
 
   it('a reduction just under a tier shows under it (5,000 then 3,002 is 39.96%)', () => {
     const e = run({ preCfm: '5000', postCfm: '3002' });
-    expect(headlineWords(e)).toMatchObject({ badge: '30% TIER — $1,300 AIR SEAL REBATE', big: '39.9%' });
+    expect(headlineWords(e)).toMatchObject({ badge: '30% TIER — UP TO $1,300 AIR SEAL REBATE', big: '39.9%' });
     expect(summaryText(e, SETTINGS)).toContain('Reduction: 39.9% (1,998 CFM50)');
     // Away from a tier the reduction rounds as it always did.
     expect(headlineWords(run(WORKED)).big).toBe('52.7%');
@@ -526,7 +527,7 @@ describe('the numbers on screen agree with the decision (BD-MATH-3)', () => {
     const v = run({ preCfm: '1500', postCfm: '699.6', bas: '1000' }, whole);
     expect(v.ventilation!.status).toBe('recommend');
     // The worked example reads the same either way.
-    expect(headlineWords(run(WORKED, whole))).toMatchObject({ badge: '40% TIER — $1,800 AIR SEAL REBATE', big: '52.7%', line: '6,952 → 3,291 CFM50' });
+    expect(headlineWords(run(WORKED, whole))).toMatchObject({ badge: '40% TIER — UP TO $1,800 AIR SEAL REBATE', big: '52.7%', line: '6,952 → 3,291 CFM50' });
   });
 });
 
@@ -569,5 +570,31 @@ describe('the N-factor hint (BD-MATH-7)', () => {
     expect(h).toContain('1-story');
     expect(h).toContain('set Stories to 1');
     expect(nFactorHint(17.5)).toMatch(/^N-factor 17\.5 is your office's default; match it to your audit software\. /);
+  });
+});
+
+describe('release review C DOC-4: a rebate the cost cap was not applied to says so', () => {
+  it('with no air sealing price, the badge and the copied summary give the tier amount as the most it pays', () => {
+    // The crew's phone: the Assisted program, no price (crews never see one).
+    const e = run({ ...WORKED, programKey: 'assisted' });
+    expect(headlineWords(e).badge).toBe('40% TIER — UP TO $2,000 AIR SEAL REBATE');
+    expect(summaryText(e, SETTINGS)).toContain('Air sealing tier: 40% improvement — rebate up to $2,000 (before the 75% cost cap)');
+  });
+
+  it('with the price, the capped amount and its cap note, as before', () => {
+    const e = run({ ...WORKED, programKey: 'assisted', cost: '1999' });
+    expect(headlineWords(e).badge).toBe('40% TIER — $1,499 AIR SEAL REBATE');
+    expect(summaryText(e, SETTINGS)).toContain('Air sealing tier: 40% improvement — rebate $1,499 (limited by 75% of $1,999)');
+    // A price the cap does not reach: the tier amount, and no "up to".
+    const high = run({ ...WORKED, programKey: 'assisted', cost: '5000' });
+    expect(headlineWords(high).badge).toBe('40% TIER — $2,000 AIR SEAL REBATE');
+    expect(summaryText(high, SETTINGS)!.split('\n')).toContain('Air sealing tier: 40% improvement — rebate $2,000');
+  });
+
+  it('a program with no cost cap pays the tier amount: no "up to"', () => {
+    const noCap: BlowerDoorSettings = { ...SETTINGS, programs: SETTINGS.programs.map((p) => ({ ...p, costCapPct: null })) };
+    const e = run({ ...WORKED, programKey: 'assisted' }, noCap);
+    expect(headlineWords(e).badge).toBe('40% TIER — $2,000 AIR SEAL REBATE');
+    expect(summaryText(e, noCap)!.split('\n')).toContain('Air sealing tier: 40% improvement — rebate $2,000');
   });
 });

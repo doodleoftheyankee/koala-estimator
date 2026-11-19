@@ -1379,11 +1379,12 @@ step('blower door: the tool opens with no signal, converts, shows the tier and c
   check((await page.getByText('House pressure: type a number.').count()) === 0, 'a lone minus sign, half typed, is not an error');
   await pressure.nth(1).fill('-50.8');
   await page.getByTestId('bd-big').filter({ hasText: '52.7%' }).waitFor();
-  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'the worked example: 52.7% and the 40% tier, $1,800 on Home Performance');
+  // No price typed yet: the most the tier pays, before the 75% cost cap (release review C DOC-4).
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — UP TO $1,800 AIR SEAL REBATE', 'the worked example: 52.7% and the 40% tier, up to $1,800 on Home Performance before the cost cap');
   check((await page.getByTestId('bd-test_out-cfm50').innerText()) === '3,291', 'the test-out at 50.8 Pa (typed with the minus sign) is 3,291 CFM50');
   check((await page.getByText('Top tier reached with 880 CFM50 to spare.').count()) === 1, 'the tier table says how far past the top tier');
   await page.getByRole('radio', { name: 'Assisted' }).click();
-  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $2,000 AIR SEAL REBATE', 'Assisted pays its own amount');
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — UP TO $2,000 AIR SEAL REBATE', 'Assisted pays its own amount');
   await page.getByRole('radio', { name: 'Home Performance' }).click();
   await page.getByLabel('House volume (ft³)').fill('20000');
   await page.getByLabel('Occupants').fill('3');
@@ -1394,7 +1395,7 @@ step('blower door: the tool opens with no signal, converts, shows the tier and c
   // Release, OD4: the price is whole dollars, as on the quote; cents are refused, not rounded away.
   await page.getByLabel('Air sealing price ($)').fill('1999.50');
   await page.getByText('Air sealing price: whole dollars, as on the quote (no cents).').waitFor();
-  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,800 AIR SEAL REBATE', 'a price with cents is refused (whole dollars, as on the quote) and caps nothing');
+  check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — UP TO $1,800 AIR SEAL REBATE', 'a price with cents is refused (whole dollars, as on the quote) and caps nothing');
   await page.getByLabel('Air sealing price ($)').fill('1999');
   check((await page.getByTestId('bd-badge').innerText()) === '40% TIER — $1,499 AIR SEAL REBATE', 'a capped rebate is whole dollars, never more than the program pays: $1,499 (was $1,499.25)');
   await page.getByLabel('Air sealing price ($)').fill('');
@@ -1402,7 +1403,7 @@ step('blower door: the tool opens with no signal, converts, shows the tier and c
   await page.getByRole('button', { name: 'Copied' }).waitFor();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   check(
-    copied.startsWith('Blower Door Results (Retrotec Model 5000)\nProgram: Energize Delaware Home Performance with ENERGY STAR\nTest-in: 6,952 CFM50 (read 6,952 CFM at 50 Pa)\nTest-out: 3,291 CFM50 (read 3,325 CFM at 50.8 Pa)\nReduction: 52.7% (3,661 CFM50)\nAir sealing tier: 40% improvement — rebate $1,800') &&
+    copied.startsWith('Blower Door Results (Retrotec Model 5000)\nProgram: Energize Delaware Home Performance with ENERGY STAR\nTest-in: 6,952 CFM50 (read 6,952 CFM at 50 Pa)\nTest-out: 3,291 CFM50 (read 3,325 CFM at 50.8 Pa)\nReduction: 52.7% (3,661 CFM50)\nAir sealing tier: 40% improvement — rebate up to $1,800 (before the 75% cost cap)') &&
       copied.includes('ACH50: 20.86 -> 9.87'),
     'Copy summary copies the same plain-text summary',
   );
@@ -1622,7 +1623,8 @@ step('blower door: the crew lead saves the test-out on the job with no signal');
   offlineStep = true;
   await cpg.getByLabel('Fan flow (CFM)').fill('3325');
   await cpg.getByLabel('House pressure (Pa)').fill('50.8');
-  check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — $2,000 AIR SEAL REBATE', "the crew sees the tier with the saved test-in, under the test-in's program");
+  // The crew's phone has no price, so the tier amount is the most it pays (release review C DOC-4).
+  check((await cpg.getByTestId('bd-badge').innerText()) === '40% TIER — UP TO $2,000 AIR SEAL REBATE', "the crew sees the tier with the saved test-in, under the test-in's program, as up to the tier amount");
   await cpg.getByRole('button', { name: 'Save test-out' }).click();
   await cpg.getByText('On this phone', { exact: true }).waitFor();
   check(psql(`select count(*) from blower_door_tests where job_id = '${jobId}'`) === '0', 'with no signal the test-out waits on the phone');
@@ -1695,6 +1697,28 @@ step('blower door: the office job page shows the readings, the tier and the vent
   check((await op.getByTestId('job-bd-ventilation').innerText()).startsWith('Ventilation OK'), 'and the ventilation check from the house the estimator gave');
   await op.getByRole('heading', { name: 'Blower door test' }).scrollIntoViewIfNeeded();
   await op.screenshot({ path: SHOTS + '18a-job-blower-door.png', fullPage: true });
+  // Release review C SEC-1: a crew member who crafts a test-out with an air sealing price cannot move
+  // the cost cap the office sees: the price is not kept.
+  const crafted = await cpg.evaluate(async (j) => {
+    const res = await fetch('/api/blower-door/tests', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mutationId: crypto.randomUUID(),
+        test: { id: crypto.randomUUID(), jobId: j, estimateId: null, kind: 'test_out', cfm: 3325, pa: 50.8, exponent: 0.65, cfm50: 3290.87, programKey: 'assisted', airSealingCost: 1000000, recordedAt: new Date().toISOString() },
+      }),
+    });
+    return { status: res.status, body: await res.json() };
+  }, jobId);
+  check(crafted.status === 200 && crafted.body.status === 'applied', "a crew's crafted test-out with a price is saved as a reading");
+  check(psql(`select count(*) from blower_door_tests where job_id = '${jobId}' and kind = 'test_out' and air_sealing_cost is not null`) === '0', 'without the price: a crew cannot set the air sealing price');
+  await op.reload();
+  await op.getByRole('heading', { name: 'Blower door test' }).waitFor();
+  check(
+    (await op.getByTestId('job-bd-badge').innerText()).includes('40% TIER — $1,499 AIR SEAL REBATE') &&
+      (await op.getByRole('region', { name: 'Blower door figures' }).innerText()).includes('(limited by 75% of $1,999)'),
+    "the office still sees the rebate capped by the estimator's price",
+  );
 }
 
 step('office verifies the actuals');
