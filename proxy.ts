@@ -22,6 +22,8 @@ export async function proxy(request: NextRequest) {
   if (!url || !key) return response; // misconfigured env: let the page render its own error
 
   const supabase = createServerClient(url, key, {
+    // As lib/supabase/server.ts: no retries while Koala's database does not answer (release review C FLOW-3).
+    db: { retry: false },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (toSet) => {

@@ -1296,6 +1296,21 @@ step("Koala's database unreachable is not a sign-out (L36)");
   const body = await api.json();
   check(api.status() === 503 && body.error === 'unreachable' && /Can't reach Koala right now/.test(body.message), `APIs answer 503, not "signed out": ${api.status()} ${body.error}`);
   {
+    // Release review C FLOW-3: the server says so at once, not after the database client's retries
+    // (1 + 2 + 4 s a read: /field took 14 s, /estimates and /api/bundle 7 s).
+    const timed = async (path) => {
+      const t0 = Date.now();
+      const r = await ctx.request.get(BASE + path, { maxRedirects: 0 });
+      return { status: r.status(), location: r.headers()['location'] ?? '', ms: Date.now() - t0 };
+    };
+    for (const path of ['/field', '/estimates']) {
+      const r = await timed(path);
+      check(r.status === 307 && r.location.includes('/unreachable') && r.ms < 2000, `${path} with the database down goes to /unreachable within 2 s: ${r.status} in ${r.ms} ms`);
+    }
+    const b = await timed('/api/bundle');
+    check(b.status === 503 && b.ms < 2000, `/api/bundle with the database down answers 503 within 2 s: ${b.status} in ${b.ms} ms`);
+  }
+  {
     // Release, blower door under the accuracy rules: the tool opens from the phone's copy and says
     // Koala cannot be reached, never that the session expired or the estimate is not theirs.
     const leeId = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Lee'");
