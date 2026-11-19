@@ -122,7 +122,7 @@ describe('priceEstimate — scope rules', () => {
   });
 
   it('caps thickness at cavity depth and reports the achieved R', () => {
-    // 2x4 wall, open-cell: R-20 needs 5.4 in; only 3.5 fits -> R-13
+    // 2x4 wall, open-cell: R-20 needs 5.4 in; only 3.5 fits -> R-12.95, stated R-12.9 (never above the cavity, F11)
     const r = priceEstimate(
       estimate({ areas: [area({ jobType: 'walls', depthIn: 3.5, sqft: 500 })] }),
       snapshot,
@@ -130,7 +130,7 @@ describe('priceEstimate — scope rules', () => {
     );
     const better = tier(r.options, 'better');
     expect(better.lines.find((l) => l.kind === 'material')!.designQty).toBe(1750); // 500 * 3.5
-    expect(better.customerItems[0]!.description).toContain('R-13');
+    expect(better.customerItems[0]!.description).toContain('R-12.9');
     expect(r.warnings.some((w) => w.code === 'thickness_capped' && w.tier === 'better')).toBe(true);
   });
 

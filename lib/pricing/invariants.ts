@@ -533,7 +533,8 @@ export function checkLabelsMatchWork({ input, priced, snapshot, coefficients }: 
         add('product_not_installed', a.id, `"${item.description}" but the quantity priced is 0`);
       } else if (stated !== null && insulating.length > 0) {
         const r = finalR(o, a, snapshot, coefficients, { upperBound: true });
-        if (r < stated - R_TOLERANCE) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
+        // An explicit epsilon, so float noise at exactly the rounding step never decides (review A F11).
+        if (r < stated - R_TOLERANCE - 1e-9) add('qty_below_stated_r', a.id, `"${item.description}" but the quantity priced gives ${a.name} R-${fmt(r, 1)}`);
       }
       if (PROMISES_FULL_CAVITY.test(item.description)) {
         const left = roomLeft(o, a, snapshot, coefficients);

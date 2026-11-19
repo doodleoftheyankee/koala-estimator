@@ -426,11 +426,12 @@ describe('L18 (S1-F4, OD5, RF-08): a wall with no depth is a 2x4 wall', () => {
     const r = all(estimate({ areas: [walls()] }));
     const better = tier(r, 'better');
     // Before: "Open-Cell Spray Foam to R-20 (~5.4" added)", $3,580: 5.4 in of foam in a 3.5 in wall.
-    expect(work(better)[0]!.description).toBe('Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity), 1,000 sq ft');
+    // 3.5 in x 3.7 = R-12.95, stated rounded down so never above what the cavity holds (review A F11: was R-13).
+    expect(work(better)[0]!.description).toBe('Open-Cell Spray Foam to R-12.9 (fills the 3.5 in cavity), 1,000 sq ft');
     expect(mat(better).qty).toBe(4375); // 1,000 sq ft x 3.5 in x 1.25 waste
     expect(better.price).toBe(2520);
     expect(warned(r, 'thickness_capped').find((w) => w.tier === 'better')!.message).toBe(
-      'Walls: the 3.5 in cavity (no depth entered: a 2x4 wall) only fits R-13 of open-cell spray foam (target R-20).',
+      'Walls: the 3.5 in cavity (no depth entered: a 2x4 wall) only fits R-12.9 of open-cell spray foam (target R-20).',
     );
   });
 
@@ -463,7 +464,8 @@ describe('L19 (S1-F5, OD5): existing insulation takes its room', () => {
     const input = estimate({ areas: [walls({ sqft: 800, depthIn: 3.5, currentR: 7, existingMaterial: 'Cellulose', existingDepthIn: 2, accessLevel: 'moderate' })] });
     const r = shown(input);
     expect(tiers(r)).toEqual(['better', 'best']); // Good (dense-pack, $1,500) costs the same as Better and does less
-    expect(work(tier(r, 'better'))[0]!.description).toBe('Open-Cell Spray Foam to R-12.6 (~1.5 in added, fills the 3.5 in cavity), 800 sq ft');
+    // 7 + 1.5 in x 3.7 = R-12.55, rounded down (review A F11: was R-12.6).
+    expect(work(tier(r, 'better'))[0]!.description).toBe('Open-Cell Spray Foam to R-12.5 (~1.5 in added, fills the 3.5 in cavity), 800 sq ft');
     expect(mat(tier(r, 'better')).qty).toBe(1500); // 800 sq ft x 1.5 in x 1.25
     expect([tier(r, 'better').price, tier(r, 'best').price]).toEqual([1500, 2295]);
   });

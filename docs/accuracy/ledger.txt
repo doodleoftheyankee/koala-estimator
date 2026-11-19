@@ -625,3 +625,25 @@ RA-F6 Install hours are multiplied in the order they were before the money stage
     Owner decision: L7 (no price was meant to move).
     Test: "attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.88 h and
     $10,815, as daymark priced it".
+
+RA-F11 A fill that fills its cavity states the R the cavity holds rounded down to 0.1, never up
+    (L23b: never more R than the cavity holds). Before, the R was rounded half up, so a cavity holding
+    R-32.65 read R-32.7. The "only fits R-…" warning reads the same. An R the cavity does not cap still
+    rounds to the nearest 0.1. The checker compares with an explicit epsilon, so float noise at the
+    rounding step no longer decides (seed 99999 was "not clean" only through 32.7 - 0.05 =
+    32.650000000000006).
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4 (or no depth), Better open-cell: 3.5 in x 3.7 = R-12.95: "Open-Cell Spray
+        Foam to R-13 (fills the 3.5 in cavity)" -> "R-12.9 (…)", and the warning "only fits R-13 of
+        open-cell spray foam" -> "R-12.9"; $2,520 unchanged.
+      Synthetic S1-F5 (walls 800 sq ft, 2x4, 2 in of cellulose R-7): "Open-Cell Spray Foam to R-12.6
+        (~1.5 in added, fills the 3.5 in cavity)" -> "R-12.5" (7 + 1.5 x 3.7 = 12.55); $1,500 unchanged.
+      Commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best closed-cell:
+        "Closed-Cell Spray Foam to R-32.7 (~2.1 in added, fills the 10.7 in cavity)" -> "R-32.6".
+    No price moves. The L18 and L19 examples above (R-13, R-12.6) now read R-12.9 and R-12.5.
+    Owner decision: L23b (R3).
+    Tests: "commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best
+    closed-cell: R-32.6, not R-32.7", "walls 2x4, open-cell fills the 3.5 in cavity: … reads R-12.9
+    (was R-13)", "an R the cavity does not cap still rounds to the nearest 0.1 …"; phase1.test.ts "walls
+    with no depth are priced as a 2x4 wall (S1-F4, OD5)" and "walls with 2 in of cellulose: …" (their
+    expected text updated); engine.test.ts "caps thickness at cavity depth and reports the achieved R".
