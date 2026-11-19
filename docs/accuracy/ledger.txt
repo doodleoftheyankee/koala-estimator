@@ -1003,3 +1003,65 @@ RB-B7 No franchise name in the email sender or the roof takeoff (hard rule 3).
     LEGACY_ESIGN_CONSENT (the sentence quotes sent before were signed under, kept word for word by
     hard rule 1) and STATE_NAMES (every state's name). Comments that use a Newark address as an
     example are not literals and stay.
+
+RB-B2 A price approval is bound to the loaded cost it was asked at (review B database-B2). Changing
+    line quantities or hours after the decision raises the cost but leaves the price and the model
+    price as they were, so the old approval used to cover the send. Now price_approvals.loaded_cost
+    (additive, nullable, frozen by the guard trigger) is written by the server from its own pricing,
+    lib/pricing/policy.ts approvalCovers refuses an approval whose cost is lower than the option's
+    now (or missing), and a price below the floor is covered only by an owner approval given for a
+    price below the floor. The phone shows such a price as needing a new request.
+      Seed fixture, Good: the owner approves $3,500 at a 7.2% margin (cost $3,249.20); labour hours x4
+      -> cost $4,938.40, margin -41%: sent -> refused, "Only the owner can approve $3,500", Request
+      approval offered again. The owner approves $4,500 as over the limit (27.8%, above the floor);
+      hours x3 -> 0.9%, below the 25% floor: sent -> refused.
+      Send checklist: a waiting or approved request asked at the lower cost: "Waiting for the owner or
+      the office to approve $X" / covered -> Request approval (status none).
+    No price changes; only which approvals let a price through. A request still pending at the same
+    price but an older cost is a separate request (the one-pending index includes the cost).
+    Tests: lib/pricing/support.test.ts "an owner approval does not cover the same price after a
+    line-hours override raises the cost", "an owner over-limit approval (belowFloor false) does not
+    cover a below-floor problem at the same price", "a cost that went down is still covered; an
+    approval with no recorded cost covers nothing", "the problem carries the loaded cost"; the
+    existing "an approved price can be sent …" passes with the cost recorded; lib/quotes/approvals.test.ts
+    "the newest request at the price, model price and a cost no higher …"; lib/field/sendChecks.test.ts
+    "an approval asked at a lower cost: the phone offers Request approval again"; tests/sql/41
+    (column, frozen on decision, kept on re-run, same price at a higher cost is its own request);
+    e2e "the request keeps the loaded cost the option had when it was asked".
+
+RB-B4 Price requests are written by the server only (review B database-B4). The migration revokes
+    insert on price_approvals from authenticated; /api/approvals POST checks the role, prices the
+    request (checkApprovalRequest, through the asker's own access), confirms can_edit_estimate, then
+    writes it with the service role, requested_by the asker. What the owner sees (price, model price,
+    cost, "Below the floor margin") is always the server's.
+      An estimator posting {good, $3,500, model $5,420, below_floor false} straight to the database:
+      stored, and shown to the owner without the "Below the floor margin" tag -> refused (403, nothing stored).
+    Tests: tests/sql/40_accuracy.test.sql (the L34 block: the estimator's and the office's own inserts
+    are refused; the server writes the requests; the rest of the block unchanged), tests/sql/41
+    "an estimator's direct insert is refused (insufficient_privilege)"; e2e "a request written
+    straight to the database with the estimator's token is refused". The Request approval -> owner
+    approves -> sent path still passes in the e2e.
+
+RB-B3 The owner's queue holds only requests that still mean something (review B flow-B3). A request
+    whose estimate is signed, lost or void, or whose option has another price, is gone, or costs more
+    now, is left out (lib/quotes/approvals.ts isLiveRequest; 200 rows read so stale ones do not crowd
+    out live ones), and PATCH /api/approvals/[id] answers 409 for a signed estimate.
+      Lee Measure asked for Good $5,175, then sent Good at $4,500 and the customer signed: "NEEDS YOU ·
+      1 price waiting for approval · Good: $5,175, 25% above …" with Approve and Decline -> no queue;
+      PATCH approved -> 409 {error: 'signed', message: 'The customer already signed this quote.'}.
+    Tests: lib/quotes/approvals.test.ts "the owner's queue drops stale requests" (4 tests, including
+    decisionRefusal); e2e "deciding a request on a signed estimate: 409 signed", "the owner's queue
+    leaves it out".
+
+RB-B5 (test fidelity, no app value) The test databases get production's grants (review B database-B5).
+    tests/sql/00_supabase_stub.sql sets the default privileges production has (pg_default_acl read on
+    2026-11-19: tables all, sequences usage/select/update, functions execute, to anon, authenticated
+    and service_role), and tests/sql/01_grants.sql no longer grants everything again after the
+    migrations. tests/sql/40_accuracy.test.sql checks the grants before any re-run of the migration
+    (fails before with "first run: a signed-in user may not take a quote number"); scripts/e2e.sh
+    stops if signed-in users may take quote numbers, read the counters or insert price requests.
+    Every SQL test file passes with the real grants (nothing else relied on the blanket ones).
+
+RB-B7db (tooling) scripts/e2e.sh lower-cases E2E_DB_NAME and refuses a name that is not letters,
+    digits and _ (review B database-B7 = flow-B14). E2E_DB_NAME=koala_fixB_Check: exit 2 ('database
+    "koala_fixB_Check" does not exist') -> runs on koala_fixb_check.

@@ -106,3 +106,92 @@ update app_settings set value = to_jsonb(:'new_terms'::text), description = 'Ter
 update app_settings set value = '"Limited lifetime warranty"'::jsonb where key = 'warranty_text';
 
 \echo '  ok'
+
+-- ===========================================================================
+-- Review B database-B2: a price approval is bound to the loaded cost it was asked at
+-- (price_approvals.loaded_cost, nullable so origin/main is unaffected, frozen by the guard trigger).
+-- Review B database-B4: signed-in users cannot write requests (the server does, after pricing them).
+-- ===========================================================================
+\set b_owner '00000000-0000-0000-0000-0000000fb001'
+\set b_est   '00000000-0000-0000-0000-0000000fb002'
+insert into auth.users (id) values (:'b_owner'), (:'b_est');
+insert into profiles (id, role, full_name) values (:'b_owner', 'owner', 'Owner RB'), (:'b_est', 'estimator', 'Estimator RB');
+insert into customers (id, first_name, last_name, created_by) values ('b2000000-0000-0000-0000-000000000001', 'Pat', 'Cost', :'b_est');
+insert into properties (id, customer_id, street, city, state, zip) values ('b3000000-0000-0000-0000-000000000001', 'b2000000-0000-0000-0000-000000000001', '1 Cost Rd', 'Springfield', 'IL', '62701');
+insert into estimates (id, customer_id, property_id, estimator_id, status, coefficient_set_id, pricing_snapshot, pricing_snapshot_hash)
+values ('b1000000-0000-0000-0000-000000000001', 'b2000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000001', :'b_est', 'draft',
+        (select id from coefficient_sets where status = 'active'), '{"test": true}', 'h-rb');
+
+do $$ begin
+  assert (select is_nullable = 'YES' and data_type = 'numeric' and numeric_precision = 12 and numeric_scale = 2
+            from information_schema.columns where table_name = 'price_approvals' and column_name = 'loaded_cost'),
+    'price_approvals.loaded_cost numeric(12,2), nullable';
+  assert not has_table_privilege('authenticated', 'price_approvals', 'insert'), 'signed-in users cannot insert requests (database-B4)';
+  assert has_table_privilege('service_role', 'price_approvals', 'insert'), 'the server can';
+end $$;
+
+-- The estimator writes straight to the database (the database-B4 scenario: a below-floor price with
+-- below_floor false and the true model price): refused.
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'b_est', false);
+do $$
+declare ok boolean := false;
+begin
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, below_floor, requested_by)
+    values ('b1000000-0000-0000-0000-000000000001', 'good', 3500, 5420, false, auth.uid());
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'an estimator''s direct insert is refused (insufficient_privilege)';
+end $$;
+reset role;
+
+-- The server writes it with the cost it was priced at; the same price at a higher cost is a new question.
+select set_config('request.jwt.claim.sub', '', false);
+set role service_role;
+do $$
+declare ok boolean := false;
+begin
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by)
+  values ('b1000000-0000-0000-0000-000000000001', 'good', 3500, 5420, true, 3249.20, '00000000-0000-0000-0000-0000000fb002');
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by)
+  values ('b1000000-0000-0000-0000-000000000001', 'good', 3500, 5420, true, 4938.40, '00000000-0000-0000-0000-0000000fb002');
+  assert (select count(*) from price_approvals where estimate_id = 'b1000000-0000-0000-0000-000000000001' and status = 'pending') = 2,
+    'the same price asked at a higher cost is its own request';
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by)
+    values ('b1000000-0000-0000-0000-000000000001', 'good', 3500, 5420, true, 4938.40, '00000000-0000-0000-0000-0000000fb002');
+  exception when unique_violation then ok := true;
+  end;
+  assert ok, 'but the same price at the same cost is queued once';
+end $$;
+reset role;
+
+-- Deciding cannot change the cost it was asked at.
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'b_owner', false);
+do $$
+declare ok boolean := false;
+begin
+  begin
+    update price_approvals set status = 'approved', loaded_cost = 9999 where estimate_id = 'b1000000-0000-0000-0000-000000000001' and loaded_cost = 3249.20;
+  exception when raise_exception then ok := true;
+  end;
+  assert ok, 'approving cannot change the loaded cost asked at';
+  update price_approvals set status = 'approved' where estimate_id = 'b1000000-0000-0000-0000-000000000001' and loaded_cost = 3249.20;
+  assert (select status = 'approved' and decided_role = 'owner' and loaded_cost = 3249.20
+            from price_approvals where estimate_id = 'b1000000-0000-0000-0000-000000000001' and loaded_cost = 3249.20),
+    'the owner approves it, and the cost stays as asked';
+end $$;
+reset role;
+
+-- Running the migration again keeps every request and its cost; a database without the column gets it.
+create temp table rb_before as select string_agg(id::text || status || coalesce(loaded_cost::text, '-'), ',' order by id) as s from price_approvals;
+\i supabase/migrations/20261119000001_accuracy.sql
+do $$ begin
+  assert (select s from rb_before) = (select string_agg(id::text || status || coalesce(loaded_cost::text, '-'), ',' order by id) from price_approvals),
+    'requests and their costs are kept on a second run';
+  assert not has_table_privilege('authenticated', 'price_approvals', 'insert'), 'and signed-in users still cannot insert';
+end $$;
+
+\echo '  ok (review B database-B2, database-B4)'

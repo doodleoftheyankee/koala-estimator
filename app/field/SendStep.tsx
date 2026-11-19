@@ -63,6 +63,7 @@ function toRow(a: unknown): unknown {
     price: x.price,
     model_price: x.modelPrice,
     below_floor: x.belowFloor,
+    loaded_cost: x.loadedCost ?? null,
     status: x.status,
     decided_role: x.decidedRole ?? null,
     note: x.note ?? null,

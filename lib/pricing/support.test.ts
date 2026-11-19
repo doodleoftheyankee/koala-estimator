@@ -125,6 +125,8 @@ describe('price policy: what an estimator may quote alone, and approvals (L34)',
     price: 4500,
     modelPrice: 5420,
     belowFloor: false,
+    // The loaded cost the request was asked at (review B database-B2): Good's, as priced.
+    loadedCost: 3249.2,
     status: 'approved',
     decidedRole: 'office',
     ...over,
@@ -151,6 +153,7 @@ describe('price policy: what an estimator may quote alone, and approvals (L34)',
         kind: 'over_limit',
         price: 4500,
         modelPrice: 5420,
+        loadedCost: 3249.2,
         range: { min: 4878, max: 5962 },
         floor: 4333,
         approver: 'office',
@@ -196,6 +199,55 @@ describe('price policy: what an estimator may quote alone, and approvals (L34)',
     expect(canSendQuote('office', options, snapshot.settings, [approval({ price: 3500, belowFloor: true, decidedRole: 'office' })]).ok).toBe(false);
     expect(canSendQuote('estimator', options, snapshot.settings, [approval({ price: 3500, belowFloor: true, decidedRole: 'owner' })]).ok).toBe(true);
     expect(canSendQuote('office', options, snapshot.settings, [approval({ price: 3500, belowFloor: true, decidedRole: 'owner' })]).ok).toBe(true);
+  });
+
+  // Review B database-B2: an approval is bound to the loaded cost it was asked at, so changing line
+  // quantities or hours after the decision (which leaves the price and the model price as they were)
+  // needs a new one; and an approval the owner gave for a price above the floor never covers that
+  // price once it is below the floor.
+  describe('an approval is bound to the cost it was asked at (review B database-B2)', () => {
+    const GOOD_LABOR = 'a1|fiberglass_blown|labor'; // Good: 10 h
+    const hours = (h: number, price: number) =>
+      opts(estimate({ overrides: { good: { price, reason: 'Neighbour discount' } }, lineOverrides: { [GOOD_LABOR]: { hours: h, reason: 'Two floors of knee walls' } } }));
+
+    it('an owner approval does not cover the same price after a line-hours override raises the cost', () => {
+      const asked = override(3500)[0]!;
+      expect(asked.loadedCost).toBe(3249.2);
+      const owner = approval({ price: 3500, belowFloor: true, decidedRole: 'owner', loadedCost: asked.loadedCost });
+      expect(canSendQuote('estimator', override(3500), snapshot.settings, [owner]).ok).toBe(true); // same cost: still covered
+      const after = hours(40, 3500); // labor hours x4
+      const good = after.find((o) => o.tier === 'good')!;
+      expect([good.price, good.modelPrice]).toEqual([3500, 5420]); // the price and model price are the same
+      expect(good.loadedCost).toBeGreaterThan(4900); // the cost is not: $3,249 -> about $4,938
+      const r = canSendQuote('estimator', after, snapshot.settings, [owner]);
+      expect(r.ok).toBe(false);
+      expect(r.problems.map((p) => [p.tier, p.kind])).toContainEqual(['good', 'below_floor']);
+    });
+
+    it('an owner over-limit approval (belowFloor false) does not cover a below-floor problem at the same price', () => {
+      const overLimit = approval({ price: 4500, belowFloor: false, decidedRole: 'owner', loadedCost: 3249.2 });
+      expect(canSendQuote('estimator', override(4500), snapshot.settings, [overLimit]).ok).toBe(true);
+      const after = hours(30, 4500); // labor hours x3: the same $4,500 is now under the 25% floor
+      expect(after.find((o) => o.tier === 'good')!.belowFloor).toBe(true);
+      // Even at the cost it was asked at, an above-floor approval is not a below-floor one.
+      const sameCost = approval({ price: 4500, belowFloor: false, decidedRole: 'owner', loadedCost: after.find((o) => o.tier === 'good')!.loadedCost });
+      for (const a of [overLimit, sameCost]) {
+        const r = canSendQuote('estimator', after, snapshot.settings, [a]);
+        expect(r.ok).toBe(false);
+        expect(r.problems.map((p) => [p.tier, p.kind])).toContainEqual(['good', 'below_floor']);
+      }
+    });
+
+    it('a cost that went down is still covered; an approval with no recorded cost covers nothing', () => {
+      expect(canSendQuote('estimator', override(4500), snapshot.settings, [approval({ loadedCost: 3300 })]).ok).toBe(true);
+      expect(canSendQuote('estimator', override(4500), snapshot.settings, [approval({ loadedCost: 3249.19 })]).ok).toBe(false);
+      expect(canSendQuote('estimator', override(4500), snapshot.settings, [approval({ loadedCost: null })]).ok).toBe(false);
+      expect(canSendQuote('estimator', override(4500), snapshot.settings, [approval({ loadedCost: undefined })]).ok).toBe(false);
+    });
+
+    it('the problem carries the loaded cost, for the request', () => {
+      expect(canSendQuote('estimator', override(4500), snapshot.settings).problems[0]).toMatchObject({ kind: 'over_limit', loadedCost: 3249.2 });
+    });
   });
 
   it('an approval never stands in for the reason a price change needs', () => {

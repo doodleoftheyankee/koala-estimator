@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { Card, SignLabel, Tag } from '@/components/daymark';
 import { formatDateTime, formatMoney, TIER_LABELS } from '@/lib/format';
 import type { Role } from '@/lib/pricing';
-import { APPROVAL_COLUMNS, approvalFromRow } from '@/lib/quotes/approvals';
+import { APPROVAL_COLUMNS, approvalFromRow, isLiveRequest } from '@/lib/quotes/approvals';
 import type { createClient } from '@/lib/supabase/server';
 import { DecideButtons } from './DecideButtons';
 
@@ -41,24 +41,29 @@ export interface QueueItem {
   note: string | null;
 }
 
-/** The requests waiting for a decision, oldest first. Null when they cannot be read. */
+/**
+ * The requests waiting for a decision, oldest first. Null when they cannot be read. A request whose
+ * estimate is signed, lost or void, or whose option has another price (or a higher cost) now, is no
+ * longer a question and is left out (review B flow-B3: lib/quotes/approvals.ts isLiveRequest).
+ */
 export async function loadQueue(db: Db): Promise<QueueItem[] | null> {
   const { data, error } = await db
     .from('price_approvals')
     .select(
       `${APPROVAL_COLUMNS},
-       estimate:estimates(id, customer:customers(first_name, last_name), property:properties(street, city)),
+       estimate:estimates(id, status, options:estimate_options(tier, price, loaded_cost), customer:customers(first_name, last_name), property:properties(street, city)),
        requester:profiles!price_approvals_requested_by_fkey(full_name)`,
     )
     .eq('status', 'pending')
     .order('requested_at', { ascending: true })
-    .limit(50);
+    // Stale requests are read and left out below, so read more than the list ever shows.
+    .limit(200);
   if (error) return null;
   const out: QueueItem[] = [];
   for (const row of (data ?? []) as unknown[]) {
     const a = approvalFromRow(row);
     const ctx = contextSchema.safeParse(row);
-    if (!a || !ctx.success) continue;
+    if (!a || !ctx.success || !isLiveRequest(row)) continue;
     const c = ctx.data;
     const name = c.estimate?.customer ? `${c.estimate.customer.first_name} ${c.estimate.customer.last_name}`.trim() : '';
     const address = c.estimate?.property ? [c.estimate.property.street, c.estimate.property.city].filter((s) => s.trim()).join(', ') : '';

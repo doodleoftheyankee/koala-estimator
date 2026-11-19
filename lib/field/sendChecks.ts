@@ -185,7 +185,7 @@ function priceChecks(role: Role, options: readonly PricedOption[], settings: Pri
     const usedApproval = canSendQuote(role, [...options], settings).problems.some((p) => p.kind === 'below_floor' || p.kind === 'over_limit');
     return [{ id: 'price', ok: true, label: usedApproval ? 'Prices within your limits or approved' : 'Prices within your limits' }];
   }
-  const current = Object.fromEntries(options.map((o) => [o.tier, { price: o.price, modelPrice: o.modelPrice }]));
+  const current = Object.fromEntries(options.map((o) => [o.tier, { price: o.price, modelPrice: o.modelPrice, loadedCost: o.loadedCost }]));
   const latest = latestByTier(approvals, current);
   return policy.problems.map((p) => problemCheck(p, latest));
 }

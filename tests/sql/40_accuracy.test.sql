@@ -59,6 +59,25 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- The grants as the migrations leave them, before any re-run below (review B database-B5): the test
+-- database gets Supabase's default privileges when each object is created (tests/sql/00_supabase_stub.sql,
+-- read from production's pg_default_acl), and tests/sql/01_grants.sql no longer grants everything
+-- again, so a revoke a migration forgets fails here instead of passing on the re-run's own revoke.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  assert not has_function_privilege('authenticated', 'next_quote_number(int)', 'execute'), 'first run: a signed-in user may not take a quote number';
+  assert not has_function_privilege('anon', 'next_quote_number(int)', 'execute'), 'first run: nor may the public';
+  assert has_function_privilege('service_role', 'next_quote_number(int)', 'execute'), 'first run: the service role may';
+  assert not has_table_privilege('authenticated', 'quote_number_counters', 'select'), 'first run: signed-in users cannot read the counters';
+  assert not has_table_privilege('authenticated', 'quote_number_counters', 'update'), 'first run: or move them';
+  assert not has_table_privilege('authenticated', 'price_approvals', 'insert'), 'first run: signed-in users cannot write price requests (database-B4)';
+  assert has_table_privilege('authenticated', 'price_approvals', 'select') and has_table_privilege('authenticated', 'price_approvals', 'update'),
+    'first run: they still read and decide them (RLS says whose)';
+  assert not has_table_privilege('anon', 'price_approvals', 'select'), 'first run: the public cannot read approvals';
+  assert has_table_privilege('authenticated', 'estimates', 'select'), 'tables a migration does not revoke keep the default grants (as in production)';
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Running the migration again adds nothing and changes nothing
 -- ---------------------------------------------------------------------------
 create temp table before_rerun as
@@ -159,7 +178,7 @@ end $$;
 
 -- Running the migration again keeps the counters and a prefix the owner changed (and the
 -- function's grants: Supabase grants every new function to the API roles, the migration takes
--- them back; tests/sql/01_grants.sql granted them again before this file).
+-- them back; the same grants were checked on the first run above).
 update app_settings set value = '"AB"' where key = 'quote_number_prefix';
 \i supabase/migrations/20261119000001_accuracy.sql
 do $$ begin
@@ -309,24 +328,54 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- L34: price approvals. Staff read; an estimator (or the office) asks; the owner or the office
 -- decides; nobody decides their own request; below the floor margin only the owner.
+-- Review B database-B4: a request is written by the server only (app/api/approvals prices it first and
+-- writes it with the service role), so what the owner sees is never typed in by the asker.
 -- ---------------------------------------------------------------------------
 reset role;
 update estimates set status = 'draft' where id = 'f1000000-0000-0000-0000-000000000001';
 set role authenticated;
 select set_config('request.jwt.claim.sub', :'est1', false);
 do $$
-declare v_id uuid; ok boolean;
+declare ok boolean := false;
 begin
-  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, note, requested_by)
-  values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, false, 'Neighbour discount', '00000000-0000-0000-0000-0000000000e3')
-  returning id into v_id;
-  assert (select requested_by from price_approvals where id = v_id) = auth.uid(), 'the request is always the asker''s own';
-  assert (select status from price_approvals where id = v_id) = 'pending', 'and starts pending';
-  -- One pending request per estimate, option and price.
-  ok := false;
+  -- The estimator posting straight to the database with numbers of their own (database-B4).
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, below_floor, requested_by)
+    values ('f1000000-0000-0000-0000-000000000001', 'good', 3500, 5420, false, auth.uid());
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'an estimator cannot write a price request into the database directly';
+  assert (select count(*) from price_approvals) = 0, 'nothing was written';
+end $$;
+select set_config('request.jwt.claim.sub', :'office', false);
+do $$
+declare ok boolean := false;
+begin
   begin
     insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
-    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, auth.uid());
+    values ('f1000000-0000-0000-0000-000000000001', 'good', 2000, 2400, auth.uid());
+  exception when insufficient_privilege then ok := true;
+  end;
+  assert ok, 'nor can the office';
+end $$;
+reset role;
+
+-- The server writes the requests: the service role, with no user in its token.
+select set_config('request.jwt.claim.sub', '', false);
+set role service_role;
+do $$
+declare v_id uuid; ok boolean;
+begin
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, note, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, false, 3249.20, 'Neighbour discount', '00000000-0000-0000-0000-0000000000e2')
+  returning id into v_id;
+  assert (select requested_by from price_approvals where id = v_id) = '00000000-0000-0000-0000-0000000000e2', 'the server writes it as the asker';
+  assert (select status from price_approvals where id = v_id) = 'pending', 'and it starts pending';
+  -- One pending request per estimate, option, price and cost.
+  ok := false;
+  begin
+    insert into price_approvals (estimate_id, tier, price, model_price, loaded_cost, requested_by)
+    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500, 5420, 3249.20, '00000000-0000-0000-0000-0000000000e2');
   exception when unique_violation then ok := true;
   end;
   assert ok, 'the same request is not queued twice';
@@ -334,15 +383,37 @@ begin
   ok := false;
   begin
     insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
-    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500.50, 5420, auth.uid());
+    values ('f1000000-0000-0000-0000-000000000001', 'better', 4500.50, 5420, '00000000-0000-0000-0000-0000000000e2');
   exception when check_violation then ok := true;
   end;
   assert ok, 'an approval is for a whole-dollar price';
-  -- The estimator cannot approve it.
-  update price_approvals set status = 'approved' where id = v_id;
-  assert (select status from price_approvals where id = v_id) = 'pending', 'an estimator cannot approve (not even their own)';
-  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, requested_by)
-  values ('f1000000-0000-0000-0000-000000000001', 'best', 3000, 7000, true, auth.uid());
+  insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'best', 3000, 7000, true, 2800.00, '00000000-0000-0000-0000-0000000000e2');
+  -- A request the office made: the office does not decide it (below).
+  insert into price_approvals (estimate_id, tier, price, model_price, loaded_cost, requested_by)
+  values ('f1000000-0000-0000-0000-000000000001', 'good', 2000, 2400, 1500.00, '00000000-0000-0000-0000-0000000000e3');
+end $$;
+reset role;
+
+-- A row written with a user's token is always that user's own and starts pending (the guard trigger).
+select set_config('request.jwt.claim.sub', :'est1', false);
+do $$
+declare v_id uuid;
+begin
+  insert into price_approvals (estimate_id, tier, price, model_price, requested_by, status)
+  values ('f1000000-0000-0000-0000-000000000001', 'good', 2100, 2400, '00000000-0000-0000-0000-0000000000e3', 'approved')
+  returning id into v_id;
+  assert (select requested_by = auth.uid() and status = 'pending' from price_approvals where id = v_id), 'the request is always the asker''s own, and pending';
+  delete from price_approvals where id = v_id;
+end $$;
+
+-- The estimator cannot approve it.
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'est1', false);
+do $$ begin
+  assert (select count(*) from price_approvals where estimate_id = 'f1000000-0000-0000-0000-000000000001') = 3, 'the estimator reads the requests on their estimate';
+  update price_approvals set status = 'approved' where tier = 'better';
+  assert (select status from price_approvals where tier = 'better') = 'pending', 'an estimator cannot approve (not even their own)';
 end $$;
 
 -- Another estimator sees none of it and cannot ask for an estimate that is not theirs.
@@ -370,7 +441,7 @@ select set_config('request.jwt.claim.sub', :'office', false);
 do $$
 declare ok boolean := false;
 begin
-  assert (select count(*) from price_approvals where estimate_id = 'f1000000-0000-0000-0000-000000000001') = 2, 'the office reads the requests';
+  assert (select count(*) from price_approvals where estimate_id = 'f1000000-0000-0000-0000-000000000001') = 3, 'the office reads the requests';
   update price_approvals set status = 'approved', decision_note = 'OK' where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
   assert (select status = 'approved' and decided_by = auth.uid() and decided_role = 'office' and decided_at is not null
             from price_approvals where tier = 'better' and estimate_id = 'f1000000-0000-0000-0000-000000000001'),
@@ -380,9 +451,7 @@ begin
   exception when insufficient_privilege then ok := true;
   end;
   assert ok, 'only the owner approves a price below the floor margin';
-  -- A request the office made itself is not the office's to decide.
-  insert into price_approvals (estimate_id, tier, price, model_price, requested_by)
-  values ('f1000000-0000-0000-0000-000000000001', 'good', 2000, 2400, auth.uid());
+  -- A request the office made itself (the server wrote it above) is not the office's to decide.
   update price_approvals set status = 'approved' where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001';
   assert (select status from price_approvals where tier = 'good' and estimate_id = 'f1000000-0000-0000-0000-000000000001') = 'pending',
     'nobody approves their own request';

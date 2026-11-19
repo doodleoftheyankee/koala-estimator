@@ -113,7 +113,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     const good = price(d).find((o) => o.tier === 'good')!;
     const asked = Math.round(good.modelPrice * 1.2);
     d.overrides = { good: { price: asked, reason: 'Attic access through a closet' } };
-    const a: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, status: 'pending', decidedRole: null, requestedAt: '2026-11-19T15:01:00Z' };
+    const a: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, loadedCost: good.loadedCost, status: 'pending', decidedRole: null, requestedAt: '2026-11-19T15:01:00Z' };
     expect(failing(input(d, { approvals: [a] }))[0]!.approval).toMatchObject({ status: 'pending' });
     const declined = { ...a, status: 'declined' as const, decidedRole: 'owner' as const, decisionNote: 'Too low for a full removal' };
     expect(failing(input(d, { approvals: [declined] }))[0]!.approval).toMatchObject({ status: 'declined', decisionNote: 'Too low for a full removal' });
@@ -121,6 +121,24 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     const checks = sendChecks(input(d, { approvals: [declined, approved] }));
     expect(checks.every((c) => c.ok)).toBe(true);
     expect(checks.find((c) => c.id === 'price')!.label).toBe('Prices within your limits or approved');
+  });
+
+  // Review B database-B2: line changes after the decision raised the cost, so the approval no longer
+  // covers the price; the phone offers Request approval again instead of a stale "approved".
+  it('an approval asked at a lower cost: the phone offers Request approval again (review B database-B2)', () => {
+    const d = complete();
+    const good = price(d).find((o) => o.tier === 'good')!;
+    const asked = Math.round(good.modelPrice * 1.2);
+    d.overrides = { good: { price: asked, reason: 'Attic access through a closet' } };
+    const approved: PriceApproval = { id: 'a1', estimateId: d.id, tier: 'good', price: asked, modelPrice: good.modelPrice, belowFloor: false, loadedCost: good.loadedCost - 300, status: 'approved', decidedRole: 'owner', requestedAt: '2026-11-19T15:01:00Z' };
+    const check = failing(input(d, { approvals: [approved] })).find((c) => c.id === 'price:good');
+    expect(check?.approval).toMatchObject({ tier: 'good', price: asked, status: 'none' });
+    expect(check?.approval).not.toHaveProperty('approvalId');
+    // A request still waiting, asked at the lower cost, is not this price's question any more either.
+    const waiting = { ...approved, status: 'pending' as const, decidedRole: null };
+    expect(failing(input(d, { approvals: [waiting] })).find((c) => c.id === 'price:good')?.approval).toMatchObject({ status: 'none' });
+    // At the cost it was asked at, the waiting request still shows.
+    expect(failing(input(d, { approvals: [{ ...waiting, loadedCost: good.loadedCost }] })).find((c) => c.id === 'price:good')?.approval).toMatchObject({ status: 'pending' });
   });
 
   it('a price change needs a reason before anything else', () => {

@@ -430,6 +430,20 @@ let asked;
   check(self.status() === 403, `an estimator cannot approve it: ${self.status()}`);
   const again = await ctx.request.post(BASE + '/api/approvals', { data: { estimateId: psql('select estimate_id from price_approvals'), tier: 'good', price: asked } });
   check(again.ok() && (await again.json()).already === true && psql('select count(*) from price_approvals') === '1', 'asking twice keeps one request');
+  // Review B database-B2: the request keeps the loaded cost it was asked at (the server's pricing).
+  check(
+    psql("select a.loaded_cost is not null and a.loaded_cost = o.loaded_cost from price_approvals a join estimate_options o on o.estimate_id = a.estimate_id and o.tier = a.tier") === 't',
+    'the request keeps the loaded cost the option had when it was asked',
+  );
+  // Review B database-B4: the estimator's own token cannot write a request straight to the database.
+  {
+    const res = await ctx.request.post(`http://localhost:${process.env.MOCK_PORT}/rest/v1/price_approvals`, {
+      headers: { apikey: 'anon', Authorization: `Bearer ${sign({ sub: EST.id, role: 'authenticated', aud: 'authenticated' })}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      data: { estimate_id: psql('select estimate_id from price_approvals'), tier: 'best', price: 1000, model_price: 9000, below_floor: false, requested_by: EST.id },
+    });
+    check(res.status() === 401 || res.status() === 403, `a request written straight to the database with the estimator's token is refused: ${res.status()}`);
+    check(psql('select count(*) from price_approvals') === '1', 'and nothing was written');
+  }
 }
 
 step('the owner approves it from the Estimates page (L34)');
@@ -588,6 +602,23 @@ check(psql("select count(*) from jobs") === '1', 'signing created a job');
 console.log('  estimate:', psql("select status, selected_tier from estimates"));
 console.log('  quote:', psql("select version, status, signed_tier, signed_price, signer_name, signed_pdf_path is not null from quotes"));
 check(psql("select esign_audit->>'consentText' like '%(ESIGN Act and Delaware UETA)%' from quotes where status = 'signed'") === 't', 'the e-sign record keeps the sentence the customer agreed to');
+{
+  // Review B flow-B3: a request still waiting on an estimate the customer signed is not decided, and
+  // the owner's queue does not show it.
+  const signedEst = psql("select estimate_id from quotes where status = 'signed' limit 1");
+  psql(`insert into price_approvals (estimate_id, tier, price, model_price, below_floor, loaded_cost, requested_by) values ('${signedEst}', 'best', 9999, 9000, false, 1000, '${EST.id}')`);
+  const stale = psql(`select id from price_approvals where estimate_id = '${signedEst}' and status = 'pending'`);
+  const octx3 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await octx3.addCookies([sessionCookie(OWNER)]);
+  const res = await octx3.request.patch(BASE + `/api/approvals/${stale}`, { data: { decision: 'approved' } });
+  const body = await res.json();
+  check(res.status() === 409 && body.error === 'signed' && body.message === 'The customer already signed this quote.', `deciding a request on a signed estimate: ${res.status()} ${body.error}`);
+  const qp = await octx3.newPage();
+  await qp.goto(BASE + '/estimates');
+  check((await qp.getByRole('list', { name: 'Prices waiting for approval' }).count()) === 0, "the owner's queue leaves it out (no 'Needs you' for a signed quote)");
+  check(psql(`select status from price_approvals where id = '${stale}'`) === 'pending', 'and it was not decided');
+  await octx3.close();
+}
 console.log('  events:', psql("select string_agg(event, ',' order by id) from quote_events"));
 console.log('  audit:', psql("select string_agg(distinct action, ',') from audit_log where action like '%.%'"));
 
