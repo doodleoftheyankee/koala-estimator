@@ -179,7 +179,7 @@ step('pitch from a photo of the gable, in Measure');
   check((await sheet.getByRole('button', { name: 'Use 6/12' }).count()) === 1, 'Use offers the whole pitch, 6/12');
   await sheet.getByRole('button', { name: 'Use 6.3/12 (as measured)' }).click();
   await sheet.waitFor({ state: 'detached' });
-  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', '"Use 6.3/12 (as measured)" fills the roof pitch');
+  check((await measure.getByLabel('Roof pitch (rise / 12 or degrees)').inputValue()) === '6.3/12', '"Use 6.3/12 (as measured)" fills the roof pitch');
   check((await measure.getByText('×1.129', { exact: true }).count()) === 1, 'and its pitch factor');
   check((await measure.getByRole('button', { name: 'Use 1,363 sq ft' }).count()) === 1, '1,260 sq ft footprint × 1.129 − 60 sq ft chimney → 1,363 sq ft of roof deck');
 
@@ -199,8 +199,8 @@ step('pitch from a photo of the gable, in Measure');
   await page.screenshot({ path: SHOTS + '03a4-pitch-second.png' });
   await sheet.getByRole('button', { name: 'Use 12/12' }).click();
   await sheet.waitFor({ state: 'detached' });
-  check((await measure.getByLabel('Second pitch (rise / 12)').inputValue()) === '12/12', '"Use 12/12" fills the second pitch, not the first');
-  check((await measure.getByLabel('Roof pitch (rise / 12)').inputValue()) === '6.3/12', 'the first pitch is unchanged');
+  check((await measure.getByLabel('Second pitch (rise / 12 or degrees)').inputValue()) === '12/12', '"Use 12/12" fills the second pitch, not the first');
+  check((await measure.getByLabel('Roof pitch (rise / 12 or degrees)').inputValue()) === '6.3/12', 'the first pitch is unchanged');
   await measure.getByRole('heading', { name: 'Pitch' }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: SHOTS + '03a5-pitch-used.png' });
 
