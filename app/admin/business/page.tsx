@@ -22,6 +22,7 @@ export const metadata: Metadata = { title: 'Business profile' };
 const rowsSchema = z.array(z.object({ key: z.string(), value: z.unknown() }));
 
 const hintOf = (key: string) => PROFILE_FIELDS.find((f) => f.key === key)?.hint;
+const labelOf = (key: string, fallback: string) => PROFILE_FIELDS.find((f) => f.key === key)?.label ?? fallback;
 const requiredKey = (key: string) => PROFILE_FIELDS.find((f) => f.key === key)?.required ?? false;
 
 export default async function BusinessProfilePage() {
@@ -78,7 +79,7 @@ function ProfileContent({ rows, readOnly }: { rows: Array<{ key: string; value: 
             {BRANDING_FIELDS.map((f) => (
               <TextField
                 key={f.key}
-                label={f.label}
+                label={labelOf(`branding.${f.key}`, f.label)}
                 name={`branding.${f.key}`}
                 type={f.type}
                 required={f.key === 'company'}
