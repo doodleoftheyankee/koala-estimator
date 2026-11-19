@@ -931,3 +931,17 @@ RB-flow-B9 (amends L11; owner screen, no customer value) "This cost is right" st
     fail before the fix), "a cost 100 times the usual is caught, with the range and its source"
     (its expected sentences updated to the new wording); e2e Pricing step "a confirmed $15.25
     widens the stored usual range …", "saving the card again without ticking is not refused".
+
+RB-flow-B13 (L32, OD14) A new estimate made on a phone's first open starts in the town and state
+    the bundle names, as a pair, like every other new estimate. Before: createEstimate read the
+    cached bundle, which a phone that had never synced did not have yet (/field?new=1 runs before
+    the first sync), so City and State were blank; a moment later the same button gave the town.
+    Now, online with no bundle, a new estimate waits for the bundle at most 3 s ("Starting the
+    estimate"); if it is slower, the estimate starts blank and the editor fills City and State
+    together when the bundle comes, only while both are still blank. Offline it starts blank, as
+    before. A town is never taken without its state (lib/field/newPlace.ts newEstimatePlace).
+    Example (e2e settings, shop address in Newark, DE): /field?new=1 on a fresh phone: City "",
+      State "" -> "Newark", "DE".
+    Review B flow-B13. Tests: lib/field/newPlace.test.ts (4 tests: the pair or nothing, filled only
+    while both are blank, the 3 s wait); e2e "review B screens" step "a phone's first /field?new=1
+    starts in the shop address's town and state".

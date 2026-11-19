@@ -1,7 +1,8 @@
 'use client';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { db, getCachedBundle, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
-import { AuthRequiredError, fetchEstimate, isReachable, onReachChange, syncAll } from '@/lib/offline/sync';
+import { AuthRequiredError, fetchEstimate, isReachable, onReachChange, refreshBundle, syncAll } from '@/lib/offline/sync';
+import { bundleForNewEstimate, newEstimatePlace } from '@/lib/field/newPlace';
 import { newDraft } from '@/lib/sync/draft';
 import { menuFor, phoneTabs } from '@/lib/nav';
 import { Banner, Button, ButtonLink, LoadingSteps } from '@/components/daymark';
@@ -22,6 +23,10 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   // A sync the person asked for (Sync now): the header says "Syncing…" until it ends. Background
   // syncs (every minute, on reconnect) stay quiet and only move "Synced 2 min ago" along.
   const [syncing, setSyncing] = useState(false);
+  // A new estimate waiting (at most 3 s) for the phone's first bundle, and one that started
+  // without a town and state, which the editor fills when the bundle comes (review B flow-B13).
+  const [starting, setStarting] = useState(false);
+  const [placePending, setPlacePending] = useState<string | null>(null);
   const lastSync = useLive(() => getMeta<string>(META.lastSync), [], null as string | null);
   // Koala's database or sign-in service not answering (L36): the phone keeps working on its own copy.
   const reachable = useSyncExternalStore(onReachChange, isReachable, () => true);
@@ -51,11 +56,17 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, []);
 
   const createEstimate = useCallback(async () => {
-    // A new estimate starts in the business profile's town (else the shop address's, else blank:
-    // L32), as the phone last downloaded it, so it works offline too.
-    const place = (await getCachedBundle())?.business?.newEstimate;
-    const draft = newDraft(new Date(), undefined, place);
+    // A new estimate starts in the town and state the bundle names, as a pair (L32, OD14), as the
+    // phone last downloaded it, so it works offline too. On a phone's first open there is no bundle
+    // yet: online, it waits for it, at most 3 s; one that starts blank is filled when it comes.
+    const cached = await getCachedBundle();
+    const wait = !cached && navigator.onLine;
+    if (wait) setStarting(true);
+    const place = newEstimatePlace(await bundleForNewEstimate(cached, refreshBundle, navigator.onLine));
+    const draft = newDraft(new Date(), undefined, place ?? undefined);
     await db().estimates.put(newLocalEstimate(draft, profile.userId));
+    setPlacePending(place ? null : draft.id);
+    setStarting(false);
     go({ kind: 'edit', id: draft.id });
   }, [go, profile.userId]);
 
@@ -98,9 +109,9 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
 
   return (
     <main className="mx-auto w-full max-w-2xl">
-      {!ready ? (
+      {!ready || starting ? (
         <div className="px-4 pt-6">
-          <LoadingSteps steps={[{ label: 'Opening the estimates on this phone', state: 'doing' }]} />
+          <LoadingSteps steps={[{ label: starting ? 'Starting the estimate' : 'Opening the estimates on this phone', state: 'doing' }]} />
         </div>
       ) : (
         <>
@@ -147,7 +158,15 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
               onSync={syncNow}
             />
           ) : (
-            <EstimateEditor key={view.id} id={view.id} profile={profile} online={online} onBack={() => go({ kind: 'list' })} requestSync={runSync} />
+            <EstimateEditor
+              key={view.id}
+              id={view.id}
+              profile={profile}
+              online={online}
+              onBack={() => go({ kind: 'list' })}
+              requestSync={runSync}
+              fillPlace={placePending === view.id}
+            />
           )}
         </>
       )}
