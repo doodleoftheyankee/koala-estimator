@@ -453,3 +453,50 @@ describe('calibrate: determinism', () => {
     expect(drives[1]).toMatchObject({ value: 1.2, changed: false });
   });
 });
+
+describe('calibrate: wall actuals do not move attic prices (L21, review A F2)', () => {
+  // Observations of cellulose jobs, each using `ratio` x the design bags.
+  const jobs = (n: number, jobType: JobType, ratio: number, daysBack = 0): Observation[] =>
+    Array.from({ length: n }, (_, i) => ({
+      jobId: `${jobType}-job-${i}`,
+      areaId: `${jobType}-area-${i}`,
+      completedAt: new Date(now.getTime() - (i + 1 + daysBack) * 86_400_000).toISOString(),
+      product: 'cellulose',
+      jobType,
+      accessLevel: 'easy',
+      sqft: 1000,
+      designQty: 30,
+      modelQty: 33,
+      estQty: null,
+      modelHours: null,
+      estHours: null,
+      actualQty: 30 * ratio,
+      actualHours: null,
+    }));
+  // The seeded active set plus the accuracy migration's walls cell (waste_factor / cellulose / walls at 1.08).
+  const withWallsCell = (): StoredCoefficient[] => {
+    const parent = find(seedActive(), 'waste_factor', 'cellulose')!;
+    return [...seedActive(), { ...parent, jobType: 'walls' }];
+  };
+  /** The waste factor an attic is priced with: its own cell, else the shared one. */
+  const atticWaste = (r: CalibrationResult) => find(r.coefficients, 'waste_factor', 'cellulose', 'attic')?.value ?? value(r.coefficients, 'waste_factor', 'cellulose');
+
+  it('200 wall jobs at 1.30: the walls cell moves, the cell attics price with stays at 1.08', () => {
+    const r = run({ observations: jobs(200, 'walls', 1.3), active: withWallsCell() });
+    expect(value(r.coefficients, 'waste_factor', 'cellulose', 'walls')).toBeGreaterThan(1.08);
+    // Before: the shared cell was fitted on the wall rows too, 1.08 -> 1.188.
+    expect(atticWaste(r)).toBe(1.08);
+  });
+
+  it('20 attic jobs at 1.08 and 200 wall jobs at 1.30: attics stay at about 1.08', () => {
+    const r = run({ observations: [...jobs(20, 'attic', 1.08), ...jobs(200, 'walls', 1.3, 30)], active: withWallsCell() });
+    // Before: 1.117, pulled toward the walls by a shared cell fitted on all rows.
+    expect(atticWaste(r)).toBeCloseTo(1.08, 3);
+    expect(value(r.coefficients, 'waste_factor', 'cellulose', 'walls')).toBeGreaterThan(1.08);
+  });
+
+  it('with no walls cell (a database before the accuracy migration) the shared cell still learns from every row', () => {
+    const r = run({ observations: jobs(200, 'walls', 1.3) });
+    expect(value(r.coefficients, 'waste_factor', 'cellulose')).toBeGreaterThan(1.08);
+  });
+});

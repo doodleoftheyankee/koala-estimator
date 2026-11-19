@@ -198,6 +198,8 @@ L21 Walls get their own cellulose waste cell: waste_factor / cellulose / walls i
     Example (seeded): with the walls cell at 1.30 (wall actuals), a 2,200 sq ft 2x4 wall takes 68 -> 82
       bags while every attic price stays as it was (before, the one shared cell moved both).
     Owner decision: R4 (review finding). calibrate.ts is unchanged; it fits the walls child cell.
+    (Review A F2: calibrate.ts still fitted the shared cell on the wall rows too, so wall actuals did
+    move attic prices once a calibration was promoted; fixed in RA-F2.)
     Tests: phase1.test.ts "starts at the shared 1.08, so no price moves", "wall actuals move wall prices
     only: a walls cell of 1.30 leaves the attic as it was"; tests/sql/40_accuracy.test.sql (value and
     bounds); tests/sql/10_phase1.test.sql (promotion and rollback move both cellulose cells).
@@ -658,3 +660,19 @@ RA-F12 A tiny area never reads "0 sq ft" (L17 below 0.05 sq ft). Under 1 sq ft a
       minimum) unchanged. 0.3 sq ft still reads "0.3 sq ft"; 12.4 sq ft "12 sq ft".
     Owner decision: S3-F23.
     Test: "attic 0.04 sq ft (the form takes any size above 0): "0.04 sq ft", not "0 sq ft" …".
+
+RA-F2 Wall actuals no longer move attic prices (makes L21 true). The learning loop fits the shared
+    waste cell (waste_factor / cellulose, which attics price with) only on the jobs of job types that
+    have no waste cell of their own; walls have one (L21), so wall jobs fit the walls cell only. With
+    no such jobs the shared cell keeps its value. A database without the walls cell (before the
+    accuracy migration) learns as before, from every job.
+    Example (seeded active set with the walls cell, 1.08): calibrate on 200 wall-only cellulose jobs
+      that each used 1.30 x the design bags: the shared cell 1.08 -> 1.188, so a 1,000 sq ft attic to
+      R-49 went from 74 to 81 bags (about +$190) once promoted -> the shared cell stays 1.08 and only
+      the walls cell moves. 20 attic jobs at 1.08 plus 200 wall jobs at 1.30: the attic cell 1.117 ->
+      1.08. No price moves today (nothing is promoted).
+    Owner decision: R4 (review finding).
+    Tests: lib/learning/calibrate.test.ts "200 wall jobs at 1.30: the walls cell moves, the cell attics
+    price with stays at 1.08", "20 attic jobs at 1.08 and 200 wall jobs at 1.30: attics stay at about
+    1.08", "with no walls cell (a database before the accuracy migration) the shared cell still learns
+    from every row".
