@@ -1,0 +1,1953 @@
+{
+  "about": "Before/after report on the golden sets (flow stage). Before: docs/accuracy/before/ (the code before any fix). After: this commit, priced by scripts/accuracy/report.ts. Every difference a customer or the office would see is listed with the ledger entries (docs/accuracy/ledger.txt) and the owner decision behind it; \"stage\" is the stage that made it. The live set keeps estimate ids, statuses and amounts only.",
+  "sets": {
+    "synthetic": {
+      "estimates": 65,
+      "violations": {
+        "before": {
+          "estimates": 65,
+          "failing": {
+            "items_add_up": 7,
+            "same_work_same_price": 35,
+            "options_step_up": 16,
+            "labels_match_work": 7,
+            "cavity_not_overfilled": 12,
+            "finite_amounts": 0,
+            "same_price_text": 64,
+            "valid_until_is_expiry": 3
+          },
+          "violations": {
+            "items_add_up": 9,
+            "same_work_same_price": 46,
+            "options_step_up": 21,
+            "labels_match_work": 7,
+            "cavity_not_overfilled": 26,
+            "finite_amounts": 0,
+            "same_price_text": 998,
+            "valid_until_is_expiry": 3
+          }
+        },
+        "after": {
+          "estimates": 65,
+          "failing": {
+            "items_add_up": 0,
+            "same_work_same_price": 0,
+            "options_step_up": 0,
+            "labels_match_work": 0,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 0,
+            "valid_until_is_expiry": 0
+          },
+          "violations": {
+            "items_add_up": 0,
+            "same_work_same_price": 0,
+            "options_step_up": 0,
+            "labels_match_work": 0,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 0,
+            "valid_until_is_expiry": 0
+          }
+        }
+      },
+      "optionTotals": {
+        "unchanged": 136,
+        "moved": 25,
+        "notShown": 28,
+        "newlyShown": 0
+      },
+      "headlineSum": {
+        "before": 3222490,
+        "after": 3211205
+      },
+      "changes": [
+        {
+          "estimate": "59357ddc-5700-49b2-82f1-f20ab5fe7acf",
+          "key": "S1-F1",
+          "option": "good",
+          "what": "total",
+          "before": 4321.5,
+          "after": 4322,
+          "stage": "money",
+          "why": "A typed price is whole dollars, and the change is its own Price adjustment line.",
+          "ledger": [
+            "L5",
+            "L3"
+          ],
+          "ownerDecision": "OD4, OD3"
+        },
+        {
+          "estimate": "e197a658-bc40-46ce-83f2-0b6147418875",
+          "key": "S1-F2",
+          "option": "good",
+          "what": "not_shown",
+          "before": 11705,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs $11,705, more than Better ($11,260), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "3c9bee9f-c691-425e-8e6b-630e8c64f54d",
+          "key": "S1-F3",
+          "option": "good",
+          "what": "total",
+          "before": 8080,
+          "after": 8715,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity.",
+          "ledger": [
+            "L20"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "069e75bd-5c57-447f-8284-ac2c38be3837",
+          "key": "S1-F4",
+          "option": "better",
+          "what": "total",
+          "before": 3795,
+          "after": 2660,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "069e75bd-5c57-447f-8284-ac2c38be3837",
+          "key": "S1-F4",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $3,795",
+          "after": "Better $2,660",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "fbe3f93f-67ab-41a9-8d44-4a05af861aed",
+          "key": "S1-F5",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Better ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "fbe3f93f-67ab-41a9-8d44-4a05af861aed",
+          "key": "S1-F5",
+          "option": "better",
+          "what": "total",
+          "before": 2245,
+          "after": 1500,
+          "stage": "cavity",
+          "why": "The insulation already in the exterior walls takes its room in the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L19",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "fbe3f93f-67ab-41a9-8d44-4a05af861aed",
+          "key": "S1-F5",
+          "option": "best",
+          "what": "total",
+          "before": 3115,
+          "after": 2295,
+          "stage": "cavity",
+          "why": "The insulation already in the exterior walls takes its room in the cavity.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "fbe3f93f-67ab-41a9-8d44-4a05af861aed",
+          "key": "S1-F5",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $2,245",
+          "after": "Better $1,500",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The insulation already in the exterior walls takes its room in the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L19",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "cabbcc06-70b3-49fd-85bc-b00634f9e5af",
+          "key": "S1-F7a",
+          "option": "best",
+          "what": "not_shown",
+          "before": 5570,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "77844c83-76cb-429c-8f2d-c9c7ace05aec",
+          "key": "S1-F7b",
+          "option": "good",
+          "what": "title",
+          "before": "Blown Cellulose to Code",
+          "after": "Blown Cellulose to R-30",
+          "stage": "money",
+          "why": "The title says only the work that is priced.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "77844c83-76cb-429c-8f2d-c9c7ace05aec",
+          "key": "S1-F7b",
+          "option": "good",
+          "what": "bullets",
+          "before": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "after": [
+            "Dense cellulose fills gaps and blocks air movement"
+          ],
+          "stage": "money",
+          "why": "The bullets promise only work that is priced in this option.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "f322aec8-ceff-4c5e-876e-44082655c634",
+          "key": "S1-F7c",
+          "option": "best",
+          "what": "title",
+          "before": "Closed-Cell Foam + Air Sealing",
+          "after": "Air Sealing",
+          "stage": "money",
+          "why": "The title says only the work that is priced.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "f322aec8-ceff-4c5e-876e-44082655c634",
+          "key": "S1-F7c",
+          "option": "best",
+          "what": "bullets",
+          "before": [
+            "Moisture-resistant",
+            "Every penetration sealed",
+            "Warmest floors"
+          ],
+          "after": [
+            "Every penetration sealed"
+          ],
+          "stage": "money",
+          "why": "The bullets promise only work that is priced in this option.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "494fe443-480c-45a5-8915-c1be3b40d26c",
+          "key": "S1-F9",
+          "option": "good",
+          "what": "total",
+          "before": 2090,
+          "after": 3070,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity.",
+          "ledger": [
+            "L20"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "0663a40a-a809-4733-85cf-21c57e855b3f",
+          "key": "S1-F9b",
+          "option": "good",
+          "what": "total",
+          "before": 1920,
+          "after": 2900,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity.",
+          "ledger": [
+            "L20"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "faf282a0-92e7-41d6-85e6-24599a3435cb",
+          "key": "R-walls-650",
+          "option": "better",
+          "what": "total",
+          "before": 2810,
+          "after": 2005,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "faf282a0-92e7-41d6-85e6-24599a3435cb",
+          "key": "R-walls-650",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $2,810",
+          "after": "Better $2,005",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "7e8166a5-f8f7-4e37-86a3-5ba733176fac",
+          "key": "R-walls-400-down",
+          "option": "better",
+          "what": "total",
+          "before": 1680,
+          "after": 1500,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20; the minimum job charge is its own line.",
+          "ledger": [
+            "L18",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "7e8166a5-f8f7-4e37-86a3-5ba733176fac",
+          "key": "R-walls-400-down",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $1,680",
+          "after": "Better $1,500",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20; the minimum job charge is its own line.",
+          "ledger": [
+            "L18",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "b70c0393-bb82-450f-8daf-c41f175a71b9",
+          "key": "R-walls-bags-up",
+          "option": "good",
+          "what": "total",
+          "before": 1635,
+          "after": 1500,
+          "stage": "money, cavity",
+          "why": "Money stage ($1,635 -> $1,710): install labor is priced for the quantity the estimator priced, not the model quantity; cavity stage ($1,710 -> $1,500): the exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the estimator's bag count is cut to what fills the cavity, and the R it states is capped at the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L7",
+            "L20",
+            "L18",
+            "L23",
+            "L23b",
+            "L2"
+          ],
+          "ownerDecision": "OD7, OD5"
+        },
+        {
+          "estimate": "b70c0393-bb82-450f-8daf-c41f175a71b9",
+          "key": "R-walls-bags-up",
+          "option": "better",
+          "what": "total",
+          "before": 3795,
+          "after": 2660,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "b70c0393-bb82-450f-8daf-c41f175a71b9",
+          "key": "R-walls-bags-up",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $3,795",
+          "after": "Better $2,660",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "8ad5a1ae-f3ac-41ad-8b1f-96038e1ce999",
+          "key": "R-wet-walls",
+          "option": "good",
+          "what": "total",
+          "before": 4740,
+          "after": 5480,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the insulation already in the exterior walls takes its room in the cavity.",
+          "ledger": [
+            "L20",
+            "L19"
+          ],
+          "ownerDecision": "OD7, OD5"
+        },
+        {
+          "estimate": "2948fa3f-203d-4454-803e-0cab8a109255",
+          "key": "R-attic-walls-rim",
+          "option": "good",
+          "what": "total",
+          "before": 4095,
+          "after": 4130,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the basement rim joist batt is the size whose R-value and thickness fit.",
+          "ledger": [
+            "L20",
+            "L18",
+            "L22"
+          ],
+          "ownerDecision": "OD7, OD5, OD8"
+        },
+        {
+          "estimate": "2948fa3f-203d-4454-803e-0cab8a109255",
+          "key": "R-attic-walls-rim",
+          "option": "better",
+          "what": "total",
+          "before": 7570,
+          "after": 6360,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "2948fa3f-203d-4454-803e-0cab8a109255",
+          "key": "R-attic-walls-rim",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $7,570",
+          "after": "Better $6,360",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "5e743590-2d2d-4395-8d87-8d76595b5295",
+          "key": "R-L6",
+          "option": "good",
+          "what": "total",
+          "before": 0.4,
+          "after": 2735,
+          "stage": "money",
+          "why": "A typed price under $1 is not used: the model price stands and the estimator is told.",
+          "ledger": [
+            "L6"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "5e743590-2d2d-4395-8d87-8d76595b5295",
+          "key": "R-L6",
+          "option": "best",
+          "what": "not_shown",
+          "before": 4005,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "395f4a82-45ee-4817-8265-cc72ae85e2c5",
+          "key": "R-L17",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Better ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "395f4a82-45ee-4817-8265-cc72ae85e2c5",
+          "key": "R-L17",
+          "option": "best",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "c189db84-2076-4ea9-83e4-d70dbbbf849b",
+          "key": "R-L19",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not priced: the wall cavity is already full of insulation, so nothing more fits.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "c189db84-2076-4ea9-83e4-d70dbbbf849b",
+          "key": "R-L19",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1740,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not priced: the wall cavity is already full of insulation, so nothing more fits.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "c189db84-2076-4ea9-83e4-d70dbbbf849b",
+          "key": "R-L19",
+          "option": "best",
+          "what": "not_shown",
+          "before": 2505,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not priced: the wall cavity is already full of insulation, so nothing more fits.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "c189db84-2076-4ea9-83e4-d70dbbbf849b",
+          "key": "R-L19",
+          "option": null,
+          "what": "headline",
+          "before": "Better $1,740",
+          "after": null,
+          "stage": "cavity",
+          "why": "No option can be priced (the cavity is full), so there is no headline.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "a6777ad4-27cd-48b9-8442-5479d4c86508",
+          "key": "R-L20",
+          "option": "good",
+          "what": "total",
+          "before": 1500,
+          "after": 2090,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L20",
+            "L2"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "102b7791-7af3-4c0b-8591-49e62c3076d4",
+          "key": "R-rim-min",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "102b7791-7af3-4c0b-8591-49e62c3076d4",
+          "key": "R-rim-min",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "102b7791-7af3-4c0b-8591-49e62c3076d4",
+          "key": "R-rim-min",
+          "option": "best",
+          "what": "headline",
+          "before": "Better $1,500",
+          "after": "Best $1,500",
+          "stage": "money",
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "07f2ba12-d363-4c70-8050-32689ba2f6bb",
+          "key": "R-rim-one-price",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1800,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,800), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "07f2ba12-d363-4c70-8050-32689ba2f6bb",
+          "key": "R-rim-one-price",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1800,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,800), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "07f2ba12-d363-4c70-8050-32689ba2f6bb",
+          "key": "R-rim-one-price",
+          "option": "best",
+          "what": "headline",
+          "before": "Better $1,800",
+          "after": "Best $1,800",
+          "stage": "money",
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "2eb9ed9c-7590-46c9-8de3-ddf89456a7be",
+          "key": "T04",
+          "option": "best",
+          "what": "not_shown",
+          "before": 13715,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "2eb9ed9c-7590-46c9-8de3-ddf89456a7be",
+          "key": "T04",
+          "option": "better",
+          "what": "headline",
+          "before": "Best $13,715",
+          "after": "Better $13,715",
+          "stage": "money",
+          "why": "Best is no longer shown, so the recommended option is Better, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "63220a7e-854b-48fb-8585-64e38552b224",
+          "key": "T05",
+          "option": "best",
+          "what": "not_shown",
+          "before": 8990,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "63220a7e-854b-48fb-8585-64e38552b224",
+          "key": "T05",
+          "option": "better",
+          "what": "headline",
+          "before": "Best $8,990",
+          "after": "Better $8,990",
+          "stage": "money",
+          "why": "Best is no longer shown, so the recommended option is Better, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "79ca87e8-a0f3-4de9-8578-e43efc20d123",
+          "key": "T07",
+          "option": "good",
+          "what": "total",
+          "before": 1500,
+          "after": 2195,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L20",
+            "L2"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "79ca87e8-a0f3-4de9-8578-e43efc20d123",
+          "key": "T07",
+          "option": "good",
+          "what": "headline",
+          "before": "Good $1,500",
+          "after": "Good $2,195",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L20",
+            "L2"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "6febb62e-c6bb-4b42-83c4-4c4aa3112972",
+          "key": "T08",
+          "option": "good",
+          "what": "total",
+          "before": 1500,
+          "after": 1970,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L20",
+            "L2"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "5e3c49d6-1131-40f8-8dd7-23124609727d",
+          "key": "T09",
+          "option": "good",
+          "what": "total",
+          "before": 3025,
+          "after": 3130,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity.",
+          "ledger": [
+            "L20",
+            "L18"
+          ],
+          "ownerDecision": "OD7, OD5"
+        },
+        {
+          "estimate": "5e3c49d6-1131-40f8-8dd7-23124609727d",
+          "key": "T09",
+          "option": "better",
+          "what": "total",
+          "before": 8865,
+          "after": 5770,
+          "stage": "cavity",
+          "why": "The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "5e3c49d6-1131-40f8-8dd7-23124609727d",
+          "key": "T09",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $8,865",
+          "after": "Better $5,770",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The exterior walls have no depth entered, so they are a 2x4 (3.5 in) and the foam fills 3.5 in, not 5.4 in to R-20.",
+          "ledger": [
+            "L18"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "c5a330ca-c5ab-475d-8f64-fb505672a113",
+          "key": "T12",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "c5a330ca-c5ab-475d-8f64-fb505672a113",
+          "key": "T12",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "c5a330ca-c5ab-475d-8f64-fb505672a113",
+          "key": "T12",
+          "option": "best",
+          "what": "headline",
+          "before": "Better $1,500",
+          "after": "Best $1,500",
+          "stage": "money",
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "9ebef66a-e88a-40e5-85b3-73f287e4f3bb",
+          "key": "T14",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1535,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs $1,535, more than Better ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "9ebef66a-e88a-40e5-85b3-73f287e4f3bb",
+          "key": "T14",
+          "option": "better",
+          "what": "headline",
+          "before": "Good $1,535",
+          "after": "Better $1,500",
+          "stage": "money",
+          "why": "Good is no longer shown, so the recommended option is Better.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "e181c9b5-a34a-42e1-8095-dd9261a7a7ce",
+          "key": "T15",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1990,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs $1,990, more than Better ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "2d2d701e-0335-4050-8651-d5c9ee16e93f",
+          "key": "T17",
+          "option": "good",
+          "what": "bullets",
+          "before": [
+            "Cost-effective code compliance"
+          ],
+          "after": [],
+          "stage": "money",
+          "why": "The bullets promise only work that is priced in this option.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "3959bb5c-0f8b-4cda-89e0-456db5ad0432",
+          "key": "T20",
+          "option": "good",
+          "what": "total",
+          "before": 4205,
+          "after": 4760,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity.",
+          "ledger": [
+            "L20"
+          ],
+          "ownerDecision": "OD7"
+        },
+        {
+          "estimate": "eea12cf2-4352-4ed7-8a57-85fce8b68784",
+          "key": "T22",
+          "option": "good",
+          "what": "total",
+          "before": 8245,
+          "after": 9000,
+          "stage": "cavity",
+          "why": "The exterior walls are blown dense: a 25 lb bag covers 35 sq ft of a 2x4 wall and fills the cavity; the crawlspace batt is the size whose R-value and thickness fit; the basement rim joist batt is the size whose R-value and thickness fit.",
+          "ledger": [
+            "L20",
+            "L22"
+          ],
+          "ownerDecision": "OD7, OD8"
+        },
+        {
+          "estimate": "eea12cf2-4352-4ed7-8a57-85fce8b68784",
+          "key": "T22",
+          "option": "good",
+          "what": "bullets",
+          "before": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Fills the full cavity",
+            "Insulates the floor above the crawlspace",
+            "Fills the rim joist bays"
+          ],
+          "after": [
+            "Brings your attic to current code R-value",
+            "Dense cellulose fills gaps and blocks air movement",
+            "Installed from outside or inside with minimal disruption",
+            "Insulates the floor above the crawlspace",
+            "Fills the rim joist bays"
+          ],
+          "stage": "cavity",
+          "why": "\"Fills the full cavity\" is said only when the cavity is filled.",
+          "ledger": [
+            "L23"
+          ],
+          "ownerDecision": null
+        },
+        {
+          "estimate": "e40b44db-aefa-4769-8ab8-c125ab859d7d",
+          "key": "E01",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "e40b44db-aefa-4769-8ab8-c125ab859d7d",
+          "key": "E01",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "e40b44db-aefa-4769-8ab8-c125ab859d7d",
+          "key": "E01",
+          "option": "best",
+          "what": "headline",
+          "before": "Better $1,500",
+          "after": "Best $1,500",
+          "stage": "money",
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "dbcf8dab-1b7c-4cc4-8d69-edc6568bc39d",
+          "key": "E02",
+          "option": "best",
+          "what": "not_shown",
+          "before": 968785,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "bdf1bf7d-7817-4685-8d1b-f68fdcc1b594",
+          "key": "E08",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Better ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "bdf1bf7d-7817-4685-8d1b-f68fdcc1b594",
+          "key": "E08",
+          "option": "better",
+          "what": "total",
+          "before": 2450,
+          "after": 1500,
+          "stage": "cavity",
+          "why": "The insulation already in the exterior walls takes its room in the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L19",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "bdf1bf7d-7817-4685-8d1b-f68fdcc1b594",
+          "key": "E08",
+          "option": "best",
+          "what": "total",
+          "before": 3435,
+          "after": 2615,
+          "stage": "cavity",
+          "why": "The insulation already in the exterior walls takes its room in the cavity.",
+          "ledger": [
+            "L19"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "bdf1bf7d-7817-4685-8d1b-f68fdcc1b594",
+          "key": "E08",
+          "option": "better",
+          "what": "headline",
+          "before": "Better $2,450",
+          "after": "Better $1,500",
+          "stage": "cavity",
+          "why": "The recommended option's total moved: The insulation already in the exterior walls takes its room in the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L19",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "e23494d9-6a28-4529-8c02-bd138d33e690",
+          "key": "E09",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "e23494d9-6a28-4529-8c02-bd138d33e690",
+          "key": "E09",
+          "option": "better",
+          "what": "not_shown",
+          "before": 2450,
+          "after": null,
+          "stage": "cavity",
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "e23494d9-6a28-4529-8c02-bd138d33e690",
+          "key": "E09",
+          "option": "best",
+          "what": "total",
+          "before": 4975,
+          "after": 1500,
+          "stage": "cavity",
+          "why": "The insulation already in the exterior walls takes its room in the cavity; the minimum job charge is its own line.",
+          "ledger": [
+            "L19",
+            "L2"
+          ],
+          "ownerDecision": "OD5"
+        },
+        {
+          "estimate": "e23494d9-6a28-4529-8c02-bd138d33e690",
+          "key": "E09",
+          "option": "best",
+          "what": "headline",
+          "before": "Better $2,450",
+          "after": "Best $1,500",
+          "stage": "cavity",
+          "why": "Better is no longer shown, so the recommended option is Best.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1"
+        },
+        {
+          "estimate": "477f7ae0-b26c-4d5f-805f-b2bd571ae2fd",
+          "key": "E10",
+          "option": "best",
+          "what": "not_shown",
+          "before": 6245,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "3c05baa7-4e4a-4ca3-82aa-21a58d14f579",
+          "key": "E11",
+          "option": "good",
+          "what": "not_shown",
+          "before": 4999.99,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs $5,000, more than Better ($4,660), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        },
+        {
+          "estimate": "356f4fc3-1274-4bca-8b56-8ccda64a3b5e",
+          "key": "E12",
+          "option": "better",
+          "what": "not_shown",
+          "before": 5220,
+          "after": null,
+          "stage": "money",
+          "why": "Not shown to the customer (it does not step up): it costs $5,220, more than Best ($4,200), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6"
+        }
+      ],
+      "unexplained": 0,
+      "bundle": "5ecebe2c0f390417"
+    },
+    "live": {
+      "estimates": 78,
+      "violations": {
+        "before": {
+          "estimates": 78,
+          "failing": {
+            "items_add_up": 13,
+            "same_work_same_price": 60,
+            "options_step_up": 18,
+            "labels_match_work": 6,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 78,
+            "valid_until_is_expiry": 16
+          },
+          "violations": {
+            "items_add_up": 13,
+            "same_work_same_price": 63,
+            "options_step_up": 30,
+            "labels_match_work": 6,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 1171,
+            "valid_until_is_expiry": 16
+          },
+          "violationsByKind": {
+            "items_add_up": {
+              "printed": 13
+            },
+            "same_work_same_price": {
+              "removal": 2,
+              "insulation": 13,
+              "air_sealing": 48
+            },
+            "options_step_up": {
+              "duplicate_shown": 6,
+              "not_increasing_override": 14,
+              "not_increasing": 10
+            },
+            "labels_match_work": {
+              "removal_not_priced": 6
+            },
+            "cavity_not_overfilled": {},
+            "finite_amounts": {},
+            "same_price_text": {
+              "accept_sentence": 234,
+              "signed_page": 234,
+              "signed_pdf": 234,
+              "signed_email": 234,
+              "office_email": 234,
+              "office_list": 1
+            },
+            "valid_until_is_expiry": {
+              "day_after": 16
+            }
+          },
+          "storedQuotes": 77,
+          "storedQuotesValidUntilOff": 16,
+          "quotedEstimates": 76,
+          "quotedEstimatesRepricedTheSame": 75,
+          "repricedDifferently": [
+            {
+              "id": "a0c1dbc7-bd1b-4129-93fd-532806b82ce7",
+              "sent": {
+                "best": 4325,
+                "good": 3370,
+                "better": 4325
+              },
+              "today": {
+                "good": 3165,
+                "better": 3830,
+                "best": 3830
+              },
+              "editedAfterSent": true
+            }
+          ]
+        },
+        "after": {
+          "estimates": 78,
+          "failing": {
+            "items_add_up": 0,
+            "same_work_same_price": 0,
+            "options_step_up": 0,
+            "labels_match_work": 0,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 0,
+            "valid_until_is_expiry": 0
+          },
+          "violations": {
+            "items_add_up": 0,
+            "same_work_same_price": 0,
+            "options_step_up": 0,
+            "labels_match_work": 0,
+            "cavity_not_overfilled": 0,
+            "finite_amounts": 0,
+            "same_price_text": 0,
+            "valid_until_is_expiry": 0
+          }
+        }
+      },
+      "optionTotals": {
+        "unchanged": 204,
+        "moved": 0,
+        "notShown": 30,
+        "newlyShown": 0
+      },
+      "headlineSum": {
+        "before": 359290,
+        "after": 359290
+      },
+      "changes": [
+        {
+          "estimate": "a0c1dbc7-bd1b-4129-93fd-532806b82ce7",
+          "status": "draft",
+          "option": "best",
+          "what": "not_shown",
+          "before": 3830,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000009",
+          "status": "signed",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1560,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,560), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000009",
+          "status": "signed",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1560,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,560), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000009",
+          "status": "signed",
+          "option": "best",
+          "what": "headline",
+          "before": 1560,
+          "after": 1560,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000021",
+          "status": "signed",
+          "option": "best",
+          "what": "not_shown",
+          "before": 6005,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000025",
+          "status": "lost",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1425,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,425), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000025",
+          "status": "lost",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1425,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,425), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000025",
+          "status": "lost",
+          "option": "best",
+          "what": "headline",
+          "before": 1425,
+          "after": 1425,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000029",
+          "status": "lost",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1710,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,710), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000029",
+          "status": "lost",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1710,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,710), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000029",
+          "status": "lost",
+          "option": "best",
+          "what": "headline",
+          "before": 1710,
+          "after": 1710,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000039",
+          "status": "lost",
+          "option": "best",
+          "what": "not_shown",
+          "before": 4295,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-00000000005a",
+          "status": "lost",
+          "option": "best",
+          "what": "not_shown",
+          "before": 3850,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000063",
+          "status": "lost",
+          "option": "best",
+          "what": "not_shown",
+          "before": 9500,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-00000000007b",
+          "status": "signed",
+          "option": "best",
+          "what": "not_shown",
+          "before": 10135,
+          "after": null,
+          "why": "Not shown to the customer (it repeats another option): it is the same work as Better. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000094",
+          "status": "lost",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000094",
+          "status": "lost",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000094",
+          "status": "lost",
+          "option": "best",
+          "what": "headline",
+          "before": 1500,
+          "after": 1500,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000df",
+          "status": "lost",
+          "option": "best",
+          "what": "bullets",
+          "before": 4,
+          "after": 3,
+          "why": "The bullets promise only work that is priced in this option.",
+          "ledger": [
+            "L15"
+          ],
+          "ownerDecision": null,
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000e4",
+          "status": "lost",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1665,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,665), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000e4",
+          "status": "lost",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1665,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,665), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000e4",
+          "status": "lost",
+          "option": "best",
+          "what": "headline",
+          "before": 1665,
+          "after": 1665,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000ed",
+          "status": "signed",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1665,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,665), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000ed",
+          "status": "signed",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1665,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,665), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000ed",
+          "status": "signed",
+          "option": "best",
+          "what": "headline",
+          "before": 1665,
+          "after": 1665,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000f5",
+          "status": "signed",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000f5",
+          "status": "signed",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-0000000000f5",
+          "status": "signed",
+          "option": "best",
+          "what": "headline",
+          "before": 1500,
+          "after": 1500,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-00000000010e",
+          "status": "signed",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1650,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,650), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-00000000010e",
+          "status": "signed",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1650,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,650), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-00000000010e",
+          "status": "signed",
+          "option": "best",
+          "what": "headline",
+          "before": 1650,
+          "after": 1650,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000112",
+          "status": "signed",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000112",
+          "status": "signed",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000112",
+          "status": "signed",
+          "option": "best",
+          "what": "headline",
+          "before": 1500,
+          "after": 1500,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000122",
+          "status": "expired",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000122",
+          "status": "expired",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000122",
+          "status": "expired",
+          "option": "best",
+          "what": "headline",
+          "before": 1500,
+          "after": 1500,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000126",
+          "status": "expired",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1380,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,380), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000126",
+          "status": "expired",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1380,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,380), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000126",
+          "status": "expired",
+          "option": "best",
+          "what": "headline",
+          "before": 1380,
+          "after": 1380,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000132",
+          "status": "ready",
+          "option": "good",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000132",
+          "status": "ready",
+          "option": "better",
+          "what": "not_shown",
+          "before": 1500,
+          "after": null,
+          "why": "Not shown to the customer (it does not step up): it costs the same as Best ($1,500), the next option up. The estimator is told.",
+          "ledger": [
+            "L14"
+          ],
+          "ownerDecision": "OD6",
+          "stage": "money"
+        },
+        {
+          "estimate": "de000000-0000-4000-8000-000000000132",
+          "status": "ready",
+          "option": "best",
+          "what": "headline",
+          "before": 1500,
+          "after": 1500,
+          "why": "Better is no longer shown, so the recommended option is Best, at the same price.",
+          "ledger": [
+            "L14",
+            "L9"
+          ],
+          "ownerDecision": "OD6, OD1",
+          "stage": "money"
+        },
+        {
+          "estimate": "c6b22b65-1e3e-4574-a799-989b9d63d1fd",
+          "status": "draft",
+          "option": "better",
+          "what": "office_list",
+          "before": 2020,
+          "after": 2730,
+          "why": "The office list shows the recommended option's price (the pick, else Better) instead of the stored model price, like the phone and the quote.",
+          "ledger": [
+            "L9"
+          ],
+          "ownerDecision": "OD1",
+          "stage": "quotes"
+        }
+      ],
+      "unexplained": 0,
+      "officeListMoved": 1,
+      "bundle": "1fffe7bf3c72bbe9",
+      "export": {
+        "estimates": 78
+      }
+    }
+  },
+  "unexplained": 0
+}

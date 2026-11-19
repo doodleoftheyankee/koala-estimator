@@ -46,10 +46,14 @@ await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE
 const page = await ctx.newPage();
 const logs = [];
 let roofNotFoundStep = false; // the lookup of an unknown address answers 404 on purpose
-let offlineStep = false; // with no signal, the sync's pull of /api/estimates fails on purpose (caught)
+let offlineStep = false; // with no signal, the app's requests fail on purpose (caught)
+let signedPushStep = false; // the phone pushes a change to a quote the customer signed: 409 locked, on purpose (L35)
+let unreachableStep = false; // the database is down on purpose: Koala answers 503 (L36)
 const expected = (m) =>
   (roofNotFoundStep && m.location().url.endsWith('/api/roof')) ||
-  (offlineStep && m.location().url.endsWith('/api/estimates') && m.text().includes('ERR_INTERNET_DISCONNECTED'));
+  (offlineStep && m.text().includes('ERR_INTERNET_DISCONNECTED')) ||
+  (signedPushStep && m.location().url.endsWith('/api/sync') && m.text().includes('409')) ||
+  (unreachableStep && m.text().includes('status of 503'));
 page.on('console', (m) => m.type() === 'error' && !expected(m) && logs.push(`${m.text()} (${m.location().url})`));
 page.on('pageerror', (e) => logs.push('PAGEERROR ' + e.message));
 const step = (s) => console.log('•', s);
@@ -322,8 +326,12 @@ await page.screenshot({ path: SHOTS + '05a-send-step.png', fullPage: true });
 console.log('  send checklist:', (await page.locator('body').innerText()).split('\n').filter((l) => l.trim()).slice(0, 40).join(' | '));
 // The seeded settings have a placeholder warranty and no license, phone or state.
 const GAPS = 'The business profile is not finished: add the license number, the office phone, the state and the warranty.';
-check((await page.getByText(GAPS, { exact: true }).count()) === 1, 'the Send checklist says the business profile is not finished, and what it needs');
-check((await page.getByText('Ask the owner or the office to finish the business profile.').count()) === 1, 'and tells the estimator who can finish it');
+{
+  const item = page.locator('li[data-check="profile"]');
+  const text = await item.innerText();
+  check((await item.getAttribute('data-ok')) === 'no' && text.includes(GAPS), 'the Send checklist says the business profile is not finished, and what it needs');
+  check(text.includes('Ask the owner or the office to finish it.') && (await item.getByRole('button').count()) === 0, 'and tells the estimator who can finish it (no button an estimator cannot use)');
+}
 check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'Send waits for the profile');
 const gateEst = psql("select id from estimates order by created_at desc limit 1");
 {
@@ -361,14 +369,117 @@ const OWNER = { id: '11111111-1111-4111-8111-111111111111', email: 'owner@koala.
 // The phone learns the profile is finished with its next download (here: opening the app again).
 await page.reload();
 await page.getByRole('button', { name: /^4 Send/ }).click();
-await page.getByText('Business profile finished (name, phone, license, warranty and terms)').waitFor({ timeout: 15000 });
+await page.locator('li[data-check="profile"][data-ok="yes"]').getByText('Business profile finished').waitFor({ timeout: 15000 });
 check(true, 'the phone sees the finished profile with its next download');
+
+step('Send checklist: plain words, and a Fix button that goes to the item (L34)');
+{
+  // An area with no size is named, not "Too small: expected number to be >0", and Add size opens it.
+  await page.getByRole('button', { name: /^2 Areas/ }).click();
+  await page.getByRole('button', { name: '+ Crawlspace' }).click();
+  await page.getByRole('button', { name: /^4 Send/ }).click();
+  const item = page.locator('li[data-check^="area:"][data-ok="no"]');
+  await item.waitFor();
+  check((await item.innerText()).includes('Crawlspace has no size yet. It is not in the price.'), 'the checklist names the crawlspace with no size, in plain words');
+  check(!(await page.locator('main').innerText()).includes('Too small'), 'and never says "Too small: expected number to be >0"');
+  check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'Send waits for it');
+  await item.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: SHOTS + '05d-send-checklist-fix.png' });
+  await item.getByRole('button', { name: 'Add size' }).click();
+  await page.waitForFunction(() => /^area-.+-sqft$/.test(document.activeElement?.id ?? ''), null, { timeout: 5000 });
+  const crawl = page.locator('section[id^="area-"]', { hasText: 'Crawlspace' });
+  check((await crawl.count()) === 1 && (await page.evaluate(() => document.activeElement?.id)) === `${await crawl.getAttribute('id')}-sqft`, "Add size opens the Areas step at the crawlspace's square feet");
+  await crawl.getByRole('button', { name: 'Delete area' }).click();
+  await page.getByRole('button', { name: /^4 Send/ }).click();
+  await page.locator('li[data-check="price"][data-ok="yes"]').waitFor();
+  check((await page.locator('li[data-check^="area:"][data-ok="no"]').count()) === 0, 'with the crawlspace gone, every area is ready again');
+}
+
+step('a price beyond what the estimator may quote alone: Request approval (L34)');
+let asked;
+{
+  await page.getByRole('button', { name: /^3 Options/ }).click();
+  const good = page.getByRole('group', { name: 'Good option' });
+  await good.getByRole('button', { name: 'Change price' }).click();
+  const hint = await good.getByText(/^Estimators can move the price up to 10% from \$/).innerText();
+  const modelGood = Number(hint.match(/from \$([\d,]+)/)[1].replace(/,/g, ''));
+  asked = Math.round(modelGood * 1.3);
+  await good.getByLabel('Customer price').fill(String(asked));
+  await good.getByLabel('Reason (required)').fill('Extra baffles and a second hatch on Good');
+  await good.getByRole('button', { name: 'Apply', exact: true }).click();
+  const explain = page.getByLabel('Explain this change (needed to send)');
+  await explain.first().waitFor();
+  while ((await explain.count()) > 0) await explain.first().fill('Customer wants the extra baffles in Good');
+  await page.getByRole('button', { name: /^4 Send/ }).click();
+  const item = page.locator('li[data-check="price:good"]');
+  await item.waitFor();
+  const dollars = (n) => '$' + n.toLocaleString('en-US');
+  // The range is 10% either way of the model price, and never under the floor margin (Good's changed
+  // line raised its cost, so the floor can be above 90% of the model price).
+  const max = Math.floor(modelGood * 1.1 + 1e-6);
+  const text = await item.innerText();
+  const said = text.match(/Good: .*Request approval to send \$[\d,]+\./)?.[0] ?? text;
+  const range = said.match(/You can quote \$([\d,]+) to \$([\d,]+) on your own \(estimators may change it up to 10%\)\./);
+  const lo = range ? Number(range[1].replace(/,/g, '')) : NaN;
+  check(
+    said.startsWith(`Good: ${dollars(asked)} is 30% above the model price of ${dollars(modelGood)}. You can quote `) &&
+      said.endsWith(`Request approval to send ${dollars(asked)}.`) &&
+      range && Number(range[2].replace(/,/g, '')) === max && lo >= Math.ceil(modelGood * 0.9 - 1e-6) && lo <= max,
+    `the checklist names the price, the model price and the range: "${said}"`,
+  );
+  check((await item.getByRole('button', { name: 'Change the price' }).count()) === 1, 'with a Fix that goes back to the price');
+  check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits');
+  await item.getByLabel(/Why this price\?/).fill('Two hatches and baffles the model does not count');
+  await item.getByRole('button', { name: 'Request approval' }).click();
+  await item.getByText(`Waiting for the owner or the office to approve ${dollars(asked)}.`).waitFor({ timeout: 15000 });
+  check(
+    psql(`select status || ':' || price::int || ':' || model_price::int || ':' || below_floor || ':' || (requested_by = '${EST.id}') from price_approvals`) === `pending:${asked}:${modelGood}:false:true`,
+    'the request is stored for this option, its exact price and the model price, as the estimator\'s',
+  );
+  await item.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: SHOTS + '05e-request-approval.png' });
+  const id = psql('select id from price_approvals');
+  const self = await ctx.request.patch(BASE + `/api/approvals/${id}`, { data: { decision: 'approved' } });
+  check(self.status() === 403, `an estimator cannot approve it: ${self.status()}`);
+  const again = await ctx.request.post(BASE + '/api/approvals', { data: { estimateId: psql('select estimate_id from price_approvals'), tier: 'good', price: asked } });
+  check(again.ok() && (await again.json()).already === true && psql('select count(*) from price_approvals') === '1', 'asking twice keeps one request');
+}
+
+step('the owner approves it from the Estimates page (L34)');
+{
+  const actx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+  await actx.addCookies([sessionCookie(OWNER)]);
+  const ap = await actx.newPage();
+  ap.on('pageerror', (e) => logs.push('OWNER PAGEERROR ' + e.message));
+  ap.on('console', (m) => m.type() === 'error' && logs.push(`${m.text()} (${m.location().url})`));
+  await ap.goto(BASE + '/estimates');
+  const queue = ap.getByRole('list', { name: 'Prices waiting for approval' });
+  await queue.waitFor();
+  const row = await queue.innerText();
+  check(/1 price waiting for approval/.test(await ap.locator('main').innerText()), 'the owner sees one price waiting for approval');
+  check(row.includes('Pat Lee') && row.includes(`Good: $${asked.toLocaleString('en-US')}, 30% above the model price of`) && row.includes('Asked by Eddie Estimator') && row.includes('Two hatches and baffles'), 'with the customer, the option, the price against the model price, who asked and why');
+  await ap.screenshot({ path: SHOTS + '05f-approval-queue.png', fullPage: true });
+  await queue.getByRole('button', { name: `Approve Good at $${asked.toLocaleString('en-US')} for Pat Lee` }).click();
+  await queue.waitFor({ state: 'detached', timeout: 15000 });
+  check(psql("select status || ':' || decided_role || ':' || (decided_by = '11111111-1111-4111-8111-111111111111') from price_approvals") === 'approved:owner:true', 'the approval is recorded with who decided and in which role');
+  await actx.close();
+}
+{
+  const item = page.locator('li[data-check^="price"]').first();
+  await item.getByRole('button', { name: 'Check again' }).click();
+  await page.locator('li[data-check="price"][data-ok="yes"]').getByText('Prices within your limits or approved').waitFor({ timeout: 15000 });
+  check(await page.getByRole('button', { name: /Send quote to customer/ }).isEnabled(), 'once approved, the quote can be sent at that price');
+}
 
 step('send');
 await page.getByRole('button', { name: /Send quote to customer/ }).click();
 await page.getByText(/Quote v1 sent/).waitFor({ timeout: 30000 });
 const link = await page.locator('a[href*="/q/"]').first().getAttribute('href');
 const estId = psql("select id from estimates order by created_at desc limit 1");
+check(
+  psql(`select (snapshot->'approvals'->0->>'price')::int || ':' || (snapshot->'options' @> '[{"tier": "good", "price": ${asked}}]') from quotes where estimate_id = '${estId}'`) === `${asked}:true`,
+  'the quote went out at the approved Good price, and keeps the approval it used',
+);
 await waitForDb(`select count(*) from photos where estimate_id = '${estId}' and uploaded_at is not null and area_id is not null`, '1', 'area photo uploaded after the estimate synced, linked to its area');
 check(psql(`select client_doc->'measurements' ? (select id::text from estimate_areas where estimate_id = '${estId}' limit 1) from estimates where id = '${estId}'`) === 't', 'measurement saved with the estimate on the server');
 const photoList = await page.evaluate((id) => fetch('/api/photos?estimateId=' + id).then((r) => r.json()), estId);
@@ -391,6 +502,25 @@ check(psql(`select status from estimates where id = '${estId}'`) === 'sent', 'op
   check(waitingPrices.length > 0 && money(total) === waitingPrices.reduce((s, p) => s + money(p), 0), `"Waiting to sign" ${total} is the sum of the sent rows' prices (${waitingPrices.join(' + ')})`);
 }
 await page.screenshot({ path: SHOTS + '05b-list-sent.png' });
+
+step('a change on the phone while the customer signs, and another estimate made offline (L35)');
+await ctx.setOffline(true);
+offlineStep = true;
+await page.locator('button[data-status=sent]', { hasText: 'Pat Lee' }).click();
+await page.getByLabel('Notes for the quote').fill('Customer asked about the garage too');
+await page.waitForTimeout(800); // saved on the phone
+await page.getByRole('button', { name: 'Back to estimates' }).click();
+await page.getByRole('button', { name: 'New estimate', exact: true }).click();
+await page.getByLabel('First name').fill('Kim');
+await page.getByLabel('Last name').fill('Pending');
+await page.getByLabel('Street address').fill('5 Queue St');
+await page.getByLabel('ZIP').fill('19711');
+await page.getByRole('button', { name: 'Next' }).click();
+await page.getByRole('button', { name: '+ Attic' }).click();
+await page.getByLabel('Square feet').fill('500');
+await page.waitForTimeout(800);
+await page.getByRole('button', { name: 'Back to estimates' }).click();
+check(psql("select count(*) from customers where last_name = 'Pending'") === '0', 'nothing reaches the office while the phone is offline');
 
 step('customer signs');
 const cust = await browser.newContext(phone);
@@ -436,6 +566,28 @@ await cp.screenshot({ path: SHOTS + '07-signed.png', fullPage: true });
   check(thanks.includes('Download your signed copy below.') && !/emailed/i.test(thanks), 'with email not set up, the thank-you page points to the download, not to an email');
   check(/You accepted .* for \$[\d,]+\. /.test(thanks) && !/\$[\d,]+\.\d\d/.test(thanks), 'and reads the price in whole dollars');
 }
+
+step('the phone hears of the signature: signed, read-only, the change not applied; the other estimate syncs (L35)');
+signedPushStep = true;
+await ctx.setOffline(false);
+offlineStep = false;
+await page.evaluate(() => window.dispatchEvent(new Event('online')));
+await waitForDb("select count(*) from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Pending'", '1', 'the estimate made offline still syncs');
+await page.locator('button[data-status=signed]', { hasText: 'Pat Lee' }).waitFor({ timeout: 15000 });
+await page.locator('button[data-status=signed]', { hasText: 'Pat Lee' }).click();
+await page.getByText('The customer signed this quote.').waitFor({ timeout: 15000 });
+{
+  const main = await page.locator('main').innerText();
+  check(main.includes('It is read-only. Your unsent change was not applied.'), 'the phone shows the signed quote, read-only, and says the change was not applied');
+  check(!main.includes('changed on another device') && !main.includes('Keep mine'), 'no false "changed on another device"');
+  check(
+    psql(`select status || ':' || (coalesce(notes, '') || coalesce(client_doc->>'notes', '') not like '%garage too%') from estimates where id = '${estId}'`) === 'signed:true',
+    'the office copy stays as signed, without the unsent change',
+  );
+}
+await page.screenshot({ path: SHOTS + '07b-phone-signed-locked.png' });
+await page.getByRole('button', { name: 'Back to estimates' }).click();
+signedPushStep = false;
 
 step('db checks after signing');
 check(psql("select count(*) from estimate_lines where is_overridden and override_reason like 'Low clearance%'") !== '0', 'overridden line synced with its reason');
@@ -1067,6 +1219,43 @@ await page.waitForTimeout(6000);
 console.log('  db after reconnect:', psql("select count(*) || ' estimates; ' || string_agg(c.last_name || ':' || e.priced_offline, ',') from estimates e join customers c on c.id=e.customer_id"));
 await page.screenshot({ path: SHOTS + '10-synced-list.png' });
 
+step("Koala's database unreachable is not a sign-out (L36)");
+{
+  const rest = (down) => fetch(`http://localhost:${process.env.MOCK_PORT}/__e2e/rest`, { method: 'POST', body: JSON.stringify({ down }) });
+  unreachableStep = true;
+  await rest(true);
+  await page.goto(BASE + '/field');
+  await page.getByRole('heading', { name: 'Estimates' }).waitFor({ timeout: 15000 });
+  await page.getByText("Can't reach Koala right now.").waitFor({ timeout: 20000 });
+  check(new URL(page.url()).pathname === '/field', 'opening /field with the database down opens the field app from the phone, not the sign-in page');
+  check((await page.getByText('Pat Lee').count()) > 0 && (await page.getByText('Your work is saved on this phone. It syncs when Koala is back.').count()) === 1, "with the phone's estimates and \"Can't reach Koala right now\"");
+  await page.screenshot({ path: SHOTS + '10b-field-unreachable.png' });
+  const api = await ctx.request.get(BASE + '/api/estimates');
+  const body = await api.json();
+  check(api.status() === 503 && body.error === 'unreachable' && /Can't reach Koala right now/.test(body.message), `APIs answer 503, not "signed out": ${api.status()} ${body.error}`);
+  const uctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await uctx.addCookies([sessionCookie(OWNER)]);
+  const up = await uctx.newPage();
+  await up.goto(BASE + '/estimates');
+  const at = new URL(up.url());
+  check(at.pathname === '/unreachable' && at.searchParams.get('next') === '/estimates', `an office page goes to /unreachable, keeping the page: ${at.pathname}${at.search}`);
+  check((await up.getByRole('heading', { name: 'Can’t reach Koala right now' }).count()) === 1 && (await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/estimates', 'it says so, with Try again back to the page');
+  await up.screenshot({ path: SHOTS + '10c-unreachable-page.png' });
+  await up.goto(BASE + '/unreachable?next=//evil.example/x');
+  check((await up.getByRole('link', { name: 'Try again' }).getAttribute('href')) === '/', 'next= is only ever a path on this site');
+  const signedOut = await browser.newContext();
+  const sp = await signedOut.newPage();
+  await sp.goto(BASE + '/estimates');
+  check(new URL(sp.url()).pathname === '/login', 'a request with no session still goes to sign in, never through');
+  await signedOut.close();
+  await uctx.close();
+  await rest(false);
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await page.getByText("Can't reach Koala right now.").waitFor({ state: 'detached', timeout: 20000 });
+  check(true, 'when the database answers again, the banner goes');
+  unreachableStep = false;
+}
+
 step('owner screens');
 const octx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await octx.addCookies([sessionCookie(OWNER)]);
@@ -1100,13 +1289,40 @@ await op.screenshot({ path: SHOTS + '11a-owner-roof-page.png', fullPage: true })
 console.log('  estimates rows mention Lee/Offline:', (await op.content()).includes('Lee'), (await op.content()).includes('Offline'));
 await op.goto(BASE + '/admin/pricing');
 await op.screenshot({ path: SHOTS + '12-pricing.png', fullPage: true });
+{
+  // L10: the margin is labelled net, after overhead, with what it means in gross terms.
+  check((await op.getByLabel('Target net margin (after overhead)').count()) === 1, 'Pricing labels the margin "Target net margin (after overhead)"');
+  const preview = await op.locator('[data-margin-preview]').innerText();
+  check(preview.startsWith('With 63% overhead, a 15% net margin is about a 48% gross margin: prices are 1.92 times the direct job cost.'), `and previews the gross margin: "${preview.split('.')[0]}"`);
+  check(psql("select value #>> '{}' from app_settings where key = 'target_margin_pct'") === '0.15', 'the stored value is unchanged');
+  // L38: the code banner comes from the data; the crawlspace placeholder is the floor priced.
+  const codeText = await op.locator('section', { has: op.locator('#code') }).last().innerText();
+  check(codeText.includes('these minimums come from 2018 IECC (local) and company default.') && !/Newark|New Castle|Delaware|climate zone/.test(codeText), 'the code banner names the editions in the data, no town or climate zone');
+  const crawlTiers = op.locator('form', { has: op.locator('input[name="job_type"][value="crawlspace"]') });
+  check((await crawlTiers.locator('input[placeholder="Code minimum (R-19)"]').count()) === 3, 'the crawlspace Target R placeholder shows the floor priced, R-19 (not the crawl wall R-10)');
+}
+// L11: a cost far outside the usual range waits for "This cost is right"; the step puts it back.
 const cost = op.getByLabel(/cost per unit/i).first();
+const costWas = await cost.inputValue();
+const ocsfCost = () => psql("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default");
+const ocsfBefore = ocsfCost();
 await cost.fill('15.25');
 await cost.press('Tab');
 const form = cost.locator('xpath=ancestor::form[1]');
 await form.getByRole('button', { name: /save/i }).click();
-await op.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+await form.getByText(/Not saved\. \$15\.25 per board ft is 102 times more than the usual \$0\.06 to \$0\.24 \(Starting range: half to twice/).waitFor({ timeout: 15000 });
+check(ocsfCost() === ocsfBefore, `a cost 100 times the usual is refused, with the usual range and where it comes from (still ${ocsfBefore})`);
+await form.scrollIntoViewIfNeeded();
+await op.screenshot({ path: SHOTS + '12b-pricing-cost-range.png' });
+await form.getByRole('switch', { name: /This cost is right/ }).click();
+await form.getByRole('button', { name: /save/i }).click();
+await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+check(Number(ocsfCost()) === 15.25, 'with "This cost is right" ticked it is saved');
 console.log('  material audit:', psql("select count(*) from audit_log where table_name='materials' and action='UPDATE' and actor_id='11111111-1111-4111-8111-111111111111'"));
+await cost.fill(costWas);
+await form.getByRole('button', { name: /save/i }).click();
+await form.getByText(/Saved/).first().waitFor({ timeout: 15000 });
+await waitForDb("select m.cost_per_unit from materials m join products p on p.id = m.product_id where p.code = 'ocsf' and m.is_default", ocsfBefore, `the step puts the open-cell cost back (${ocsfBefore})`);
 // A change that would break pricing must be refused and rolled back.
 await op.goto(BASE + '/admin/team');
 await op.screenshot({ path: SHOTS + '13-team.png', fullPage: true });

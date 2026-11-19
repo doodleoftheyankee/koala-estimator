@@ -498,6 +498,144 @@ and dates with lib/format.ts (formatDateLong, formatDateTime, formatAuditTime, c
 quote's own formatUsd and the PDF's and emails' own date functions are gone. Output for a quote sent
 before is unchanged (the 2,926-file comparison above).
 
+=== Stage "flow": sending, approvals, signed while offline, Koala unreachable, Pricing words (L10, L11, L34-L36, L38, L23c) ===
+
+No price formula changes in this stage: no option total of either golden set moves, and the
+random quotes price exactly as after the quotes stage. What changes is what the estimator, the
+office and the owner are told, and what they may do.
+
+L34 The Send checklist is in plain words, one item per problem, each with a Fix button that opens
+    the place to fix it (a customer field, an area's size or its measuring sheet, an option, the
+    Business profile), or Request approval for a price beyond what the estimator may quote alone
+    (lib/field/sendChecks.ts, lib/field/fix.ts). The price policy names the price, the model price,
+    the lowest price the floor margin allows and the range the estimator may quote alone
+    (lib/pricing/policy.ts). An estimator (or the office) asks for one option's exact price; the
+    owner or the office decides it on /estimates ("Prices waiting for approval"); nobody decides
+    their own request; below the floor margin only the owner. An approval is bound to the estimate,
+    the option, the exact whole-dollar price and the model price it was asked against
+    (price_approvals, RLS; /api/approvals GET POST, /api/approvals/[id] PATCH); the quote is sent
+    at that price and keeps the approval it used (quotes.snapshot.approvals).
+    Examples (hand fixture, Good model $5,420, estimator limit 10%, floor 25%):
+      Good at $4,500: "good: price is 17.0% from the model price; estimators may change it up to 10%.
+        Ask the office to send." -> "Good: $4,500 is 17% below the model price of $5,420. You can
+        quote $4,878 to $5,962 on your own (estimators may change it up to 10%). Request approval
+        to send $4,500."
+      Good at $3,500: "good: margin 7.2% is below the 25% floor. Owner approval required." ->
+        "Good: $3,500 is below the 25% floor margin; the lowest price it allows is $4,333 (model
+        price $5,420). You can quote $4,878 to $5,962 on your own (estimators may change it up to
+        10%). Only the owner can approve $3,500."
+      An estimate with a crawlspace of no size: "Too small: expected number to be >0" -> "Crawlspace
+        has no size yet. It is not in the price." with Add size (opens the Areas step at that
+        area's square feet).
+      e2e (seeded): Good $3,933 against the model's $3,025 -> "Good: $3,933 is 30% above the model
+        price of $3,025. You can quote $2,881 to $3,327 on your own …" (the floor margin lifts the
+        low end above 90% of the model because Good's labor was raised); Request approval; the
+        owner approves it on /estimates; the quote goes out with Good at $3,933.
+      With line changes that raise the cost so far that no price within 10% clears the floor:
+        "… With these changes no price you can quote on your own (within 10% of the model price)
+        clears the 25% floor margin. Request approval to send $8,245."
+    Owner decision: none new (audit RF-02, UX-04; the record's approval rules). Added here: an
+    approval also binds the model price, so a re-priced estimate needs a new one (owner question).
+    Tests: lib/field/sendChecks.test.ts (all 10, e.g. "an area with no size is named, not "Too
+    small: expected number to be >0", with an Add size button", "a broken measurement is named
+    (RF-07), with Finish measuring", "a request waiting or declined says so; an approved price can
+    be sent"); lib/pricing/support.test.ts "price policy: what an estimator may quote alone, and
+    approvals (L34)" (6); lib/pricing/overrides.test.ts "applies the estimator limit against the
+    pure model price when only line overrides exist" (now expects the full message);
+    lib/quotes/approvals.test.ts; tests/sql/40_accuracy.test.sql price approvals; e2e "Send
+    checklist: plain words, and a Fix button that goes to the item (L34)", "a price beyond what the
+    estimator may quote alone: Request approval (L34)", "the owner approves it from the Estimates
+    page (L34)".
+
+L35 A signed estimate answers 'locked' before the row-version check (sync_upsert_estimate,
+    recreated with the same signature), and the phone says what happened to its unsent change.
+    Other unsynced estimates keep syncing. An empty state keeps the stored property's state (else
+    the business profile's); the database no longer writes in 'DE'.
+    Examples: SQL, a phone's edit made on version 2 of an estimate signed at version 3: {"status":
+      "conflict", "row_version": 3} -> {"status": "locked", "row_version": 3}. e2e: the phone edits
+      Pat Lee's sent quote offline while the customer signs: DRAFT + "This estimate was changed on
+      another device." (Keep mine / Use the other version) -> Signed, "The customer signed this
+      quote. It is read-only. Your unsent change was not applied."; the estimate made offline at
+      the same time (Kim Pending) syncs. Empty state on an IL property: "DE" -> "IL".
+    origin/main's phone already treats 'locked' as signed and read-only (its applySyncResult is the
+    same), so the live site works with the new answer (step 4 of this stage).
+    Owner decision: none needed (audit RF-05).
+    Tests: tests/sql/40_accuracy.test.sql "a signed estimate answers locked, not conflict", "an
+    empty state keeps the stored one"; lib/offline/syncCore.test.ts "a change made before the phone
+    heard of the signature is dropped, and the estimator is told (L35)"; e2e "a change on the phone
+    while the customer signs …", "the phone hears of the signature: signed, read-only, the change
+    not applied; the other estimate syncs (L35)".
+
+L36 Koala's database (or sign-in service) not answering is not a sign-out. lib/server/auth.ts
+    getSessionState() is ok | signed_out | unreachable; pages go to /unreachable?next=<same-site
+    path> ("Can't reach Koala right now", Try again, and the phone's own copy of the field or crew
+    app); APIs answer 503 {error: 'unreachable'}; proxy.ts does the same when the sign-in check gets
+    no answer. Unreachable never lets a request through: /unreachable reads no data, and a request
+    with no session still goes to sign in. The service worker (v10) opens the cached field app when
+    its page goes to /unreachable, and keeps it.
+    Examples (e2e, the database made unreachable: REST answers 503): estimator opens /field: /login
+      -> the phone's estimates with "Can't reach Koala right now. Your work is saved on this phone.
+      It syncs when Koala is back."; GET /api/estimates: 401 "Not signed in" -> 503 "unreachable";
+      owner opens /estimates: /login -> /unreachable?next=%2Festimates; /unreachable?next=//evil.
+      example/x: Try again goes to "/".
+    Owner decision: none needed (audit RF-04, UX-05).
+    Tests: lib/server/sessionState.test.ts (4, e.g. "the profile read: no answer or a server error
+    is 'unreachable'; a refused token is signed out", "the page it sends people to keeps where they
+    were going, on this site only"); e2e "Koala's database unreachable is not a sign-out (L36)".
+
+L38 The code banner on Pricing comes from the data, and the Target R placeholder shows the minimum
+    the engine prices. The photo-read prompt names no franchise, town or climate zone.
+    Examples: banner "seeded from the 2021 IECC (attic R-60). Delaware has used both … Confirm which
+      edition Newark and New Castle County enforce …" -> "these minimums come from 2018 IECC (local)
+      and company default. Confirm which edition your local building department enforces …";
+      crawlspace Target R placeholder "Code minimum (R-10)" (the crawl wall) -> "Code minimum
+      (R-19)" (the floor it prices); photo-read prompt "at Koala Insulation of Newark, Delaware (IECC
+      climate zone 4A)" -> no franchise words (prompt version photo-read-2026-11-19b).
+    Owner decision: hard rule 3 (audit RF-17, S2-F18).
+    Tests: lib/admin/codes.test.ts "the banner names the editions in the data …", "the crawlspace
+    placeholder shows the floor the engine prices (R-19), not the crawl wall (R-10)";
+    lib/ai/photoRead.test.ts "names no franchise, town or climate zone (L38, S2-F18, hard rule 3)";
+    e2e Pricing checks.
+
+L10 The margin setting is labelled "Target net margin (after overhead)", with its gross margin
+    shown as the owner types; the floor and ceiling hints say they are net too. Stored value
+    unchanged.
+    Example (seeded: 63% overhead, 15%): "Target margin" / "Gross margin on price (0–95%)" ->
+      "Target net margin (after overhead)" and "With 63% overhead, a 15% net margin is about a 48%
+      gross margin: prices are 1.92 times the direct job cost." target_margin_pct stays 0.15.
+    Owner decision: OD9 (audit S2-F10, RF-14).
+    Tests: lib/admin/settings.test.ts "is labelled net, after overhead, and previews the gross
+    margin", "the stored value is unchanged …"; the out-of-range test now names the field as the
+    page does ("Target net margin must be less than 95"); e2e Pricing checks.
+
+L11 Each material has a usual cost range and where it comes from (materials.typical_min,
+    typical_max, typical_source: half to twice the cost on file when the migration ran, unless a
+    range is set; the owner can enter a supplier's range). A cost outside it is refused until
+    "This cost is right" is ticked.
+    Example: open-cell $0.12 -> $15.25 per board ft: "Saved." -> "Not saved. $15.25 per board ft is
+      102 times more than the usual $0.06 to $0.24 (Starting range: half to twice the cost on file
+      when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is
+      right” to save it." Ticked: saved. (15.25 / 0.15, the middle of the range, is 102.) The e2e
+      step puts $0.12 back at its end.
+    Owner decision: the record's default (half to twice the starting cost until real ranges are
+    entered).
+    Tests: lib/admin/pricingForms.test.ts "a cost 100 times the usual is caught, with the range and
+    its source" ($12: 80 times), "a cost inside the range, or a material with no range, is fine",
+    "the range fields and the confirmation are read from the form"; tests/sql/40_accuracy.test.sql
+    L11 block; e2e Pricing step.
+
+L23c (checker, no customer value) An R exactly on the 0.05 rounding boundary is not "below" by
+    floating-point noise. Seed 99999 (20,000 quotes) flagged 2.1 in of closed-cell on R-19 in a
+    10.7 in cavity: it is exactly R-32.65 (16,032.4 sq ft x 2.1 in = 33,668.04 board ft), said R-32.7
+    as every R is said to 0.1 rounded half up (3.5 in of open-cell, R-12.95, reads R-13), but the
+    check read the quantity back as R-32.649999999999995. The check allows 1e-9 for float noise only;
+    the rule (an item's R within 0.05 of what its quantity gives) is unchanged.
+    Example: seed 99999, labels_match_work qty_below_stated_r 1 -> 0; the item still reads R-32.7.
+    Owner decision: none (checker).
+    Tests: lib/pricing/phase1.test.ts "2.1 in of closed-cell foam on R-19 reads R-32.7, and the check
+    agrees the quantity gives it" (failed before), "a stated R more than the rounding above what the
+    quantity gives is still caught" (R-32.8 and R-33 still flagged).
+
 === Review A fixes (docs/accuracy/review/review-a.json; branch claude/accuracy-fixa) ===
 
 An independent review of the pricing engine and of quotes and documents (review A, at fdc3eaa),

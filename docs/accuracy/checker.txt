@@ -74,3 +74,12 @@ After each stage
   docs/accuracy/after-money/, docs/accuracy/after-cavity/ and docs/accuracy/after-quotes/: the random
   run and both golden sets after that stage (about.txt in each says how they were made);
   after-quotes/hard-rule-1.txt also says how the stored quotes were compared.
+
+After Phase 1 (flow stage) and the before/after report
+  docs/accuracy/after/: violations.txt (10,000 at seed 20261118, 20,000 at seeds 7 and 99999),
+  golden-synthetic-after.json and golden-live-after.json.
+  node scripts/accuracy/run.mjs scripts/accuracy/report.ts <golden dir> docs/accuracy/report/report.json docs/accuracy/after
+      prices both golden sets, compares them with docs/accuracy/before/ and explains every
+      difference (stage, ledger ids, owner decision); a difference it cannot explain is printed as
+      UNEXPLAINED. <golden dir> is the read-only live export (with live-priced-before.json), kept
+      out of git. report-summary.txt says the same in plain words.
