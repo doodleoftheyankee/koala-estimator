@@ -181,6 +181,13 @@ grant execute on function can_record_blower_door(uuid, uuid) to authenticated;
 
 alter table blower_door_tests enable row level security;
 
+-- Production grants every new table to the API roles when it is created (default privileges,
+-- review B database-B5), so the readings do not rest on RLS alone (review B database-B4): the public
+-- has no privilege on them, and a signed-in user only reads them (through the read policy below).
+-- A reading gets in only through sync_blower_door_test(). Revoking again changes nothing.
+revoke all on table blower_door_tests from anon;
+revoke insert, update, delete, truncate on table blower_door_tests from authenticated;
+
 -- Owner, office and estimators read the table; crews do not (a row carries the air sealing price
 -- and what the phone showed): they read their jobs' readings through blower_door_context(), which
 -- leaves the price out, as crew_job_view leaves out a job's revenue.

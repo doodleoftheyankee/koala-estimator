@@ -319,11 +319,35 @@ begin
   exception when insufficient_privilege then null;
   end;
 end $$;
-update blower_door_tests set cfm50 = 1, cfm = 1 where id = 'b5000000-0000-0000-0000-000000000021';
-delete from blower_door_tests where id = 'b5000000-0000-0000-0000-000000000021';
+-- Edits and deletes: refused outright since the release (the table's update and delete privileges
+-- are revoked, review B database-B4/B5); before, RLS let them through as a change of no rows.
+do $$
+begin
+  begin
+    update blower_door_tests set cfm50 = 1, cfm = 1 where id = 'b5000000-0000-0000-0000-000000000021';
+    raise exception 'a crew edit of a reading should be refused';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from blower_door_tests where id = 'b5000000-0000-0000-0000-000000000021';
+    raise exception 'a crew delete of a reading should be refused';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
 select set_config('request.jwt.claim.sub', :'owner', false);
-update blower_door_tests set exponent = 0.7 where id = 'b5000000-0000-0000-0000-000000000001';
-delete from blower_door_tests where id = 'b5000000-0000-0000-0000-000000000001';
+do $$
+begin
+  begin
+    update blower_door_tests set exponent = 0.7 where id = 'b5000000-0000-0000-0000-000000000001';
+    raise exception 'an owner edit of a reading should be refused';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from blower_door_tests where id = 'b5000000-0000-0000-0000-000000000001';
+    raise exception 'an owner delete of a reading should be refused';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
 
 -- The table's own checks, on an insert by the database owner (the outbox's path).
 reset role;
@@ -404,3 +428,19 @@ do $$ begin
 end $$;
 reset role;
 \echo '  ok'
+
+-- Release, "blower door under the accuracy rules" (review B database-B4, database-B5): production
+-- grants every new table to the API roles at creation (default privileges), so the readings table
+-- does not rest on RLS alone: the public has no privilege on it, and signed-in users may only read
+-- it (through its read policy); a reading gets in only through sync_blower_door_test().
+do $$ begin
+  assert not has_table_privilege('anon', 'blower_door_tests', 'select'), 'the public cannot read readings';
+  assert not has_table_privilege('anon', 'blower_door_tests', 'insert'), 'or write them';
+  assert has_table_privilege('authenticated', 'blower_door_tests', 'select'), 'signed-in users read through the read policy';
+  assert not has_table_privilege('authenticated', 'blower_door_tests', 'insert'), 'signed-in users cannot insert readings directly';
+  assert not has_table_privilege('authenticated', 'blower_door_tests', 'update'), 'or edit them';
+  assert not has_table_privilege('authenticated', 'blower_door_tests', 'delete'), 'or delete them';
+  assert not has_table_privilege('authenticated', 'blower_door_tests', 'truncate'), 'or empty the table (RLS does not cover truncate)';
+  assert has_table_privilege('service_role', 'blower_door_tests', 'insert'), 'the server keeps its access';
+end $$;
+\echo '  ok (release: readings table privileges)'
