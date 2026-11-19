@@ -4,7 +4,7 @@ import { priceEstimate, type PricedEstimate } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
-import { resolveConflict, touch } from '@/lib/offline/syncCore';
+import { resolveConflict, touch, UNSENT_CHANGE_DROPPED } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { withDraftDefaults } from '@/lib/field/draft';
 import { ackSummary } from '@/lib/field/flags';
@@ -254,8 +254,8 @@ export function EstimateEditor({
 
       <div className="space-y-3 px-4 py-4">
         {locked ? (
-          <Banner tone="ok" icon={Lock} title="The customer signed this quote." live={false}>
-            It is read-only.
+          <Banner tone="ok" icon={Lock} title="The customer signed this quote." live={record.lastError === UNSENT_CHANGE_DROPPED}>
+            It is read-only.{record.syncState === 'locked' && record.lastError === UNSENT_CHANGE_DROPPED ? ` ${UNSENT_CHANGE_DROPPED}` : null}
           </Banner>
         ) : null}
         {record.syncState === 'conflict' ? (

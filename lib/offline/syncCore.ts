@@ -13,6 +13,12 @@ export function syncBlocker(draft: EstimateDraft): string | null {
 }
 
 /**
+ * What a phone with an unsent change is told once it learns the customer signed: the signed quote
+ * replaces its copy and the change is not applied (L35, RF-05). Never a "changed on another device".
+ */
+export const UNSENT_CHANGE_DROPPED = 'Your unsent change was not applied.';
+
+/**
  * Applies a server response to the local record. `sentMutationId` is the mutation that was
  * sent; if the user edited while the request was in flight, the record has a newer
  * mutationId and must stay pending.
@@ -51,7 +57,8 @@ export function applySyncResult(
         syncState: 'locked',
         serverDoc: null,
         serverRowVersion: res.rowVersion,
-        lastError: 'The customer already signed this quote. It can no longer be edited.',
+        // Only a phone with something to send hears 'locked': that change is dropped (L35).
+        lastError: UNSENT_CHANGE_DROPPED,
       };
     }
     case 'invalid':

@@ -3,7 +3,7 @@ import { newMeasurement } from '@/lib/measure/measure';
 import { describe, expect, it } from 'vitest';
 import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import type { LocalEstimate } from './db';
-import { applySyncResult, mergeRemote, resolveConflict, syncBlocker, touch } from './syncCore';
+import { applySyncResult, mergeRemote, resolveConflict, syncBlocker, touch, UNSENT_CHANGE_DROPPED } from './syncCore';
 
 const NOW = '2026-10-20T12:00:00.000Z';
 /** New drafts start in the business profile's town (L32); these tests' estimates are in this one. */
@@ -74,6 +74,19 @@ describe('applySyncResult', () => {
     expect(r.draft.status).toBe('signed');
     const noDoc = applySyncResult(record(), 'm1', { status: 'locked', rowVersion: 9, serverDoc: null }, NOW);
     expect(noDoc.draft.status).toBe('signed');
+  });
+  it('a change made before the phone heard of the signature is dropped, and the estimator is told (L35)', () => {
+    // The phone edited a sent quote offline (touch: a new draft revision) while the customer signed.
+    const sent = { ...complete(), status: 'sent' as const, rowVersion: 4, notes: 'before' };
+    const edited = touch(record({ draft: sent, syncState: 'synced' }), { ...sent, notes: 'my unsent change' }, 'm1', NOW);
+    expect(edited.draft.status).toBe('draft');
+    const r = applySyncResult(edited, 'm1', { status: 'locked', rowVersion: 5, serverDoc: { ...sent, status: 'signed', rowVersion: 5 } }, NOW);
+    expect(r).toMatchObject({ syncState: 'locked', serverDoc: null, serverRowVersion: 5 });
+    expect(r.draft).toMatchObject({ status: 'signed', rowVersion: 5, notes: 'before' });
+    expect(r.lastError).toBe(UNSENT_CHANGE_DROPPED);
+    expect(UNSENT_CHANGE_DROPPED).toBe('Your unsent change was not applied.');
+    // Nothing more is sent: a locked estimate is not edited or queued again.
+    expect(touch(r, { ...r.draft, notes: 'again' }, 'm2', NOW).syncState).toBe('locked');
   });
   it('keeps errors for retry or fixing', () => {
     expect(applySyncResult(record(), 'm1', { status: 'invalid', error: 'bad zip' }, NOW)).toMatchObject({ syncState: 'invalid', lastError: 'bad zip' });
