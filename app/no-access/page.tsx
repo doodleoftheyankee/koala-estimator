@@ -1,11 +1,10 @@
 // Where requireRole sends a signed-in person who opened a page their role cannot use (an old
 // bookmark, a link someone shared): it says whose page it is and links to their own home page.
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 import { NoAccessState } from '@/components/shell/StatePages';
 import { menuFor, ROLE_LABELS } from '@/lib/nav';
 import type { Role } from '@/lib/pricing';
-import { getSessionProfile } from '@/lib/server/auth';
+import { getSessionState, redirectIfNoSession } from '@/lib/server/auth';
 
 export const metadata: Metadata = { title: 'Not in your menu' };
 
@@ -19,8 +18,7 @@ function whoseWords(roles: Role[]): string | null {
 }
 
 export default async function NoAccessPage({ searchParams }: { searchParams: Promise<{ for?: string | string[] }> }) {
-  const profile = await getSessionProfile();
-  if (!profile) redirect('/login');
+  const profile = await redirectIfNoSession(await getSessionState());
   const raw = (await searchParams).for;
   const roles = ((Array.isArray(raw) ? raw[0] : raw) ?? '')
     .split(',')

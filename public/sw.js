@@ -16,9 +16,12 @@
  *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
  *    and offline a /field launch opens the /crew shell when /crew was the last shell loaded, so
  *    a crew member never gets someone else's priced /field shell.
+ *  - Koala's database or sign-in service not answering is not a sign-out (L36): the server sends a
+ *    page to /unreachable (or answers 503). For a shell, the phone's cached copy opens instead and
+ *    says "Can't reach Koala right now"; the cached copy is kept, never deleted for that.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v9';
+const VERSION = 'v10';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
@@ -64,11 +67,21 @@ async function cacheAssets(urls, refetch = false) {
 async function precacheShell(shellUrl) {
   const res = await fetch(shellUrl, { credentials: 'include', cache: 'no-store' });
   const cache = await caches.open(SHELL_CACHE);
+  // Koala not answering: keep the copy we have.
+  if (unreachable(res)) return;
   // Signed out or wrong role: drop any copy cached for an earlier user. Other errors: keep it.
   if (refused(res)) return cache.delete(shellUrl);
   if (!res.ok) return;
   await cache.put(shellUrl, res.clone());
   await cacheAssets([...assetsIn(await res.text()), '/manifest.webmanifest', '/icons/icon-192.png'], true);
+}
+
+/** Koala's database or sign-in service did not answer: the server sent the page to /unreachable, or a 503. */
+function unreachable(res) {
+  if (res.status === 503) return true;
+  if (!res.redirected) return false;
+  const to = new URL(res.url);
+  return to.origin === self.location.origin && to.pathname === '/unreachable';
 }
 
 function refused(res) {
@@ -118,12 +131,29 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+/** The cached copy of a shell for this device (see FALLBACK), or undefined. */
+async function cachedShell(cache, shell) {
+  const last = await cache.match(LAST_SHELL).then((r) => (r ? r.text() : null));
+  // A device last used for the crew app never opens a priced shell offline.
+  const preferred = last && FALLBACK[shell] === last ? last : shell;
+  return (await cache.match(preferred)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
+}
+
 async function shellNavigation(req, shell) {
   const cache = await caches.open(SHELL_CACHE);
   try {
-    const res = await fetch(req);
+    // Redirects are followed here, so where they lead is known: /unreachable (Koala is not
+    // answering: open the phone's copy) or anywhere else (signed out or the wrong role: drop it).
+    const res = await fetch(req.url, { credentials: 'include', redirect: 'follow', headers: req.headers });
+    if (unreachable(res)) {
+      const cached = await cachedShell(cache, shell);
+      if (cached) return cached;
+      return res.redirected ? Response.redirect(res.url, 302) : res;
+    }
     if (refused(res)) {
       await cache.delete(shell);
+      // A navigation cannot take a followed redirect as its answer: send the browser there itself.
+      return res.redirected ? Response.redirect(res.url, 302) : res;
     } else if (res.ok) {
       cache.put(shell, res.clone());
       cache.put(LAST_SHELL, new Response(shell));
@@ -136,10 +166,7 @@ async function shellNavigation(req, shell) {
     }
     return res;
   } catch {
-    const last = await cache.match(LAST_SHELL).then((r) => (r ? r.text() : null));
-    // A device last used for the crew app never opens a priced shell offline.
-    const preferred = last && FALLBACK[shell] === last ? last : shell;
-    const cached = (await cache.match(preferred)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
+    const cached = await cachedShell(cache, shell);
     if (cached) return cached;
     return new Response(
       '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title>' +

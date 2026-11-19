@@ -1,10 +1,10 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { db, getCachedBundle, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
-import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
+import { AuthRequiredError, fetchEstimate, isReachable, onReachChange, syncAll } from '@/lib/offline/sync';
 import { newDraft } from '@/lib/sync/draft';
 import { menuFor, phoneTabs } from '@/lib/nav';
-import { Banner, ButtonLink, LoadingSteps } from '@/components/daymark';
+import { Banner, Button, ButtonLink, LoadingSteps } from '@/components/daymark';
 import { useHideTabBar } from '@/components/shell';
 import { EstimateEditor } from './EstimateEditor';
 import { EstimateList } from './EstimateList';
@@ -23,6 +23,8 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   // syncs (every minute, on reconnect) stay quiet and only move "Synced 2 min ago" along.
   const [syncing, setSyncing] = useState(false);
   const lastSync = useLive(() => getMeta<string>(META.lastSync), [], null as string | null);
+  // Koala's database or sign-in service not answering (L36): the phone keeps working on its own copy.
+  const reachable = useSyncExternalStore(onReachChange, isReachable, () => true);
   // An open estimate has its own bottom bar (price, Previous, Next): the menu's tab bar steps aside.
   useHideTabBar(view.kind === 'edit');
 
@@ -114,6 +116,21 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
                 }
               >
                 Your work is saved on this phone. Sign in again to sync it.
+              </Banner>
+            </div>
+          ) : null}
+          {online && !reachable && !signedOut ? (
+            <div className="px-4 pt-4">
+              <Banner
+                tone="warn"
+                title="Can't reach Koala right now."
+                action={
+                  <Button size="sm" onClick={syncNow} disabled={syncing}>
+                    Try again
+                  </Button>
+                }
+              >
+                Your work is saved on this phone. It syncs when Koala is back.
               </Banner>
             </div>
           ) : null}

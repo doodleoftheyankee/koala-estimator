@@ -20,6 +20,34 @@ const emit = () => listeners.forEach((fn) => fn());
 
 export class AuthRequiredError extends Error {}
 
+// Can Koala be reached? (L36) A 503 from Koala's own server means its database or sign-in service
+// is not answering: not a sign-out, and not this phone's signal. The field app says "Can't reach
+// Koala right now" while it lasts; work stays on the phone and syncs when Koala answers again.
+let reachable = true;
+const reachListeners = new Set<Listener>();
+function setReachable(r: boolean) {
+  if (r === reachable) return;
+  reachable = r;
+  reachListeners.forEach((fn) => fn());
+}
+/** Records what a response from Koala says about reaching it. */
+function noteResponse(res: Response) {
+  setReachable(res.status !== 503);
+}
+/** A request that threw: with signal, Koala itself did not answer. */
+function noteFailure() {
+  if (navigator.onLine) setReachable(false);
+}
+export function isReachable(): boolean {
+  return reachable;
+}
+export function onReachChange(fn: Listener): () => void {
+  reachListeners.add(fn);
+  return () => reachListeners.delete(fn);
+}
+/** What an estimate's sync says while Koala cannot be reached. */
+export const UNREACHABLE_SYNC_ERROR = "Can't reach Koala right now. Your change is saved on this phone.";
+
 async function postSync(record: LocalEstimate): Promise<SyncResponse> {
   try {
     const res = await fetch('/api/sync', {
@@ -27,10 +55,13 @@ async function postSync(record: LocalEstimate): Promise<SyncResponse> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mutationId: record.mutationId, baseRowVersion: record.draft.rowVersion, draft: record.draft }),
     });
+    noteResponse(res);
     if (res.status === 401) throw new AuthRequiredError('Signed out');
+    if (res.status === 503) return { status: 'error', error: UNREACHABLE_SYNC_ERROR };
     return (await res.json()) as SyncResponse;
   } catch (e) {
     if (e instanceof AuthRequiredError) throw e;
+    noteFailure();
     return { status: 'error', error: navigator.onLine ? 'Could not reach the server.' : 'Offline. Will sync when back online.' };
   }
 }
@@ -68,6 +99,7 @@ export async function refreshBundle(): Promise<PricingBundle | null> {
     // The bundle's own ETag covers the pricing hash and the business profile; a bundle cached before
     // it carried one is fetched again.
     const res = await fetch('/api/bundle', { headers: cached ? { 'If-None-Match': cached.etag ?? `"${cached.hash}"` } : {} });
+    noteResponse(res);
     if (res.status === 401) throw new AuthRequiredError('Signed out');
     if (res.status === 304) return cached;
     if (!res.ok) return cached;
@@ -77,6 +109,7 @@ export async function refreshBundle(): Promise<PricingBundle | null> {
     return bundle;
   } catch (e) {
     if (e instanceof AuthRequiredError) throw e;
+    noteFailure();
     return cached;
   }
 }
@@ -87,8 +120,10 @@ export async function pullEstimates(ownerId: string): Promise<void> {
   try {
     res = await fetch('/api/estimates');
   } catch {
+    noteFailure();
     return; // offline or flaky signal; next cycle retries
   }
+  noteResponse(res);
   if (res.status === 401) throw new AuthRequiredError('Signed out');
   if (!res.ok) return;
   const { estimates } = (await res.json()) as { estimates: RemoteEstimate[] };
@@ -108,6 +143,7 @@ export async function fetchEstimate(id: string, ownerId: string): Promise<LocalE
   const local = await db().estimates.get(id);
   try {
     const res = await fetch(`/api/estimates/${id}`);
+    noteResponse(res);
     if (!res.ok) return local ?? null;
     const remote = (await res.json()) as RemoteEstimate;
     const merged = mergeRemote(local, remote, ownerId, uuid());
@@ -125,6 +161,8 @@ export function syncAll(ownerId: string): Promise<void> {
   running = (async () => {
     if (!navigator.onLine) return;
     await refreshBundle();
+    // Koala not answering (L36): nothing to push to; the next cycle tries again.
+    if (!reachable) return;
     await pushAll();
     await syncPhotos();
     await pullEstimates(ownerId);

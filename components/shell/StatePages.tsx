@@ -173,3 +173,34 @@ export function ErrorState({
     </StatePage>
   );
 }
+
+/**
+ * Koala's database or sign-in service did not answer (L36, RF-04): not a sign-out. Says so, keeps
+ * the way back to the page (a same-site path), and offers the phone's own copy of the field or crew
+ * app, which opens without Koala. Reads no data, so it works while the database is down.
+ */
+export function UnreachableState({ next, phoneApp }: { next: string; phoneApp: { href: string; label: string } | null }) {
+  return (
+    <StatePage
+      icon={CloudOff}
+      label="Can’t reach Koala"
+      title="Can’t reach Koala right now"
+      actions={
+        <>
+          <a href={next} className={buttonClass({ variant: 'main' })}>
+            <Icon icon={RefreshCw} size="s" />
+            Try again
+          </a>
+          {phoneApp ? (
+            <a href={phoneApp.href} className={buttonClass({ variant: 'secondary' })}>
+              {phoneApp.label}
+            </a>
+          ) : null}
+        </>
+      }
+    >
+      <p>Koala is not answering. You are not signed out, and you do not need to sign in again.</p>
+      <p>Work in the field or crew app is saved on your phone and syncs when Koala is back. Try again in a minute.</p>
+    </StatePage>
+  );
+}
