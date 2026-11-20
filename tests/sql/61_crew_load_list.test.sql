@@ -6,11 +6,11 @@
 -- keeps every column it had, in order, and running the migration twice changes nothing.
 -- Runs after the earlier test files, so every id here is new.
 
-\set owner  '00000000-0000-0000-0000-0000000006a1'
-\set office '00000000-0000-0000-0000-0000000006a2'
-\set est    '00000000-0000-0000-0000-0000000006a3'
-\set crewa  '00000000-0000-0000-0000-0000000006a5'
-\set crewb  '00000000-0000-0000-0000-0000000006a6'
+\set owner  '00000000-0000-0000-0000-0000000006c1'
+\set office '00000000-0000-0000-0000-0000000006c2'
+\set est    '00000000-0000-0000-0000-0000000006c3'
+\set crewa  '00000000-0000-0000-0000-0000000006c5'
+\set crewb  '00000000-0000-0000-0000-0000000006c6'
 
 insert into auth.users (id) values (:'owner'), (:'office'), (:'est'), (:'crewa'), (:'crewb');
 insert into profiles (id, role, full_name) values
@@ -106,7 +106,7 @@ do $$ begin
   assert (select crew_notes from jobs where id = current_setting('ll.job1')::uuid) like 'Park on the street.%',
     'a crew member or an estimator cannot change the office''s notes';
   assert (select count(*) from audit_log where action = 'job.crew_notes' and row_id = current_setting('ll.job1')
-            and actor_id = '00000000-0000-0000-0000-0000000006a2' and context->>'crew_notes' like 'Park on the street.%') = 1,
+            and actor_id = '00000000-0000-0000-0000-0000000006c2' and context->>'crew_notes' like 'Park on the street.%') = 1,
     'the change is in the audit log, with who made it';
 end $$;
 
@@ -192,7 +192,7 @@ reset role;
 do $$ begin
   assert (select value from app_settings where key = 'load_list') = '{"always_bring": ["Blower", "Ladders"]}', 'the owner changes the list';
   assert (select count(*) from audit_log where table_name = 'app_settings' and row_id = 'load_list'
-            and actor_id = '00000000-0000-0000-0000-0000000006a1') >= 1, 'and the change is audited with who made it';
+            and actor_id = '00000000-0000-0000-0000-0000000006c1') >= 1, 'and the change is audited with who made it';
 end $$;
 
 -- ---------------------------------------------------------------------------
