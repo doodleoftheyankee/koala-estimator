@@ -37,6 +37,15 @@ alter table materials drop constraint if exists materials_default_is_general;
 alter table materials add constraint materials_default_is_general
   check (not is_default or (job_type is null and r_value is null));
 
+-- Material names carry no cost (readiness walk W2). The crew's job screen and the estimator's
+-- Details print material names, and the market-defaults seed (20261020000003) wrote each spray
+-- foam set's price into its name, so the crew read "~$1,800/set". Back to the names the first
+-- migration gave them; only those exact seed names change, so a name the owner typed stays.
+update materials set name = 'Open-cell set (per board ft)'
+ where name = 'Open-cell set (~$1,800/set at full yield, per board ft)';
+update materials set name = 'Closed-cell set (per board ft)'
+ where name = 'Closed-cell set (~$2,350/set at full yield, per board ft)';
+
 -- Dense-pack wall cellulose (OD7, S1-F9). A wall is blown dense, so a bag covers far less than on
 -- an attic floor: Greenfiber SANCTUARY card (Rev E, 01/23), dry dense-pack sidewalls at 3.5 pcf,
 -- 2x4 (3.5 in): 35.0 sq ft per bag at 16 in o.c. (33.8 at 24 in o.c.) = 122.5 sq ft x in per bag;

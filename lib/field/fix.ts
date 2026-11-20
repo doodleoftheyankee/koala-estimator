@@ -22,8 +22,11 @@ export type FixTarget =
       field?: MeasureField | null;
     }
   | { step: 'areas'; areaId?: undefined; open?: undefined }
-  /** Open the Options step, at one option when given; edit 'price' opens its price editor at Customer price (flow-B12). */
-  | { step: 'options'; tier?: Tier; edit?: 'price' };
+  /**
+   * Open the Options step, at one option when given; edit 'price' opens its price editor at Customer
+   * price (flow-B12); field 'drive' focuses the drive time (readiness walk W6).
+   */
+  | { step: 'options'; tier?: Tier; edit?: 'price'; field?: 'drive' };
 
 export interface Fix {
   /** The button's words, e.g. "Finish measuring". */
@@ -39,6 +42,7 @@ export function fixElementId(t: FixTarget): string | null {
     case 'areas':
       return t.areaId ? (t.open === 'size' ? `area-${t.areaId}-sqft` : `area-${t.areaId}`) : 'add-area';
     case 'options':
+      if (t.field === 'drive') return 'drive-minutes';
       return t.tier ? (t.edit === 'price' ? `option-${t.tier}-price` : `option-${t.tier}`) : null;
   }
 }

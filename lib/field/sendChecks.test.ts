@@ -18,6 +18,8 @@ function complete(): EstimateDraft {
     customer: { ...d.customer, firstName: 'Riley', lastName: 'Quinn', email: 'riley@example.com' },
     property: { ...d.property, street: '12 Elm St', zip: '62701' },
     areas: [{ ...newArea('attic'), sqft: 1200 }],
+    // A job close by: the drive time is entered (readiness walk W6) and travel is priced at 0 min, as before.
+    driveMinutesOneWay: 0,
   };
 }
 const price = (d: EstimateDraft): PricedOption[] => {
@@ -39,6 +41,7 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
       'Address: 12 Elm St, Springfield, IL 62701',
       'Attic: 1,200 sq ft',
       `${price(complete()).length} options priced`,
+      'Drive time: 0 min each way',
       'Prices within your limits',
       'Every change from the model is explained',
       'Online',
@@ -206,5 +209,22 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
         expect(c.label).not.toMatch(/expected|Too small|Too big|Invalid|undefined|NaN/);
       }
     }
+  });
+});
+
+describe('readiness walk W6: the drive time is entered before a quote goes out', () => {
+  it('a blank drive time is named, with a button to the drive field; 0 is an answer', () => {
+    const blank = { ...complete(), driveMinutesOneWay: null };
+    const f = failing(input(blank));
+    expect(f.map((c) => c.id)).toEqual(['drive']);
+    expect(f[0]!.label).toBe('Enter the drive time, one way in minutes, so travel is in the price.');
+    expect(f[0]!.fix).toEqual({ label: 'Add drive time', target: { step: 'options', field: 'drive' } });
+    expect(fixElementId(f[0]!.fix!.target)).toBe('drive-minutes');
+    expect(sendChecks(input(complete())).find((c) => c.id === 'drive')).toMatchObject({ ok: true, label: 'Drive time: 0 min each way' });
+    expect(sendChecks(input({ ...complete(), driveMinutesOneWay: 25 })).find((c) => c.id === 'drive')).toMatchObject({ ok: true, label: 'Drive time: 25 min each way' });
+  });
+  it('an estimate with no area to price yet asks for the areas first, not the drive time', () => {
+    const empty = { ...complete(), areas: [], driveMinutesOneWay: null };
+    expect(sendChecks(input(empty)).some((c) => c.id === 'drive')).toBe(false);
   });
 });

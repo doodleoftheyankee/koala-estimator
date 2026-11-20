@@ -134,16 +134,16 @@
       "coverage_sqft_in": null
     },
     {
-      "id": "5693bdea-a60a-47be-80fa-d00021b7b10b",
-      "name": "Closed-cell set (~$2,350/set at full yield, per board ft)",
+      "id": "6a2bd04e-72b5-4e4e-895a-314dfaf8af13",
+      "name": "Closed-cell set (per board ft)",
       "unit": "board_ft",
       "product_id": "73bb2487-068b-4c60-81dd-d7188a5f056a",
       "cost_per_unit": 0.47,
       "coverage_sqft_in": 1
     },
     {
-      "id": "4db72d7a-db5e-49aa-8e02-a52df829ec67",
-      "name": "Open-cell set (~$1,800/set at full yield, per board ft)",
+      "id": "af23417b-0491-48da-8976-c33894dffeaa",
+      "name": "Open-cell set (per board ft)",
       "unit": "board_ft",
       "product_id": "9f8bacc0-bc4c-4680-80e9-aa446fbf7669",
       "cost_per_unit": 0.12,

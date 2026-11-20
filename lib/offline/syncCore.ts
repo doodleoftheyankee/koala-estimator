@@ -59,6 +59,10 @@ export function applySyncResult(
         serverRowVersion: res.rowVersion,
         // Only a phone with something to send hears 'locked': that change is dropped (L35).
         lastError: UNSENT_CHANGE_DROPPED,
+        // The phone's headline was its own pick, not what the customer signed: the pull that follows
+        // every push fills in the signed price (mergeRemote), and nothing claims it until then.
+        summaryPrice: null,
+        summaryTier: null,
       };
     }
     case 'invalid':
@@ -104,7 +108,17 @@ export function mergeRemote(
 ): LocalEstimate | null {
   const doc = parseDoc(remote.doc);
   if (!doc) return null;
-  const draft: EstimateDraft = { ...doc, status: asStatus(remote.status, doc.status), rowVersion: remote.rowVersion };
+  const status = asStatus(remote.status, doc.status);
+  // A signed estimate recommends what the customer signed: the server's headline is the signed
+  // price and option, so the editor's dock and option cards say the same as the list and the PDF
+  // (readiness walk W1: the dock read the estimator's earlier pick, Best, after Better was signed).
+  const signed = status === 'signed' && remote.headline ? remote.headline : null;
+  const draft: EstimateDraft = {
+    ...doc,
+    status,
+    rowVersion: remote.rowVersion,
+    ...(signed?.tier ? { selectedTier: signed.tier } : {}),
+  };
   // A copy saved by an older build lacks fields added since (photo reads, measurements…). Fill
   // them from the server before anything else, or the next edit would send empty ones and erase
   // the server's. A push refused for exactly that reason can then go through.
@@ -122,7 +136,10 @@ export function mergeRemote(
     }
   }
   if (local && ['pending', 'conflict', 'invalid', 'error', 'local'].includes(local.syncState)) return null;
-  if (local && local.draft.rowVersion !== null && local.draft.rowVersion >= remote.rowVersion && local.draft.status === draft.status) {
+  // A signed copy whose headline is not yet the signed one (the phone heard 'locked' on a push, or
+  // stored its own pick) takes the server's, even at the same row version.
+  const headlineBehind = signed !== null && (local?.summaryPrice !== signed.price || (signed.tier !== null && local?.summaryTier !== signed.tier));
+  if (local && !headlineBehind && local.draft.rowVersion !== null && local.draft.rowVersion >= remote.rowVersion && local.draft.status === draft.status) {
     return null; // already up to date
   }
   return {

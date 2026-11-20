@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { predictWin, recommendPrice } from '@/lib/learning/winRate';
 import { priceEstimate, type WinModel } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
-import { beyondOverrideLimit, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
+import { beyondOverrideLimit, MIN_WIN_SPREAD, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
 
 // A plausible market: win chance falls as the markup rises; walls jobs win a bit more often.
 const model: WinModel = {
@@ -67,6 +67,22 @@ describe('priceAdvice', () => {
     expect(at.atBest).toBe(true);
     expect(at.current.winProbability).toBeCloseTo(at.best.winProbability, 12);
     expect(at.current.expectedProfit).toBeCloseTo(at.best.expectedProfit, 2);
+  });
+
+  it('readiness walk W4: suggests a price only when the model has learned how price moves the win chance', () => {
+    // This market's win chance falls with the markup: a price is suggested, inside the range.
+    const learned = priceAdvice(model, better, features, settings)!;
+    expect(learned.learnedPrice).toBe(true);
+    // A model that barely reacts to price (past quotes all near the model price) always "suggests"
+    // the top of the range; that is not advice, so there is none.
+    const flat: WinModel = { ...model, weights: { ...model.weights, markup: -0.02 } };
+    const none = priceAdvice(flat, better, features, settings)!;
+    const chances = none.best.curve.map((p) => p.winProbability);
+    expect(Math.max(...chances) - Math.min(...chances)).toBeLessThan(MIN_WIN_SPREAD);
+    expect(none.best.price).toBe(none.best.curve.at(-1)!.price);
+    expect(none.learnedPrice).toBe(false);
+    // The win chance at the estimator's price is still given.
+    expect(none.current.winProbability).toBeGreaterThan(0);
   });
 
   it('a higher price always has a lower win chance with this model', () => {

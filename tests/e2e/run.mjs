@@ -328,6 +328,18 @@ console.log('  send checklist:', (await page.locator('body').innerText()).split(
 // warranty seed): no checklist item, sentence or link asks anyone to finish a business profile.
 check((await page.locator('li[data-check="profile"]').count()) === 0, 'the Send checklist has no business-profile item');
 check(!/business profile/i.test(await page.locator('main').innerText()), 'and nothing on the Send step mentions a business profile');
+// Readiness walk W6: a blank drive time holds Send back, with a Fix to the drive field; 0 is an answer.
+{
+  const drive = page.locator('li[data-check="drive"][data-ok="no"]');
+  check((await drive.innerText()).includes('Enter the drive time, one way in minutes, so travel is in the price.'), 'a blank drive time is named on the checklist (readiness walk W6)');
+  check(await page.getByRole('button', { name: /Send quote to customer/ }).isDisabled(), 'and Send waits for it');
+  await drive.getByRole('button', { name: 'Add drive time' }).click();
+  await page.locator('#drive-minutes').waitFor();
+  await page.locator('#drive-minutes').fill('0');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.waitForTimeout(3500); // let auto-sync run
+  check((await page.locator('li[data-check="drive"]').innerText()).includes('Drive time: 0 min each way'), 'Add drive time opened the drive field; 0 (a job close by) is an answer');
+}
 check(await page.getByRole('button', { name: /Send quote to customer/ }).isEnabled(), 'Send is ready with the seeded settings, nothing filled in');
 const gateEst = psql("select id from estimates order by created_at desc limit 1");
 {

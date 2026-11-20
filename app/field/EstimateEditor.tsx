@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { priceEstimate, type PricedEstimate } from '@/lib/pricing';
+import { priceEstimate, type PricedEstimate, type Tier } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
@@ -222,6 +222,15 @@ export function EstimateEditor({
   }
 
   const locked = record.syncState === 'locked' || draft.status === 'signed';
+  // A signed estimate's dock shows what the customer signed (the server's headline, as the list
+  // and the office have it), not a price worked out again from today's pricing (readiness walk W1).
+  const signedPrice = locked && typeof record.summaryPrice === 'number' && record.summaryPrice > 0 ? record.summaryPrice : null;
+  const headline: { price: number; tier: Tier | null; signed: boolean } | null =
+    signedPrice !== null
+      ? { price: signedPrice, tier: record.summaryTier ?? summary?.tier ?? null, signed: true }
+      : summary
+        ? { ...summary, signed: false }
+        : null;
   const name = `${draft.customer.firstName} ${draft.customer.lastName}`.trim() || 'New estimate';
   const street = draft.property.street.trim();
   const address = street ? [street, draft.property.city.trim()].filter(Boolean).join(', ') : 'No address yet';
@@ -372,14 +381,14 @@ export function EstimateEditor({
       <Dock label="Estimate actions">
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <SignLabel size={11}>{summary ? 'Recommended' : 'Price'}</SignLabel>
+            <SignLabel size={11}>{headline ? (headline.signed ? 'Signed' : 'Recommended') : 'Price'}</SignLabel>
             {/* The option's name is never cut ("BETT…" beside a five-digit price at 390 px): it wraps
                 under the price if it ever cannot fit (release review C FLOW-8). */}
             <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2">
-              <span className="gauge-m text-[26px] text-ink">{summary ? formatMoney(summary.price, { cents: 'never' }) : '—'}</span>
-              {summary ? (
+              <span className="gauge-m text-[26px] text-ink">{headline ? formatMoney(headline.price, { cents: 'never' }) : '—'}</span>
+              {headline?.tier ? (
                 <SignLabel size={11} tone="ink" className="whitespace-nowrap">
-                  {TIER_LABELS[summary.tier]}
+                  {TIER_LABELS[headline.tier]}
                 </SignLabel>
               ) : (
                 <span className="sr-only">Not priced yet</span>

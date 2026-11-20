@@ -38,7 +38,17 @@ export interface PriceAdvice {
   best: PriceRecommendation;
   /** The current price already is the recommended one (to the cent). */
   atBest: boolean;
+  /**
+   * The model has learned how price moves the win chance: across the allowed range it changes by
+   * at least MIN_WIN_SPREAD. When it has not (past quotes all sat near the model price), the most
+   * profit is always the top of the range, which says nothing about this customer, so the phone
+   * suggests no price (readiness walk W4).
+   */
+  learnedPrice: boolean;
 }
+
+/** How much the win chance must change across the allowed price range before a price is suggested. */
+export const MIN_WIN_SPREAD = 0.05;
 
 /** Null when the option has no usable cost or price, or the settings leave nothing to scan. */
 export function priceAdvice(
@@ -54,10 +64,13 @@ export function priceAdvice(
   const best = recommendPrice(model, loadedCost, features, settings);
   if (!best) return null;
   const winProbability = predictWin(model, { ...features, markup: price / loadedCost });
+  const chances = best.curve.map((p) => p.winProbability);
+  const spread = chances.length ? Math.max(...chances) - Math.min(...chances) : 0;
   return {
     current: { price, winProbability, expectedProfit: money(winProbability * (price - loadedCost)) },
     best,
     atBest: Math.abs(price - best.price) < 0.005,
+    learnedPrice: spread >= MIN_WIN_SPREAD - 1e-9,
   };
 }
 

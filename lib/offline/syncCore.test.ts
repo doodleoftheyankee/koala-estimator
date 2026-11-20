@@ -188,4 +188,30 @@ describe('release review C FLOW-2: the row keeps its headline when the server co
     const moved = mergeRemote(sentLocal(), remote({ rowVersion: 4, headline: { price: 4100, tier: 'best' } }), 'u1', 'm')!;
     expect(moved).toMatchObject({ summaryPrice: 4100, summaryTier: 'best' });
   });
+
+  it('readiness walk W1: a signed estimate recommends the option the customer signed, not the earlier pick', () => {
+    // The estimator recommended Best; the customer signed Better at 5,060.
+    const picked = { ...complete(), status: 'sent' as const, rowVersion: 3, selectedTier: 'best' as const };
+    const local = record({ syncState: 'synced', draft: picked, summaryPrice: 9900, summaryTier: 'best' });
+    const signed = mergeRemote(local, remote({ status: 'signed', rowVersion: 4, doc: picked, headline: { price: 5060, tier: 'better' } }), 'u1', 'm')!;
+    expect(signed).toMatchObject({ syncState: 'locked', summaryPrice: 5060, summaryTier: 'better' });
+    expect(signed.draft).toMatchObject({ status: 'signed', selectedTier: 'better' });
+    expect(toRow(signed, now)).toMatchObject({ price: 5060, priceLabel: 'Better' });
+    // An unsigned estimate keeps the estimator's pick.
+    const sent = mergeRemote(local, remote({ status: 'viewed', rowVersion: 4, doc: picked, headline: { price: 9900, tier: 'best' } }), 'u1', 'm')!;
+    expect(sent.draft.selectedTier).toBe('best');
+  });
+
+  it("readiness walk W1: a phone told 'locked' on a push drops its own headline, and the next pull fills in the signed one", () => {
+    const sent = { ...complete(), status: 'sent' as const, rowVersion: 4, selectedTier: 'best' as const };
+    const edited = touch(record({ draft: sent, syncState: 'synced', summaryPrice: 9900, summaryTier: 'best' }), { ...sent, notes: 'x' }, 'm1', NOW);
+    const locked = applySyncResult(edited, 'm1', { status: 'locked', rowVersion: 5, serverDoc: { ...sent, status: 'signed', rowVersion: 5 } }, NOW);
+    expect(locked).toMatchObject({ syncState: 'locked', summaryPrice: null, summaryTier: null });
+    // Same row version and status as the server: before W1 this was 'already up to date' and kept no price.
+    const pulled = mergeRemote(locked, remote({ status: 'signed', rowVersion: 5, doc: sent, headline: { price: 5060, tier: 'better' } }), 'u1', 'm2')!;
+    expect(pulled).toMatchObject({ syncState: 'locked', summaryPrice: 5060, summaryTier: 'better' });
+    expect(pulled.draft.selectedTier).toBe('better');
+    // Once it has the signed headline, the same copy is up to date again.
+    expect(mergeRemote(pulled, remote({ status: 'signed', rowVersion: 5, doc: sent, headline: { price: 5060, tier: 'better' } }), 'u1', 'm3')).toBeNull();
+  });
 });

@@ -93,8 +93,8 @@ export function OptionsStep({
               ))}
             </Select>
           </Field>
-          <Field label="Drive (min, one way)">
-            <NumberInput allowDecimal={false} value={draft.driveMinutesOneWay} onValue={(v) => update((d) => ({ ...d, driveMinutesOneWay: v }))} />
+          <Field label="Drive (min, one way)" hint={draft.driveMinutesOneWay === null ? 'Needed to send. Type 0 if the job is close by.' : undefined}>
+            <NumberInput id="drive-minutes" allowDecimal={false} value={draft.driveMinutesOneWay} onValue={(v) => update((d) => ({ ...d, driveMinutesOneWay: v }))} />
           </Field>
         </div>
         <div className="mt-2 flex items-center gap-2">

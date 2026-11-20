@@ -6,7 +6,7 @@ import { Button } from '@/components/ui';
 
 /**
  * Expected-profit advice for one option (PLAN.md §6.6), scored offline with the cached win
- * model. Dollar profit only for people who may see costs; the recommended price and the win
+ * model. Dollar profit only for people who may see costs; the suggested price and the win
  * chance are for everyone.
  */
 export function PriceAdvicePanel({
@@ -19,11 +19,25 @@ export function PriceAdvicePanel({
   advice: PriceAdvice;
   nQuotes: number;
   showCosts: boolean;
-  /** Set when an estimator could not send the recommended price without the office. */
+  /** Set when an estimator could not send the suggested price without the office. */
   limitNote: string | null;
   onUse: () => void;
 }) {
-  const { current, best, atBest } = advice;
+  const { current, best, atBest, learnedPrice } = advice;
+  if (!learnedPrice) {
+    // The model has not learned how price changes the win chance (readiness walk W4): no price to suggest.
+    return (
+      <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
+        <p>
+          Win chance at this price: <span className="font-semibold">{pct(current.winProbability, 0)}</span>
+          {showCosts ? <span className="text-slate-600"> · expected profit {usd(current.expectedProfit)}</span> : null}
+        </p>
+        <p className="text-xs text-slate-500">
+          Learned from {num(nQuotes)} won or lost quotes. They don&apos;t yet show how price changes the win chance, so there is no price to suggest.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
       <p>
@@ -37,14 +51,14 @@ export function PriceAdvicePanel({
           </>
         ) : (
           <>
-            Recommended price: <span className="font-semibold">{usd(best.price)}</span>
+            Suggested price: <span className="font-semibold">{usd(best.price)}</span>
           </>
         )}{' '}
         (win chance {pct(best.winProbability, 0)})
       </p>
       <WinCurve advice={advice} showPriceRange={showCosts} />
       {atBest ? (
-        <p className="text-emerald-800">You are at the recommended price.</p>
+        <p className="text-emerald-800">You are at the suggested price.</p>
       ) : (
         <Button size="sm" variant="secondary" onClick={onUse}>
           Use this price ({usd(best.price)})
@@ -73,7 +87,7 @@ function WinCurve({ advice, showPriceRange }: { advice: PriceAdvice; showPriceRa
         viewBox={`0 0 ${BOX.width} ${BOX.height}`}
         className="h-auto w-full"
         role="img"
-        aria-label={`Win chance by price. At your price, ${usd(current.price)}: ${pct(current.winProbability, 0)}. At the recommended price, ${usd(best.price)}: ${pct(best.winProbability, 0)}.`}
+        aria-label={`Win chance by price. At your price, ${usd(current.price)}: ${pct(current.winProbability, 0)}. At the suggested price, ${usd(best.price)}: ${pct(best.winProbability, 0)}.`}
       >
         {GRID.map((p) => (
           <g key={p}>
@@ -106,7 +120,7 @@ function WinCurve({ advice, showPriceRange }: { advice: PriceAdvice; showPriceRa
           <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-slate-900 align-middle" /> Your price
         </span>
         <span>
-          <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 align-middle" /> Recommended
+          <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-emerald-500 align-middle" /> Suggested
         </span>
         <span>
           <span className="mr-1 inline-block h-0.5 w-4 bg-brand-600 align-middle" /> Win chance

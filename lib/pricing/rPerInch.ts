@@ -70,3 +70,35 @@ export function existingThicknessIn(area: Pick<AreaInput, 'currentR' | 'existing
   if (area.currentR > 0) return area.currentR / existingRPerInch(area.existingMaterial);
   return 0;
 }
+
+/**
+ * The R-value of the insulation already in an area, worked out from its type and depth: depth x
+ * the table's R per inch, to a whole number (4 in of blown fiberglass = R-10). Null when either is
+ * missing, or the type is "None" or not in the table: then nothing can be worked out.
+ */
+export function currentRFromDepth(material: string | null | undefined, depthIn: number | null | undefined): number | null {
+  const known = existingMaterialNamed(material);
+  if (!known || known === 'None') return null;
+  if (depthIn === null || depthIn === undefined || !Number.isFinite(depthIn) || depthIn <= 0) return null;
+  return Math.round(depthIn * EXISTING_R_PER_INCH[known]);
+}
+
+/**
+ * A change to the existing insulation's type or depth, with the current R-value it implies
+ * (readiness walk W3: typing 4 in of blown fiberglass left R-0, so the area was priced as if
+ * empty). The R-value follows the type and depth while it is 0 or still the value they gave;
+ * one the estimator typed (from a label) is never overwritten.
+ */
+export function withExistingChange<A extends Pick<AreaInput, 'currentR' | 'existingMaterial' | 'existingDepthIn'>>(
+  area: A,
+  change: Partial<Pick<AreaInput, 'existingMaterial' | 'existingDepthIn'>>,
+): Partial<Pick<AreaInput, 'currentR' | 'existingMaterial' | 'existingDepthIn'>> {
+  const before = currentRFromDepth(area.existingMaterial, area.existingDepthIn);
+  const next = { ...area, ...change };
+  const after = currentRFromDepth(next.existingMaterial, next.existingDepthIn);
+  const followsTypeAndDepth = area.currentR === 0 || (before !== null && area.currentR === before);
+  if (!followsTypeAndDepth) return change;
+  if (after !== null) return { ...change, currentR: after };
+  // The type or depth was cleared: an R-value that came from them goes with them.
+  return before !== null && area.currentR === before ? { ...change, currentR: 0 } : change;
+}

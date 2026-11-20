@@ -15,6 +15,7 @@ import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
 import { removeAreaPhotos } from '@/lib/offline/photos';
 import { PhotoRead } from './measure/PhotoRead';
 import { EXISTING_MATERIALS, type StoredPhotoRead, type Suggestion } from '@/lib/ai/photoRead';
+import { currentRFromDepth, withExistingChange } from '@/lib/pricing/rPerInch';
 import { lookupAddress, mergeNotes, ROOF_LOOKUP_JOBS } from '@/lib/roof/lookup';
 import { RoofLookupButton, RoofLookupSheet, type RoofApply } from './measure/RoofLookup';
 
@@ -183,7 +184,7 @@ export function AreasStep({
                   <Field label="Existing insulation">
                     <Select
                       value={a.existingMaterial ?? 'None'}
-                      onChange={(e) => set(a.id, { existingMaterial: e.target.value === 'None' ? null : e.target.value })}
+                      onChange={(e) => set(a.id, withExistingChange(a, { existingMaterial: e.target.value === 'None' ? null : e.target.value }))}
                     >
                       {EXISTING.map((m) => (
                         <option key={m}>{m}</option>
@@ -191,10 +192,20 @@ export function AreasStep({
                     </Select>
                   </Field>
                   <Field label="Existing depth (in)">
-                    <NumberInput value={a.existingDepthIn} onValue={(v) => set(a.id, { existingDepthIn: v })} />
+                    <NumberInput value={a.existingDepthIn} onValue={(v) => set(a.id, withExistingChange(a, { existingDepthIn: v }))} />
                   </Field>
                 </div>
-                <Field label="Current R-value" hint="Estimate from type and depth if there is no label." group>
+                <Field
+                  label="Current R-value"
+                  hint={(() => {
+                    const fromDepth = currentRFromDepth(a.existingMaterial, a.existingDepthIn);
+                    if (fromDepth === null) return 'Fills in from the type and depth. Use the label if there is one.';
+                    return a.currentR === fromDepth
+                      ? `From ${num(a.existingDepthIn ?? 0, 1)} in of ${(a.existingMaterial ?? '').toLowerCase()}. Use the label if there is one.`
+                      : `${num(a.existingDepthIn ?? 0, 1)} in of ${(a.existingMaterial ?? '').toLowerCase()} is about R-${fromDepth}.`;
+                  })()}
+                  group
+                >
                   <div className="flex items-start gap-2">
                     <NumberInput aria-label="Current R-value" className="w-24" value={a.currentR} onValue={(v) => set(a.id, { currentR: v ?? 0 })} />
                     <Chips label="Common R-values" value={String(a.currentR)} onChange={(v) => set(a.id, { currentR: Number(v) })} options={['0', '11', '19', '30'].map((r) => ({ value: r, label: `R-${r}` }))} />

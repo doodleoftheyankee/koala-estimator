@@ -70,6 +70,22 @@ export function sendChecks(input: SendCheckInput): SendCheck[] {
     );
   }
 
+  // Travel is priced from the drive time; a blank one would price it at 0 minutes without anyone
+  // deciding so (readiness walk W6). 0 is an answer: a job close by.
+  if (priceable.length > 0) {
+    const drive = draft.driveMinutesOneWay;
+    checks.push(
+      drive === null
+        ? {
+            id: 'drive',
+            ok: false,
+            label: 'Enter the drive time, one way in minutes, so travel is in the price.',
+            fix: { label: 'Add drive time', target: { step: 'options', field: 'drive' } },
+          }
+        : { id: 'drive', ok: true, label: `Drive time: ${num(drive)} min each way` },
+    );
+  }
+
   // Anything else the draft still lacks (rare: a reason under 3 letters on a changed line, notes too long…).
   if (checks.every((c) => c.ok) && syncBlocker(draft)) checks.push(otherCheck(draft));
 

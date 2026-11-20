@@ -153,10 +153,25 @@ export const crewViewRowSchema = z.object({
     .optional()
     .transform((v) => (v ?? []).flatMap((l) => {
       const r = scopeLineSchema.safeParse(l);
-      return r.success ? [r.data] : [];
+      return r.success ? [{ ...r.data, description: withoutPrices(r.data.description) }] : [];
     })),
 });
 export type CrewViewRow = z.infer<typeof crewViewRowSchema>;
+
+/**
+ * A scope line's words with any price taken out: crews never see prices, but a material's name can
+ * carry one (the seeded "Open-cell set (~$1,800/set at full yield, per board ft)", or a name the
+ * owner types), and a signed job keeps the names it was priced with (readiness walk W2). A
+ * bracketed note with a dollar amount goes; a bare amount left elsewhere goes too.
+ */
+export function withoutPrices(text: string): string {
+  return text
+    .replace(/\s*\([^()]*\$[^()]*\)/g, '')
+    .replace(/~?\$\s?\d[\d,]*(\.\d+)?(\s?\/\s?[a-z]+)?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
+}
 
 /** Columns of crew_actuals_view the crew app reads (the view has no cost columns at all). */
 export const CREW_ACTUAL_COLUMNS =

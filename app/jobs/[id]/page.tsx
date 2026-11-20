@@ -314,7 +314,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               <Item label="Labor">{costs.labor !== null ? usdCents.format(costs.labor) : '—'}</Item>
               <Item label="Other">{costs.other !== null ? usdCents.format(costs.other) : '—'}</Item>
               <Item label="Total">{costs.total !== null ? usdCents.format(costs.total) : '—'}</Item>
-              <Item label="Revenue">{revenue != null ? usdCents.format(revenue) : '—'}</Item>
+              <Item label="Revenue">{revenue != null ? formatMoney(revenue, { cents: 'never' }) : '—'}</Item>
               <Item label="Gross margin">
                 {costs.total !== null && revenue != null && revenue > 0 ? `${usdCents.format(revenue - costs.total)} (${pct((revenue - costs.total) / revenue, 1)})` : '—'}
               </Item>
