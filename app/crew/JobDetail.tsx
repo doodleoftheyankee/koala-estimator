@@ -7,17 +7,17 @@ import type { CachedProfile } from '@/lib/offline/db';
 import { dayLabel, formatNyDateTime, nyDate } from '@/lib/jobs/dates';
 import { mapsUrl, naturalKey, PRODUCT_LABELS, telUrl, UNIT_LABELS, type CrewArea, type CrewJob } from '@/lib/jobs/crew';
 import type { ProductCode } from '@/lib/pricing';
-import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
 import { ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
-import { Alert, Badge, Button, Card } from '@/components/ui';
+import { Alert, Button, Card } from '@/components/ui';
+import { jobBadgeStatus, RefreshCw, Smartphone, StatusBadge, Tag } from '@/components/daymark';
 import { useLive } from '@/app/field/hooks';
 import { ActualsForm } from './ActualsForm';
-import { ACTUALS_BADGE } from './JobList';
+import { ActualsTag } from './JobList';
 import { useActualsEditor } from './useActualsEditor';
+import { BlowerDoorLink } from '@/app/field/blower-door/BlowerDoorLink';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
 
-const STATUS_TONE = { scheduled: 'blue', in_progress: 'amber', completed: 'green', cancelled: 'slate' } as const;
 
 export function JobDetail({
   id,
@@ -117,7 +117,10 @@ export function JobDetail({
             <p className="truncate font-semibold">{job.customer.name}</p>
             <p className="truncate text-xs text-slate-500">{job.address.street}</p>
           </div>
-          <Badge tone={STATUS_TONE[job.status]}>{JOB_STATUS_LABELS[job.status]}</Badge>
+          {/* Verified once the office has locked this job's actuals, as on the office's job page. */}
+          <StatusBadge
+            status={job.status === 'completed' && draft?.syncState === 'locked' ? 'job.verified' : jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart })}
+          />
         </div>
       </header>
 
@@ -169,6 +172,12 @@ export function JobDetail({
         {job.areas.map((a) => (
           <AreaCard key={a.areaId} area={a} />
         ))}
+
+        <BlowerDoorLink
+          context={{ kind: 'job', id, label: [job.customer.name, job.address.street].filter(Boolean).join(', ') || null }}
+          ownerId={profile.userId}
+          hint="Test-out after the air sealing, saved to this job. Works with no signal."
+        />
 
         <div className="flex items-center justify-between gap-2 px-1 pt-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Actuals</h2>
@@ -299,8 +308,11 @@ function AreaCard({ area }: { area: CrewArea }) {
 
 function SyncState({ draft, online }: { draft: LocalActuals; online: boolean }) {
   if (draft.syncState === 'pending' || draft.syncState === 'error') {
-    return <Badge tone="amber">{online ? 'Syncing…' : 'Saved on phone'}</Badge>;
+    return (
+      <Tag tone="warn" icon={online ? RefreshCw : Smartphone}>
+        {online ? 'Syncing…' : 'Saved on phone'}
+      </Tag>
+    );
   }
-  const b = ACTUALS_BADGE[draft.syncState];
-  return <Badge tone={b.tone}>{b.label}</Badge>;
+  return <ActualsTag state={draft.syncState} />;
 }

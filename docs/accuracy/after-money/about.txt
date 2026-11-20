@@ -1,0 +1,30 @@
+AFTER THE MONEY STAGE (claude/accuracy after merging claude/accuracy-baseline and claude/accuracy-money)
+
+What these files are
+  violations-20261118.txt           npm run accuracy:violations -- 10000 20261118 (seeded pricing)
+  golden-synthetic-after-money.json node scripts/accuracy/run.mjs scripts/accuracy/price-golden.ts synthetic <file>
+  golden-live-after-money.json      the live set's counts and option totals keyed by estimate id (no names or
+                                    addresses), from price-golden.ts live with the read-only production export
+
+The checker reads what the customer sees: shownOptions leaves out any option the engine hides (OD6,
+an 'option_hidden' warning), and work items are read by the engine's item kinds (travel, minimum and
+adjustment lines are never "the same work"). "Options priced" counts every option (showAll);
+"shown" counts what the customer is shown.
+
+10,000 random quotes, seed 20261118 (before -> after money)
+  items_add_up            1,849 quotes / 2,434 -> 0
+  same_work_same_price    4,842 / 10,693       -> 0
+  options_step_up         3,353 / 4,370        -> 0
+  labels_match_work       1,997 / 2,456        -> 426 / 472 (code_below_code only; removal and air sealing 0)
+  cavity_not_overfilled   2,215 / 5,214        -> 2,015 / 4,692 (the cavity stage's job)
+  finite_amounts          0                    -> 0
+  same_price_text         9,296 / 139,719      -> 9,329 / 116,642 (accept_sentence, signed_page, signed_pdf,
+                                                  signed_email, office_email print cents until L8; office_list until L9)
+  valid_until_is_expiry   1,681                -> 1,684 (L13)
+  Options priced 27,349 -> 27,400; shown 27,349 -> 23,083 (OD6).
+
+Golden sets (estimates failing, before -> after money)
+  Live (78):      items 13 -> 0, same work 60 -> 0, step up 18 -> 0, labels 6 -> 0, cavity 0 -> 0,
+                  same price text 78 -> 78, valid until 16 -> 16.
+  Synthetic (65): items 7 -> 0, same work 35 -> 0, step up 16 -> 0, labels 7 -> 0, cavity 12 -> 11,
+                  same price text 64 -> 64, valid until 3 -> 3.

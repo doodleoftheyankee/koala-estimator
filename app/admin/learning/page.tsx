@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -54,6 +53,7 @@ import {
   plural,
   profileNameRowSchema,
   RUN_COLUMNS,
+  nightlyScheduleWords,
   runKindLabel,
   scopeLabel,
   scopeNamesFrom,
@@ -75,7 +75,7 @@ import { SectionHeading } from '../pricing/fields';
 import { approveCandidate, rejectCandidate, restoreSet, runLearningNow } from './actions';
 import { ApproveForm, RejectForm, RestoreSetButton, RunNowForm } from './LearningForms';
 
-export const metadata: Metadata = { title: 'Learning' };
+export const metadata: Metadata = { title: 'Insights' };
 // "Run learning now" is a Server Action on this page; give it the same budget as the nightly cron.
 export const maxDuration = 300;
 
@@ -244,10 +244,9 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">Learning</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Insights</h1>
           {isOwner ? null : <Badge tone="blue">Read-only</Badge>}
         </div>
         <p className="text-sm text-slate-600">
@@ -257,7 +256,7 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
         {notice ? <Alert tone="green">{noticeMessage(notice)}</Alert> : null}
         {isOwner ? null : <Alert tone="blue">You can view everything here. Only the owner can run learning, approve, reject or restore sets.</Alert>}
         {loadError || !data ? (
-          <Alert tone="red">Could not load the learning dashboard: {loadError}</Alert>
+          <Alert tone="red">Could not load Insights: {loadError}</Alert>
         ) : (
           <LearningContent data={data} isOwner={isOwner} />
         )}
@@ -269,13 +268,13 @@ export default async function LearningPage({ searchParams }: { searchParams: Pro
 function LearningContent({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
   return (
     <>
-      <nav aria-label="Learning sections" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
+      <nav aria-label="Insights sections" className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur">
         <ul className="flex gap-2 whitespace-nowrap">
           {SECTIONS.map((s) => (
             <li key={s.id}>
               <a
                 href={`#${s.id}`}
-                className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800"
+                className="inline-flex min-h-12 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800"
               >
                 {s.label}
                 {s.id === 'candidate' && data.candidate ? (
@@ -421,7 +420,7 @@ function Overview({ data, isOwner }: { data: Dashboard; isOwner: boolean }) {
           >
             {last ? <RunStatusBadge status={last.status} /> : <span className="text-slate-500">—</span>}
           </Stat>
-          <Stat label="Schedule" sub="Runs nightly at about 2:15 AM Eastern (3:15 AM while daylight saving time is on). All times on this page are Eastern.">
+          <Stat label="Schedule" sub={nightlyScheduleWords()}>
             Nightly
           </Stat>
         </div>
@@ -814,7 +813,7 @@ function WinRate({ data }: { data: Dashboard }) {
   const jobLabel = (code: string) => jobTypeLabel(code, names);
   return (
     <section className="space-y-3">
-      <SectionHeading id="win-rate" title="Win rate and price recommendations">
+      <SectionHeading id="win-rate" title="Win rate and price suggestions">
         Every sent quote ends won, lost or expired. Once there are enough of them, a model learns how price affects the chance of winning and
         suggests the price with the best expected profit.
       </SectionHeading>
@@ -836,7 +835,7 @@ function WinRate({ data }: { data: Dashboard }) {
                 {formatPct(winModel.metrics.baseRate)}
               </Stat>
             </div>
-            <p className="text-sm text-slate-600">Estimators see a recommended price with its win probability next to their own.</p>
+            <p className="text-sm text-slate-600">Estimators see the win chance at their price, and a suggested price once past quotes show how price changes the win chance.</p>
             {winRun && !winRun.summary.trained && winRun.summary.reason ? (
               <p className="text-sm text-slate-500">
                 The last run ({formatDate(winRun.row.started_at)}) kept this model: {winRun.summary.reason}

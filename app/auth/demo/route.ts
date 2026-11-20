@@ -19,7 +19,10 @@ async function signIn(request: NextRequest, role: unknown, next: string | null =
   const account = DEMO_ACCOUNTS[role];
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email: account.email, password: process.env.DEMO_PASSWORD! });
-  if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(`Demo sign-in failed: ${error.message}`)}`, origin), { status: 303 });
+  if (error) {
+    console.error('[demo] sign-in failed', error.message);
+    return NextResponse.redirect(new URL('/login?error=demo-failed', origin), { status: 303 });
+  }
   const target = safeNext(next, account.home);
   return NextResponse.redirect(new URL(target, origin), { status: 303 });
 }

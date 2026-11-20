@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { PRESET_DIMS, SHAPE_NAMES, solveShape, type Point, type ShapeInput, type ShapeKind, type SolvedShape } from '@/lib/measure/geometry';
 import { layoutShape } from '@/lib/measure/layout';
 import { formatFeet, parseFeet } from '@/lib/measure/units';
+import { num } from '@/lib/format';
 import { Button, cx } from '@/components/ui';
 
 const ICONS: Record<ShapeKind, string> = {
@@ -32,7 +33,7 @@ export function LengthInput({ label, value, onChange, placeholder = `e.g. 24'6"`
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={bad}
         className={cx(
-          'block min-h-12 w-full rounded-xl border px-3 text-lg text-slate-900 placeholder:text-base placeholder:text-slate-400 focus:outline-none focus:ring-2',
+          'block min-h-12 w-full rounded-xl border px-3 text-lg text-slate-900 placeholder:text-base placeholder:text-placeholder focus:outline-none focus:ring-2',
           bad ? 'border-red-500 bg-red-50 focus:ring-red-100' : 'border-slate-300 bg-white focus:border-brand-600 focus:ring-brand-100',
         )}
       />
@@ -99,7 +100,7 @@ export function ShapeEditor({ shape, onChange, compact }: { shape: ShapeInput; o
 
       <ShapePreview shape={solved.ok ? solved.shape : null} empty={shape.kind === 'custom' ? 'Draw the outline below' : 'Enter the sizes'} compact={compact} />
       <p className="min-h-5 text-center text-sm font-semibold text-slate-700">
-        {solved.ok ? `${Math.round(solved.shape.area).toLocaleString('en-US')} sq ft · perimeter ${formatFeet(solved.shape.perimeter)}` : ''}
+        {solved.ok ? `${num(Math.round(solved.shape.area))} sq ft · perimeter ${formatFeet(solved.shape.perimeter)}` : ''}
       </p>
 
       {shape.kind === 'custom' ? (

@@ -1,29 +1,38 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
-import { Alert, Badge, Button, Card, Field, Select, Textarea } from '@/components/ui';
+import { Banner, Button, ButtonLink, Download, EmptyState, Field, FileText, Icon, Plus, Search, Select, StatusBadge } from '@/components/daymark';
+import { PageHeader } from '@/components/shell';
+import { ABOVE_ROW_LINK, FilterChips, KpiStrip, ROW_LINK, TABLE, type KpiItem } from '@/components/office';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
+import { formatDateTime, formatMoney, num, plural, relativeTime } from '@/lib/format';
 import { canMarkLost } from '@/lib/jobs/forms';
-import { ActionForm } from '../admin/pricing/ActionForm';
-import { markLost } from './actions';
+import {
+  activityLine,
+  closedWords,
+  ESTIMATE_STATUSES,
+  estimateKpis,
+  estimatesHref,
+  headlinePrice,
+  priceLabel,
+  rowStatus,
+  statusChips,
+  statusFilterValues,
+  type EstimateKpis,
+  type LatestQuote,
+  type RowStatus,
+} from '@/lib/office/estimates';
+import type { MoneyGroup } from '@/lib/office/figures';
+import { ApprovalQueue, loadQueue } from './ApprovalQueue';
+import { RowMenu } from './RowMenu';
 
 export const metadata: Metadata = { title: 'Estimates' };
 
-const ESTIMATE_STATUSES = ['draft', 'ready', 'sent', 'viewed', 'signed', 'lost', 'expired', 'void'] as const;
-type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
-
-const STATUS_TONE: Record<EstimateStatus, 'slate' | 'green' | 'amber' | 'red' | 'blue'> = {
-  draft: 'slate',
-  ready: 'blue',
-  sent: 'blue',
-  viewed: 'amber',
-  signed: 'green',
-  lost: 'red',
-  expired: 'slate',
-  void: 'slate',
-};
+/** The list shows at most this many estimates, newest change first. */
+const LIMIT = 200;
+/** More estimators than this and the estimator filter is a drop-down, not chips. */
+const MAX_ESTIMATOR_CHIPS = 8;
 
 // ---------------------------------------------------------------------------
 // Row parsing (embedded to-one relations may come back as an object or a 1-item array)
@@ -66,15 +75,53 @@ type Row = z.infer<typeof rowSchema>;
 
 const estimatorSchema = z.array(z.object({ id: z.string(), full_name: z.string() }));
 
-function totalOf(r: Row, quote: NonNullable<Row['quotes']>[number] | undefined): number | null {
-  if (quote?.signed_price != null) return quote.signed_price;
-  const selected = r.options?.find((o) => o.tier === r.selected_tier);
-  if (selected?.price != null) return selected.price;
-  return r.model_total_price ?? null;
+interface Item {
+  id: string;
+  status: RowStatus;
+  customer: string;
+  address: string | null;
+  estimator: string;
+  price: number | null;
+  priceLabel: string | null;
+  activity: string | null;
+  updatedAt: string;
+  openHref: string;
+  pdfHref: string | null;
+  quoteVersion: number | null;
+  openQuoteVersion: number | null;
+  canMarkLost: boolean;
 }
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const when = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function toItem(r: Row): Item {
+  const q = r.quotes?.[0];
+  const quote: LatestQuote | null = q
+    ? { id: q.id, version: q.version, status: q.status, sentAt: q.sent_at, signedAt: q.signed_at, signedPrice: q.signed_price }
+    : null;
+  const status = rowStatus(r.status, quote);
+  const head = headlinePrice({
+    selectedTier: r.selected_tier,
+    options: r.options,
+    modelTotalPrice: r.model_total_price,
+    signedPrice: quote?.status === 'signed' || r.status === 'signed' ? (quote?.signedPrice ?? null) : null,
+  });
+  const name = r.customer ? `${r.customer.first_name} ${r.customer.last_name}`.trim() : '';
+  return {
+    id: r.id,
+    status,
+    customer: name || 'New customer',
+    address: r.property ? [r.property.street, r.property.city].filter((s) => s.trim()).join(', ') || null : null,
+    estimator: r.estimator?.full_name ?? '—',
+    price: head.price,
+    priceLabel: priceLabel(head),
+    activity: activityLine(status, quote, r.status === 'lost' ? (r.lost_reason ?? null) : null),
+    updatedAt: r.updated_at,
+    openHref: `/field?e=${encodeURIComponent(r.id)}`,
+    pdfHref: quote ? `/api/quotes/${encodeURIComponent(quote.id)}/pdf` : null,
+    quoteVersion: quote?.version ?? null,
+    openQuoteVersion: quote && (quote.status === 'sent' || quote.status === 'viewed') ? quote.version : null,
+    canMarkLost: canMarkLost(r.status),
+  };
+}
 
 function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -104,15 +151,17 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
     .order('updated_at', { ascending: false })
     .order('version', { referencedTable: 'quotes', ascending: false })
     .limit(1, { referencedTable: 'quotes' })
-    .limit(200);
-  if (status) query = query.eq('status', status);
+    .limit(LIMIT);
+  if (status) query = query.in('status', statusFilterValues(status));
   if (estimatorId) query = query.eq('estimator_id', estimatorId);
 
-  const [res, estimatorsRes] = await Promise.all([
+  const [res, estimatorsRes, queue] = await Promise.all([
     query,
     canFilterEstimator
       ? db.from('profiles').select('id, full_name').in('role', ['owner', 'office', 'estimator']).order('full_name')
       : Promise.resolve(null),
+    // The prices waiting for a decision (L34): the owner and the office decide them here.
+    canFilterEstimator ? loadQueue(db) : Promise.resolve(null),
   ]);
 
   let rows: Row[] = [];
@@ -125,219 +174,336 @@ export default async function EstimatesPage({ searchParams }: { searchParams: Pr
   }
   const estimators = estimatorsRes && !estimatorsRes.error ? (estimatorSchema.safeParse(estimatorsRes.data).data ?? []) : [];
 
-  const items = rows.map((r) => {
-    const quote = r.quotes?.[0];
-    return {
-      id: r.id,
-      status: r.status,
-      customer: r.customer ? `${r.customer.first_name} ${r.customer.last_name}`.trim() : '—',
-      address: r.property ? `${r.property.street}, ${r.property.city}` : '—',
-      estimator: r.estimator?.full_name ?? '—',
-      total: totalOf(r, quote),
-      updated: when.format(new Date(r.updated_at)),
-      quote,
-      lostReason: r.status === 'lost' ? (r.lost_reason ?? null) : null,
-    };
-  });
+  const items = rows.map(toItem);
+  const now = new Date().getTime();
+  const kpis = estimateKpis(items);
   const filtered = Boolean(status || estimatorId);
+  const capped = items.length === LIMIT;
+  const estimatorName = estimatorId ? (estimators.find((e) => e.id === estimatorId)?.full_name ?? 'one estimator') : null;
+  const title = profile.role === 'estimator' ? 'All my estimates' : 'Estimates';
 
   return (
-    <>
-      <AppNav profile={profile} />
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">Estimates</h1>
-          {canFilterEstimator ? (
-            <Link href="/jobs" className="ml-auto inline-flex min-h-12 items-center rounded-xl px-3 font-semibold text-brand-800 hover:bg-brand-50">
-              Jobs
-            </Link>
-          ) : null}
-          <Link
-            href="/field?new=1"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-700 px-5 text-base font-semibold text-white shadow-sm hover:bg-brand-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
-          >
-            + New estimate
-          </Link>
-        </div>
+    <main className="@container mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6">
+      <PageHeader
+        title={title}
+        description={profile.role === 'estimator' ? 'Every estimate you have synced, newest change first.' : 'Every estimate and quote, newest change first.'}
+        actions={
+          <ButtonLink href="/field?new=1" variant="primary" icon={Plus} prefetch={false}>
+            New estimate
+          </ButtonLink>
+        }
+      />
 
-        <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filter estimates">
-          <Field label="Status" className="w-full sm:w-48">
-            <Select name="status" defaultValue={status ?? ''}>
-              <option value="">All statuses</option>
-              {ESTIMATE_STATUSES.map((s) => (
-                <option key={s} value={s} className="capitalize">
-                  {s[0]!.toUpperCase() + s.slice(1)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {canFilterEstimator ? (
-            <Field label="Estimator" className="w-full sm:w-56">
-              <Select name="estimator" defaultValue={estimatorId ?? ''}>
-                <option value="">Everyone</option>
-                {estimators.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.full_name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : null}
-          <Button type="submit" variant="secondary">
-            Apply
-          </Button>
-          {filtered ? (
-            <Link href="/estimates" className="inline-flex min-h-12 items-center rounded-xl px-3 font-semibold text-brand-800 hover:bg-brand-50">
-              Clear
-            </Link>
-          ) : null}
-        </form>
+      {queue && queue.length ? <ApprovalQueue items={queue} role={profile.role} userId={profile.userId} /> : null}
 
-        {error ? <Alert tone="red">Could not load estimates: {error}</Alert> : null}
-        {!error && items.length === 0 ? (
-          <Card>
-            <p className="text-slate-600">{filtered ? 'No estimates match these filters.' : 'No estimates yet. Start one with “New estimate”.'}</p>
-          </Card>
+      {!error && items.length > 0 ? (
+        <KpiStrip
+          title="Figures for this list"
+          items={kpiItems(kpis)}
+          note={countNote(items.length, { capped, filtered, statusLabel: status ? statusChips(status).find((c) => c.current)?.label : null, estimatorName })}
+        />
+      ) : null}
+
+      <div className="space-y-4">
+        <FilterChips
+          label="Status"
+          items={statusChips(status).map((c) => ({
+            key: c.value ?? 'all',
+            label: c.label,
+            current: c.current,
+            href: estimatesHref({ status: c.value, estimator: estimatorId }),
+          }))}
+        />
+        {canFilterEstimator && estimators.length > 0 ? (
+          estimators.length <= MAX_ESTIMATOR_CHIPS ? (
+            <FilterChips
+              label="Estimator"
+              items={[
+                { key: 'everyone', label: 'Everyone', current: estimatorId === null, href: estimatesHref({ status, estimator: null }) },
+                ...estimators.map((e) => ({ key: e.id, label: e.full_name, current: e.id === estimatorId, href: estimatesHref({ status, estimator: e.id }) })),
+              ]}
+            />
+          ) : (
+            <EstimatorPicker estimators={estimators} current={estimatorId} status={status} />
+          )
         ) : null}
+      </div>
 
-        {items.length ? (
-          <>
-            {/* Phones: cards */}
-            <ul className="space-y-3 md:hidden">
-              {items.map((it) => (
-                <li key={it.id}>
-                  <Card>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{it.customer}</p>
-                        <p className="truncate text-sm text-slate-600">{it.address}</p>
-                      </div>
-                      <StatusBadge status={it.status} />
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2 text-sm text-slate-600">
-                      <span className="text-lg font-bold tabular-nums text-slate-900">{it.total != null ? usd.format(it.total) : '—'}</span>
-                      <span>
-                        {it.estimator} · {it.updated}
-                      </span>
-                    </div>
-                    {it.quote ? <QuoteLine quote={it.quote} /> : null}
-                    {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
-                    <div className="mt-3 flex gap-2">
-                      <RowActions id={it.id} quoteId={it.quote?.id ?? null} />
-                    </div>
-                    {canMarkLost(it.status) ? <MarkLost id={it.id} /> : null}
-                  </Card>
-                </li>
-              ))}
-            </ul>
+      {error ? (
+        <Banner
+          tone="bad"
+          title="Could not load estimates"
+          action={
+            <ButtonLink href={estimatesHref({ status, estimator: estimatorId })} size="sm" prefetch={false}>
+              Try again
+            </ButtonLink>
+          }
+        >
+          {error}
+        </Banner>
+      ) : null}
 
-            {/* md+: table */}
-            <Card className="hidden overflow-x-auto p-0 md:block">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th scope="col" className="px-4 py-3">Customer</th>
-                    <th scope="col" className="px-4 py-3">Address</th>
-                    <th scope="col" className="px-4 py-3">Estimator</th>
-                    <th scope="col" className="px-4 py-3">Status</th>
-                    <th scope="col" className="px-4 py-3 text-right">Total</th>
-                    <th scope="col" className="px-4 py-3">Updated</th>
-                    <th scope="col" className="px-4 py-3">
-                      <span className="sr-only">Actions</span>
+      {!error && items.length === 0 ? (
+        filtered ? (
+          <EmptyState
+            icon={Search}
+            title="No estimates match these filters"
+            hint="Try another status, or show every estimate."
+            action={
+              <ButtonLink href="/estimates" prefetch={false}>
+                Clear filters
+              </ButtonLink>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={FileText}
+            title="No estimates yet"
+            hint={
+              profile.role === 'estimator'
+                ? 'Estimates appear here once your phone syncs them. Start one with New estimate.'
+                : 'Estimates appear here once an estimator’s phone syncs them. Start one with New estimate.'
+            }
+          />
+        )
+      ) : null}
+
+      {items.length ? (
+        <>
+          {/* Narrow screens: one plate, a block per estimate. */}
+          <ul aria-label={title} className="plate divide-y divide-solid divide-line @4xl:hidden">
+            {items.map((it) => (
+              <li key={it.id} className="relative px-4 py-3.5 hover:bg-sunken">
+                <EstimateCard item={it} showEstimator={canFilterEstimator} now={now} />
+              </li>
+            ))}
+          </ul>
+
+          {/* Wide screens: a hairline table. */}
+          <div className={`${TABLE.plate} hidden @4xl:block`}>
+            <table className={`${TABLE.table} table-fixed`}>
+              <caption className="sr-only">{title}</caption>
+              <colgroup>
+                <col />
+                <col />
+                <col className="w-40" />
+                {canFilterEstimator ? <col className="w-32" /> : null}
+                <col className="w-28" />
+                <col className="w-36" />
+              </colgroup>
+              <thead>
+                <tr className={TABLE.headRow}>
+                  <th scope="col" className={TABLE.th}>
+                    Customer
+                  </th>
+                  <th scope="col" className={TABLE.th}>
+                    Status
+                  </th>
+                  <th scope="col" className={`${TABLE.th} ${TABLE.thNum} pr-6`}>
+                    Price
+                  </th>
+                  {canFilterEstimator ? (
+                    <th scope="col" className={TABLE.th}>
+                      Estimator
                     </th>
+                  ) : null}
+                  <th scope="col" className={TABLE.th}>
+                    Updated
+                  </th>
+                  <th scope="col" className={TABLE.th}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className={TABLE.body}>
+                {items.map((it) => (
+                  <tr key={it.id} className={TABLE.row}>
+                    <td className={TABLE.td}>
+                      <Link href={it.openHref} prefetch={false} className={ROW_LINK}>
+                        {it.customer}
+                      </Link>
+                      {it.address ? <p className="mt-0.5 text-[15px] font-medium text-ink-2">{it.address}</p> : null}
+                    </td>
+                    <td className={TABLE.td}>
+                      <StatusBadge status={it.status} />
+                      {it.activity ? <p className="mt-1.5 text-[15px] leading-snug font-medium text-ink-2 [overflow-wrap:anywhere]">{it.activity}</p> : null}
+                    </td>
+                    <td className={`${TABLE.td} ${TABLE.tdNum} pr-6`}>
+                      <Price price={it.price} label={it.priceLabel} />
+                    </td>
+                    {canFilterEstimator ? <td className={`${TABLE.td} text-ink-2`}>{it.estimator}</td> : null}
+                    <td className={`${TABLE.td} text-[15px] font-medium text-ink-2`}>
+                      <Updated at={it.updatedAt} now={now} />
+                    </td>
+                    <td className={`${TABLE.td} py-2 pr-2 pl-1`}>
+                      <RowActions item={it} />
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {items.map((it) => (
-                    <tr key={it.id} className="align-middle hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">{it.customer}</td>
-                      <td className="px-4 py-3 text-slate-600">{it.address}</td>
-                      <td className="px-4 py-3 text-slate-600">{it.estimator}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={it.status} />
-                        {it.quote ? <QuoteLine quote={it.quote} compact /> : null}
-                        {it.lostReason ? <LostReason reason={it.lostReason} /> : null}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{it.total != null ? usd.format(it.total) : '—'}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">{it.updated}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <RowActions id={it.id} quoteId={it.quote?.id ?? null} />
-                        </div>
-                        {canMarkLost(it.status) ? <MarkLost id={it.id} popover /> : null}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
-            {items.length === 200 ? <p className="text-sm text-slate-500">Showing the 200 most recent. Use the filters to narrow down.</p> : null}
-          </>
-        ) : null}
-      </main>
-    </>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {capped ? <p className="text-[15px] font-medium text-ink-3">Showing the {LIMIT} most recent. Use the filters to narrow down.</p> : null}
+        </>
+      ) : null}
+    </main>
   );
 }
 
-function StatusBadge({ status }: { status: EstimateStatus }) {
+// ---------------------------------------------------------------------------
+// Figures
+// ---------------------------------------------------------------------------
+
+function moneyLine(g: MoneyGroup, noun: string, what: string): string {
+  const base = `${plural(g.count, noun)}, ${what}`;
+  if (g.unpriced === 0) return base;
+  return `${base}. ${num(g.unpriced)} without a price ${g.unpriced === 1 ? 'is' : 'are'} not in the total`;
+}
+
+function kpiItems(k: EstimateKpis): KpiItem[] {
+  return [
+    {
+      key: 'waiting',
+      label: 'Waiting to sign',
+      value: formatMoney(k.waiting.total ?? 0),
+      detail: moneyLine(k.waiting, 'quote', 'sent or viewed'),
+    },
+    {
+      key: 'signed',
+      label: 'Signed',
+      value: formatMoney(k.signed.total ?? 0),
+      detail: moneyLine(k.signed, 'quote', 'signed by the customer'),
+    },
+    {
+      key: 'drafts',
+      label: 'Drafts',
+      value: num(k.drafts.count),
+      detail: `${k.drafts.count === 1 ? 'estimate' : 'estimates'} not sent yet`,
+    },
+    {
+      key: 'closed',
+      label: 'Lost or expired',
+      value: num(k.closed.count),
+      detail: closedWords(k.closed) ? `${closedWords(k.closed)}. Not in any total` : 'Lost, declined or expired. Not in any total',
+    },
+  ];
+}
+
+function countNote(
+  n: number,
+  f: { capped: boolean; filtered: boolean; statusLabel: string | null | undefined; estimatorName: string | null },
+): string {
+  const which = [f.statusLabel ? `status ${f.statusLabel}` : null, f.estimatorName ? `estimator ${f.estimatorName}` : null].filter(Boolean).join(', ');
+  const rows = f.capped ? `the ${n} most recent estimates` : `the ${plural(n, 'estimate')}`;
+  return `These figures count ${rows} listed below${f.filtered && which ? ` (${which})` : ''}.`;
+}
+
+// ---------------------------------------------------------------------------
+// Row parts
+// ---------------------------------------------------------------------------
+
+function Price({ price, label }: { price: number | null; label: string | null }) {
+  if (price === null) return <span className="text-[15px] font-semibold text-ink-3">Not priced</span>;
   return (
-    <Badge tone={STATUS_TONE[status]}>
-      <span className="capitalize">{status}</span>
-    </Badge>
+    <span className="inline-flex flex-col items-end gap-1">
+      <span className="gauge-m text-[22px] text-ink">{formatMoney(price)}</span>
+      {label ? <span className="sign-label text-ink-2 [--sign-size:11px]">{label}</span> : null}
+    </span>
   );
 }
 
-function QuoteLine({ quote, compact = false }: { quote: NonNullable<Row['quotes']>[number]; compact?: boolean }) {
-  const date = quote.signed_at ?? quote.sent_at;
-  const label = quote.signed_at ? 'signed' : quote.status;
+/** When the estimate last changed: relative in the list, the full date on hover (UX-10). */
+function Updated({ at, now }: { at: string; now: number }) {
   return (
-    <p className={compact ? 'mt-1 text-xs text-slate-500' : 'mt-2 text-xs text-slate-500'}>
-      Quote v{quote.version} {label}
-      {date ? ` ${when.format(new Date(date))}` : ''}
-    </p>
+    <time dateTime={at} title={formatDateTime(at)}>
+      {relativeTime(at, now)}
+    </time>
   );
 }
 
-const actionLink =
-  'inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-100';
-
-function RowActions({ id, quoteId }: { id: string; quoteId: string | null }) {
+function RowActions({ item }: { item: Item }) {
   return (
-    <>
-      <Link href={`/field?e=${encodeURIComponent(id)}`} className={`${actionLink} flex-1 bg-brand-700 text-white hover:bg-brand-800 md:flex-none`}>
-        Open
-      </Link>
-      {quoteId ? (
+    <div className={`${ABOVE_ROW_LINK} flex items-center justify-end gap-1`}>
+      {item.pdfHref ? (
         <a
-          href={`/api/quotes/${encodeURIComponent(quoteId)}/pdf`}
+          href={item.pdfHref}
           target="_blank"
           rel="noopener"
-          className={`${actionLink} flex-1 bg-white text-slate-900 ring-1 ring-slate-300 hover:bg-slate-50 md:flex-none`}
+          aria-label={`PDF of quote v${item.quoteVersion} for ${item.customer}`}
+          className="inline-flex min-h-12 items-center gap-1.5 rounded-control px-3 text-[16px] font-bold text-ink no-underline hover:bg-sunken hover:underline"
         >
+          <Icon icon={Download} size="s" className="text-ink-2" />
           PDF
         </a>
       ) : null}
-    </>
+      <RowMenu
+        id={item.id}
+        customer={item.customer}
+        address={item.address}
+        openHref={item.openHref}
+        pdfHref={item.pdfHref}
+        openQuoteVersion={item.openQuoteVersion}
+        canMarkLost={item.canMarkLost}
+      />
+    </div>
   );
 }
 
-function LostReason({ reason }: { reason: string }) {
-  return <p className="mt-1 max-w-xs text-xs text-red-700">Lost: {reason}</p>;
+function EstimateCard({ item: it, showEstimator, now }: { item: Item; showEstimator: boolean; now: number }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link href={it.openHref} prefetch={false} className={`${ROW_LINK} text-[18px]`}>
+            {it.customer}
+          </Link>
+          {it.address ? <p className="mt-0.5 text-[15px] font-medium text-ink-2">{it.address}</p> : null}
+        </div>
+        <StatusBadge status={it.status} />
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <span className="sr-only">Price: </span>
+          {it.price === null ? (
+            <span className="text-[15px] font-semibold text-ink-3">Not priced</span>
+          ) : (
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="gauge-m text-[26px] text-ink">{formatMoney(it.price)}</span>
+              {it.priceLabel ? <span className="sign-label text-ink-2 [--sign-size:11px]">{it.priceLabel}</span> : null}
+            </span>
+          )}
+        </div>
+        <RowActions item={it} />
+      </div>
+      <div className="text-[15px] leading-snug font-medium">
+        {it.activity ? <p className="text-ink-2">{it.activity}</p> : null}
+        <p className="text-ink-3">
+          {showEstimator ? `${it.estimator} · updated ` : 'Updated '}
+          <Updated at={it.updatedAt} now={now} />
+        </p>
+      </div>
+    </div>
+  );
 }
 
-/** Record that the customer went elsewhere (or went quiet), with the reason. No JavaScript needed to open it. */
-function MarkLost({ id, popover = false }: { id: string; popover?: boolean }) {
+/** Many estimators: a drop-down and a Show button (works without a script, like the old filter). */
+function EstimatorPicker({ estimators, current, status }: { estimators: Array<{ id: string; full_name: string }>; current: string | null; status: string | null }) {
   return (
-    <details className={popover ? 'relative mt-1 text-right' : 'mt-2'}>
-      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-xl px-3 text-sm font-semibold text-red-700 hover:bg-red-50">Mark lost…</summary>
-      <div className={popover ? 'absolute right-0 top-full z-10 mt-1 w-80 rounded-2xl bg-white p-3 text-left shadow-lg ring-1 ring-slate-200' : 'mt-2'}>
-        <ActionForm action={markLost} readOnly={false} submitLabel="Mark lost">
-          <input type="hidden" name="id" value={id} />
-          <Field label="Why was it lost?" hint="Price, timing, went with a competitor, no response…">
-            <Textarea name="reason" rows={2} required maxLength={500} />
-          </Field>
-        </ActionForm>
-      </div>
-    </details>
+    <form method="get" action="/estimates" className="flex flex-wrap items-end gap-2" aria-label="Filter by estimator">
+      {status ? <input type="hidden" name="status" value={status} /> : null}
+      <Field label="Estimator" className="min-w-56">
+        <Select name="estimator" defaultValue={current ?? ''}>
+          <option value="">Everyone</option>
+          {estimators.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.full_name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Button type="submit" size="sm">
+        Show
+      </Button>
+    </form>
   );
 }

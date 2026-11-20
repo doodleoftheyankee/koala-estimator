@@ -1,0 +1,1421 @@
+ACCURACY LEDGER (Phase 1, rebuild of round 1)
+
+One entry per value change: id, what changed, a before -> after example with real numbers, the
+owner decision behind it, and the test that fails before the change and passes after.
+"Seeded" means the pricing every new database starts with (supabase/migrations), which equals the
+live rows; tests use it through lib/pricing/__fixtures__/seeded.ts (seeded-rows.json; the money
+stage used migrationSeed.ts, which the cavity stage replaced with it: the same values). "Hand fixture" is the
+hand-made test pricing in lib/pricing/__fixtures__/seed.ts. Drive is 20 min one way unless stated.
+
+=== Stage "money": the engine's money lines and option rules ===
+
+L1  Each item is priced from its own cost, the same in every option; the rest of the price is a
+    "Travel and setup" line.
+    Each work item = its cost x (1 + overhead) / (1 - target margin), rounded down to the dollar.
+    Travel and setup = the price the costs ask for minus the work items (drive, trips, the $5 rounding).
+    Example (seeded): attic 1,200 sq ft at R-19, old insulation removed.
+      Removal: Good $2,720.15 / Better $2,735.84 -> $2,483 in both.
+      Good: $2,720.15 + $3,664.85 -> $2,483 + $3,345 + Travel and setup $557.
+      Totals unchanged: Good $6,385, Better $8,010.
+    Owner decision: OD2.
+    Tests: lib/pricing/phase1.test.ts "the same removal costs the same in every option; travel and
+    setup is its own line", "the same insulation and air sealing cost the same in Better and Best",
+    property "the same work is the same price in every option, whatever the drive and the overrides".
+
+L2  The minimum job top-up is its own "Minimum job charge" line.
+    Example (seeded today): walls 1,000 sq ft, 2x4, Good: one item $1,500 -> $820 work + $190 travel
+      and setup + $490 minimum job charge = $1,500.
+    The record's example ($1,254 + $186 + $60) used the dense-pack wall bag (122.5 sq ft x in per
+      bag, 31 bags) that the insulation stage adds (L20). With that coverage the engine gives exactly
+      $1,254 + $186 + $60.
+    After L20 (stage "cavity") the seeded example itself reads $1,254 + $186 + $60.
+    Owner decision: OD2.
+    Tests: phase1.test.ts "a job under the minimum shows its work, travel and the top-up to the
+    minimum", "with the dense-pack wall coverage of 122.5 sq ft x in per bag, the record example
+    reads $1,254 + $186 + $60".
+
+L3  An estimator's price is a "Price adjustment" line; items keep their prices.
+    Example (seeded): attic 900 sq ft at R-19, Better set to $3,000: items $2,373.44 + $626.56 ->
+      $2,153 + $568 + travel and setup $374 + price adjustment -$95 (model price $3,095).
+      A price raised by hand: attic 1,000, Good $3,100 -> adjustment +$105 over $2,995.
+    Owner decision: OD3.
+    Tests: phase1.test.ts "Better set to $3,000 keeps its items and shows the change", "a price
+    raised by hand shows a positive adjustment".
+
+L4  Printed whole-dollar items add up to the printed total.
+    The record's example (garages 1,002 + 2,526 + crawlspace 368, Better, $14,994 under $14,995)
+      came from a random quote whose other inputs are not in the record; at those sizes with plain
+      inputs the Better total is $10,865, so it cannot be re-run.
+    Example (seeded): garage 1,002 sq ft (difficult access) + crawlspace 368 sq ft, Best: printed
+      $6,154 + $2,072 + $283 = $8,509 under an $8,510 total -> $5,482 + $1,846 + $252 + travel
+      and setup $930 = $8,510.
+    Owner decision: OD4.
+    Tests: phase1.test.ts "printed items add up to the printed total (S1-F2)", property "every
+    customer line is whole dollars, only the adjustment can be negative, and the lines add up".
+
+L5  A price override rounds to whole dollars, and the price step is at least $1.
+    Examples:
+      Seeded attic 1,000 sq ft, Good set to $4,321.50: $4,321.50 -> $4,322 (adjustment +$1,327).
+      Deviation note, hand fixture Better set to $7,224.50: "you are quoting $7,224.50" -> "$7,225".
+      Price rounding set to 0 (seeded attic 1,000, Good): $2,990.92 -> $2,991.
+      Price advice (win model) with rounding 0, $1,000 loaded cost: $1,333.34 / $1,335.48 ->
+        $1,334 / $1,336, the same step as the engine.
+    Owner decision: OD4.
+    Tests: phase1.test.ts "a price change is whole dollars (S1-F1, OD4)", "the deviation note quotes
+    the whole-dollar price", "the price step is at least $1: a rounding of 0 prices to the dollar";
+    lib/learning/deviation.test.ts "quotes a price typed with cents in whole dollars, and says when
+    there is no reason" (was "formats cents and a missing reason", $5,560.50 over $4,815 before the
+    fixture change); lib/learning/winRate.test.ts "rounds up to whole dollars when rounding is off
+    (as the engine does, L5), and includes a ceiling off the step grid".
+
+L6  An override under $1 is ignored, with an override_too_low warning; Apply waits for $1 or more.
+    Example (seeded): attic 900 sq ft, Good $0.40: printed $0 -> $2,735 (the model price) plus
+      "Good price $0.40 is under $1, so it is not used. The price stays $2,735."
+    Owner decision: R7 (review finding), OD4.
+    Test: phase1.test.ts "a price under $1 is not used; the estimator is told (R7)".
+
+L7  Install labor is priced for the quantity priced (the model's hours stay the model's).
+    Hours priced = setup + (quantity / waste) x rate x access, only when the estimator changed the
+    quantity; an estimator's own hours still win.
+    Examples (hand fixture): Good blown fiberglass 58 -> 70 bags: labor 10 h -> 11.72 h priced
+      (+$68.80); learning estHours 18.88 -> 19.81 for 95 bags (attic 1,000, difficult, Better).
+      Seeded air sealing 1,000 -> 1,500 sq ft: 6.5 h -> 9.5 h.
+    Owner decision: S1-F3 / R3.
+    Tests: phase1.test.ts "more bags take more install hours; the model hours stay the model", "the
+    learning loop reads the hours priced for the estimator's bags", "an air-sealing quantity moves
+    the air-sealing labor the same way"; lib/learning/observations.test.ts "builds one observation
+    per area x product with a priced line and an actual" (estHours 18.88 -> 19.81);
+    lib/pricing/overrides.test.ts "a qty override on a material line" (direct cost +$456 -> +$524.80).
+
+L14 Duplicates and options that do not step up are not shown, with an option_hidden warning.
+    An option with the same work as another is shown once, at the lower price (the lower tier on a
+    tie); then from the top down an option is shown only when the next shown option up costs at
+    least $1 more. priceEstimate(input, snapshot, coeffs, { showAll: true }) returns every option.
+    Examples (seeded):
+      Attic 1,200 sq ft at R-0: Best $5,160 (same as Better) -> not shown, "Best is not shown to the
+        customer: it is the same work as Better."
+      Rim joist 150 sq ft, all three at the $1,500 minimum: Good, Better, Best shown -> Best only.
+      Attic 1,000, Good set to $4,500 above Better $4,390: Good shown -> not shown, "... Change its
+        price to show it."
+      Quote document: a picked option that is not shown is no longer marked recommended
+        ('best' -> 'better').
+    Owner decision: OD6.
+    Tests: phase1.test.ts "Best that repeats Better is not shown, and the estimator is told",
+    "options that all cost the same show only the one that does the most", "an option the estimator
+    priced above the next one up is hidden, and says how to show it", "of two options with the same
+    work, the cheaper one is shown"; lib/pricing/engine.test.ts "priceEstimate - tier order (OD6)";
+    engine.property.test.ts "OD6: the options shown step up ..."; lib/quotes/model.test.ts "never
+    recommends an option the quote does not carry (OD6)".
+
+L15 Titles and bullets come from the work actually priced.
+    Examples (seeded):
+      Attic at R-11, target R-30, Good: "Blown Cellulose to Code" -> "Blown Cellulose to R-30"; the
+        bullet "Brings your attic to current code R-value" is removed.
+      Attic at R-60, Better: "Air Seal + Blown Cellulose" -> "Air Sealing"; bullets -> only "Seals
+        the leaks that drive drafts and high bills".
+      Crawlspace 800 at R-19, Best: "Closed-Cell Foam + Air Sealing" -> "Air Sealing".
+      Attic with nothing to remove, Best (showAll): "Remove, Air Seal + Cellulose" -> "Air Sealing +
+        Blown Cellulose"; "Old, dirty or damaged insulation removed" dropped.
+      Package (attic at R-60 + walls), Good: the attic's two bullets are no longer listed.
+    Owner decision: S1-F7, R2.
+    Tests: phase1.test.ts "a target below code is not called \"to Code\"", "an option that only air
+    seals says so (R2, E2 and E3)", "\"Remove\" is said only when removal is priced", "a package only
+    carries bullets of areas with work in it (R2)".
+
+L16 Air-sealing words per job type.
+    Example (seeded): crawlspace 800 sq ft, Best: "Air sealing of top plates, penetrations and
+      bypasses (800 sq ft)" -> "Air sealing of the rim, penetrations and gaps in the floor above
+      (800 sq ft)". Attics keep their words. Walls, rim joists, garages and commercial jobs have their
+      own words, used only if the owner adds air sealing to one of their options.
+    Owner decision: S3-F20.
+    Test: phase1.test.ts "air sealing says where it is done (S3-F20)".
+
+L17 Areas under 10 sq ft keep one decimal.
+    Example (seeded): attic 0.3 sq ft: "0 sq ft" -> "0.3 sq ft" (12.4 sq ft still reads "12 sq ft").
+    Owner decision: S3-F23.
+    Test: phase1.test.ts "a tiny area never reads \"0 sq ft\" (S3-F23)".
+
+Test data only (no customer price): the hand fixture's cellulose bag $14 -> $22 so its Good ($5,420)
+stays below Better ($6,255) under OD6. Math tests price every option with showAll.
+
+=== Stage "cavity": insulation that fits (L18-L24) ===
+
+Seeded below includes the accuracy migration's rows (supabase/migrations/20261119000001_accuracy.sql):
+the dense-pack wall bag, seven batt sizes and the walls cellulose waste cell. Easy access unless
+stated. "Before" is the engine after the money stage.
+
+L18 A wall with no depth entered is a 2x4 wall, a 3.5 in cavity; nothing is installed thicker than
+    the cavity.
+    Example (seeded): walls 1,000 sq ft, no depth, Better: "Open-Cell Spray Foam to R-20 (~5.4" added)"
+      $3,580 -> "Open-Cell Spray Foam to R-13 (fills the 3.5 in cavity)" $2,520 (6,756.8 -> 4,375 board
+      ft), with a warning "the 3.5 in cavity (no depth entered: a 2x4 wall) only fits R-13 of open-cell
+      spray foam (target R-20)". Synthetic S1-F4 (moderate access): Better $3,795 -> $2,660; walls
+      650 sq ft difficult: Better $2,810 -> $2,005; walls 2,400 no depth: Better $8,865 -> $5,770.
+    The phone's depth hint for walls now says a wall with no depth is priced as a 2x4.
+    Owner decision: OD5 (S1-F4, RF-08).
+    Tests: phase1.test.ts "walls with no depth are priced as a 2x4 wall (S1-F4, OD5)"; guards "a depth
+    entered is the cavity: a 2x6 wall takes R-20 of open-cell", "an open attic has no cavity".
+
+L19 Insulation already in an area takes its room: its depth entered, else its R over the one
+    R-per-inch table (L24); removed first, the whole cavity is free. With under 0.5 in of room left
+    the cavity is full: that option adds no product there, with a cavity_full warning.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, R-11 fiberglass batts (3.44 in): Good $1,500 / Better $1,740 / Best
+        $2,505 -> no options; three warnings "Walls: the 3.5 in cavity already holds 3.44 in of
+        insulation, so Good adds no blown cellulose." (and Better, Best).
+      Synthetic S1-F5, walls 800 sq ft, 2x4, 2 in of cellulose (R-7), moderate: Better $2,245 -> $1,500
+        ("Open-Cell Spray Foam to R-12.6 (~1.5 in added, fills the 3.5 in cavity)", 1,500 board ft),
+        Best $3,115 -> $2,295; Good ($1,500, the same as Better) is no longer shown (OD6).
+    An existing material not named, not in the table, or "None" with an R is read at the highest R
+    per inch (3.7), so the room left is never understated; the checker reads it the same way.
+    Owner decision: OD5 (S1-F5).
+    Tests: phase1.test.ts "existing insulation counts against the cavity (S1-F5): a full cavity gets
+    nothing", "walls with 2 in of cellulose: the new insulation fills only the 1.5 in left", "removed
+    first, the whole cavity is free again", "an existing material named in any case, or not named,
+    takes room by the one table".
+
+L20 Dense-pack walls: a new material row "Cellulose bag, dense-pack walls (25 lb)", walls only, 122.5
+    sq ft x in per bag (Greenfiber SANCTUARY: 35.0 sq ft of 2x4 wall per bag at 16 in o.c.; RA-F13), at the current
+    cellulose bag cost ($14), flagged Needs owner input. Dense-pack always fills the room left.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, Good: 19 -> 31 bags; $1,500 unchanged (the minimum), lines $820 + $190 +
+        $490 -> $1,254 + $186 + $60.
+      Walls 1,000 sq ft, 2x6, target R-13, Good: 20 bags (R-13) $1,500 -> 49 bags, "Blown Cellulose to
+        R-19.8 (fills the 5.5 in cavity)", $2,090; "Fills the full cavity" is now true.
+      Synthetic S1-F9 walls 2,200 sq ft 2x4, 60 min drive, moderate: Good $2,090 -> $3,070 (68 bags);
+        S1-F9b walls 1,400 sq ft 2x6: Good $1,920 -> $2,900; wet walls 1,200 (batts out): Good $4,740
+        -> $5,480. Attics keep the attic bag (200 sq ft x in).
+    Dense-pack walls are the only change in this stage that raises prices.
+    Owner decision: OD7 (S1-F9, R6); coverage and cost need owner input.
+    Tests: phase1.test.ts "dense-pack walls use the dense-pack bag coverage (S1-F9, OD7)", "dense-pack
+    fills the whole cavity, so \"Fills the full cavity\" is true (R6, E5)", "the synthetic dense-pack
+    jobs: 2,200 sq ft 2x4 and 1,400 sq ft 2x6"; guard "an attic keeps the attic bag";
+    tests/sql/40_accuracy.test.sql (the row, its cost and flag, never a default).
+
+L21 Walls get their own cellulose waste cell: waste_factor / cellulose / walls in the active set at
+    the shared value (1.08), bounds 1.00-1.60. No price moves today; wall actuals no longer move attic
+    prices.
+    Example (seeded): with the walls cell at 1.30 (wall actuals), a 2,200 sq ft 2x4 wall takes 68 -> 82
+      bags while every attic price stays as it was (before, the one shared cell moved both).
+    Owner decision: R4 (review finding). calibrate.ts is unchanged; it fits the walls child cell.
+    (Review A F2: calibrate.ts still fitted the shared cell on the wall rows too, so wall actuals did
+    move attic prices once a calibration was promoted; fixed in RA-F2.)
+    Tests: phase1.test.ts "starts at the shared 1.08, so no price moves", "wall actuals move wall prices
+    only: a walls cell of 1.30 leaves the attic as it was"; tests/sql/40_accuracy.test.sql (value and
+    bounds); tests/sql/10_phase1.test.sql (promotion and rollback move both cellulose cells).
+
+L22 Batts by size: seven rows R-11, R-13, R-15 (3.5 in), R-19 (6.25 in), R-21 (5.5 in), R-30 (10 in),
+    R-38 (12 in), each at the current batt cost ($0.75 per sq ft), flagged Needs owner input. The
+    engine picks, of the sizes that fit the room in the cavity (any size with no cavity), the least R
+    that reaches the R needed, else the most R that fits; a batt adds its rated R. No size fits under
+    3.5 in of room: cavity_full.
+    Examples (seeded):
+      Crawlspace 800 sq ft, 2x6 floor (5.5 in), target R-38, Good: "Fiberglass Batts, R-38" (a 12 in
+        batt in 5.5 in) -> "Fiberglass Batts to R-21 (5.5 in thick)", $2,270 unchanged, with "the
+        thickest batt that fits the 5.5 in cavity is R-21 (target R-38)".
+      Garage 480 sq ft (no depth), Good: "Fiberglass Batts, R-30" -> "Fiberglass Batts to R-30 (10 in
+        thick)"; crawlspace 7.25 in with R-6 of batts: an R-13 batt, "to R-19 (R-13 batts, 3.5 in thick)".
+    Owner decision: OD8 (S1-F6); batt costs need owner input.
+    Tests: phase1.test.ts "batts are picked by R-value and thickness (S1-F6, OD8)", "with no cavity the
+    least R that reaches the target; over what is there, the batt adds its own R", "no batt fits less
+    than 3.5 in of room: the cavity is full for batts"; tests/sql/40_accuracy.test.sql (seven sizes).
+
+L23 An estimator's quantity changes what the item promises, and never more than a full cavity is
+    priced: above it the quantity is cut, with an override_capped warning (the cut is the room left
+    over the bag coverage, times the waste, rounded up to a bag; board feet to 0.1).
+    Examples (seeded, walls 1,000 sq ft, 2x4, Good):
+      10 bags: "Blown Cellulose to R-12.6" and "Fills the full cavity" -> "Blown Cellulose to R-4.1
+        (~1.1" added)", the bullet removed (10 / 1.08 x 122.5 / 1,000 = 1.13 in).
+      60 bags: 60 priced -> 31 priced, "Walls: 60 bags of blown cellulose is more than the 3.5 in
+        cavity holds. Good is priced with 31, a full cavity." Price $1,500.
+      Open attic 1,000 sq ft, Good 37 bags (model 74): "to R-49" -> "to R-24.7 (~6.9" added)".
+    Also: an estimator's hours on one option scale from each option's hours for the quantities it
+      prices, so bags typed for every option are the same work at one price. Attic 508 sq ft at R-11,
+      27 bags counted for every option, Best's install set to 12.65 h: Good "to R-49 (~10.6" added)"
+      $1,328 (9 h) and Better "to R-60 (~13.6" added)" $1,451 (10.83 h) for the same 27 bags -> both
+      "to R-46.4 (~9.8" added)" at $1,573 (12.65 h).
+    Owner decision: R3 (review finding), OD2.
+    Tests: phase1.test.ts "a changed bag count changes what the item promises", "a bag count above what
+    the cavity holds is cut, with a warning", "the cut uses the waste factor: a full cavity is the room
+    left over the coverage, times the waste", "spray foam is cut the same way, in board feet", "bags
+    typed for every option, hours changed on Best: the same bags cost the same in every option (OD2)",
+    "fewer bags in an open attic promise less R; the model quantity promises the target".
+
+L23b The R an item states is capped at what the cavity holds.
+    Example (seeded, moderate): walls 1,000 sq ft, no depth, Good bags +20% (37): cut to 31 bags, which
+      at 122.5 per bag is 3.52 in: "R-12.7 (fills the 3.5 in cavity)" -> "R-12.6"; price $1,500
+      unchanged. 31 bags typed by hand read the same.
+    Owner decision: R3.
+    Test: phase1.test.ts "a full cavity priced in whole bags never promises more R than it holds".
+
+L24 One R-per-inch table for insulation already in place (lib/pricing/rPerInch.ts), used by the
+    engine, the photo read (its suggestions and its prompt) and the accuracy checker. The materials
+    the company installs read as its products: cellulose 3.5 -> 3.6; "Other" 2.5 -> 3.2.
+    Example: photo read of 10 in of cellulose with no R-value: R-35 -> R-36.
+    The photo read's prompt version is now photo-read-2026-11-19 (its per-inch numbers come from the table).
+    Owner decision: S2-F19; "Other" at 3.2 is a default for the owner to confirm.
+    Tests: phase1.test.ts "one R-per-inch table, equal to the products the company installs (S2-F19)",
+    "a photo read of 10 in of cellulose is R-36, the R the engine gives it".
+
+Labels in packages (part of L15's rule, needed once walls end at their cavity): a "code" sentence and a
+"full cavity" sentence hold for every area they are about (the areas whose job type they name, else
+every area of the quote). Example (synthetic attic + walls + rim joist, Good): "Brings your attic to
+current code R-value" stays (the attic reaches R-49); a bullet such as "Cost-effective code compliance"
+in a package whose 2x4 walls end at R-12.6 is removed. Tests: the checker's labels_match_work on
+10,000 random quotes (code_below_code 472 -> 0, full_cavity_not_filled 731 -> 0).
+
+Checker (no customer value): labels_match_work also checks full_cavity_not_filled and
+qty_below_stated_r; a batt adds its rated R. The generator keeps the 2026-11-18 per-inch table so the
+seed draws the same quotes. (Review A F7: that held only while the engine showed the same options;
+see "Review A fixes" for the generator that draws the same quotes whatever the engine returns.)
+
+Live golden set (78 estimates, live rows plus the migration's rows): no shown option total changed
+(no live estimate has walls or a depth entered). 20 batt items now name the size priced, at the same
+price: "Fiberglass Batts, R-19, 840 sq ft" -> "Fiberglass Batts to R-19 (6.25 in thick), 840 sq ft";
+rim joists "Fiberglass Batts, R-10" -> "to R-11 (3.5 in thick)" (the least size that reaches code).
+
+=== Stage "measure": measuring guards and job status ===
+
+None of these changes a price formula. They stop a wrong measurement from reaching a price, and
+stop a verified job from changing status. The before -> after numbers are what the estimator or
+the office sees.
+
+L25 A pitch typed in degrees is understood, and nothing steeper than 24/12 is taken.
+    A pitch is rise per 12 ("6", "6/12", "6:12", "3/6") or degrees ("30°", "30 deg", "30 degrees").
+    A pitch over 24/12 (63.4°) is refused. A bare number over 24 says what it would be and how to
+    type degrees. A bare number from 12 to 24 is still read as rise per 12, with a note giving its
+    angle and how to type degrees. The pitch field has a text keyboard and a "Use 30°" button.
+    Examples (footprint 40 x 30 = 1,200 sq ft, roofline):
+      "30 deg": refused ("isn't valid"), 0 sq ft -> 30° = 6.93/12, x1.155, 1,386 sq ft.
+      "100": 100/12, x8.393, 10,072 sq ft -> refused: 'Pitch "100" would be 100/12, steeper than
+        24/12. Type the rise per 12, e.g. 6/12, or degrees, e.g. 30°.'
+      "30": 30/12, x2.693, 3,231 sq ft -> refused: 'Pitch "30" would be 30/12, steeper than 24/12.
+        For degrees, type 30°.' with a "Use 30° (6.93/12)" button.
+      "18": 18/12, 2,163 sq ft, no word -> the same, with 'Pitch 18 is read as 18/12, a very steep
+        roof (56.3°). If you meant 18°, type 18°.'
+      e2e (42 x 30 less a 6 x 10 chimney): "30 deg" -> "Use 1,395 sq ft".
+    The record gave x1.157 for 30°. 1 / cos 30° is 1.1547, so it reads x1.155 here.
+    Owner decision: none needed (audit RF-06, S2-F13; the 24/12 limit is the record's).
+    Tests: lib/measure/units.test.ts "reads a pitch typed in degrees as degrees", "takes nothing
+    steeper than 24/12", "says why a pitch is refused, with a hint", "offers the degrees reading of a
+    bare number that reads as a steep roof"; lib/measure/measure.test.ts "a pitch typed in degrees is
+    understood; nothing over 24/12 (L25, RF-06, S2-F13)", "a bare number that reads as a very steep
+    roof says how it was read (L25)"; e2e pitch step.
+
+L26 A broken measurement takes its size back.
+    When a measurement that gave the area its square feet stops being finished (a size cleared or
+    unreadable, a crossed outline), the area's square feet go back to 0. The area is then Incomplete
+    and not priced, and its card says why, with a "Finish measuring" button. A size typed by hand
+    (not the measurement's) stays. lib/field/measuring.ts measurementChecks() lists these areas,
+    each with a Fix ({ label: 'Finish measuring', target: { step: 'areas', areaId, open: 'measure' } },
+    lib/field/fix.ts) for a Send checklist to use.
+    Example (seeded, 20 min drive): walls 120 ft x 8 ft = 960 sq ft, Ready, Good $1,500 / Better
+      $2,575 / Best $5,270 -> height cleared: was still 960 sq ft, Ready, the same three prices ->
+      0 sq ft, Incomplete, no options, "Exterior walls: the measurement isn't finished, so this area
+      isn't priced. Enter the average wall height." with "Finish measuring".
+      e2e: walls 180 ft x 8 ft = 1,440 sq ft, height cleared -> "0 sq ft, measuring not finished".
+    Owner decision: none needed (audit RF-07, S2-F14).
+    Tests: lib/field/measuring.test.ts "walls 960 sq ft, height cleared: 0 sq ft, Incomplete, not
+    priced, with a Finish measuring fix", "a size typed by hand stays, and an area with no
+    measurement is not a measuring problem", "names the first thing to finish, or a measurement that
+    comes to nothing"; lib/measure/measure.test.ts "a measurement that breaks takes back the square
+    feet it gave", "a size typed by hand is not the measurement's, so it stays"; e2e walls step.
+
+L27 A self-crossing outline is an error with a plain message.
+    Example: custom outline with corners (0,0) (10,10) (10,0) (0,10) (a bow tie): an area of 0 sq ft
+      with the note "The outline crosses itself; the area may be wrong. Redraw it." -> no area, and
+      "The outline crosses itself, so its area can't be measured. Redraw it so the sides don't cross."
+    Owner decision: none needed (audit S2-F15).
+    Tests: lib/measure/geometry.test.ts "a self-crossing outline is an error (L27, S2-F15)";
+    lib/measure/measure.test.ts "a self-crossing outline measures nothing (L27)".
+
+L28 Parts of the satellite outline with no roof data (a carport, a flat part) start switched off.
+    Whenever the "Parts with no roof data" switch is offered (over 5% of the footprint and over 5
+    m²), they start left out for every area, not only a garage. A part too small to offer stays
+    counted, as Roof Takeoff counts it. The check under the numbers says it is left out and how to
+    count it.
+    Example (9 Carport Ct, the e2e mock: footprint 242 m², 25 m² with no roof data, face 5 left out,
+      12 in overhang): attic floor 2,230 -> 1,990 sq ft; 2,230 again when the switch is turned on.
+    The record gave 1,960 for "3 Carport Ct". Its mock house is not in the record. On this house the
+      contract formula gives 1,988.3 sq ft, shown as 1,990. The 2,230 before matches the record.
+    Owner decision: none needed (audit RF-15).
+    Tests: lib/roof/lookup.test.ts "a carport Google has no roof faces for is left out until the
+    estimator turns it on", "a part too small to offer stays counted, as Roof Takeoff counts it; the
+    wall run never uses it", "adds a blurry photo, no outline, a rough wall run, no faces and the
+    parts with no roof data" (the left-out wording); lib/roof/contract.test.ts (the formulas still
+    match Roof Takeoff's own choices; the app's default leaves the part out when offered); e2e
+    "parts with no roof data are offered, and start off".
+
+L29 A low slope never reads 2/12.
+    A rise under 2/12 is shown, and grouped for the main pitch, as at most 1.9/12. A rise worked out
+    from the angle is judged low slope before rounding.
+    Examples: rise 1.96: "2/12 (low slope)" -> "1.9/12 (low slope)"; main pitch of faces 1.96 (60 m²),
+      2.4 (50 m²) and 6/12 (100 m²): 2/12 (the 1.96 face counted with the 2.4 face) -> 6/12; a face at
+      9.45° (rise 1.997) with no rise sent: 2/12, not low slope -> 1.9/12, low slope.
+    Owner decision: none needed (audit S3-F22).
+    Tests: lib/roof/lookup.test.ts "low slope reads under 2/12 (L29, S3-F22)", "main pitch: the
+    whole-number rise with the most ground" (its 1.96 / 2.4 / 6 case now expects 6, was 2);
+    lib/roof/roofing.test.ts "a low-slope face never reads 2/12 (L29, S3-F22)".
+
+L37 A verified job offers no status changes; the owner can Unverify.
+    A job with any verified actuals row shows no status buttons. The Status card says why: for the
+    owner, "To change it, Unverify the actuals below first."; for the office, "Only the owner can
+    Unverify them." Unverify stays owner only.
+    Example: completed job, 3 of 3 rows verified, office or owner: "Mark in progress" and "Cancel job"
+      -> none.
+    Owner decision: none needed (audit RF-16).
+    Tests: lib/jobs/status.test.ts "offers no status changes once its actuals are verified", "says
+    why, and that only the owner can Unverify"; e2e "a verified job offers no status changes".
+
+=== Stage "quotes": what the customer reads, the numbers and dates on a quote (L8, L9, L12, L13, L30-L33, L39) ===
+
+Hard rule 1 holds through the whole stage: a quote already sent or signed renders exactly as before.
+A document now carries `format: 2` (lib/quotes/model.ts DOCUMENT_FORMAT); one sent before has none
+and prints as it did (cents in its sentences, its printed "Valid until" on the expired page, its own
+consent sentence, its PDF layout). Proof: the 77 stored quotes of the live golden export, rendered
+with the code before this stage (7c6b08c) and after, in every state (page open for each option,
+signed for each option, superseded, declined, expired, as stored), plus the PDF and signed PDF as
+text and every email: 2,926 files, 0 differences (scripts/accuracy/render-stored.ts;
+docs/accuracy/after-quotes/hard-rule-1.txt).
+
+L8  The accept sentence, the thank-you page, the signed page's price, the signed PDF and the signed
+    and office emails print the price in whole dollars, as the option cards, the sign button and
+    the quote PDF already did (one formatter: lib/format.ts formatMoney, through lib/quotes/model.ts
+    quoteMoney and sentenceMoney).
+    Examples: "You are accepting Better: … for $4,780.00." -> "for $4,780."; signed PDF and signed
+      email "Price: $4,780.00" -> "Price: $4,780"; thank-you page "$5,060.00" -> "$5,060"; office
+      email subject "$4,780" and body "$4,780.00" -> both "$4,780".
+    10,000 random quotes (seed 20261118): same_price_text accept_sentence, signed_page, signed_pdf,
+      signed_email and office_email 22,145 each -> 0.
+    A quote sent before keeps its cents in those sentences (hard rule 1).
+    Owner decision: OD4 (S1-F1).
+    Tests: lib/quotes/quotes-stage.test.ts "the thank-you page says "for $4,780", not "for $4,780.00"",
+    "the signed PDF says "Price: $4,780"; a quote sent before still says "$4,780.00"", "the signed
+    emails say "Price: $4,780", the office email's subject and body alike"; quote-page.test.ts "keeps
+    the signing form legally identical, with the quote's own consent sentence and one price (L8, L31)",
+    "a signed quote shows the signed price in whole dollars, as the PDF does (L8)"; email.test.ts
+    "signed confirmation includes the price in whole dollars …", "office notice … the same in the
+    subject and the body (L8)".
+
+L9  The headline is the recommended option everywhere: the office list, the phone's list, the
+    sync's model_total_price and the quote. Recommended = the option the estimator picked; with no
+    pick, Better, the implied pick (OD15). When that option is not shown (OD6), the option shown
+    that does the same work, else the nearest one shown above it, else the nearest below
+    (lib/field/recommended.ts; amended by RB-flow-B4: before it, a hidden pick went to the next
+    option shown after it, and with no pick a hidden Better went to the first option shown).
+    Examples: office list, no pick, Good $2,375 / Better $4,095 / Best $6,920: $2,375 (the stored
+      model price, no option named) -> $4,095 "Better". Live golden set: c6b22b65 (draft, no pick)
+      $2,020 -> $2,730 Better; it is the only live estimate whose office headline moves.
+      Picked Better hidden (Best does more for the same price), Good and Best shown: recommended
+      Good -> Best. Sync with no pick: model_total_price was the first option's (Good's) model price
+      -> Better's. The phone's Send step stars the same option the quote will recommend.
+    Owner decision: OD1 (S2-F12, review R5).
+    Tests: lib/office/estimates.test.ts "with no pick, shows Better, the option every other list and
+    the quote recommend (OD1, L9)", "when the pick is no longer shown, shows the next option shown
+    (OD1, OD6, L9)"; lib/sync/payload.test.ts "the model total is the recommended option's: the pick,
+    else Better (OD1, L9)"; quotes-stage.test.ts "a picked option that is not shown recommends the
+    next one shown", "the quote recommends the same option as the lists".
+
+L12 Quote numbers come from a counter: PREFIX-YEAR-0001-v1, the year in the business time zone. The
+    database function next_quote_number(year) (security definer, search_path pinned, executable by
+    the service role only) gives the next number of the year from quote_number_counters; the prefix
+    is the quote_number_prefix setting, seeded "KN" (the prefix quotes already carry), set on the
+    Business profile page. A new version keeps the estimate's number ("-0001-v2"), including a
+    number given before the counter; the phone shows and finds the number each quote was sent with
+    (lastQuote.quoteNumber), and the old number for quotes sent before.
+    Examples: "KN-2026-1A2B3C-v1" (six characters of the estimate id) -> "KN-2026-0001-v1"; a quote
+      sent Jan 1 2027 at 03:00 UTC (Dec 31, 10 PM in the business zone): year 2027 -> 2026. e2e: the
+      first quote of the year is KN-<year>-0001-v1.
+    Owner decision: OD10 (S2-F16, S2-F17).
+    Tests: quotes-stage.test.ts "PREFIX-YEAR-0001-v1, a new version keeps its number, the year is the
+    business zone's"; tests/sql/40_accuracy.test.sql (1, 2, then 1 for a new year; grants; a second
+    run keeps the counters and a saved prefix); estimateList.test.ts "shows and finds the number a
+    quote was sent with, from the counter (L12, OD10)".
+
+L13 "Valid until" is the business-zone date of the last moment the link works (expires_at, which is
+    unchanged: sent + validDays x 24 h). The expired page says when the link stopped, date and time.
+    Examples: sent 2026-11-18 at 02:30 UTC for 30 days, the link stops 2026-12-18 02:30 UTC (Dec 17,
+      9:30 PM): "Valid until Dec 18" -> "Dec 17". Expired page "This quote expired on December 18,
+      2026" -> "on Dec 17, 2026 · 9:30 PM". A quote sent at noon reads the same date as before.
+    10,000 random quotes: valid_until_is_expiry 1,626 (all day_after) -> 0. Synthetic golden 3 -> 0,
+      live golden (re-quoted today) 16 -> 0. The 16 stored live quotes that print a day late keep
+      their printed date and their expired page says that date (hard rule 1).
+    Owner decision: OD11 (S1-F8, RF-11).
+    Tests: quotes-stage.test.ts "sent 2026-11-18 at 02:30 UTC for 30 days: valid until Dec 17 …",
+    "the expired page says when the link really stopped: "Dec 17, 2026 · 9:30 PM"".
+
+L30 A quote cannot be sent while the business profile has a gap: the company name, license number,
+    office phone, state, quote number prefix, warranty or terms missing, or still a seed
+    PLACEHOLDER. The send route answers 409 setup_incomplete with one sentence naming the gaps; the
+    phone's Send checklist says the same from its downloaded bundle (business info outside the
+    pricing hash; the ETag covers both) and Send waits. New page /admin/business (Business profile)
+    for the owner (edits) and the office (reads); the branding and quote text moved there from
+    Pricing. lib/quotes/profile.ts: PROFILE_FIELDS, businessProfileGaps, profileGapsSentence.
+    Example: the live seed (placeholder warranty, no phone, no license, no state): sent -> refused,
+      "The business profile is not finished: add the license number, the office phone, the state and
+      the warranty."
+    Owner decision: RF-01, UX-01 (Phase 1: "a business profile … required before a quote can go out").
+    Tests: quotes-stage.test.ts "names every gap in one plain sentence; a finished profile has none";
+    e2e "the Send checklist says the business profile is not finished, and what it needs", "the server
+    refuses to send it too", "once saved, everything a quote needs is filled in".
+
+L31 A new quote's e-sign consent sentence names the state in the business profile and is stored in
+    the quote (document.consent); the e-sign record keeps the sentence the customer saw. A quote sent
+    before keeps the sentence it was sent with (lib/quotes/consent.ts consentFor).
+    Example: "(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and Illinois UETA)" for a profile in IL;
+      e2e with the state DE: "Delaware UETA", from the data.
+    Owner decision: RF-01, hard rule 3 (no state typed into the code for new quotes).
+    Tests: quotes-stage.test.ts ""(ESIGN Act and Delaware UETA)" -> "(ESIGN Act and <the profile's
+    state> UETA)""; quote-page.test.ts "a quote sent before keeps its sentence and its cents in the
+    accept sentence (hard rule 1)"; e2e "the e-sign record keeps the sentence the customer agreed to".
+
+L32 A new estimate starts in the business profile's town and state, else the shop address's, else
+    blank (newDraft takes the place; the phone reads it from its bundle, offline too).
+    Examples: no profile town and no shop address: "Newark, DE" -> blank; the seeded shop address
+      "Newark, DE 19711": Newark, DE, read from the setting, not the code.
+    Owner decision: RF-17, hard rule 3.
+    Tests: quotes-stage.test.ts "no town is typed into the code", "the profile, then the shop address";
+    e2e "a new estimate starts in the town of the shop address in the settings".
+
+L33 Honest wording. The thank-you page says the signed copy was emailed only when the email went
+    out (the sign route returns emailed); the PDF says the link "we sent you" (it may have been sent
+    by text or by hand when email is not set up).
+    Examples: email not set up: "We emailed you a copy and will contact you shortly …" -> "Download
+      your signed copy below. We will contact you shortly …"; PDF "Sign online at the link in your
+      email." -> "Sign online at the link we sent you."
+    Owner decision: RF-12.
+    Tests: quotes-stage.test.ts "with email not set up, the thank-you page points to the download …",
+    "the PDF says "Sign online at the link we sent you." …"; e2e "with email not set up, the thank-you
+    page points to the download, not to an email".
+
+L39 Each option block on the PDF stays on one page (wrap off for an option of up to 18 lines and
+    bullets; a longer one may still break). No amount changes.
+    Example: three options of 4, 5 and 6 lines: Best's title on page 1 and its lines and total on
+      page 2 -> Best whole on page 2.
+    Owner decision: UX-01.
+    Test: quotes-stage.test.ts "no option starts on one page and ends on the next".
+
+One formatter: every quote surface (page, PDF, emails) formats money with lib/format.ts formatMoney
+and dates with lib/format.ts (formatDateLong, formatDateTime, formatAuditTime, calendarDay); the
+quote's own formatUsd and the PDF's and emails' own date functions are gone. Output for a quote sent
+before is unchanged (the 2,926-file comparison above).
+
+=== Stage "flow": sending, approvals, signed while offline, Koala unreachable, Pricing words (L10, L11, L34-L36, L38, L23c) ===
+
+No price formula changes in this stage: no option total of either golden set moves, and the
+random quotes price exactly as after the quotes stage. What changes is what the estimator, the
+office and the owner are told, and what they may do.
+
+L34 The Send checklist is in plain words, one item per problem, each with a Fix button that opens
+    the place to fix it (a customer field, an area's size or its measuring sheet, an option, the
+    Business profile), or Request approval for a price beyond what the estimator may quote alone
+    (lib/field/sendChecks.ts, lib/field/fix.ts). The price policy names the price, the model price,
+    the lowest price the floor margin allows and the range the estimator may quote alone
+    (lib/pricing/policy.ts). An estimator (or the office) asks for one option's exact price; the
+    owner or the office decides it on /estimates ("Prices waiting for approval"); nobody decides
+    their own request; below the floor margin only the owner. An approval is bound to the estimate,
+    the option, the exact whole-dollar price and the model price it was asked against
+    (price_approvals, RLS; /api/approvals GET POST, /api/approvals/[id] PATCH); the quote is sent
+    at that price and keeps the approval it used (quotes.snapshot.approvals).
+    Examples (hand fixture, Good model $5,420, estimator limit 10%, floor 25%):
+      Good at $4,500: "good: price is 17.0% from the model price; estimators may change it up to 10%.
+        Ask the office to send." -> "Good: $4,500 is 17% below the model price of $5,420. You can
+        quote $4,878 to $5,962 on your own (estimators may change it up to 10%). Request approval
+        to send $4,500."
+      Good at $3,500: "good: margin 7.2% is below the 25% floor. Owner approval required." ->
+        "Good: $3,500 is below the 25% floor margin; the lowest price it allows is $4,333 (model
+        price $5,420). You can quote $4,878 to $5,962 on your own (estimators may change it up to
+        10%). Only the owner can approve $3,500."
+      An estimate with a crawlspace of no size: "Too small: expected number to be >0" -> "Crawlspace
+        has no size yet. It is not in the price." with Add size (opens the Areas step at that
+        area's square feet).
+      e2e (seeded): Good $3,933 against the model's $3,025 -> "Good: $3,933 is 30% above the model
+        price of $3,025. You can quote $2,881 to $3,327 on your own …" (the floor margin lifts the
+        low end above 90% of the model because Good's labor was raised); Request approval; the
+        owner approves it on /estimates; the quote goes out with Good at $3,933.
+      With line changes that raise the cost so far that no price within 10% clears the floor:
+        "… With these changes no price you can quote on your own (within 10% of the model price)
+        clears the 25% floor margin. Request approval to send $8,245."
+    Owner decision: none new (audit RF-02, UX-04; the record's approval rules). Added here: an
+    approval also binds the model price, so a re-priced estimate needs a new one (owner question).
+    Tests: lib/field/sendChecks.test.ts (all 10, e.g. "an area with no size is named, not "Too
+    small: expected number to be >0", with an Add size button", "a broken measurement is named
+    (RF-07), with Finish measuring", "a request waiting or declined says so; an approved price can
+    be sent"); lib/pricing/support.test.ts "price policy: what an estimator may quote alone, and
+    approvals (L34)" (6); lib/pricing/overrides.test.ts "applies the estimator limit against the
+    pure model price when only line overrides exist" (now expects the full message);
+    lib/quotes/approvals.test.ts; tests/sql/40_accuracy.test.sql price approvals; e2e "Send
+    checklist: plain words, and a Fix button that goes to the item (L34)", "a price beyond what the
+    estimator may quote alone: Request approval (L34)", "the owner approves it from the Estimates
+    page (L34)".
+
+L35 A signed estimate answers 'locked' before the row-version check (sync_upsert_estimate,
+    recreated with the same signature), and the phone says what happened to its unsent change.
+    Other unsynced estimates keep syncing. An empty state keeps the stored property's state (else
+    the business profile's); the database no longer writes in 'DE'.
+    Examples: SQL, a phone's edit made on version 2 of an estimate signed at version 3: {"status":
+      "conflict", "row_version": 3} -> {"status": "locked", "row_version": 3}. e2e: the phone edits
+      Pat Lee's sent quote offline while the customer signs: DRAFT + "This estimate was changed on
+      another device." (Keep mine / Use the other version) -> Signed, "The customer signed this
+      quote. It is read-only. Your unsent change was not applied."; the estimate made offline at
+      the same time (Kim Pending) syncs. Empty state on an IL property: "DE" -> "IL".
+    origin/main's phone already treats 'locked' as signed and read-only (its applySyncResult is the
+    same), so the live site works with the new answer (step 4 of this stage).
+    Owner decision: none needed (audit RF-05).
+    Tests: tests/sql/40_accuracy.test.sql "a signed estimate answers locked, not conflict", "an
+    empty state keeps the stored one"; lib/offline/syncCore.test.ts "a change made before the phone
+    heard of the signature is dropped, and the estimator is told (L35)"; e2e "a change on the phone
+    while the customer signs …", "the phone hears of the signature: signed, read-only, the change
+    not applied; the other estimate syncs (L35)".
+
+L36 Koala's database (or sign-in service) not answering is not a sign-out. lib/server/auth.ts
+    getSessionState() is ok | signed_out | unreachable; pages go to /unreachable?next=<same-site
+    path> ("Can't reach Koala right now", Try again, and the phone's own copy of the field or crew
+    app); APIs answer 503 {error: 'unreachable'}; proxy.ts does the same when the sign-in check gets
+    no answer. Unreachable never lets a request through: /unreachable reads no data, and a request
+    with no session still goes to sign in. The service worker (v10) opens the cached field app when
+    its page goes to /unreachable, and keeps it.
+    Examples (e2e, the database made unreachable: REST answers 503): estimator opens /field: /login
+      -> the phone's estimates with "Can't reach Koala right now. Your work is saved on this phone.
+      It syncs when Koala is back."; GET /api/estimates: 401 "Not signed in" -> 503 "unreachable";
+      owner opens /estimates: /login -> /unreachable?next=%2Festimates; /unreachable?next=//evil.
+      example/x: Try again goes to "/".
+    Owner decision: none needed (audit RF-04, UX-05).
+    Tests: lib/server/sessionState.test.ts (4, e.g. "the profile read: no answer or a server error
+    is 'unreachable'; a refused token is signed out", "the page it sends people to keeps where they
+    were going, on this site only"); e2e "Koala's database unreachable is not a sign-out (L36)".
+
+L38 The code banner on Pricing comes from the data, and the Target R placeholder shows the minimum
+    the engine prices. The photo-read prompt names no franchise, town or climate zone.
+    Examples: banner "seeded from the 2021 IECC (attic R-60). Delaware has used both … Confirm which
+      edition Newark and New Castle County enforce …" -> "these minimums come from 2018 IECC (local)
+      and company default. Confirm which edition your local building department enforces …";
+      crawlspace Target R placeholder "Code minimum (R-10)" (the crawl wall) -> "Code minimum
+      (R-19)" (the floor it prices); photo-read prompt "at Koala Insulation of Newark, Delaware (IECC
+      climate zone 4A)" -> no franchise words (prompt version photo-read-2026-11-19b).
+    Owner decision: hard rule 3 (audit RF-17, S2-F18).
+    Tests: lib/admin/codes.test.ts "the banner names the editions in the data …", "the crawlspace
+    placeholder shows the floor the engine prices (R-19), not the crawl wall (R-10)";
+    lib/ai/photoRead.test.ts "names no franchise, town or climate zone (L38, S2-F18, hard rule 3)";
+    e2e Pricing checks.
+
+L10 The margin setting is labelled "Target net margin (after overhead)", with its gross margin
+    shown as the owner types; the floor and ceiling hints say they are net too. Stored value
+    unchanged.
+    Example (seeded: 63% overhead, 15%): "Target margin" / "Gross margin on price (0–95%)" ->
+      "Target net margin (after overhead)" and "With 63% overhead, a 15% net margin is about a 48%
+      gross margin: prices are 1.92 times the direct job cost." target_margin_pct stays 0.15.
+    Owner decision: OD9 (audit S2-F10, RF-14).
+    Tests: lib/admin/settings.test.ts "is labelled net, after overhead, and previews the gross
+    margin", "the stored value is unchanged …"; the out-of-range test now names the field as the
+    page does ("Target net margin must be less than 95"); e2e Pricing checks.
+
+L11 Each material has a usual cost range and where it comes from (materials.typical_min,
+    typical_max, typical_source: half to twice the cost on file when the migration ran, unless a
+    range is set; the owner can enter a supplier's range). A cost outside it is refused until
+    "This cost is right" is ticked.
+    Example: open-cell $0.12 -> $15.25 per board ft: "Saved." -> "Not saved. $15.25 per board ft is
+      102 times more than the usual $0.06 to $0.24 (Starting range: half to twice the cost on file
+      when ranges were added. Enter your supplier's range.). Check the unit, or tick “This cost is
+      right” to save it." Ticked: saved. (15.25 / 0.15, the middle of the range, is 102.) The e2e
+      step puts $0.12 back at its end. (Amended by RB-flow-B9: the distance is now measured from
+      the nearest edge, and a confirmed cost widens the stored range.)
+    Owner decision: the record's default (half to twice the starting cost until real ranges are
+    entered).
+    Tests: lib/admin/pricingForms.test.ts "a cost 100 times the usual is caught, with the range and
+    its source" ($12: 80 times), "a cost inside the range, or a material with no range, is fine",
+    "the range fields and the confirmation are read from the form"; tests/sql/40_accuracy.test.sql
+    L11 block; e2e Pricing step.
+
+L23c (checker, no customer value) An R exactly on the 0.05 rounding boundary is not "below" by
+    floating-point noise. Seed 99999 (20,000 quotes) flagged 2.1 in of closed-cell on R-19 in a
+    10.7 in cavity: it is exactly R-32.65 (16,032.4 sq ft x 2.1 in = 33,668.04 board ft), said R-32.7
+    as every R is said to 0.1 rounded half up (3.5 in of open-cell, R-12.95, reads R-13), but the
+    check read the quantity back as R-32.649999999999995. The check allows 1e-9 for float noise only;
+    the rule (an item's R within 0.05 of what its quantity gives) is unchanged.
+    Example: seed 99999, labels_match_work qty_below_stated_r 1 -> 0; the item still reads R-32.7.
+    Owner decision: none (checker).
+    Tests: lib/pricing/phase1.test.ts "2.1 in of closed-cell foam on R-19 reads R-32.7, and the check
+    agrees the quantity gives it" (failed before), "a stated R more than the rounding above what the
+    quantity gives is still caught" (R-32.8 and R-33 still flagged).
+
+=== Review A fixes (docs/accuracy/review/review-a.json; branch claude/accuracy-fixa) ===
+
+An independent review of the pricing engine and of quotes and documents (review A, at fdc3eaa),
+each finding checked by an adversarial verifier. One entry per fix that changes a price, title,
+bullet, item or quantity; fixes with no customer value (the checker, the generator, the phone) are
+listed at the end. Seeded pricing, easy access, 20 min drive unless stated. Random-quote counts are
+10,000 quotes at seed 20261118 drawn by the generator of RA-F7, so before and after are the same
+quotes. Tests are in lib/pricing/review-a.test.ts unless named otherwise.
+
+RA-F3 Batts and air sealing say the area their quantity covers (R3 closed for every unit, not only
+    bags and board feet). A quantity priced by the square foot covers quantity / waste; below the
+    area, the item says "N of M sq ft", and a bullet that says every leak is sealed goes when the
+    air sealing covers part of the area. Batts above the whole area are cut to the whole area (one
+    layer), with an override_capped warning, as a fill is cut to a full cavity (L23). Air sealing
+    above the area is not cut (knee walls, L7): the item says the sq ft priced.
+    Examples (seeded):
+      Crawlspace 800 sq ft, 2x6, Good batts set to 100 sq ft: "Fiberglass Batts to R-21 (5.5 in
+        thick), 800 sq ft" -> "…, 95 of 800 sq ft" (100 / 1.05); $1,500 unchanged.
+      The same, 1,600 sq ft of batts: priced 1,600 sq ft, item $3,902, Good $4,275 -> 840 sq ft (the
+        whole area), item $2,080, Good $2,270, with "Crawlspace: 1,600 sq ft of fiberglass batts is
+        more than the 800 sq ft area. Good is priced with 840 sq ft, the whole area."
+      Attic 1,000 sq ft, air sealing set to 500 sq ft on Better: "Air sealing of top plates,
+        penetrations and bypasses (1,000 sq ft)" -> "(500 of 1,000 sq ft)", $4,090 unchanged; Best
+        (showAll) loses "Full air sealing before new insulation".
+      Air sealing set to 1,500 sq ft (knee walls): "(1,000 sq ft)" -> "(1,500 sq ft)", $4,685 and
+        9.5 h unchanged (L7).
+    Random quotes: labels_match_work area_not_covered (new kind) 152 in 119 quotes -> 0.
+    Owner decision: R3 (review finding), L15.
+    Tests: "crawlspace 800 sq ft, Good batts set to 100 sq ft: "95 of 800 sq ft" …", "1,600 sq ft of
+    batts for an 800 sq ft area is cut to the whole area …", "attic 1,000 sq ft, air sealing set to
+    500 sq ft: "(500 of 1,000 sq ft)"", "air sealing set above the area (knee walls, L7) is not cut …";
+    lib/accuracy/invariants.test.ts "labels_match_work (review A F3): the area an item states is the
+    area its quantity covers".
+
+RA-M1 A cavity depth goes with the job type. The Cavity depth field is shown for walls, rim joists,
+    crawlspaces and garages only; changing an area to attic or commercial now clears its depth, and
+    a depth already stored on such an area (an earlier build kept it) is not priced
+    (lib/sync/draft.ts withJobType, priceableAreas; the phone, the sync and the send route all
+    price through priceableAreas).
+    Examples (seeded, attic 1,000 sq ft, R-0, with 3.5 in left from walls): Good $1,500 "Blown
+      Cellulose to R-12.6" (fills the 3.5 in cavity) -> $2,995 "Blown Cellulose to Code" (R-49);
+      Better $1,635 -> $4,390. At R-11: Good not offered (cavity full), Better $1,500, Best $4,085 ->
+      Good $2,385, Better $3,805, Best $6,655.
+    A quote already sent keeps its prices (hard rule 1); only drafts that still carry such a depth
+    re-price. The engine itself still reads a depth on any job type (L18); whether an attic floor's
+    joist depth should ever cap blown fill is an owner question (see RA-F9).
+    Owner decision: none needed (review finding M1; the form never showed this depth).
+    Tests: lib/sync/payload.test.ts "a cavity depth goes with the job type: changed to attic, an area
+    keeps no hidden depth (review A M1)", "a depth stored on an attic (a draft saved before the fix)
+    is not priced …".
+
+RA-F9 An option never removes what is there to leave the area with less R. When an option's own
+    removal (its template's, not one the estimator marked as needed) would end the area below the R
+    it has, the option keeps what is there instead (no removal priced), with a removal_kept warning.
+    Removal the estimator requires (damaged, wet, rodents) is priced as before, whatever R follows.
+    Examples (seeded, attic 1,000 sq ft):
+      R-38 cellulose, target R-30 typed: Best $5,025 "Remove, Air Seal + Cellulose" (removes R-38,
+        installs "Blown Cellulose to R-30 (~8.3" added)") -> Best keeps the R-38 and air seals, the
+        same work as Better ($1,500 "Air Sealing"), so it is not shown (OD6). Warning: "Attic: Best
+        would remove the R-38 there and end at R-30, so it keeps what is there."
+      R-49 blown fiberglass with a 7.25 in depth (an input the engine still accepts; see RA-M1): Best
+        $4,840 ending at "R-26.1 (fills the 7.25 in cavity)" -> not shown, as above.
+      R-19, no target: Best still removes and installs R-60, $ unchanged.
+    Random quotes: options_step_up ends_below_existing (new kind) 142 -> 0; options shown 22,203 ->
+      22,138 (65 Best options that were the same as Better once they keep what is there).
+    Owner decision: none in the record allows the dearest option to leave less R; the default here is
+    "keep what is there". Owner question: keep this, or skip such an option outright; and whether an
+    attic floor's joist depth should cap blown fill at all.
+    Tests: "target R-30 typed on an attic at R-38: Best no longer removes R-38 …", "attic 1,000 sq ft,
+    7.25 in joists, R-49 blown fiberglass: Best no longer removes R-49 to end at R-26.1", "removal the
+    estimator requires (damaged, wet) is kept …", "a removal that ends above what is there is kept …";
+    lib/accuracy/invariants.test.ts "options_step_up (review A F9): an option never leaves an area
+    with less R than it has".
+
+RA-F4 A product with a quantity of 0 is not sold as work. A material quantity is what is installed
+    (R3, L23), so 0 installs nothing: the product gets no item, no words in the title or bullets
+    and no install hours (unless the estimator typed hours), with a product_zero warning; its lines
+    stay so the estimator can change them back in Details. An option left with no work at all is not
+    shown to the customer ("… it installs nothing. Change the quantity in Details to show it."), and
+    stays on the phone under "Not shown to the customer" (RA-F1). The phone no longer takes a material
+    quantity of 0 ("A quantity of 0 installs nothing. Enter the quantity to install; for material
+    already on site, change the price instead."); 0 hours is still taken.
+    Examples (seeded):
+      Walls 1,000 sq ft, 2x4, Good set to 0 bags: Good $1,500 "Dense-Pack Cellulose", item "Blown
+        Cellulose to R-0 (~0" added), 1,000 sq ft" $134 + $186 + $1,180 minimum -> Good not shown;
+        Better $2,520 and Best $5,280 as before.
+      Rim joist 200 sq ft, Best set to 0 board ft: the one option shown, Best $1,500 "Closed-Cell
+        Spray Foam to R-0 (~0" added)" -> Better $1,500 "Open-Cell Spray Foam to R-10 (~2.7"
+        added)" (Best not shown; Good repeats Better's price, OD6).
+      Attic 1,000 sq ft, 0 bags and 0 h on every option: a $0 "Blown Cellulose to R-0" item -> no
+        item; Better and Best are "Air Sealing".
+    Random quotes (the generator now draws a quantity or hours of 0 on 5% of line changes): labels_
+      match_work product_not_installed (new) 23 -> 0, finite_amounts zero_work_item (new) 3 -> 0;
+      quotes with no option shown 897 -> 899 (two quotes whose every option was emptied).
+    Follow-ups found by the full runs (seed 7): a product at 0 is no work when options are compared
+      (OD6): crawlspace 800 sq ft with Best's air sealing set to 0: Best was shown and Better hidden
+      ("costs the same as Best"), both selling the same single item -> Best hidden as "the same work
+      as Better", Better shown. And work with a cost never prints at $0: attic 0.3 sq ft at R-19,
+      removal hours set to 0 (disposal $0.11): "Remove and dispose of existing insulation (0.3 sq ft)"
+      $0 -> $1, travel and setup $1 less, the total unchanged.
+    Owner decision: R3 (a quantity is what is installed), L15. The Phase 2 note "a zero override is
+    valid (e.g. materials already on site)" no longer holds under R3; material on site is a price
+    change.
+    Tests: "walls 2x4, Good dense-pack set to 0 bags: …", "0 bags and 0 hours on every option: no $0
+    work item …", "rim joist 200 sq ft, Best set to 0 board ft: …", "crawlspace 800 sq ft, Best's air
+    sealing set to 0: Best is the same work as Better …", "a removal with a cost never prints at $0 …";
+    lib/field/lineOverrides.test.ts
+    "refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)";
+    lib/accuracy/invariants.test.ts "review A F4: a product with a quantity of 0 is not sold as work".
+
+RA-F5 Two options with different materials are not "the same work" (OD6). The work signature that
+    finds duplicates names each material line's material as well as its quantity, so an R-19 batt
+    and an R-30 batt over the same floor are different options.
+    Example (an owner's setup, not the seeded one: crawlspace Better set to R-30 batts at $1.10 per sq
+      ft; crawlspace 800 sq ft): Good $2,270 and Best $4,660 shown, Better hidden as "the same work as
+      Good for more ($2,830 against $2,270)" -> Good $2,270, Better $2,830 "Fiberglass Batts to R-30
+      (10 in thick)", Best $4,660 all shown.
+    Seeded setup: nothing moves (random quotes: options shown 22,113 before and after; the golden sets
+    are unchanged by this fix).
+    Owner decision: OD6.
+    Test: "Good (R-19 batts) and Better (R-30 batts) are both shown; Better is no longer hidden as the
+    same work".
+
+RA-F6 Install hours are multiplied in the order they were before the money stage (units x hours
+    per unit x access), so a half-cent tie rounds as the model always rounded it (L7: the model's
+    hours stay the model's). The money stage had multiplied units x (hours per unit x access), which
+    at a tie can land a hair under it.
+    Example (seeded): attic 2,625 sq ft, extreme access, to R-49, plus an attic of 275 sq ft,
+      difficult, 67 min drive: 2 + 178.6458 bags x 0.15 h x 1.6 = 44.875 h. Good 44.87 h, $10,810 ->
+      44.88 h, $10,815 (the daymark engine's price).
+    The reviewer's 4,000 attic-only inputs priced with the same bundle by the daymark engine and this
+    one: 3 differed by $5 (q1208 Best $40,000 -> $39,995, q1703 Good $10,810 -> $10,815, q2753 Good
+    $33,595 -> $33,590 after this fix, each now the daymark price); the 43 that still differ are all
+    Best options that no longer remove the insulation there (RA-F9, each with a removal_kept warning).
+    Owner decision: L7 (no price was meant to move).
+    Test: "attic 2,625 sq ft extreme to R-49 + attic 275 sq ft difficult, 67 min: Good 44.88 h and
+    $10,815, as daymark priced it".
+
+RA-F11 (checker, no customer value) An R exactly on the 0.05 rounding boundary is not "below" by
+    float noise: the checker allows 1e-9 more than the 0.05 rounding room, for floating-point noise
+    only. This is the same change, and the same constant, as the flow stage's L23c, made there
+    independently: seed 99999's one qty_below_stated_r (random quote 8ebd36f3: 2.1 in of closed-cell on
+    R-19 in a 10.7 in cavity, exactly R-32.65, read back as 32.649999999999995) -> 0.
+    The item still reads R-32.7, as every R is said to 0.1 rounded half up (L18: 3.5 in of open-cell,
+    R-12.95, reads R-13). This branch first stated a cavity-capped R rounded down (R-32.6, R-12.9), as
+    the reviewer suggested; that was taken back to agree with L23c and L18. Owner question: should an
+    R the cavity caps be said rounded down (R-12.9 for a 2x4 of open-cell), so it never reads above
+    what the cavity holds, even by the 0.05 of rounding?
+    Owner decision: none (checker).
+    Test: "commercial 16,032.4 sq ft, 10.7 in cavity with 8.6 in of vermiculite (R-19), Best
+    closed-cell: R-32.7, and no violation" (failed before the epsilon).
+
+RA-F12 A tiny area never reads "0 sq ft" (L17 below 0.05 sq ft). Under 1 sq ft an area is written
+    with two significant digits; and a model quantity to 0.1 (batts, board feet, air sealing) is
+    never 0 for a positive need, so a tiny area's air sealing is not dropped as "a quantity of 0"
+    (RA-F4).
+    Examples (seeded, attic 0.04 sq ft, the area form takes any size above 0): "Blown Cellulose to
+      R-49 (~13.6" added), 0 sq ft" -> "…, 0.04 sq ft"; "Air sealing of top plates, penetrations and
+      bypasses (0 sq ft)" -> "(0.04 sq ft)", its material 0 -> 0.1 sq ft; every option $1,500 (the
+      minimum) unchanged. 0.3 sq ft still reads "0.3 sq ft"; 12.4 sq ft "12 sq ft".
+    Owner decision: S3-F23.
+    Test: "attic 0.04 sq ft (the form takes any size above 0): "0.04 sq ft", not "0 sq ft" …".
+
+RA-F2 Wall actuals no longer move attic prices (makes L21 true). The learning loop fits the shared
+    waste cell (waste_factor / cellulose, which attics price with) only on the jobs of job types that
+    have no waste cell of their own; walls have one (L21), so wall jobs fit the walls cell only. With
+    no such jobs the shared cell keeps its value. A database without the walls cell (before the
+    accuracy migration) learns as before, from every job.
+    Example (seeded active set with the walls cell, 1.08): calibrate on 200 wall-only cellulose jobs
+      that each used 1.30 x the design bags: the shared cell 1.08 -> 1.188, so a 1,000 sq ft attic to
+      R-49 went from 74 to 81 bags (about +$190) once promoted -> the shared cell stays 1.08 and only
+      the walls cell moves. 20 attic jobs at 1.08 plus 200 wall jobs at 1.30: the attic cell 1.117 ->
+      1.08. No price moves today (nothing is promoted).
+    Owner decision: R4 (review finding).
+    Tests: lib/learning/calibrate.test.ts "200 wall jobs at 1.30: the walls cell moves, the cell attics
+    price with stays at 1.08", "20 attic jobs at 1.08 and 200 wall jobs at 1.30: attics stay at about
+    1.08", "with no walls cell (a database before the accuracy migration) the shared cell still learns
+    from every row".
+
+RA-F13 The dense-pack citation names one card (docs only; no value changes). L20 and the migration
+    comment cited "Greenfiber SANCTUARY (INS765)", mixing two products. The source is the SANCTUARY
+    card (Rev E, 01/23; read through a web search summary, since greenfiber.com is outside this
+    session's network): dry dense-pack sidewalls at 3.5 pcf, 2x4 (R-13 on the card): 35.0 sq ft per
+    bag at 16 in o.c., 33.8 at 24 in o.c.; 2x6: 22.3 and 21.6. 122.5 sq ft x in per bag is the 16 in
+    o.c. figure (35.0 x 3.5; 2x6: 22.3 x 5.5 = 122.65). INS765 / INS765LD is another product with its
+    own card.
+    At 24 in o.c. the figure is 118.3 (33.8 x 3.5): a 1,000 sq ft 2x4 wall would take 32 bags, not 31.
+    The engine states R-12.6 for a full 2x4 (3.5 in x 3.6, the one per-inch table, L24) where the card
+    says R-13; that follows L24 and understates, so it is kept.
+    Owner questions: price dense-pack at 16 in or 24 in o.c.; confirm the bag weight in the row name
+    ("25 lb"), which the card read here did not show. If 24 in o.c., a new additive migration sets
+    118.3 where the seeded 122.5 is untouched.
+    Owner decision: OD7 (the row stays flagged Needs owner input).
+
+RA-DOC-4 (L39) An option is kept on one page only when it fits one. L39 kept together any option
+    of 18 lines and bullets or fewer, whatever its height; when such a block was taller than a page,
+    react-pdf squeezed the whole first page and its lines printed over each other (the masthead,
+    "Prepared for", "Valid until" and the options). Now an option is kept together only when its
+    estimated height (lib/quotes/pdf.tsx estimateOptionHeight, erring high) is at most 640 pt of the
+    page's 708; a taller one breaks across pages as before L39, its title kept with what follows.
+    Example (an engine-priced quote of 7 attics named with 80 characters, within the form's limit):
+      Better, 15 lines and 1 bullet, kept together: page 1 squeezed and overlapping, 3 pages ->
+      Better runs from page 1 onto page 2, every line readable, 4 pages
+      (docs/accuracy/after-fixa/doc4-before-page1.png, doc4-after-page1.png, doc4-after-page2.png).
+      A quote of 3 attics with short names: unchanged, every option kept on one page.
+    No amount, item or text changes. A quote sent before the accuracy round still lays out as it
+    did (hard rule 1: it is never kept together).
+    Owner decision: UX-01.
+    Tests: lib/quotes/quotes-stage.test.ts "7 attics with 80-character names: react-pdf never squeezes
+    an option into a page …", "8 attics with 55-character names: no option is squeezed either"
+    (both render the real PDF and fail before the fix with react-pdf's "bigger than available page
+    height"); "no option starts on one page and ends on the next" still passes.
+
+No customer value (the phone, the checker, the generator):
+  RA-F1, RA-M2 The phone keeps every option the customer is not shown on the Options step, collapsed
+    under "Not shown to the customer", with the reason, the estimator's price, Change price, Remove
+    price change and Details; it cannot be made the recommended option. Example (seeded attic 1,000 sq
+    ft): Good set to $4,500 above Better $4,390: the Good card disappeared, and with it the only
+    control that could undo the change -> Good's card stays, and Remove price change brings it back at
+    $2,995. Tests: app/field/OptionsStep.test.tsx (3 tests); e2e "a price change that hides an option
+    can be taken back (OD6, review A F1)".
+  RA-F10 The card the quote highlights says "Highlighted on the quote" whichever option it is (rim
+    joist 150 sq ft, only Best shown: no badge -> badge); a pick that is not shown reads "Recommended
+    (your pick is not shown)", not "(default)". Tests: app/field/OptionsStep.test.tsx (2 tests).
+  RA-F7 The random generator draws the same areas, crews, drives, picks and dates whatever the
+    engine or the prices; the estimator's changes come from each quote's own stream. The baseline
+    engine and checker (b708d67) re-run on the same 10,000 quotes:
+    docs/accuracy/after-fixa/violations-b708d67-same-quotes-20261118.txt. Test: lib/accuracy/
+    invariants.test.ts "draw the same areas, crews, drives, picks and dates whatever the engine
+    returns (review A F7)".
+  RA-F8 The checker reads the showAll result too: a hidden option with work must do the same work as
+    another for as much or more, or cost no less than the next option shown above it (kinds
+    wrongly_hidden, none_shown). Tests: lib/accuracy/invariants.test.ts "options_step_up (review A F8):
+    an option the customer is not shown was rightly hidden" (4 tests).
+  Random quotes on the same quotes and checker, engine before -> after these fixes: seed 20261118
+    331 -> 0 breaks, seed 7 637 -> 0, seed 99999 621 -> 0 (docs/accuracy/after-fixa/about.txt).
+
+=== Review B fixes and owner decisions OD12-OD16 ===
+
+(One section for both review B fix branches, merged on claude/accuracy: first the documents,
+server, database and security part from claude/accuracy-fixb-docs (RB-OD*, RB-B*, RB-FB*), then the
+screens part from claude/accuracy-fixb-screens (RB-flow-B*). The merge itself changes no price,
+title, bullet, quantity or customer word; the final checks are in docs/accuracy/results/final.json.)
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier) and the owner's round-2 decisions. This part is the documents, server, database, security
+and the Send checklist; the screens part (flow-B4/OD15, B6, B8, B9, B11, B12, B13) follows
+below, from claude/accuracy-fixb-screens. Hard rule 1 holds: a quote already sent keeps its stored
+document (company, terms, warranty, consent and number are read from the document, never from the
+settings); docs/accuracy/after-fixb/hard-rule-1.txt.
+
+The documents were made safe before the gate was removed (review B database-B3 = flow-B1: deleting
+the gate as the code stood printed "PLACEHOLDER" and made every send throw on the consent sentence,
+because production has no default_state). Production's rows, read with a SELECT on 2026-11-19:
+branding {"company":"Koala Insulation of Newark","license":null,"phone":null,...} (description
+"PLACEHOLDER — PDF branding"), quote_terms naming "Koala Insulation of Newark" (description
+"... PLACEHOLDER, owner to replace"), warranty_text "Workmanship warranty — PLACEHOLDER, owner to
+replace.", shop_address "Newark, DE 19711", no default_city, no default_state; every one still the seed.
+
+RB-OD12a Every quote names "Koala Insulation". The accuracy migration's new last section replaces the
+    branding setting only where it is still exactly the seed (company "Koala Insulation of Newark",
+    license, phone, colour and logo null), and clears its PLACEHOLDER description; DEFAULT_COMPANY
+    (lib/quotes/settings.ts) is "Koala Insulation". A branding value the owner saved (any field) is kept.
+      Quote email subject: "Your insulation quote from Koala Insulation of Newark (KN-2026-0001-v1)" ->
+      "Your insulation quote from Koala Insulation (KN-2026-0001-v1)"; the masthead, PDF header and
+      footer "Koala Insulation of Newark | KN-2026-0001-v1" -> "Koala Insulation | KN-2026-0001-v1".
+    Owner decision: OD12 (review A DOC-1, DOC-6). Tests: tests/sql/41_owner_decisions.test.sql (seed
+    replaced; owner value kept; second run changes nothing); lib/quotes/owner-decisions-2.test.ts "a
+    quote, its PDF (real render), its email and its page from those rows …", "defaults: Koala
+    Insulation, …", "the migration writes the same words the code prints"; lib/quotes/email.test.ts
+    "falls back to defaults" ('Koala Insulation of Newark' -> 'Koala Insulation').
+
+RB-OD12b The terms name no town. The seeded terms (only when exactly the seed) and DEFAULT_TERMS:
+      "A signed quote authorizes Koala Insulation of Newark to schedule the work." ->
+      "A signed quote authorizes Koala Insulation to schedule the work." (the rest word for word).
+    Owner decision: OD12. Tests: as RB-OD12a (both branches in 41_owner_decisions.test.sql, including
+    terms with one word changed, which are the owner's and kept).
+
+RB-OD13 The warranty line reads exactly "Limited lifetime warranty". The stored seed "Workmanship
+    warranty — PLACEHOLDER, owner to replace." (only that exact value) is replaced by the migration,
+    and DEFAULT_WARRANTY "Workmanship warranty details are available from our office." -> "Limited
+    lifetime warranty". No other warranty terms, years or conditions were written.
+      Production's next quote: Warranty "Workmanship warranty — PLACEHOLDER, owner to replace." (what
+      it would have printed with the gate gone) -> "Limited lifetime warranty".
+    Owner decision: OD13 (review B database-B3, flow-B1 (a)). Tests: 41_owner_decisions.test.sql;
+    owner-decisions-2.test.ts "production's rows before the migration step …" and the seeded-rows test.
+
+RB-OD12c Any stored text that says PLACEHOLDER is not filled in: the warranty, the terms and every
+    branding field (company, license, phone, email, website, colour, logo) fall back to the default
+    or are left off. lib/quotes/settings.ts quoteSettingsFromRows.
+      License "PLACEHOLDER": the gate refused the send (with the gate simply deleted it would have
+      printed "License PLACEHOLDER" under the company) -> sent, with no license line; company
+      "PLACEHOLDER company" -> "Koala Insulation".
+    Owner decision: OD12 (flow-B1 (4)). Test: owner-decisions-2.test.ts "any stored text that says
+    PLACEHOLDER is not filled in …".
+
+RB-OD12d Nothing blocks or delays a send for the business profile, for any role.
+      POST /api/quotes on the seeded settings: 409 setup_incomplete "The business profile is not
+      finished: add the license number, the office phone, the state and the warranty." -> the quote
+      is sent (e2e: KN-<year>-0001-v1 to Pat Lee).
+      Send checklist: "The business profile is not finished: add … Ask the owner or the office to
+      finish it." (estimator), the same with "Open the business profile" (owner, office), "Business
+      profile finished" -> no business-profile item (lib/field/sendChecks.ts); the 'profile' gaps are
+      gone from /api/bundle (business is { newEstimate } only) and the setup_incomplete branch and its
+      link from app/field/SendStep.tsx (review A DOC-3: the office could not finish it anyway).
+      /admin/business: the amber "The business profile is not finished … Until then no quote can be
+      sent" and the green "Everything a quote needs is filled in." -> "Optional. Quotes go out without
+      it: they say Koala Insulation, and leave off anything not filled in here. …"; its Town and State
+      fields are gone (OD14); the fields show what quotes print today (a PLACEHOLDER shows as the
+      default). It stays an owner page (office reads it), in the menu, linked from no warning.
+      /admin/pricing: "Needs owner input" no longer lists "Business profile: Quote PDF branding /
+      Warranty / Terms" or "Business profile: office phone for customers"; the Business profile card
+      "… A quote cannot be sent until they are filled in." -> "… It is optional: quotes say Koala
+      Insulation and leave off what is not filled in." (no Placeholder badge). Menu hint "Name, phone,
+      license, warranty and terms on every quote" -> "Optional: office phone, license, warranty and
+      terms on quotes".
+    businessProfileGaps, profileGapsSentence and the 'business' Fix target's only producer are gone.
+    Owner decision: OD12 (review A DOC-1, DOC-3; review B flow-B1 (d)). Tests: lib/field/sendChecks.test.ts
+    "no business-profile item for any role …" (the old "changes from the model need a note; the
+    business profile; offline" keeps its note and offline items); app/field/SendStep.test.tsx (3 roles,
+    a cached bundle that still carries gaps; fails before on all three); owner-decisions-2.test.ts "no
+    part of the app carries the gate or its words"; lib/quotes/quotes-stage.test.ts L30 block (the
+    same live seed now sends: warranty, license/phone left off, consent, prefix); e2e "send: nothing
+    about a business profile holds it back" and "the Business profile page is optional".
+
+RB-OD12e Never "call our office" without a number: the signing page's error messages name the
+    office phone when the quote has one, else the estimator's email (lib/quotes/contact.ts reachUs,
+    the same order as the page's OfficeContact). Quote with no office phone, estimator Sam Rivera:
+      declined: "This quote was declined. Please contact our office." -> "This quote was declined.
+      To go ahead, please email Sam Rivera at sam@example.com."
+      expired: "This quote has expired. Please contact our office for an updated quote." -> "This
+      quote has expired. For an updated quote, please email Sam Rivera at sam@example.com."
+      signing failed: "… Please try again or call our office." -> "… Please try again, or email Sam
+      Rivera at sam@example.com." (with an office phone: "…, or call (555) 010-0199.")
+    (The PDF, the emails and the quote page already left a missing phone or license off and pointed
+    to the estimator; review B checked them, and the seeded-rows test now proves it.)
+    Owner decision: OD12. Tests: lib/quotes/contact.test.ts (2 tests).
+
+RB-OD14a The consent sentence names the property's state when it is a real US state, else the shop
+    address's state, else no state; it never throws (lib/quotes/consent.ts esignConsent,
+    lib/quotes/profile.ts consentState). It no longer reads default_state, which production never had.
+      Property 12 Elkton Rd, Newark, DE: "(ESIGN Act and Delaware UETA)" (unchanged, e2e).
+      Property state "XX", shop "100 Main St, Springfield, IL 62701": "(ESIGN Act and Illinois UETA)".
+      No state anywhere: send threw "Not a US state: " (500) -> "(ESIGN Act and the Uniform Electronic
+      Transactions Act)".
+    The sentence is stored with the quote as before (L31), and quotes sent before keep theirs.
+    Owner decision: OD14 (review B database-B3, flow-B1 (b)). Tests: owner-decisions-2.test.ts "a code
+    that is not a state (or none) …", "the property's state when it is a real state, else the shop
+    address's, else neutral"; quotes-stage.test.ts L31 (esignConsent('XX') threw -> the acts by name).
+
+RB-OD14b A new estimate starts in the town and state of the shop address as a pair, else both blank
+    (lib/quotes/profile.ts newEstimateDefaults); a town from one place is never paired with a state
+    from another.
+      default_state PA saved, shop "Newark, DE 19711": "Newark, PA" -> "Newark, DE".
+      default_city "Bear", default_state DE, shop "Springfield, IL 62701": "Bear, DE" -> "Springfield, IL".
+      Production (shop "Newark, DE 19711", no town or state saved): Newark, DE, unchanged (e2e).
+    Owner decision: OD14 (review A DOC-2). Tests: owner-decisions-2.test.ts "the shop address when it
+    parses, else both blank …"; quotes-stage.test.ts L32 ('Bear, DE' -> 'Springfield, IL').
+
+RB-B1c A quote number never starts with a blank or a bad prefix: a stored quote_number_prefix that is
+    not 1 to 6 capitals or digits falls back to KN (OD16 keeps KN).
+      Prefix "" : "-2026-0001-v1" -> "KN-2026-0001-v1"; "k-n": "k-n-2026-0001-v1" -> "KN-2026-0001-v1".
+    Owner decisions: OD12, OD16 (flow-B1 (c)). Test: owner-decisions-2.test.ts "a stored prefix that is
+    not 1 to 6 capitals or digits falls back to 'KN' (OD16)".
+
+RB-B7 No franchise name in the email sender or the roof takeoff (hard rule 3).
+      lib/env.ts sender with QUOTE_FROM_EMAIL unset: "Koala Insulation of Newark <onboarding@resend.dev>"
+      -> "Koala Insulation <onboarding@resend.dev>"; .env.example "Koala Insulation of Newark
+      <quotes@yourdomain.com>" -> "Koala Insulation <quotes@yourdomain.com>".
+      Roof takeoff summary "Koala Insulation of Newark: roof takeoff" -> "Koala Insulation: roof
+      takeoff"; report header and footer "Koala Insulation of Newark · Roof takeoff" -> "Koala
+      Insulation · Roof takeoff" (lib/roof/roofing.ts COMPANY).
+      Customer step, electric utility suggestions (estimator only, never on a quote): the fixed list
+      "Delmarva Power, City of Newark, Delaware Electric Co-op, DEMEC municipal" -> the names this
+      phone's estimates already use, most used first (lib/field/utilities.ts).
+    Owner decision: OD12; review B flow-B7. Tests: lib/env.test.ts "defaults to Koala Insulation";
+    lib/roof/roofing.test.ts "the report and the summary name Koala Insulation, no franchise town";
+    lib/field/utilities.test.ts; lib/franchise-text.test.ts (fails before with 6 literals in
+    CustomerStep, env, settings and roofing); e2e "Copy summary copies the takeoff as text, under the brand".
+    Hard rule 3 scan (lib/franchise-text.test.ts): every string, template and JSX text literal in app/,
+    lib/ and components/ (tests, lib/demo and __fixtures__ aside), read with the TypeScript parser, for
+    /Koala Insulation of|Newark|Delaware|\(302\)/. Documented exceptions: lib/quotes/consent.ts
+    LEGACY_ESIGN_CONSENT (the sentence quotes sent before were signed under, kept word for word by
+    hard rule 1) and STATE_NAMES (every state's name). Comments that use a Newark address as an
+    example are not literals and stay.
+
+RB-B2 A price approval is bound to the loaded cost it was asked at (review B database-B2). Changing
+    line quantities or hours after the decision raises the cost but leaves the price and the model
+    price as they were, so the old approval used to cover the send. Now price_approvals.loaded_cost
+    (additive, nullable, frozen by the guard trigger) is written by the server from its own pricing,
+    lib/pricing/policy.ts approvalCovers refuses an approval whose cost is lower than the option's
+    now (or missing), and a price below the floor is covered only by an owner approval given for a
+    price below the floor. The phone shows such a price as needing a new request.
+      Seed fixture, Good: the owner approves $3,500 at a 7.2% margin (cost $3,249.20); labour hours x4
+      -> cost $4,938.40, margin -41%: sent -> refused, "Only the owner can approve $3,500", Request
+      approval offered again. The owner approves $4,500 as over the limit (27.8%, above the floor);
+      hours x3 -> 0.9%, below the 25% floor: sent -> refused.
+      Send checklist: a waiting or approved request asked at the lower cost: "Waiting for the owner or
+      the office to approve $X" / covered -> Request approval (status none).
+    No price changes; only which approvals let a price through. A request still pending at the same
+    price but an older cost is a separate request (the one-pending index includes the cost).
+    Tests: lib/pricing/support.test.ts "an owner approval does not cover the same price after a
+    line-hours override raises the cost", "an owner over-limit approval (belowFloor false) does not
+    cover a below-floor problem at the same price", "a cost that went down is still covered; an
+    approval with no recorded cost covers nothing", "the problem carries the loaded cost"; the
+    existing "an approved price can be sent …" passes with the cost recorded; lib/quotes/approvals.test.ts
+    "the newest request at the price, model price and a cost no higher …"; lib/field/sendChecks.test.ts
+    "an approval asked at a lower cost: the phone offers Request approval again"; tests/sql/41
+    (column, frozen on decision, kept on re-run, same price at a higher cost is its own request);
+    e2e "the request keeps the loaded cost the option had when it was asked".
+
+RB-B4 Price requests are written by the server only (review B database-B4). The migration revokes
+    insert on price_approvals from authenticated; /api/approvals POST checks the role, prices the
+    request (checkApprovalRequest, through the asker's own access), confirms can_edit_estimate, then
+    writes it with the service role, requested_by the asker. What the owner sees (price, model price,
+    cost, "Below the floor margin") is always the server's.
+      An estimator posting {good, $3,500, model $5,420, below_floor false} straight to the database:
+      stored, and shown to the owner without the "Below the floor margin" tag -> refused (403, nothing stored).
+    Tests: tests/sql/40_accuracy.test.sql (the L34 block: the estimator's and the office's own inserts
+    are refused; the server writes the requests; the rest of the block unchanged), tests/sql/41
+    "an estimator's direct insert is refused (insufficient_privilege)"; e2e "a request written
+    straight to the database with the estimator's token is refused". The Request approval -> owner
+    approves -> sent path still passes in the e2e.
+
+RB-B3 The owner's queue holds only requests that still mean something (review B flow-B3). A request
+    whose estimate is signed, lost or void, or whose option has another price, is gone, or costs more
+    now, is left out (lib/quotes/approvals.ts isLiveRequest; 200 rows read so stale ones do not crowd
+    out live ones), and PATCH /api/approvals/[id] answers 409 for a signed estimate.
+      Lee Measure asked for Good $5,175, then sent Good at $4,500 and the customer signed: "NEEDS YOU ·
+      1 price waiting for approval · Good: $5,175, 25% above …" with Approve and Decline -> no queue;
+      PATCH approved -> 409 {error: 'signed', message: 'The customer already signed this quote.'}.
+    Tests: lib/quotes/approvals.test.ts "the owner's queue drops stale requests" (4 tests, including
+    decisionRefusal); e2e "deciding a request on a signed estimate: 409 signed", "the owner's queue
+    leaves it out".
+
+RB-B5 (test fidelity, no app value) The test databases get production's grants (review B database-B5).
+    tests/sql/00_supabase_stub.sql sets the default privileges production has (pg_default_acl read on
+    2026-11-19: tables all, sequences usage/select/update, functions execute, to anon, authenticated
+    and service_role), and tests/sql/01_grants.sql no longer grants everything again after the
+    migrations. tests/sql/40_accuracy.test.sql checks the grants before any re-run of the migration
+    (fails before with "first run: a signed-in user may not take a quote number"); scripts/e2e.sh
+    stops if signed-in users may take quote numbers, read the counters or insert price requests.
+    Every SQL test file passes with the real grants (nothing else relied on the blanket ones).
+
+RB-B7db (tooling) scripts/e2e.sh lower-cases E2E_DB_NAME and refuses a name that is not letters,
+    digits and _ (review B database-B7 = flow-B14). E2E_DB_NAME=koala_fixB_Check: exit 2 ('database
+    "koala_fixB_Check" does not exist') -> runs on koala_fixb_check.
+
+Staff-facing words (no quote value changes):
+  RB-FB2 The Send checklist uses Koala's reachability, not only the signal (review B flow-B2). With
+    signal but Koala's database not answering (REST 503, the banner "Can't reach Koala right now."):
+    "✓ Online" and "Everything the quote needs is here." with Send enabled -> "Can't reach Koala right
+    now. Sending needs Koala; your work is saved." (to do), Send and Request approval disabled. No
+    signal still reads "Offline. Sending needs a connection; your work is saved." SendStep reads
+    lib/offline/sync isReachable itself (no new props through FieldApp or EstimateEditor).
+    Tests: lib/field/sendChecks.test.ts "signal but Koala unreachable: the online item says so …";
+    e2e "the Send checklist says Koala cannot be reached, not \"Online\"", "and Send waits while Koala
+    cannot be reached".
+  RB-FB5 "Shorten the notes" goes to the notes box (review B flow-B5): target customer/firstName ->
+    customer/notes (#customer-notes); the notes box gets maxLength 5,000 (the draft's own limit) and
+    the Fix focus also focuses a text area. Test: lib/field/sendChecks.test.ts "notes too long: the
+    Fix goes to the notes box".
+  RB-FB10 A server action refused while Koala cannot be reached says so (review B flow-B10): saving
+    Pricing as the owner with the database down, "Only the owner can change pricing." -> "Can't reach
+    Koala right now. Nothing was saved." The same for Team, Insights (learning), Jobs and marking an
+    estimate lost (lib/server/actionAuth.ts actionRefusal; signed out or another role keep the
+    action's own words). Tests: lib/server/actionAuth.test.ts (3 tests); e2e "saving Pricing while
+    Koala is down says …".
+
+--- Screens part (claude/accuracy-fixb-screens) ---
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier; owner decisions OD12-OD16 in docs/accuracy/spec/owner-decisions-2.txt). Entries from the
+screens branch (claude/accuracy-fixb-screens) are RB-flow-B<n>. Seeded pricing, easy access, 20 min
+drive unless stated.
+
+RB-flow-B4 (OD15, amends L9) With no pick, Better is the implied pick, exactly as when Better is
+    picked. When the recommended option is not shown (OD6), the recommendation moves to the option
+    shown that does the same work, else the nearest one shown above it, else the nearest below.
+    Before: with no pick and Better hidden, the first option shown (Good, the cheapest); a hidden
+    pick went to the next option shown after it. The engine marks the option kept for each option
+    it leaves out as the same work (PricedOption.sameWorkAs), so the phone, the sync and the quote
+    see the same-work step; the office list (stored tier and price only) takes the nearest-above
+    step, which named the same option in every golden and random quote checked.
+    Example (attic 1,386 sq ft at R-0, Best the same work as Better, Better raised to $7,538 above
+      Best's $6,070, no pick): dock, phone list, office list and the quote's RECOMMENDED badge
+      Good $4,195 -> Best $6,070; sync model_total_price Good's model price -> Best's. With Better
+      picked: Best $6,070 before and after.
+    Golden sets: 0 headlines change (synthetic 65, live 78; no estimate there has no pick with Good
+      and Best shown and Better not). Random quotes: 24 of 10,000 (seed 20261118), 50 of 20,000
+      (seed 7), 42 of 20,000 (seed 99999) change, all no pick, Good -> Best; no picked quote
+      changes. Every change with its reason: docs/accuracy/after-fixb/headline-changes.txt.
+    Sent and signed quotes keep their stored recommendedTier (hard rule 1).
+    Owner decision: OD15 (review B flow-B4).
+    Tests: lib/field/recommended.test.ts "OD15 (review B flow-B4): with no pick, Better is the
+    implied pick" (5 tests, 4 fail before the fix: "Better not shown, Good and Best shown: Best, as
+    when Better is picked (was Good, the cheapest)", "a pick that is not shown moves first to the
+    option shown that does the same work", "the engine says which option shown does the work of the
+    hidden Better", "the phone, the office list, the sync and the quote all recommend Best at $6,070
+    (was Good at $4,195)").
+
+RB-flow-B9 (amends L11; owner screen, no customer value) "This cost is right" sticks, and the
+    refusal says how far the cost is from the nearest edge of the usual range. Before: a confirmed
+    cost was saved but the stored range kept it outside, so every later save of the card (a name
+    change, or Save with nothing changed) was refused again until ticked again; and the distance
+    was measured from the middle of the range. Now a cost saved with "This cost is right" outside
+    the range widens the stored range to it (materials.typical_min / typical_max); "N times" is
+    used only from twice the edge, else a percentage.
+    Examples (open-cell, usual $0.06 to $0.24):
+      $0.30 ticked, then saved again unticked: refused every time -> saved; stored range $0.06 to
+        $0.24 -> $0.06 to $0.30.
+      $0.30: "is 2.0 times more than the usual $0.06 to $0.24" -> "is 25% above the usual high of
+        $0.24. The usual range is $0.06 to $0.24 (...)".
+      $0.05: "is 3.0 times less than the usual" -> "is 17% below the usual low of $0.06".
+      $15.25: "is 102 times more than the usual $0.06 to $0.24" -> "is 64 times the usual high of
+        $0.24"; $12: 80 -> 50 times; $0.01: "15 times less" -> "6.0 times less than the usual low
+        of $0.06".
+    No price, quantity or customer word changes. Review B flow-B9.
+    Tests: lib/admin/pricingForms.test.ts "says how far a cost is from the nearest edge: a
+    percentage, "N times" only from twice the edge (review B flow-B9)", "a cost the owner confirmed
+    widens the stored range to it, so the next save is not refused again (review B flow-B9)" (both
+    fail before the fix), "a cost 100 times the usual is caught, with the range and its source"
+    (its expected sentences updated to the new wording); e2e Pricing step "a confirmed $15.25
+    widens the stored usual range …", "saving the card again without ticking is not refused".
+
+RB-flow-B13 (L32, OD14) A new estimate made on a phone's first open starts in the town and state
+    the bundle names, as a pair, like every other new estimate. Before: createEstimate read the
+    cached bundle, which a phone that had never synced did not have yet (/field?new=1 runs before
+    the first sync), so City and State were blank; a moment later the same button gave the town.
+    Now, online with no bundle, a new estimate waits for the bundle at most 3 s ("Starting the
+    estimate"); if it is slower, the estimate starts blank and the editor fills City and State
+    together when the bundle comes, only while both are still blank. Offline it starts blank, as
+    before. A town is never taken without its state (lib/field/newPlace.ts newEstimatePlace).
+    Example (e2e settings, shop address in Newark, DE): /field?new=1 on a fresh phone: City "",
+      State "" -> "Newark", "DE".
+    Review B flow-B13. Tests: lib/field/newPlace.test.ts (4 tests: the pair or nothing, filled only
+    while both are blank, the 3 s wait); e2e "review B screens" step "a phone's first /field?new=1
+    starts in the shop address's town and state".
+
+=== Release: blower door under the accuracy rules ===
+
+(Branch claude/release = claude/accuracy 30afd15 + claude/blower-door 30a21a3, merged at 4ae7878. The
+blower door tool, its office card and its Rebate programs page brought under this round's rules:
+OD4 whole dollars, OD12/OD13 wording and hard rule 3, one formatter (lib/format.ts), L36 and
+review B flow-B10 for Koala unreachable, database-B1 safeNext, and the service worker. Each change
+was reproduced first: the test named fails on the merged code before the change (the outputs are
+in docs/release/release.txt) and passes after. No quote price, title, bullet or customer word of a
+quote moves: both golden sets re-price byte-identical to docs/accuracy/after/, and every stored
+quote renders as before (docs/release/hard-rule-1.txt). Worked example below: the blower door
+build notes' house (6,952 CFM at 50 Pa in, 3,325 CFM at 50.8 Pa out, n 0.65: 3,291 CFM50, 52.7%,
+the 40% tier) on the seeded programs (Assisted: 40% tier $2,000, 75% cost cap).)
+
+RL-1 (OD4) A capped air sealing rebate is whole dollars, never more than the program pays. The
+    cost cap (cap % of the air sealing price) is floored to the dollar, on the tool, the copied
+    summary, the result saved with a test-out and the office job card.
+    Examples: Assisted, price $1,999: "40% TIER — $1,499.25 AIR SEAL REBATE" -> "40% TIER — $1,499
+      AIR SEAL REBATE" (75% of $1,999 is $1,499.25); Home Performance, price $1,234: $925.50 ->
+      $925; price $1,001: $750.75 -> $750. Uncapped rebates ($900 ... $2,000) are unchanged.
+    Owner decision: OD4.
+    Tests: lib/blowerdoor/blowerdoor.test.ts "floors a capped amount to whole dollars, never more
+    than the program pays (OD4)" (was "floors a capped amount to the cent"), record.test.ts (3
+    expectations $1,499.25 -> $1,499); e2e "a capped rebate is whole dollars, never more than the
+    program pays: $1,499 (was $1,499.25)" and the office card "40% TIER — $1,499 AIR SEAL REBATE".
+
+RL-2 (OD4) The air sealing price is typed in whole dollars, as on the quote. Cents are refused
+    with a reason instead of being read to the cent.
+    Examples: "1999.50" -> was read as $1,999.50 (cap $1,499.62, shown "$1,499.62") -> "Air sealing
+      price: whole dollars, as on the quote (no cents)." and no cap until it is fixed (the badge
+      stays "$1,800" on Home Performance); "$1,999.999" -> was read as $2,000 -> refused;
+      "$1,999.00" and "$1,999" -> $1,999.
+    Owner decision: OD4.
+    Tests: blowerdoor.test.ts "takes the air sealing price in whole dollars, as on the quote
+    (OD4)", "reads the other fields at the precision the database keeps" (its $1,999.999 line now
+    expects the refusal); e2e "a price with cents is refused (whole dollars, as on the quote) and
+    caps nothing".
+
+RL-3 (one formatter, L8) The blower door code formats money, numbers and dates through
+    lib/format.ts. Before it had its own Intl.DateTimeFormat for a program's effective date, 'en-US'
+    toLocaleString for field limits and ACH50, and a dollar sign glued to raw numbers in the Rebate
+    programs messages. lib/format.ts gains fixed(n, digits) (exactly that many decimals, for ACH50).
+    Example (Rebate programs, a higher tier paying less): "Program 1: a higher tier cannot pay less
+      than a lower one ($1300 then $1000)." -> "($1,300 then $1,000)." Effective dates ("Nov 1,
+      2024"), field limits ("at most $1,000,000", "at most 50,000 CFM") and ACH50 ("20.86",
+      "7.10") read as before.
+    Owner decision: none needed (the accuracy round's one-formatter rule).
+    Tests: lib/blowerdoor/format.test.ts (no Intl formatter, own locale, toLocaleString or "$"
+    template in the blower door code: 4 scans failed before, naming settings.ts, numbers.ts and
+    words.ts; the readings that must not change), settings.test.ts "wants a higher tier to pay at
+    least as much".
+
+RL-4 (review B flow-B10, L36) Saving the rebate programs while Koala's database does not answer
+    says so. Before: "Only the owner can change the rebate programs." (as if the owner were not
+    allowed) -> "Can't reach Koala right now. Nothing was saved." Signed out, or the office, keep
+    the action's own words (lib/server/actionAuth.ts actionRefusal, as Pricing, Team, Insights,
+    Jobs and Estimates do).
+    Owner decision: none needed.
+    Tests: app/admin/rebates/actions.test.ts (3; the unreachable one failed before),
+    lib/server/actionAuth.test.ts "the server actions use it wherever they refuse a person" (lists
+    app/admin/rebates/actions.ts; failed before); e2e "saving the rebate programs while Koala is
+    down says "Can't reach Koala right now. Nothing was saved."", "and nothing was saved".
+
+RL-5 (L36) The blower door tool treats Koala not answering as Koala not answering. Its APIs already
+    answered 503 {error: 'unreachable'} through lib/server/auth authorize (the accuracy round's);
+    the phone read that answer as "The server answered 503. Will retry." and showed nothing else.
+    Now a 503 on a saved reading reads "Can't reach Koala right now. The reading is saved on this
+    phone; it is sent when Koala is back." (kept, sent again on the next sync), and the tool shows
+    "Can't reach Koala right now." with Try again while it lasts, like the field app. It is never
+    "Your session expired" or "not one you can save readings to".
+    Examples (e2e, REST answering 503): the estimator opens /field/blower-door?estimate=<Lee>:
+      the phone's copy opens with "Can't reach Koala right now."; POST /api/blower-door/tests: 503
+      unreachable (not 401 "Not signed in").
+    Owner decision: none needed.
+    Tests: lib/offline/blowerDoorCore.test.ts "a 503 from Koala says "Can't reach Koala right now"
+    and keeps the reading to send again (was "The server answered 503")" (failed before), "a 401
+    is a sign-out; a refusal and a stored reading are as the server says; anything else is
+    retried"; e2e "the blower door tool, opened while Koala's database is down, opens from the
+    phone and says ...", "the blower door API answers 503 unreachable".
+
+RL-6 (review B database-B1, safeNext) "Sign in again" on the tool comes back to the same job or
+    estimate. Before: /login?next=%2Ffield%2Fblower-door, the plain calculator, whose typed form and
+    readings are kept apart from the job's, so the readings seemed gone after signing in. Now
+    /login?next=<the tool's address for the job or estimate>, through safeNext.
+    Example: job 0b000000-...-000000000001 "Pat Lee, 12 Elkton Rd": next=/field/blower-door ->
+      next=/field/blower-door?job=0b000000-0000-4000-8000-000000000001&label=Pat+Lee%2C+12+Elkton+Rd.
+    Owner decision: none needed.
+    Tests: blowerDoorCore.test.ts ""Sign in again" comes back to the same job or estimate, through
+    safeNext (was /field/blower-door, the plain calculator)" (failed before).
+
+RL-7 (L36, review B flow-B8, service worker) The blower door shell under L36. public/sw.js v13 (the
+    merge: one past the accuracy round's v12 and the blower door's v7) opens /field/blower-door from
+    its saved copy while Koala's pages go to /unreachable, and keeps the copy; on the blower door
+    branch alone (v7) that redirect counted as a refusal, the copy was deleted and the phone showed
+    /unreachable. And /unreachable opened for the tool offers "Open the blower door tool on this
+    phone" for the same job or estimate, instead of the estimator's field app ("Open the estimates
+    on this phone", /field), which a crew phone never has: a crew lead was told "This phone has no
+    saved copy of the app yet" while the tool was saved. phoneAppFor moves to
+    lib/offline/phoneCopy.ts; hasSavedCopy finds a shell saved under its bare path for any ?job=.
+    Owner decision: none needed.
+    Tests: lib/offline/serviceWorker.test.ts "opens the blower door tool from its saved copy while
+    Koala cannot be reached, and keeps it (L36)" (fails on the v7 worker: "Can't reach Koala right
+    now" instead of the tool), lib/offline/phoneCopy.test.ts "offers the blower door tool for the
+    tool, with its job or estimate", "finds the tool saved under its bare path for any job" (both
+    failed before), "keeps the field and crew apps as they were ..."; e2e "/unreachable for the
+    blower door tool offers the tool for the same estimate (was the estimates list)".
+
+RL-8 (review B database-B4, database-B5; no customer value) The readings table does not rest on RLS
+    alone. On a production-shaped database (production's default privileges, as the test stub has
+    them since database-B5) the new blower_door_tests table was granted to the API roles at
+    creation: the public had every privilege on it, and signed-in users insert, update, delete and
+    truncate, held back by RLS alone (RLS does not cover truncate). The blower door migration now
+    revokes all from anon and insert, update, delete and truncate from authenticated, as the
+    accuracy migration does for price_approvals. Readings still get in only through
+    sync_blower_door_test(); a second run of the migration changes nothing.
+    Before -> after (grants on blower_door_tests): anon DELETE,INSERT,REFERENCES,SELECT,TRIGGER,
+      TRUNCATE,UPDATE -> none; authenticated the same -> REFERENCES,SELECT,TRIGGER; service_role
+      unchanged. A crew's or the owner's UPDATE or DELETE of a reading: "0 rows" -> refused
+      (permission denied).
+    Owner decision: none needed (hard rule 2: additive, the live site never reads this table).
+    Tests: tests/sql/50_blower_door.test.sql "release: readings table privileges" (failed before:
+    "the public cannot read readings"); its edit and delete checks now expect the refusal.
+
+RL-9 (OD12, OD13, hard rule 3; no change) The blower door screens, its copied summary (its report;
+    it has no PDF), the office card and the Rebate programs page name no company and no franchise,
+    show no PLACEHOLDER and never send anyone to the business profile; nothing in them needed
+    changing. The hard-rule-3 scan (lib/franchise-text.test.ts) reads every blower door file, and
+    now says so; lib/blowerdoor/franchise.test.ts also keeps out "Koala Insulation", PLACEHOLDER,
+    the business profile and its page, a warranty, Newark and (302).
+    Owner decision: OD12, OD13, hard rule 3.
+    Tests: lib/franchise-text.test.ts "reads the code it means to" (13 blower door files listed),
+    lib/blowerdoor/franchise.test.ts "never says %s" (9 words). Both pass on the merged code.
+
+The merge (no value change): the menus have both new pages, Blower door (every role, after Roof
+lookup; a tab for crews) and Rebate programs (owner and office, after Pricing, before the optional
+Business profile); the e2e run has the accuracy round's L36 step and then the blower door's offline
+step, the review B screens step and then the rebate programs step.
+
+=== Release review fixes ===
+
+(Release review C of claude/release at 93d9dbc: docs/release/review-c.json, 19 verified findings.
+Each fix was reproduced first: the test named fails on the code before the fix and passes after
+(docs/release/release.txt, "Review C fixes"). No price formula changes: both golden sets re-price
+byte-identical to docs/accuracy/after/, the 10,000-quote check is 0 on every invariant, and every
+stored quote renders exactly as before (docs/release/hard-rule-1.txt).)
+
+RC-1 (review C DOC-1, FLOW-7; OD11, hard rule 1) Dates and times in the franchise's time zone.
+    Every date and time was New York's, for every franchise. The zone now comes from the
+    deployment's NEXT_PUBLIC_BUSINESS_TIME_ZONE (an IANA name; unset or not a zone: New York, so
+    this franchise reads exactly as before). A new quote keeps the zone it was sent in
+    (QuoteDocument.timeZone) and prints its Date, Valid until, signature time, Issued and signed-on
+    dates in it; a quote sent without one prints in New York, as it always did.
+    Examples (a franchise set to America/Los_Angeles, quote sent 9:30 PM Nov 19 Pacific = 05:30 UTC
+      Nov 20, 30 days): PDF "Date: November 20, 2026" -> "Date: November 19, 2026"; "Valid until:
+      December 20, 2026" -> "December 19, 2026" (the link stops Dec 19 at 9:30 PM Pacific); expired
+      page "Dec 20, 2026 · 12:30 AM" -> "Dec 19, 2026 · 9:30 PM PST"; signed at 12:15 PM Pacific:
+      "November 21, 2026 at 3:15:00 PM EST" -> "November 21, 2026 at 12:15:00 PM PST"; the phone
+      list "Quote v1 sent Nov 19 · 12:25 PM" -> "Nov 19 · 9:25 AM"; Insights "Runs nightly at
+      about 2:15 AM Eastern ... All times on this page are Eastern." -> "about 11:15 PM Pacific
+      (12:15 AM while daylight saving time is on). All times on this page are Pacific."
+    This franchise (no setting): one customer word changes, on the expired page of a quote sent
+      from the accuracy round on (none in production yet): "This quote expired on Dec 17, 2026 ·
+      9:30 PM" -> "Dec 17, 2026 · 9:30 PM EST" (the zone named, as the signed PDF already does).
+      Quotes sent before keep "December 17, 2026".
+    Owner decision: OD11 ("the business-zone date"); question D1 in docs/release/owner-questions.txt.
+    Tests: lib/format.test.ts "the franchise's time zone" (2 of 3 failed before),
+    lib/quotes/quotes-stage.test.ts "Release review C DOC-1" (3, failed before), the L13 expired
+    page test now expects "· 9:30 PM EST"; lib/admin/learning.test.ts "Insights words the nightly
+    run in the business zone" (failed before).
+
+RC-2 (review C DOC-2, CLAIM-1; OD14) A New York home's signature sentence names New York's own law.
+    "(ESIGN Act and New York UETA)" -> "(ESIGN Act and the New York Electronic Signatures and
+    Records Act)". New York never adopted UETA. Every other state ("Delaware UETA", "Illinois
+    UETA", ...) and the state-neutral sentence read as before; quotes already sent keep the
+    sentence stored with them.
+    Owner decision: OD14 (the sentence names the property's state: it still does); question A1.
+    Tests: lib/quotes/owner-decisions-2.test.ts "a New York home cites the Electronic Signatures and
+    Records Act, never "New York UETA"" (failed before), "every other state reads as before ...".
+
+RC-3 (review C DOC-4, FLOW-1) A rebate the cost cap was not applied to says "up to".
+    With a program that caps the rebate at a share of the air sealing price and no price known (the
+    crew's phone never has one; the office has none when no reading was saved with one), the tier
+    amount is only the most the program pays.
+    Examples (the worked example, Assisted, 40% tier $2,000, 75% cap): crew badge "40% TIER — $2,000
+      AIR SEAL REBATE" -> "40% TIER — UP TO $2,000 AIR SEAL REBATE"; copied summary "rebate $2,000"
+      -> "rebate up to $2,000 (before the 75% cost cap)"; the estimator's tool before a price is
+      typed, Home Performance: "40% TIER — $1,800 ..." -> "40% TIER — UP TO $1,800 ...". Office job
+      page, crew-only readings 4,800 -> 3,500 CFM50 (Home Performance, no price): "20% TIER — $900
+      AIR SEAL REBATE" and "20% tier · $900" -> "20% TIER — UP TO $900 AIR SEAL REBATE" and "20%
+      tier · up to $900 (before the 75% cost cap: no air sealing price saved)". With a price, as
+      before: "$1,499 ... (limited by 75% of $1,999)"; $688 gives "$516 (limited by 75% of $688)".
+    Owner decision: none needed (questions C4, C5 stay open).
+    Tests: lib/blowerdoor/blowerdoor.test.ts "release review C DOC-4" (1 of 3 failed before),
+    record.test.ts "release review C FLOW-1" (2, failed before); 8 existing no-price expectations
+    now read "UP TO"; e2e (the tool's badges and summary, the crew badge).
+
+RC-4 (review C SEC-1) A crew cannot set the air sealing price.
+    sync_blower_door_test drops a price sent by a crew (and the API drops it first). Before, a crew
+    member's crafted test-out with a price became the office's cost cap.
+    Example (estimator's test-in under Assisted at $1,999, crew's test-out sent with 1,000,000):
+      office "40% TIER — $2,000 AIR SEAL REBATE" (no cap note) -> "40% TIER — $1,499 AIR SEAL
+      REBATE (limited by 75% of $1,999)"; sent with 100: "$75 (limited by 75% of $100)" -> the same
+      $1,499. Stored air_sealing_cost 1000000.00 -> null.
+    Owner decision: none needed (crews never see or send a price).
+    Tests: tests/sql/50_blower_door.test.sql "release review C: a crew cannot set the air sealing
+    price" (failed before: stored 1000000.00); e2e office step (a crafted crew POST leaves $1,499).
+
+RC-5 (review C FLOW-2; OD1) The estimator's phone list keeps the headline when the server's copy
+    replaces the phone's.
+    Examples: Otto Offlineday after the customer opened the quote: "VIEWED" with no price and no
+      "Waiting to sign" -> "$3,975 Better VIEWED", "Waiting to sign $3,975"; Mona Moneyday signed:
+      no price -> $3,959; an estimate the phone pulled (Pat Lee, signed): no price -> $5,060. The
+      server sends the headline the office list shows (the signed price, else the recommended
+      option's).
+    Owner decision: OD1.
+    Tests: lib/offline/syncCore.test.ts "release review C FLOW-2" (2, failed before).
+
+RC-6 (review C DOC-5 and the two missed findings) PDF page breaks of quotes sent from the accuracy
+    round on: an option's title bar moves with its first bullet, its column header with its first
+    line, and Notes, Warranty and Terms are not split from their text. No word or price changes;
+    quotes sent before lay out exactly as they did.
+    Example: the five-area quote: page 2 ended "Best: Best package", 8 bullets, "AREA WORK PRICE";
+      now the header and the first line ("Main house attic ... $3,278") start page 3 together.
+    Tests: lib/quotes/quotes-stage.test.ts "Release review C DOC-5" (2 failed before: the long quote
+    and 15 of 150 swept layouts; the third checks quotes sent before against their old page text).
+
+Staff screens (no customer word, no price):
+  RC-7 (FLOW-4) /unreachable for a page that is not a phone app also offers "Open the estimates on
+    this phone" / "Open the crew app on this phone" when the phone has it saved, and "Go back".
+    Tests: lib/offline/phoneCopy.test.ts fallbackAppsFor (2, failed before); e2e L36.
+  RC-8 (FLOW-12) In a package the option cards name each line's area ("ATTIC", "EXTERIOR WALLS"
+    above the description), as the customer's quote does. Test: app/field/OptionsStep.test.tsx
+    (failed before); e2e.
+  RC-9 (FLOW-9) Business profile: "The next quote this year reads like KN-2026-0001-v1 (the number
+    counts up)." -> "Quote numbers read like KN-2026-0001-v1: the number counts up with each quote
+    and starts again at 0001 each year." Test: e2e.
+  RC-10 (FLOW-8, FLOW-11) At 390 px the dock's "BETT…" -> "BETTER" with a five-digit price (the
+    Previous button is 48 px wide, the name never truncates); an area's header button is at least
+    48 px tall (was 322x45). Tests: e2e (390 px).
+  RC-11 (FLOW-3) With Koala's database down, pages and APIs say so at once (no 1 + 2 + 4 s
+    retries): /field 14 s -> under 2 s, /estimates and /api/bundle 7 s -> under 2 s. Tests:
+    lib/supabase/server.test.ts (failed before); e2e L36 timing.

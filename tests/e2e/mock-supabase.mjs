@@ -89,10 +89,18 @@ const send = (res, code, body, headers = {}) => {
 };
 const readBody = (req) => new Promise((r) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
 
+// The e2e flow can make the database unreachable (L36): REST answers 503 as Supabase's gateway does
+// when PostgREST cannot be reached, while sign-in keeps working. POST /__e2e/rest {"down": true|false}.
+let restDown = false;
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
   try {
+    if (url.pathname === '/__e2e/rest' && req.method === 'POST') {
+      restDown = JSON.parse((await readBody(req)).toString() || '{}').down === true;
+      return send(res, 200, { down: restDown });
+    }
     if (url.pathname === '/auth/v1/user') {
       const claims = verify(auth);
       const u = claims && users.find((x) => x.id === claims.sub);
@@ -102,6 +110,7 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/auth/v1/')) return send(res, 404, { msg: 'not mocked: ' + url.pathname });
 
     if (url.pathname.startsWith('/rest/v1')) {
+      if (restDown) return send(res, 503, { message: 'An invalid response was received from the upstream server' });
       const body = await readBody(req);
       const headers = { ...req.headers };
       delete headers.host; delete headers['content-length'];
@@ -210,4 +219,4 @@ http.createServer(async (req, res) => {
   } catch (e) {
     console.error(e); send(res, 500, { error: String(e) });
   }
-}).listen(54321, () => console.log('mock supabase on :54321'));
+}).listen(Number(process.env.MOCK_PORT ?? 54321), () => console.log(`mock supabase on :${process.env.MOCK_PORT ?? 54321}`));

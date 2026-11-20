@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compactTakeoff, MAP_SIZE, takeoffSchema } from './lookup';
-import { insideShape, labelPoint, mapShapes, satelliteUrl, svgPoints } from './draw';
+import { contrastRatio, MAP_GROUNDS, parseHex } from '@/lib/design/contrast';
+import { compactTakeoff, EDGE_TYPES, MAP_SIZE, takeoffSchema } from './lookup';
+import { edgeColor, insideShape, labelPoint, MAP_COLORS, mapShapes, paintRoofMap, satelliteUrl, svgPoints } from './draw';
 
 const house = (name: string) => compactTakeoff(takeoffSchema.parse(JSON.parse(readFileSync(join(import.meta.dirname, '__fixtures__', 'roof-takeoff', `${name}.json`), 'utf8'))));
 const r = house('3-cross-gable');
@@ -65,5 +66,47 @@ describe('mapShapes', () => {
   it('writes SVG points and the photo address', () => {
     expect(svgPoints([{ x: 1, y: 2.25 }, { x: 3.333, y: 4 }])).toBe('1.0,2.3 3.3,4.0');
     expect(satelliteUrl(r)).toBe(`/api/roof/satellite?lat=${r.center.lat}&lng=${r.center.lng}&zoom=20`);
+  });
+});
+
+describe('map colours', () => {
+  const css = readFileSync(join(import.meta.dirname, '../../app/globals.css'), 'utf8');
+  const token = (name: string) => new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(css)?.[1]?.toUpperCase();
+  const rgb = (hex: string) => parseHex(hex)!;
+
+  it('are the Daymark roof map tokens in app/globals.css', () => {
+    expect(MAP_COLORS.casing).toBe(token('e-casing'));
+    for (const k of ['ridge', 'hip', 'valley', 'eave', 'rake', 'break', 'step', 'headwall'] as const) expect(edgeColor(k), k).toBe(token(`e-${k}`));
+    expect(MAP_COLORS.casing).toBe(token('face-badge'));
+    expect(MAP_COLORS.light).toBe(token('on-face-badge'));
+  });
+
+  it('give every edge type its own colour that stands out from the ink casing', () => {
+    expect(new Set(EDGE_TYPES.map(edgeColor)).size).toBe(EDGE_TYPES.length);
+    for (const k of EDGE_TYPES) expect(contrastRatio(rgb(edgeColor(k)), rgb(MAP_COLORS.casing)), k).toBeGreaterThanOrEqual(4.5);
+    // The casing itself stands out from lawn and shingles (a UI boundary: 3:1).
+    for (const ground of Object.values(MAP_GROUNDS)) expect(contrastRatio(rgb(MAP_COLORS.casing), rgb(ground))).toBeGreaterThanOrEqual(3);
+    // Face numbers: white on ink.
+    expect(contrastRatio(rgb(MAP_COLORS.light), rgb(MAP_COLORS.casing))).toBeGreaterThan(19);
+  });
+
+  it('paint the printed photo: ink casing under each line, then its colour', () => {
+    const calls: string[] = [];
+    const g = new Proxy(
+      {},
+      {
+        get: (_, key) => (key === 'setLineDash' || typeof key !== 'string' ? () => undefined : (...args: unknown[]) => calls.push(`${key}(${args.join(',')})`)),
+        set: (_, key, value) => (calls.push(`${String(key)}=${value}`), true),
+      },
+    ) as unknown as CanvasRenderingContext2D;
+    const shapes = mapShapes(r, [5]);
+    paintRoofMap(g, 960, shapes, null, { font: 'Archivo' });
+    const strokes = calls.filter((c) => c.startsWith('strokeStyle='));
+    // The first edge: casing, then the edge's colour.
+    const at = strokes.indexOf(`strokeStyle=${edgeColor(shapes.edges[0]!.type)}`);
+    expect(at).toBeGreaterThan(0);
+    expect(strokes[at - 1]).toBe(`strokeStyle=${MAP_COLORS.casing}`);
+    expect(calls).toContain(`fillStyle=${MAP_COLORS.casing}`);
+    expect(calls.find((c) => c.startsWith('font='))).toMatch(/^font=800 .*px Archivo$/);
   });
 });

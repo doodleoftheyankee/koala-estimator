@@ -13,6 +13,7 @@ import {
   telUrl,
   toDbActualRow,
   toServerActual,
+  withoutPrices,
   type ActualsRow,
 } from './crew';
 
@@ -66,6 +67,20 @@ describe('crewViewRowSchema', () => {
     expect(r.hazards).toEqual([]);
     expect(r.scope).toHaveLength(2); // the line without a product is dropped
     expect(r.scope[0]).toMatchObject({ product: 'cellulose', qty: 70, unit: 'bag', hours: null });
+  });
+  it('readiness walk W2: a material name with a price in it reaches the crew without the price', () => {
+    const r = crewViewRowSchema.parse(
+      viewRow({
+        scope: [{ product: 'ocsf', kind: 'material', description: 'Open-cell set (~$1,800/set at full yield, per board ft)', qty: '900', unit: 'board_ft', hours: null }],
+      }),
+    );
+    expect(r.scope[0]!.description).toBe('Open-cell set');
+    expect(withoutPrices('Closed-cell set (~$2,350/set at full yield, per board ft)')).toBe('Closed-cell set');
+    expect(withoutPrices('Batt R-19 $0.85/sqft')).toBe('Batt R-19');
+    expect(withoutPrices('Air sealing, $1,323 budget')).toBe('Air sealing, budget');
+    // Words without a price are left alone.
+    expect(withoutPrices('Cellulose bag (25 lb)')).toBe('Cellulose bag (25 lb)');
+    expect(withoutPrices('Fiberglass batt R-30 (10 in)')).toBe('Fiberglass batt R-30 (10 in)');
   });
   it('treats a missing scope as empty and rejects garbage numbers', () => {
     expect(crewViewRowSchema.parse(viewRow({ scope: null })).scope).toEqual([]);

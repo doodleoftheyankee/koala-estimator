@@ -1,6 +1,7 @@
 // Business settings (app_settings) as the admin UI sees them: labels, input kinds, and the
 // parser that turns a submitted form into jsonb values. Pure, so it is unit-tested.
 import { z } from 'zod';
+import { QUOTE_PREFIX_PATTERN } from '@/lib/quotes/model';
 import {
   booleanField,
   fractionToPercent,
@@ -28,14 +29,16 @@ export interface ScalarSetting {
 
 /** Scalar settings, grouped as they appear on the page. */
 export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings: ReadonlyArray<ScalarSetting> }> = [
+  // The quote text (warranty, terms) and the branding are on the Business profile page
+  // (app/admin/business), with the rest of what every quote prints.
   {
     id: 'margins',
     title: 'Margins and overhead',
     settings: [
       { key: 'overhead_pct', label: 'Overhead', kind: 'percent', hint: '% of direct cost (0–300%)', min: 0, max: 300 },
-      { key: 'target_margin_pct', label: 'Target margin', kind: 'percent', hint: 'Gross margin on price (0–95%)', min: 0, max: 95 },
-      { key: 'floor_margin_pct', label: 'Floor margin', kind: 'percent', hint: 'Never below this without owner override', min: 0, max: 95 },
-      { key: 'ceiling_margin_pct', label: 'Ceiling margin', kind: 'percent', hint: 'Upper bound for the price optimizer', min: 0, max: 95 },
+      { key: 'target_margin_pct', label: 'Target net margin (after overhead)', kind: 'percent', hint: 'What is left of the price after direct cost and overhead (0–95%)', min: 0, max: 95 },
+      { key: 'floor_margin_pct', label: 'Floor margin', kind: 'percent', hint: 'Net, after overhead. Only the owner can go below it', min: 0, max: 95 },
+      { key: 'ceiling_margin_pct', label: 'Ceiling margin', kind: 'percent', hint: 'Net, after overhead. Upper bound for the price optimizer', min: 0, max: 95 },
       { key: 'estimator_override_limit_pct', label: 'Estimator override limit', kind: 'percent', hint: 'Max price change an estimator can make alone', min: 0, max: 100 },
       { key: 'deviation_threshold', label: 'Deviation flag threshold', kind: 'percent', hint: 'Flag estimates this far from the model', min: 0, max: 100 },
     ],
@@ -55,14 +58,36 @@ export const SETTING_GROUPS: ReadonlyArray<{ id: string; title: string; settings
       { key: 'shop_address', label: 'Shop address', kind: 'text', hint: 'Origin for drive-time estimates' },
     ],
   },
-  {
-    id: 'quote-text',
-    title: 'Quote text',
-    settings: [
-      { key: 'quote_terms', label: 'Quote terms', kind: 'textarea', hint: 'Printed on every quote' },
-      { key: 'warranty_text', label: 'Warranty', kind: 'textarea', hint: 'Printed on the quote PDF' },
-    ],
-  },
+];
+
+/**
+ * What a target net margin means in gross terms (L10, OD9): the engine prices direct cost x
+ * (1 + overhead) / (1 - margin), so the margin is what is left after overhead, not a gross margin.
+ * At 63% overhead a 15% net margin is about a 48% gross margin (1.92 times direct cost); typing the
+ * usual 48% gross figure here would price every quote about 63% too high. Null for values the
+ * engine refuses. The stored value is unchanged (a fraction, as before).
+ */
+export function marginPreview(overheadPct: number, netMarginPct: number): { grossMarginPct: number; multiple: number; text: string } | null {
+  if (!Number.isFinite(overheadPct) || !Number.isFinite(netMarginPct) || overheadPct < 0 || netMarginPct < 0 || netMarginPct >= 0.95) return null;
+  const multiple = (1 + overheadPct) / (1 - netMarginPct);
+  const grossMarginPct = 1 - 1 / multiple;
+  const pct0 = (x: number) => `${Math.round(x * 100)}%`;
+  return {
+    multiple,
+    grossMarginPct,
+    text: `With ${pct0(overheadPct)} overhead, a ${pct0(netMarginPct)} net margin is about a ${pct0(grossMarginPct)} gross margin: prices are ${multiple.toFixed(2)} times the direct job cost.`,
+  };
+}
+
+/**
+ * The optional business profile's own settings (app/admin/business), besides the branding fields.
+ * There is no town or state here: new estimates start in the shop address's town and state, and
+ * the signing sentence names the property's state (OD14).
+ */
+export const PROFILE_SETTINGS: ReadonlyArray<ScalarSetting> = [
+  { key: 'quote_number_prefix', label: 'Quote number prefix', kind: 'text' },
+  { key: 'warranty_text', label: 'Warranty', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
+  { key: 'quote_terms', label: 'Terms', kind: 'textarea', hint: 'Printed on every quote and its PDF' },
 ];
 
 export const BRANDING_FIELDS = [
@@ -77,6 +102,7 @@ export const BRANDING_FIELDS = [
 /** Readable names, used as the description when a "PLACEHOLDER — ..." description is cleared. */
 export const SETTING_LABELS: Record<string, string> = {
   ...Object.fromEntries(SETTING_GROUPS.flatMap((g) => g.settings.map((s) => [s.key, s.label]))),
+  ...Object.fromEntries(PROFILE_SETTINGS.map((s) => [s.key, s.label])),
   financing: 'Financing partner and terms',
   branding: 'Quote PDF branding',
 };
@@ -87,7 +113,7 @@ export const SETTING_LABELS: Record<string, string> = {
 
 const scalarSchemas: Record<string, z.ZodType<Json>> = {
   overhead_pct: percentField('Overhead', { min: 0, max: 300 }),
-  target_margin_pct: percentField('Target margin', { min: 0, lt: 95 }),
+  target_margin_pct: percentField('Target net margin', { min: 0, lt: 95 }),
   floor_margin_pct: percentField('Floor margin', { min: 0, max: 95 }),
   ceiling_margin_pct: percentField('Ceiling margin', { min: 0, max: 95 }),
   estimator_override_limit_pct: percentField('Estimator override limit', { min: 0, max: 100 }),
@@ -103,6 +129,10 @@ const scalarSchemas: Record<string, z.ZodType<Json>> = {
   shop_address: textField('Shop address', 300),
   quote_terms: textField('Quote terms', 10_000),
   warranty_text: textField('Warranty', 10_000),
+  // The optional business profile (lib/quotes/profile.ts).
+  quote_number_prefix: textField('Quote number prefix', 6)
+    .transform((v) => v.toUpperCase())
+    .refine((v) => QUOTE_PREFIX_PATTERN.test(v), 'Quote number prefix must be 1 to 6 letters or digits'),
 };
 
 const financingSchema = z.object({

@@ -242,15 +242,21 @@ function pushRatio(rows: RatioRow[], o: Observation, w: number, r: number): void
 }
 
 /**
- * The parent cell over all rows, shrunk toward its prior, plus one child per job type, each
- * shrunk toward the parent's estimate.
+ * The parent cell, shrunk toward its prior, plus one child per job type, each shrunk toward the
+ * parent's estimate. The parent is fitted over all rows, or, with `ownCell`, over the rows of job
+ * types that have no cell of their own: the job types that price with the parent. With no such rows
+ * the parent keeps its active value (no estimate) and the children shrink toward that.
  */
-function fitTwoLevel(fit: Fit, parent: StoredCoefficient, rows: RatioRow[]): void {
+function fitTwoLevel(fit: Fit, parent: StoredCoefficient, rows: RatioRow[], ownCell?: (jobType: JobType) => boolean): void {
   if (rows.length === 0) return;
   const k = fit.s.shrinkageK;
-  const top = summarize(rows.map((r) => r.r), rows.map((r) => r.w), fit.s.winsorPct);
-  const topValue = shrink(top.mean, top.nEff, anchor(parent), k);
-  put(fit, parent, top, topValue);
+  const parentRows = ownCell ? rows.filter((r) => !ownCell(r.o.jobType)) : rows;
+  let topValue = parent.value;
+  if (parentRows.length > 0) {
+    const top = summarize(parentRows.map((r) => r.r), parentRows.map((r) => r.w), fit.s.winsorPct);
+    topValue = shrink(top.mean, top.nEff, anchor(parent), k);
+    put(fit, parent, top, topValue);
+  }
   for (const jobType of JOB_TYPES) {
     const sub = rows.filter((r) => r.o.jobType === jobType);
     if (sub.length === 0) continue;
@@ -261,7 +267,11 @@ function fitTwoLevel(fit: Fit, parent: StoredCoefficient, rows: RatioRow[]): voi
   for (const r of rows) fit.used.add(r.o);
 }
 
-/** waste_factor per (product) and (product, job type): actual material / design quantity. */
+/**
+ * waste_factor per (product) and (product, job type): actual material / design quantity. A job type
+ * with its own waste cell (walls cellulose, L21) does not move the shared cell the others price with,
+ * so wall actuals never move attic prices (review A F2).
+ */
 function fitWaste(fit: Fit, obs: Weighted<Observation>[]): void {
   for (const product of PRODUCTS) {
     const parent = fit.byKey.get(cellKey(cell('waste_factor', product)));
@@ -273,7 +283,7 @@ function fitWaste(fit: Fit, obs: Weighted<Observation>[]): void {
       const actual = usable(o.actualQty);
       if (design !== null && actual !== null) pushRatio(rows, o, w, actual / design);
     }
-    fitTwoLevel(fit, parent, rows);
+    fitTwoLevel(fit, parent, rows, (jobType) => fit.byKey.has(cellKey(cell('waste_factor', product, jobType))));
   }
 }
 

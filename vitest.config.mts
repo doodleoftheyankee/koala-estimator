@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: { alias: { '@': import.meta.dirname } },
   test: {
-    include: ['lib/**/*.test.ts'],
+    // Tests may sit next to their screens in app/ as well as in lib/ and components/.
+    include: ['lib/**/*.test.{ts,tsx}', 'components/**/*.test.{ts,tsx}', 'app/**/*.test.{ts,tsx}'],
     environment: 'node',
     coverage: {
       provider: 'v8',

@@ -1,0 +1,69 @@
+ORIGIN/MAIN COMPATIBILITY ON THE SAME DATABASE (hard rule 2), release candidate, Nov 19 2026
+
+What ran
+  A temporary git worktree of origin/main (c0ae5f1, the live site's code), with ONLY two files
+  added: supabase/migrations/20261119000001_accuracy.sql and 20261120000001_blower_door.sql from
+  claude/release (the release's only new migrations, the blower door one with the release's
+  revokes). origin/main's own scripts/e2e.sh and tests/e2e/run.mjs ran it, on their fixed ports
+  3000/3001/54321 and database koala_e2e (nothing else was on those ports or had that database).
+  node_modules was a hard-link copy of the release checkout's (origin/main's dependencies are a
+  subset). The first attempt stopped at the Next.js build's security-upgrade notice; the same
+  command was retried once (nothing upgraded, the notice not followed).
+  Both migrations were applied by origin/main's own script (its stub and grants), after its seven:
+  the database then had blower_door_tests, price_approvals, the blower_door setting and the
+  branding company "Koala Insulation".
+
+Result
+  225 ok, 0 failed, EXIT=0, console errors: none.
+  The same 225 checks, word for word, as origin/main's e2e without the new migrations (the
+  baseline run of docs/accuracy/final/compat-main.txt) and with the accuracy migration alone (the
+  accuracy round's compat run): the only difference in the check text is the clock in the Roof
+  lookup page's recent-lookups line ("today 3:49 PM" against "4:43 AM" and "2:43 PM"). The live
+  site works on a database with both migrations: its estimates, quotes, e-sign, roof lookups, crew
+  actuals, learning run and dashboards.
+  The database koala_e2e was dropped and the worktree removed afterwards.
+
+Tail of the log (origin/main's e2e with both new migrations)
+  ok: the new estimate has the house address
+  ok: the attic opens on the tapped roof, already checked, with no new lookup
+• Roof lookup page: a roof with 24 faces still prints on one page
+  ok: a five-digit roof surface stays inside its tile on a 360 px phone
+  ok: the 24 faces go in two tables side by side
+  ok: and the report still prints on one letter page
+  ok: Print names the PDF after the house on the page too
+• offline estimate
+  ok: offline, the Roof lookup page opens and says it needs internet
+  ok: the satellite lookup is off without signal
+  ok: and says why
+  offline prices [ '$2,375', '$4,095', '$4,650' ]
+  db before reconnect: 1
+  db after reconnect: 2 estimates; Lee:false,Offline:true
+• owner screens
+  ok: the owner's menu has Roof lookup, with everyone's recent lookups and who looked each up
+  estimates rows mention Lee/Offline: true true
+  material audit: 1
+  estimator on /admin/pricing ends at: /field
+• office schedules the job and assigns Crew A
+  ok: job scheduled for Crew A today
+• crew starts the job on a phone
+  ok: crew started the job
+  ok: crew screens show no prices
+  ok: crew jobs API returns no prices or costs
+• crew enters actuals and completes the job
+  ok: crew completed the job
+  actuals: 3 rows; 36.400 h
+  ok: whole-job actuals synced
+  ok: crew is kept out of the priced field app
+• office verifies the actuals
+  ok: all actuals verified
+  ok: actuals changes are audited
+• nightly learning run (cron)
+  ok: cron refuses a request without the secret
+  cron 200 {"startedAt":"2026-11-19T15:49:29.533Z","finishedAt":"2026-11-19T15:49:29.732Z","trigger":"cron","expiredQuotes":0,"calibration":{"runId":"83847072-acf7-49e8-8d3e-801f61c41dbf","status":"succeeded","jobsConsidered":1,"jobsUsed":1,"candidateSetId":null,"changedCount":0,"promoted":false,"gates":[{"name":"sanity","passed":true,"detail":"All 27 coefficients are finite, positive and within bounds."},{"name":"bounds","passed":true,"detail":"0 clamped to bounds."},{"name":"step_limit","passed":true,"detail":"0 limited to ±10% of the active value."},{"name":"min_evidence","passed":true,"detail":"4 hel
+  ok: nightly run succeeded
+  ok: learning run recorded
+• owner learning dashboard
+  run now: Learning run finished. Calibration: no coefficient moved (1 of 1 completed job usable). Win model not trained: Only 1 decided quote; the win model needs at least 40. Showing win rates by bucket only.
+  estimator on /admin/learning ends at: /field
+  ok: estimators cannot open the learning dashboard
+console errors: none

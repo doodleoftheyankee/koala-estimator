@@ -1,0 +1,483 @@
+{
+ "reviews": [
+  {
+   "lens": "Quotes, documents, money text and snapshots (lib/quotes/*, quote send/sign routes, app/q/[token], lib/format.ts, /admin/business, office list and field card headline, quote numbers, quote part of 20261119000001_accuracy.sql). Reviewed fdc3eaa against origin/claude/daymark 9051b81 and origin/main c0ae5f1. The measure stage is not in fdc3eaa, so it was not reviewed.",
+   "checkedOk": [
+    "HARD RULE 1, pages, PDFs and emails: I ran scripts/accuracy/render-stored.ts on origin/claude/daymark (with the script and stubs copied in) and on fdc3eaa against the live export already on disk (/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/golden/live-quote-docs.json). The export is current: a read-only SELECT on production returns 77 quotes, the last sent 2026-10-20. Each side wrote 2,926 files and 233 differ. All 233 are page HTML where only the order of CSS classes changed ('mt-1 block \u2026' became 'block \u2026 mt-1'). That change came from the money stage. After sorting class tokens there are 0 differences (python normdiff.py render-daymark render-fdc gives 'differ 233, differ after class sort 0'). The text files (.txt) are identical.",
+    "HARD RULE 1 against the live site's code: PDFs and emails rendered with origin/main c0ae5f1 and with fdc3eaa: 1,386 files, 0 differences. This confirms the quotes.json claim. I also compared the raw PDF bytes (77 unsigned and 231 signed). They are identical except for /CreationDate and /ID, so the PDF layout is unchanged too, not only the text.",
+    "Legacy consent sentence: LEGACY_ESIGN_CONSENT is byte-identical to origin/main's ESIGN_CONSENT. consentFor(doc) is what both the signing page and esign_audit.consentText use, so a quote sent before is signed under the words it showed. The signed-PDF 'Date:' line (formatAuditTime) renders identically to the old toLocaleString.",
+    "A legacy quote number still shows and can be looked up. The customer page, PDF and emails print doc.quoteNumber unchanged. The phone list uses lastQuote.quoteNumber, else legacyQuoteNumber (UTC year, the same formula as before), and search matches it. A v2 of a legacy quote keeps the legacy base (KN-2026-A0C1DB-v2).",
+    "next_quote_number in a local DB (fresh migrations, then migration re-run): SECURITY DEFINER, proconfig search_path=public, pg_temp. anon and authenticated get 'permission denied for function next_quote_number' and 'permission denied for table quote_number_counters'. service_role can call it. Concurrency: 8 parallel workers x 50 calls as service_role gave 400 numbers, 1..400, none repeated. The year boundary is right: businessYear(2027-01-01T04:59:59Z)=2026 and (05:00Z)=2027. If the counter call fails, the route throws before any PDF upload or insert, so nothing is written. A double send of the same estimate fails on unique(estimate_id, version) or on the v1.pdf upload; it only skips a number, which notDone already documents. npm run test:db passes.",
+    "OD11 Valid until, vitest (scratch zz-review-tests/documents.test.ts, 13 tests pass). Sends every 15 minutes from 00:00 to 05:45 UTC on 17 days around DST (2026-11-01, 2027-03-14) and month ends, for validDays 1, 7, 14, 30, 31, 45, 60, 90. In every case the printed date (PDF, email, tile) equals the business-zone date of expires_at, and the expired page's date and time is on that same day. isExpired is false at expires_at and true 1 ms later. The cron expire_stale_quotes uses the same expires_at < now(). Example: sent 2027-02-13T04:30Z for 30 days gives valid until 2027-03-15 and an expired page reading 'Mar 15, 2027 \u00b7 12:30 AM'.",
+    "OD4 whole dollars: npm run accuracy:violations -- 4000 9917 (a fresh seed) gives every rule at 0, same_price_text and valid_until_is_expiry included. Golden synthetic (65) and live (78): same_price_text 0 and valid_until_is_expiry 0. The same_price_text check only calls the PDF formatter, so I also rendered real PDFs. For 112 random quotes, the unsigned and signed PDFs were read with pdftotext: every 'X total:' and signed 'Price:' equals dollarsText(price), and 'Valid until:' equals the real expiry date. 0 mismatches.",
+    "Business profile gate on production's current settings (read-only SELECT of app_settings): the send is refused with 'The business profile is not finished: add the license number, the office phone, the state and the warranty.' This matches the ledger. The migration's KN prefix passes. New estimates would start in Newark, DE (from shop_address). The owner sees this sentence on /admin/business and must fill the license, office phone, state and warranty. Until then no quote can be sent, as quotes.json notDone says.",
+    "Consent for new quotes is esignConsent(profile state). It is frozen in document.consent and stored the same way in esign_audit. Quotes sent before keep the legacy sentence.",
+    "Honest wording with email on and off: 'emailed' is true only when the customer's sendEmail returned sent:true. The download link sits below the sentence, so 'Download your signed copy below' is true. With email off the phone tells the estimator to share the link, so the PDF's 'the link we sent you' becomes true. The expired page's date and time match the PDF and the link.",
+    "The office list and field card headline both resolve through recommendedTier. The send route stores the same tier in selected_tier. The phone summary stores the recommended option's price.",
+    "npm run typecheck passes on fdc3eaa. vitest on lib/quotes, lib/office, lib/field, lib/sync and lib/accuracy: 267 tests pass."
+   ],
+   "findings": [
+    {
+     "id": "DOC-1",
+     "severity": "high",
+     "confidence": "high",
+     "title": "The profile gate accepts the seeded company name and the seeded terms, so a new franchise sends quotes naming 'Koala Insulation of Newark'",
+     "files": [
+      "lib/quotes/profile.ts",
+      "supabase/migrations/20261020000001_init.sql",
+      "supabase/migrations/20261020000002_phase1.sql",
+      "app/admin/business/page.tsx"
+     ],
+     "failureScenario": "Every database gets branding.company = 'Koala Insulation of Newark' (init.sql:1138, description 'PLACEHOLDER \u2014 PDF branding'). It also gets quote_terms 'A signed quote authorizes Koala Insulation of Newark to schedule the work\u2026' (phase1.sql:16, description 'PLACEHOLDER, owner to replace'). isGap (profile.ts:56-61) only looks for an empty value or the word 'placeholder' inside the value. Take a Springfield, IL franchise. It is told to 'add the license number, the office phone, the state and the warranty', fills exactly those, and sees the green 'Everything a quote needs is filled in.' Its quotes then go out under the Newark company name, with terms that authorize Koala Insulation of Newark to do the work. Ledger L30 says a required field that is 'still a seed PLACEHOLDER' blocks sending, but two of the seven required fields are not checked that way. Expected: the seeded company and terms count as gaps until the owner saves them.",
+     "evidence": "Scratch vitest /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/zz-review-tests/documents.test.ts, test 'the gate names only license, phone, state and warranty; the seeded company and terms pass' (passes, which confirms the behaviour). On the seed rows, businessProfileGaps gives exactly those 4 gaps. After license, phone, IL and warranty are filled it gives []. quoteSettingsFromRows(filled).branding.company is 'Koala Insulation of Newark', terms contain 'authorizes Koala Insulation of Newark', and newEstimateDefaults gives {city:'Newark', state:'IL'}. Run with: npx vitest run lib/zz-review (in a worktree at fdc3eaa).",
+     "suggestedFix": "Treat a profile setting as a gap while its app_settings.description still marks it as a seed PLACEHOLDER. saveSettings already strips that marker when the owner saves (stripPlaceholder), so one save of the Business profile clears it. Alternatively, require an explicit owner confirmation of company and terms. Production would then also need the owner to re-save the terms once."
+    },
+    {
+     "id": "DOC-2",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "New estimates take the town from the shop address and the state from the profile, giving a wrong pair (Newark, PA / Newark, IL)",
+     "files": [
+      "lib/quotes/profile.ts",
+      "app/field/FieldApp.tsx",
+      "app/admin/business/page.tsx"
+     ],
+     "failureScenario": "newEstimateDefaults (profile.ts:93-101) falls back field by field. Take a profile with State = PA and Town left empty (the page says 'Left empty, they take the town of the shop address'), and the seeded shop_address 'Newark, DE 19711' (description still 'PLACEHOLDER, set the shop address'). Every new estimate then starts in 'Newark, PA'. A franchise licensed in one state with its shop in another hits the same thing: shop 'Philadelphia, PA' with state NJ gives 'Philadelphia, NJ'. If the estimator does not retype the town, the quote's property line prints the wrong town and state. Ledger L32 says 'the profile's town and state, else the shop address's'; the code mixes the two.",
+     "evidence": "Same scratch vitest file, test 'town from the shop address and state from the profile are mixed when they differ': production rows plus default_state PA give {city:'Newark', state:'PA'}. The seed-franchise test gives {city:'Newark', state:'IL'}.",
+     "suggestedFix": "Choose the place as a pair: use the profile town with the profile state; else use the shop address's town only when its state equals the profile state (or there is no profile state); else leave the town blank and use the profile state. Ignore a shop_address whose description still says PLACEHOLDER."
+    },
+    {
+     "id": "DOC-3",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "The phone sends estimators to the office and gives office users an edit link, but only the owner can change the business profile",
+     "files": [
+      "app/field/SendStep.tsx",
+      "app/admin/business/page.tsx"
+     ],
+     "failureScenario": "Right after deploy, production has 4 gaps, so every send is blocked. An estimator sees 'Ask the owner or the office to finish the business profile.' (SendStep.tsx:168 and :231). An office user is shown 'Open the business profile' (canFixProfile includes office, :57). That link opens a page marked Read-only, 'Only the owner can change it.' (business/page.tsx:30, 49), and the office's save is refused by owner-only RLS (quotes.json notDone). Estimators chase the office, and the office cannot do it, so sending stays blocked until someone reaches the owner.",
+     "evidence": "Code read at fdc3eaa: SendStep.tsx:57 `const canFixProfile = profile.role === 'owner' || profile.role === 'office';` with lines 163-168 and 226-231. business/page.tsx:30 `const readOnly = profile.role !== 'owner';`. quotes.json notDone[0]: 'The office can open the business profile but not save it'.",
+     "suggestedFix": "Say 'Ask the owner to finish the business profile.' Show the 'Open the business profile' link only to the owner. Office users get the read-only note, or the link with the words 'see what is missing'."
+    },
+    {
+     "id": "DOC-4",
+     "severity": "low",
+     "confidence": "high",
+     "title": "L39 keep-together: an option of 18 lines or fewer that is taller than a page prints with overlapping, unreadable lines",
+     "files": [
+      "lib/quotes/pdf.tsx"
+     ],
+     "failureScenario": "OptionSection sets wrap={false} whenever items plus bullets is 18 or fewer, whatever the text length. When such a block is taller than a page, react-pdf logs 'Node of type VIEW can't wrap between pages and it's bigger than available page height' and squeezes the block: bullets and area names print on top of each other on the customer's PDF. Two inputs that trigger it, both within the app's limits: (a) 12 items with 80-character area names (the draft schema allows 80) plus 6 owner bullets of 200 characters (the admin form allows 8 x 200); (b) 17 items with 75-character descriptions and 50-character area names plus 1 bullet. Real engine quotes with 8 areas and long names did not trigger it, so this is an edge case. Before this stage such a block would have broken across pages normally.",
+     "evidence": "Scratch script /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/zz-review-scripts/pdf-tall.ts, run with node scripts/accuracy/run.mjs on a worktree at fdc3eaa. Args '12 6 70 200 80' and '17 1 75 100 50' print the react-pdf warning. Screenshot /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/tall-12-6-1.png shows the Better block with overlapping bullets and area names; the PDF is /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/tall-12-6.pdf.",
+     "suggestedFix": "Keep together only when the estimated height (wrapped lines at the column widths) fits a page. Or keep the head together with the first lines (minPresenceAhead) and let the block wrap, instead of wrap={false} on the whole block."
+    },
+    {
+     "id": "DOC-5",
+     "severity": "low",
+     "confidence": "high",
+     "title": "The hard-rule-1 check does not render the thank-you after signing, and that text did change for quotes sent before",
+     "files": [
+      "scripts/accuracy/render-stored.ts",
+      "app/q/[token]/SignForm.tsx",
+      "docs/accuracy/after-quotes/hard-rule-1.txt",
+      "docs/accuracy/ledger.txt"
+     ],
+     "failureScenario": "render-stored.ts renders QuotePage server-side, so the client-state thank-you (SignedThanks) is never compared. For a quote sent before the round, signed when the customer email did not go out, daymark printed 'You accepted Better: X for $2,935.00. We emailed you a copy and will contact you shortly to schedule the work.' fdc3eaa prints '\u2026 for $2,935.00. Download your signed copy below. We will contact you shortly to schedule the work.' This is the deliberate L33 honest-wording fix and touches no item, price, number, date, consent or PDF. But hard-rule-1.txt and the ledger say every page of a stored quote 'reads exactly as before \u2026 in every state', and a future change to this screen would go unnoticed.",
+     "evidence": "Scratch vitest 'reads differently from daymark when the email did not go out' (passes): SignedThanks with centsInSentences=true and emailed=false renders the 'Download your signed copy below' sentence. The daymark text was read from git show 9051b81:app/q/[token]/SignForm.tsx.",
+     "suggestedFix": "Add SignedThanks (emailed true and false) for each option to render-stored.ts. Record in hard-rule-1.txt that this sentence deliberately changes for legacy quotes when no email went out."
+    },
+    {
+     "id": "DOC-6",
+     "severity": "low",
+     "confidence": "medium",
+     "title": "lib/quotes/settings.ts still hard-codes 'Koala Insulation of Newark' as the default company and in the default terms",
+     "files": [
+      "lib/quotes/settings.ts",
+      "app/q/[token]/data.ts"
+     ],
+     "failureScenario": "DEFAULT_COMPANY = 'Koala Insulation of Newark' and DEFAULT_TERMS (which names it) remain at settings.ts:6-10 and are used at lines 59 and 67. The send gate stops them reaching a new quote. But getSettingsBranding (data.ts) shows the masthead from current settings on /q pages for an unknown token or a failed lookup, and it falls back to DEFAULT_COMPANY when branding.company is unset. That puts Newark's name in front of another franchise's customer. quotes.json notDone lists the legacy consent, legacyQuoteNumber and the demo seed as the franchise text left in code, but not these two constants (hard rule 3).",
+     "evidence": "git grep at fdc3eaa: lib/quotes/settings.ts:6 `export const DEFAULT_COMPANY = 'Koala Insulation of Newark';`, :9 the terms text, :59 `company: b.company ?? DEFAULT_COMPANY`. Not reproduced in a running app.",
+     "suggestedFix": "Use a neutral fallback (empty, or the masthead without a name) and drop DEFAULT_TERMS. The gate already guarantees real values for new quotes."
+    },
+    {
+     "id": "DOC-7",
+     "severity": "low",
+     "confidence": "high",
+     "title": "A new version keeps a legacy base that 75 production estimates share, so v2 numbers repeat across customers",
+     "files": [
+      "app/api/quotes/route.ts",
+      "lib/demo/seed.ts"
+     ],
+     "failureScenario": "In the live export, 75 of 77 quotes are numbered 'KN-2026-DE0000-v1': they are demo estimates whose ids all start de000000, and legacyQuoteNumber uses the first six hex characters of the id. The route keeps the previous base for a new version (route.ts:158-160), so re-quoting any of them gives 'KN-2026-DE0000-v2' for every customer, and the phone's number search finds all 75. lib/demo/seed.ts still numbers newly seeded demo quotes with the hard-coded 'KN-' prefix whatever the franchise's prefix is. Only demo data is affected, which is why this is low.",
+     "evidence": "python over live-quote-docs.json: Counter({'KN-2026-DE0000-v1': 75, 'KN-2026-A0C1DB-v1': 1, 'KN-2026-A0C1DB-v2': 1}), 76 distinct estimates. route.ts:158 `const base = previous?.quote_number ? quoteNumberBase(previous.quote_number) : null;`.",
+     "suggestedFix": "When the previous number is a legacy one (it does not match PREFIX-YYYY-NNNN), take a counter number for the new version. Have the demo seed use the configured prefix and an id-unique suffix."
+    }
+   ]
+  },
+  {
+   "lens": "Pricing engine math and checker integrity (lib/pricing, lib/accuracy, lib/quotes/invariants.ts, scripts/accuracy, lib/learning, lib/field/recommended.ts, lib/office/estimates.ts, the phone's offline bundle, and the pricing rows in the accuracy migration), reviewed at fdc3eaa against origin/claude/daymark 9051b81 and the baseline checker b708d67",
+   "checkedOk": [
+    "Violation counts reproduce. At seed 20261118 (10,000 quotes) all 8 invariants are 0, and the run matches docs/accuracy/after-quotes/violations-20261118.txt line for line: 26,333 options priced, 22,145 shown, 967 quotes with no option. Seeds 7 and 424242 (20,000 quotes each) are 0 on every invariant. Seed 99999 has exactly 1 violation (see finding F11). Outputs are in /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/viol-{20261118,7,424242,99999}.txt.",
+    "Customer lines are clean on 70,000 random quotes (4 seeds, 154,363 shown options). No negative or $0 work item, no negative Travel and setup or Minimum job charge line. Every option has a travel line, every amount is whole dollars, and the items sum exactly to the price. Every Price adjustment has the sign of (price - adjustedPrice). Output: /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/adv/lines.out",
+    "41 hand-written edge cases (/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/adv/adv.ts, output in adv.out): 0.01 / 0.3 / 1 / 9.95 sq ft, 200,000 and 200,001 sq ft for every job type, all six job types in one estimate, existing insulation deeper than the cavity (cavity_full, no options), target R below existing R (already_at_target), removal with nothing existing, overrides of $500 under the minimum, $1, $1.49, $0.99, -$100 and NaN, 0 bags / 0 board ft / 0 h line overrides, all three tiers set to one price, and the picked or recommended tier hidden. No invariant violation in any of them. Every case kept: no negative item, adjustment sign correct, total = printed items, whole dollars. When any option is priced, at least one is shown. 0 sq ft throws RangeError, and priceableAreas filters that size out before pricing.",
+    "OD6 shownOptions always keeps the top remaining option, so an estimate with work never ends with zero options: zeroShownWithWork = 0 on all 70,000 quotes. About 12% of random quotes show only one option. The recommended option then moves to the one shown (recommendedTier gives the next shown after the pick, else the nearest one before), and the quote, office list and sync use that same function.",
+    "Phone and server price identically. The bundle after a JSON round trip (what Dexie caches from /api/bundle) prices byte-identically to the server's bundle on 10,000 quotes (scan D = 0). SendStep and the send route use the same priceEstimate defaults, priceableAreas and toEstimateInput. pricesMatch compares the same sets of shown tiers. public/sw.js goes from v5 to v9, so phones pick up the new engine.",
+    "Dense-pack math is consistent with 35 sq ft of 2x4 wall per 25 lb bag (122.5 sq ft x in): a 1,000 sq ft 2x4 wall takes 1000*3.5/122.5*1.08 = 30.86, so 31 bags; a 2x6 wall takes 48.5, so 49 bags. A web search summary of the Greenfiber SANCTUARY chart gives the 2x4 row as R-13, 3.5 in, 3.5 pcf, 35.0 sq ft/bag at 16 in o.c. and 33.8 at 24 in o.c. greenfiber.com and images.greenbuildingadvisor.com are outside this session's allowed network hosts, so the 2x6 row could not be read directly. Attics keep the 200 sq ft x in bag.",
+    "Attic and non-wall prices against the daymark engine: 4,000 inputs (2,151 attic-only, no walls, no depth, whole-dollar overrides only), priced with the same bundle on both engines. 3,997 are identical. The 3 that differ are finding F6.",
+    "Every ledger example L1-L24 and L23b is pinned to exact values in lib/pricing/phase1.test.ts (136 assertions), for example removal $2,483, $6,385 / $8,010, -$95, $8,510, $4,322, $2,735, 11.72 h, $2,520, $1,500 / $2,295, $2,090, 68 bags / $3,070 / $2,900, $2,270, R-4.1, R-12.6 and R-36. The in-scope vitest run passes (38 files, 672 tests). Typecheck is clean, eslint on the in-scope files is clean, and npm run test:db passes on a throwaway local database.",
+    "Checker diff against b708d67: no check, test or generator case was removed. random.ts only gained a frozen 2026-11-18 per-inch table. Tests were added or tightened (toMatchObject became toEqual; new tests for withAccuracyRows, item kinds, full_cavity_not_filled, qty_below_stated_r and batt rated R). PROMISES_FULL_CAVITY now also matches 'fills the 3.5 in cavity'. shownOptions now also drops tiers named in option_hidden warnings, which changes nothing for the engine's default output. The cavity rule still uses lowerBound and the label rules upperBound, each giving the benefit of the doubt in its own direction.",
+    "Migration 20261119000001_accuracy.sql (pricing rows): additive. Columns are nullable. The new rows are is_default=false, so origin/main's default-only loader never sees them. Inserts are guarded by NOT EXISTS, so a second run changes nothing. The walls waste cell copies the active parent value (1.08, bounds 1.00-1.60). Constraint materials_default_is_general is added. The in-scope diff contains no Newark, Delaware, (302) or New_York text.",
+    "priceStep / L5: rounding 5 is unchanged; 0 or 0.5 prices to the dollar; winRate.recommendPrice uses the same step. L6: an override under $1 is ignored with override_too_low; $1.49 becomes $1."
+   ],
+   "findings": [
+    {
+     "id": "F1",
+     "severity": "high",
+     "confidence": "high",
+     "title": "OD6 dead end: a price change that hides an option also removes the only control that can undo it",
+     "files": [
+      "app/field/OptionsStep.tsx",
+      "lib/pricing/engine.ts"
+     ],
+     "failureScenario": "1. Attic 1,000 sq ft, R-0, 20 min drive. 2. The estimator sets Good to $4,500, above Better's $4,390. 3. The engine hides Good and warns 'Good is not shown to the customer: it costs $4,500, more than Better ($4,390), the next option up. Change its price to show it.' 4. OptionsStep builds cards only for priced.ok.options (line 48: options = priced?.ok?.options), and those are the shown options only. The Good card, which holds the only 'Change price' editor and the line editors, disappears. 5. The override stays in draft.overrides.good, and no screen can edit or clear it. The estimator cannot do what the warning says without also repricing Better or Best. Same result for a line change that makes an option a duplicate (for example Better set to $9,000 is hidden as 'the same work as Best').",
+     "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/adv/engine.review.test.tsx, test 'R-A'. It renders OptionsStep with renderToStaticMarkup. The markup contains the warning 'Good is not shown to the customer: it costs $4,500, more than Better ($4,390), the next option up. Change its price to show it.' and exactly one card, role=group aria-label=\"Better option\"; the expectation for aria-label=\"Good option\" fails. grep shows draft.overrides is edited only in OptionsStep (setPriceOverride at OptionsStep.tsx:124).",
+     "suggestedFix": "In OptionsStep, also price with { showAll: true } (or keep the hidden set) and render each hidden option as a collapsed 'Not shown to the customer' card with Change price, Remove price change and line editing. Alternatively, put a 'Remove the price change' action on each option_hidden warning whose option isOverridden or hasLineOverrides. Add a component test and an e2e step."
+    },
+    {
+     "id": "F2",
+     "severity": "high",
+     "confidence": "high",
+     "title": "L21 'wall actuals no longer move attic prices' is not true: calibrate still fits the shared cellulose waste cell on wall rows",
+     "files": [
+      "lib/learning/calibrate.ts",
+      "docs/accuracy/ledger.txt",
+      "supabase/migrations/20261119000001_accuracy.sql",
+      "lib/pricing/phase1.test.ts"
+     ],
+     "failureScenario": "1. Take the seeded active set plus the migration's waste_factor/cellulose/walls cell. 2. Calibrate on 200 wall-only cellulose jobs that each used 1.30 x the design bags. 3. fitTwoLevel (calibrate.ts:248-262) fits the parent cell waste_factor/cellulose/* over ALL rows, walls included: 1.08 becomes 1.188 (one 10% step). 4. There is no attic child cell, so attics price with the parent: a 1,000 sq ft attic to R-49 goes from 74 to 81 bags, about +$190 per quote, from wall data alone. The ledger (L21: 'wall actuals no longer move attic prices'), the migration comment ('attic prices read the shared cell') and the R4 closure all claim the opposite. The phase1 test for L21 only sets the walls cell by hand and never runs calibrate. The cavity stage's own notDone says the parent is still fitted on all rows, which contradicts the ledger.",
+     "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/adv/learning.review.test.ts: 'AssertionError: expected 1.1880000000000002 to be 1.08'. In the same run the walls cell rose above 1.08, and the cell attics read is the parent (jobType null).",
+     "suggestedFix": "Fit the parent cell only on rows of job types that have no cell of their own (or seed an attic child at 1.08 and have attic pricing read it), and add a test that runs calibrate on wall-only data and asserts the cell attics price with does not move. Until then, correct the L21 ledger entry and the R4 closure."
+    },
+    {
+     "id": "F3",
+     "severity": "high",
+     "confidence": "high",
+     "title": "A batt or air-sealing quantity below the area still promises the whole area, and no check can see it (R3 is closed only for bags and board ft)",
+     "files": [
+      "lib/pricing/engine.ts",
+      "lib/pricing/invariants.ts"
+     ],
+     "failureScenario": "Crawlspace 800 sq ft, 2x6. The estimator sets Good batts to 100 sq ft ('counted on site'). The customer's item still reads 'Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft' at $306, though only 100 sq ft of batts is priced. Attic 1,000 sq ft with air sealing set to 500 sq ft: the item still reads 'Air sealing of top plates, penetrations and bypasses (1,000 sq ft)'. The engine rewrites an item's promise only for loose fill (engine.ts:733-756, `loose` = bag or board_ft). Batt descriptions (764-768) and air sealing (828) always print area.sqft. The checker misses it: finalR adds a sized batt's rated R whatever its quantity (invariants.ts:246-249), and air sealing has no R. The generator itself produces these inputs.",
+     "evidence": "Review tests 'R-C' (engine.review.test.tsx) fail: the batt line qty is 100, checkPricedQuote returns [], and the description still contains '800 sq ft'; the air-sealing item still contains '(1,000 sq ft)'. Scan /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/adv/scan2.ts, run only on quotes with 0 checker violations, finds option-areas priced below their stated area: seed 20261118, 50 in 37 quotes (39 air sealing, 11 batts); seed 7, 131; seed 424242, 131; seed 99999, 108. Example 73c0e4a6 Better: 882.7 sq ft of air sealing priced, item 'Air sealing of top plates, penetrations and bypasses (1,267 sq ft)' $558. Outputs: adv/scan2-20261118.out and adv/scan2-other.out.",
+     "suggestedFix": "When a sq-ft material line is overridden, print the area it covers: qty / waste, or 'about N sq ft of 800'. Or cap the stated area and warn. Add a labels_match_work kind area_not_covered that compares qty / waste for sq-ft lines (batts, air sealing) against the area an item states."
+    },
+    {
+     "id": "F4",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "A product priced at 0 is still sold as work: title, bullets and an item 'to R-0 (~0\" added)', sometimes $0",
+     "files": [
+      "lib/pricing/engine.ts",
+      "lib/pricing/invariants.ts"
+     ],
+     "failureScenario": "Walls 1,000 sq ft, 2x4. The estimator sets Good dense-pack to 0 bags (the schema allows qty 0). Good is shown as 'Dense-Pack Cellulose' with the bullet 'Installed from outside or inside with minimal disruption'. Its item reads 'Blown Cellulose to R-0 (~0\" added), 1,000 sq ft' $134, plus travel and minimum, for a $1,500 total, and nothing is installed. With 0 bags and 0 h on every option, a $0 work line prints. Rim joist 200 sq ft with Best set to 0 board ft: the only option shown is 'Closed-Cell Spray Foam to R-0 (~0\" added)' at $1,500. AreaWork.primary is set whenever the product scope returns lines, whatever the quantity. qty_below_stated_r compares R-0 with R-0, so the checker sees nothing. The generator never draws 0 bags: Math.round(modelQty x factor) with factor >= 0.5 is at least 1.",
+     "evidence": "engine.review.test.tsx, tests 'R-B': the label is 'Dense-Pack Cellulose', the description is 'Blown Cellulose to R-0 (~0\" added), 1,000 sq ft', and the $0 work item list is non-empty. adv.out shows the same, including 'ZERO work item' for the 0 bags + 0 h case.",
+     "suggestedFix": "Treat a product line with qty 0 as no product: primary = null, so L15 drops the product from the title and bullets. Warn the estimator, or refuse a 0 quantity on the phone. Add a labels rule product_not_installed (an item stating 'to R-x' with no quantity) and a finite_amounts kind zero_work_item."
+    },
+    {
+     "id": "F5",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "The OD6 duplicate test ignores which material is priced, so two batt sizes count as 'the same work'",
+     "files": [
+      "lib/pricing/engine.ts"
+     ],
+     "failureScenario": "workSignature (engine.ts:119-125) keys a material line by lineKey(area, product, 'material') and qty, not materialId. Suppose the owner sets the crawlspace Better template to batts at target R-30, and even prices the R-30 batt at $1.10 against $0.75 for R-19. Good (R-19 batt) and Better (R-30 batt) both price 840 sq ft, so Better is hidden: 'Better is not shown to the customer: it is the same work as Good for more ($2,830 against $2,270)'. The customer never sees the higher-R option. Seeded templates use batts only in Good, so nothing live moves today, but templates are owner-editable and this branch is meant for every franchise.",
+     "evidence": "engine.review.test.tsx test 'R-D': with showAll, Good's item says R-19 and Better's says R-30. The shown result carries the warning above, and Better is not in the shown tiers.",
+     "suggestedFix": "Include materialId (or the rated R and thickness) in workSignature's material entry, and add a phase1 or property test with two sized batts in two tiers."
+    },
+    {
+     "id": "F6",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "Attic and non-wall prices moved by $5 on about 1 in 1,300 inputs, with no ledger entry (labor hours re-associated in L7)",
+     "files": [
+      "lib/pricing/engine.ts"
+     ],
+     "failureScenario": "The money stage now computes install hours as setup + designQty x (coeff x access) (engine.ts:730, 760, 813, 824). Daymark computed (designQty x coeff) x access. At a half-cent tie, round2 flips. Example: attic 2,625 sq ft, extreme access, to R-49, plus an attic of 275 sq ft, difficult, 67 min drive. 2 + 178.6458 x 0.15 x 1.6 = 44.875 h on daymark, rounded to 44.88 h. Here 178.6458 x 0.24000000000000002 = 44.87499999 h, rounded to 44.87 h. Good goes from $10,815 to $10,810. The model hours themselves change, although L7 says 'the model's hours stay the model's', and the stages say no attic price moves.",
+     "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/cmp/ (gen.ts, dump.ts, old.json, new.json): the same bundle priced by both engines over 4,000 inputs with no walls, no depth and no line overrides. 3 differ: q1208 Best $39,995 -> $40,000, q1703 Good $10,815 -> $10,810, q2753 Good $33,590 -> $33,595. node: 2+d*0.15*1.6 = 44.875 but 2+d*(0.15*1.6) = 44.87499999999999. Review test 'R-F': 'expected 44.87 to be 44.88'.",
+     "suggestedFix": "Restore daymark's multiplication order, or make round2 robust (Math.round((n + Number.EPSILON) * 100) / 100, as money() does) so a tie no longer depends on association. Re-run the golden sets, and add a ledger note if any total moves."
+    },
+    {
+     "id": "F7",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "The random generator's draws depend on the engine, so 'the same seed draws the same quotes' is false and the before/after counts are on different quotes",
+     "files": [
+      "lib/pricing/__fixtures__/random.ts",
+      "docs/accuracy/ledger.txt",
+      "docs/accuracy/before/violations-20261118.txt",
+      "docs/accuracy/after-money/violations-20261118.txt"
+     ],
+     "failureScenario": "randomQuote calls priceEstimate and then pick(r, model.options), loops over model.options with chance(r, 0.6), and draws override prices from the model's prices (random.ts:248-275). Whenever the engine shows a different number of options (OD6) or different prices, the RNG stream shifts and every later quote is different. The before (b708d67), after-money and after-cavity counts at seed 20261118 therefore measure different populations: options priced 27,349 -> 27,400 -> 26,333; quotes with no option 704 -> 671 -> 967, and the money stage did not change which tiers have work. The ledger says 'The generator keeps the 2026-11-18 per-inch table so the seed draws the same quotes', and baseline.json says 'The same seed always gives the same quotes'. Neither holds across engine versions, so the per-rule 'N -> 0' comparisons are not like for like.",
+     "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/cmp/gq.ts: the b708d67 generator and engine and the fdc3eaa ones draw 10,000 quotes at seed 20261118 from the SAME bundle. Only 238 of 10,000 are identical, and they first diverge at quote 11 (Good override 60,837.7 against 61,421.5). Outputs: cmp/q-base.json and cmp/q-new.json.",
+     "suggestedFix": "Draw estimator overrides independently of the engine: always draw a factor and a coin for all three tiers and for a fixed set of line keys, from a separate stream (for example mulberry32(seed ^ quoteIndex)), and apply them to whatever the engine returns. Then recompute docs/accuracy/before with the frozen generator, or reword the ledger and baseline claims."
+    },
+    {
+     "id": "F8",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "options_step_up can only pass: it reads the options the engine chose to show, and nothing checks that a hidden option was rightly hidden",
+     "files": [
+      "lib/pricing/invariants.ts",
+      "scripts/accuracy/violations.ts"
+     ],
+     "failureScenario": "shownOptions(priced) is the engine's output minus tiers named in option_hidden warnings. The engine hides every option that does not step up by its own stepUp and workSignature, so checkOptionsStepUp holds by construction: it cannot catch a wrong hide like F5, an option priced out of view like F1, or a Best that ends with less R like F9. The audit's rule ('Good, Better and Best always step up'; 'an option that duplicates a cheaper one, or does not step up, is hidden') is now checked only against the engine's own definitions. This is not a weakening against b708d67, whose shownOptions was the same engine output, but the rule is not checked independently. Related: expectedHeadline also calls the app's recommendedTier, so the headline rule is the app compared with itself. Its comment still says 'else Better, else the first option', which is stale since L9.",
+     "evidence": "invariants.ts:84-87 (shownOptions) and 314-344 (checkOptionsStepUp). violations.ts:38-44 runs the checks on the default (shown) result only; showAll is used just for the count. F5's wrong hide passes checkPricedQuote with 0 violations.",
+     "suggestedFix": "Add an invariant over the showAll result. For every tier absent from the shown options, re-derive the reason from what the customer would read: the same item descriptions and materials (lineKey plus materialId) as a cheaper shown option, or a price at or above the next shown option up. Check that at least one option is shown when any is priced. Report wrongly_hidden and none_shown kinds."
+    },
+    {
+     "id": "F9",
+     "severity": "medium",
+     "confidence": "high",
+     "title": "The option that removes the old insulation can end below the R already there, at the highest price (rule gap, also on daymark)",
+     "files": [
+      "lib/pricing/engine.ts",
+      "lib/pricing/invariants.ts"
+     ],
+     "failureScenario": "Attic 1,000 sq ft, 7.25 in joist depth entered, R-49 blown fiberglass, no target. Good is skipped (already at code). Better becomes 'Air Sealing' for $1,500, because the existing insulation fills the 'cavity'. Best, 'Remove, Air Seal + Cellulose', costs $4,840: it removes the R-49 and installs only 'Blown Cellulose to R-26.1 (fills the 7.25 in cavity)'. The customer pays the most to drop from R-49 to R-26.1. Likewise, a target of R-30 typed on an attic at R-38: Best removes R-38 and installs R-30. No rule checks that an option ends at or above what is there. Daymark already priced this attic Best at $4,840 to R-26.1, so this is not a regression. The cavity stage makes it starker (Better is now air sealing only).",
+     "evidence": "engine.review.test.tsx tests 'R-E'. cmp/attic49.ts on daymark and on fdc3eaa (both: best 4840 'Blown Cellulose to R-26.1'). Scan scan2.ts, counting only template removal (removalNeeded false) on quotes with 0 violations: option-areas ending below the existing R: seed 20261118, 159; seed 7, 292; seed 424242, 259; seed 99999, 280. Examples: cd70b42b Best $57,735 removes R-49 and ends at R-26.2; 6ebdd1d1 Best $14,465 removes R-60 and ends at R-30.2 (target 30).",
+     "suggestedFix": "When an option's removal comes from the template (not removalNeeded) and the R it reaches is below area.currentR, do not price the removal for that area (keep what is there), or skip the option with a warning. Add a labels/step-up kind ends_below_existing. Decide separately whether an attic's entered depth should cap blown fill at all."
+    },
+    {
+     "id": "F10",
+     "severity": "low",
+     "confidence": "high",
+     "title": "With one option left, the phone does not mark the option the quote highlights",
+     "files": [
+      "app/field/OptionsStep.tsx"
+     ],
+     "failureScenario": "Rim joist 150 sq ft, no pick: all three tiers are at the $1,500 minimum, so only Best is shown, and the quote's recommendedTier is Best. The card shows 'Recommended (default)', but the 'Highlighted on the quote' badge (OptionsStep.tsx:300: picked, or default and tier === 'better') is missing. The same happens whenever OD6 hides Better and the default moves to Best or Good. About 12% of random quotes show a single option.",
+     "evidence": "engine.review.test.tsx test 'R-I': the markup contains 'Recommended (default)' but not 'Highlighted on the quote'. lib/quotes/model.ts:185 uses recommendedTier(options, selectedTier).",
+     "suggestedFix": "Show the badge when recommended !== null (the same recommendedTier the quote uses), and update the comment 'The quote marks the picked option, else Better'."
+    },
+    {
+     "id": "F11",
+     "severity": "low",
+     "confidence": "high",
+     "title": "Seed 99999 is not clean: a capped R rounds up past what the cavity holds, and the checker's tolerance sits exactly on that boundary",
+     "files": [
+      "lib/pricing/engine.ts",
+      "lib/pricing/invariants.ts"
+     ],
+     "failureScenario": "Commercial area 16,032.4 sq ft, 10.7 in cavity, 8.6 in of vermiculite R-19 in it, Best closed-cell. The cavity holds 19 + 2.1 x 6.5 = R-32.65. fmtR rounds half up, so the item reads 'to R-32.7 (fills the 10.7 in cavity)', 0.05 more than the cavity holds; L23b says the stated R is capped at what the cavity holds. The checker flags it (qty_below_stated_r) only because 32.65 < 32.7 - 0.05 = 32.650000000000006 in floating point. So '0 on every seed' depends on float noise.",
+     "evidence": "/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/viol-99999.txt: 'labels_match_work | 1 | qty_below_stated_r 1 ... 8ebd36f3 best: \"Closed-Cell Spray Foam to R-32.7 (~2.1 in added, fills the 10.7 in cavity), 16,032 sq ft\" but the quantity priced gives Commercial area R-32.6'. Full reproduction: adv/find-8ebd36f3.out (finalR 32.650).",
+     "suggestedFix": "When the cavity caps the R, state it rounded down to 0.1 (Math.floor((r + 1e-9) * 10) / 10). Give the checker an explicit epsilon (stated - R_TOLERANCE - 1e-9) so the result no longer depends on float noise."
+    },
+    {
+     "id": "F12",
+     "severity": "low",
+     "confidence": "high",
+     "title": "L17 'a tiny area never reads 0 sq ft' fails below 0.05 sq ft",
+     "files": [
+      "lib/pricing/engine.ts"
+     ],
+     "failureScenario": "The area form accepts any positive size (areaSchema sqft positive). An attic of 0.01 to 0.04 sq ft prints 'Blown Cellulose to R-60 (~16.7\" added), 0 sq ft' and 'Air sealing of top plates, penetrations and bypasses (0 sq ft)', because fmtSqft uses maximumFractionDigits 1 (engine.ts:962).",
+     "evidence": "adv.out, case 'attic 0.01 sq ft'. engine.review.test.tsx test 'R-G' (0.04 sq ft): the description matches /\\b0 sq ft/.",
+     "suggestedFix": "Use two significant digits under 1 sq ft (or print '< 0.1 sq ft'), or set a minimum area in areaSchema."
+    },
+    {
+     "id": "F13",
+     "severity": "low",
+     "confidence": "low",
+     "title": "The dense-pack citation mixes two Greenfiber products, and the stated R understates the chart",
+     "files": [
+      "supabase/migrations/20261119000001_accuracy.sql",
+      "docs/accuracy/ledger.txt"
+     ],
+     "failureScenario": "The row cites 'Greenfiber SANCTUARY (INS765)' with a 25 lb bag and 35 sq ft of 2x4 wall per bag. A web search summary (greenfiber.com could not be fetched from this session) gives two products: SANCTUARY with a 25 lb bag at 35.0 sq ft/bag for 2x4 at 16 in o.c. and 33.8 at 24 in o.c.; INS765LD with a 30 lb bag at about 32.4 / 31.3. 122.5 matches SANCTUARY at 16 in o.c. only: a 1,000 sq ft 2x4 wall at 24 in o.c. needs 1000/33.8 x 1.08 = 31.95, so 32 bags against 31 priced. The chart rates a full 2x4 at R-13, while the engine states R-12.6 (cellulose at 3.6 per inch). The row is flagged Needs owner input.",
+     "evidence": "WebSearch summary of greenfiber.com SANCTUARY and INS765LD charts. WebFetch to www.greenfiber.com and images.greenbuildingadvisor.com was refused: these hosts are not in this session's allowed network hosts, so the 2x6 row could not be read.",
+     "suggestedFix": "Cite one card (product, bag weight, revision) in the migration comment and the ledger, and ask the owner which stud spacing to price with."
+    }
+   ]
+  }
+ ],
+ "verifs": [
+  {
+   "verdicts": [
+    {
+     "id": "F1",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reproduction": "Own worktree at fdc3eaa, the reviewer's test copied to /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/engine/verify/t/engine.review.test.tsx, run with `npx vitest run --config ../t/vitest.verify.mts`. R-A fails with: `expected '<section ...' to contain 'aria-label=\"Good option\"'`. The markup contains 'Good is not shown to the customer: it costs $4,500, more than Better ($4,390), the next option up. Change its price to show it.' and only the Better card. My own sweep (t/verify.review.test.ts 'F1 sweep') types every Better price on the one card shown: better=null/1/3000/4390 -> better only; better=4499/4500/4501/5000/9000/50000 -> best:4390 only. Good never comes back. Raising Better to $4,499 or more also hides Better as a duplicate of Best, so a second override gets stuck. grep: draft.overrides is edited only at app/field/OptionsStep.tsx:123-124, and EstimateEditor.tsx:89 prices without showAll.",
+     "reasoning": "OD6 says hide and tell the estimator. It does not say the estimator loses the control. The warning gives an instruction the UI cannot carry out. Deviation flags (EstimateEditor) and canSendQuote only read the shown options, so Send is not blocked. The only way out is a non-obvious sequence: raise Best above Better, raise Better above $4,500, reset Good, then undo the others, which can leave an override stuck on a hidden duplicate. This is new against daymark, which had no hiding. No customer price is wrong, but it is a dead end in the core estimating flow.",
+     "fixSpec": "app/field/OptionsStep.tsx (and EstimateEditor.tsx, which supplies the pricing): also price with { showAll: true } (memoized next to `priced`). For each tier named in an option_hidden warning whose draft.overrides[tier] is set, or whose option hasLineOverrides, render a compact card marked 'Not shown to the customer' with the warning text, 'Change price', 'Use model price' (onOverride(null)) and Details/OptionLines, and no Recommend button. Test: a component test (renderToStaticMarkup, as in R-A) on attic 1,000 sq ft with overrides.good = $4,500 expects aria-label=\"Good option\" and 'Use model price'. It fails today and passes after. Add an e2e step: set Good to $4,500, see 'Not shown', press 'Use model price', and Good is back."
+    },
+    {
+     "id": "F2",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "t/learning.review.test.ts (the reviewer's) fails: 'expected 1.1880000000000002 to be 1.08'. My own t/learning2.review.test.ts calibrates with lib/learning/calibrate.ts at fdc3eaa and prints: A (200 wall jobs at 1.30, with the migration's walls cell): [[null,1.188],[walls,1.188]]. B (same rows, NO walls cell, as on origin/main): [[null,1.188],[walls,1.188]], identical to A. C (20 attic jobs at 1.08): attic child 1.08. D (20 attic jobs at 1.08 plus 200 wall jobs at 1.30): parent 1.188, walls 1.188, attic child 1.117. Attics price with the parent unless an attic child exists.",
+     "reasoning": "buildCandidate creates a fresh child cell for any job type with data (calibrate.ts:677-693), so the seeded walls cell changes nothing about learning: A equals B. fitTwoLevel fits the parent on every row, walls included (calibrate.ts:248-262), and an attic child is shrunk toward that parent, so wall actuals still move attic prices with or without attic data (D). The ledger L21 ('wall actuals no longer move attic prices'), the migration comment ('attic prices read the shared cell') and the spec's R4 closure are false; the phase1 L21 test sets the walls cell by hand and never runs calibrate. The cavity stage's notDone admits it, contradicting its own ledger. Not a regression (unchanged from main), and nothing moves until the owner promotes a calibration, so medium rather than high.",
+     "fixSpec": "lib/learning/calibrate.ts, in fitWaste only (so removal and drive fits do not change): fit the parent on the rows whose job type has no stored child cell in `active` (fit.byKey has no cell(kind, product, jobType)). With no such rows, keep the parent's active value and shrink the children toward it. Optionally seed an attic child at the parent value in a new additive migration. Tests in lib/learning/calibrate.test.ts: (1) 200 wall-only cellulose jobs at 1.30 leave the cell attics price with at 1.08 (fails now: 1.188); (2) 20 attic jobs at 1.08 plus 200 wall jobs at 1.30 leave the attic cell at about 1.08 (fails now: 1.117). Until the fix lands, correct ledger L21 and the R4 closure text."
+    },
+    {
+     "id": "F3",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reproduction": "R-C tests fail at fdc3eaa: 'expected \"Fiberglass Batts to R-21 (5.5 in thick), 800 sq ft\" not to contain \"800 sq ft\"' with batt qty 100 and checkPricedQuote = []. Air sealing at 500 still reads 'Air sealing of top plates, penetrations and bypasses (1,000 sq ft)'. Reran the reviewer's scan2.ts on my worktree (node scripts/accuracy/run.mjs ../t/scan2.ts 10000 20261118): {\"A\":50,\"Aquotes\":37,\"air_sealing\":39,\"batts\":11}, identical to the reviewer's, for example '73c0e4a6 better: air_sealing 882.7 sqft priced ... item says \"(1,267 sq ft)\" $558'. The reverse also holds (t/verify.review.test.ts 'F3 reverse'): crawlspace 800 sq ft with Good batts at 1,600 prices 1,600 sq ft ($3,902 item) and the item still says '800 sq ft', with 0 violations.",
+     "reasoning": "engine.ts rewrites the item's promise only for loose fill (`loose` = bag or board_ft, lines 733-756). Batt descriptions (764-768) and air sealing (828) always print area.sqft, and nothing caps a batt or air-sealing quantity. The checker's finalR adds a sized batt's rated R whatever its quantity (invariants.ts:246-249), and air sealing has no R, so no rule can see it. This is the same class as R3, which was closed for bags and board ft only. On a signed quote the stated area and the priced area differ, in either direction. Pre-existing on daymark, but this branch claims R3 closed.",
+     "fixSpec": "lib/pricing/engine.ts: when a sq-ft material line (sized batt, air sealing) is overridden and qty/waste differs from area.sqft, state the area actually covered, for example '..., 100 of 800 sq ft' or '(500 of 1,000 sq ft)'. Above the area, cap at the area x waste with an override_capped warning, as L23 does. lib/pricing/invariants.ts: add labels_match_work kind area_not_covered, which compares qty / waste of sqft-unit lines with the sq ft the item states (1% tolerance). Tests: phase1.test.ts 'a batt or air-sealing quantity changes the area the item states' (the R-C inputs), and an invariants test where checkPricedQuote on the R-C input returns area_not_covered (today it returns [])."
+    },
+    {
+     "id": "F4",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "R-B tests fail: Good label 'Dense-Pack Cellulose', item 'Blown Cellulose to R-0 (~0\" added), 1,000 sq ft', price $1,500. With 0 bags and 0 h on every option, the $0 work item list is non-empty. My own case (t/verify.review.test.ts 'F4'): rim joist 200 sq ft, Best ccsf set to 0 board ft -> [[\"best\",\"Closed-Cell Spray Foam\",1500,[\"Closed-Cell Spray Foam to R-0 (~0\\\" added), 200 sq ft 201\",\"Travel and setup 189\",\"Minimum job charge 1110\"]]], violations 0. The phone allows 0: lib/field/lineOverrides.ts buildLineOverride refuses only value < 0, and lineOverrideSchema has qty min(0).",
+     "reasoning": "AreaWork.primary is set whenever priceProductScope returns lines, so L15 keeps the product title and bullets even though nothing is installed. qty_below_stated_r compares R-0 with R-0, and the generator never draws 0 bags, so the checks miss it. An estimator who types 0 to drop the product (a plausible use) sends a quote that sells a product at R-0.",
+     "fixSpec": "lib/pricing/engine.ts priceProductScope: when the R product's material line qty is 0, keep the lines (so the override stays visible and can be reset in Details), set primary to null in priceTier (so L15 drops the product from the title and bullets), describe the item without an R promise, and warn (code product_zero: 'Good: 0 bags of blown cellulose, so Good installs none in Walls'). Also refuse a material qty of 0 in buildLineOverride with a plain message. lib/pricing/invariants.ts: add labels kind product_not_installed (an item stating 'to R-x' whose product line has qty 0) and finite_amounts kind zero_work_item. Tests: the R-B inputs in phase1.test.ts (label is not 'Dense-Pack Cellulose', no '$0' work item), and a lineOverrides test that 0 is refused."
+    },
+    {
+     "id": "F5",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "R-D fails: 'Better is not shown to the customer: it is the same work as Good for more ($2,830 against $2,270).' My F8 test with the same template prints the shown options 'good 2270 Fiberglass Batts to R-19 (6.25 in thick), 800 sq ft | best 4660 ...'. Better (R-30 batt at $1.10) is gone. Seeded templates (dumped in t/tpl.review.test.ts) use batts only in Good, and tier templates are owner-editable (app/admin/pricing/actions.ts:306-353).",
+     "reasoning": "workSignature (engine.ts:119-125) keys a material line by lineKey(area, product, 'material') and qty. A batt's qty is the area whatever its size, so two batt sizes always look like the same work. Nothing moves with the seeded templates today. But 'Good: R-19 batts, Better: R-30 batts' is a natural owner configuration, and this branch is meant for every franchise. New with OD6 (daymark did not hide).",
+     "fixSpec": "lib/pricing/engine.ts workSignature: material entry `${l.key}=${l.materialId}:${l.qty}`. Test (phase1.test.ts or engine.test.ts): the R-D configuration shows Better and has no option_hidden warning for it. Re-run the golden sets and violations to confirm no seeded output changes."
+    },
+    {
+     "id": "F6",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "Same bundle (b708d67's seeded bundle 56ccd238ee6bea55, dumped to JSON) priced by each engine with t/f6.ts. Baseline engine b708d67 (daymark's math): 'good 10815 44.88,5.79'. Money stage 50814c5: 'good 10810 44.87,5.79'. fdc3eaa: 'good 10810 44.87' (also with the fdc3eaa bundle 5ecebe2c0f390417). Daymark computes `designQty * coeff(...) * access` (git show 9051b81:lib/pricing/engine.ts:411,441); fdc3eaa computes `designQty * (coeff * access)` (engine.ts:730,760,813,824). In exact arithmetic 2 + (128625/720) x 0.24 = 44.875, so 44.88 is the correct half-up rounding.",
+     "reasoning": "This is an unledgered $5 move on rare attic inputs, and the new association gives the less exact result. It contradicts 'the model's hours stay the model's' (L7) and the stages' claim that no attic price moves. It is rare (reviewer: 3 in 4,000), the live golden set has no shown total change, and stored quotes are snapshots, so low.",
+     "fixSpec": "lib/pricing/engine.ts: keep the per-unit rate and the access multiplier separate and multiply left to right as daymark did: `setup + units * perUnit * access` for both the model hours and the priced hours (product scope and air sealing). Do not change round2 globally, since that could move other ties. Test: phase1.test.ts with the R-F case (attic 2,625 sq ft extreme to R-49 + attic 275 difficult, 67 min): Good labor 44.88 h and $10,815. Re-run the reviewer's daymark comparison (expect 0 differences on attic-only inputs)."
+    },
+    {
+     "id": "F7",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "t/gendump.ts hashes each generated quote's inputs (id, input, selectedTier, issuedAt, validDays). It ran in worktrees at b708d67 (the 'before' counts) and 50814c5 (the 'after-money' counts). Both have the same random.ts (last changed d5c023b) and the same seeded bundle 56ccd238ee6bea55, at seed 20261118 x 10,000. Result: 'identical 55 of 10000, first diff at 29'. random.ts:257-286 prices the input and loops over model.options (shown options) with chance()/pick(), so the stream shifts whenever OD6 changes the number of options shown.",
+     "reasoning": "The ledger's 'the seed draws the same quotes', baseline.json's 'the same seed always gives the same quotes' and after-cavity/about.txt's 'the counts move only because fewer options and quotes are priced' are false across engine versions. Before/after counts come from different populations, for example quotes with no option 704 -> 671 across a stage that cannot change which tiers have work. The after counts (0 on the new population) remain valid on their own, and both runs sample the same distribution, so the per-rule conclusions hold statistically. The defect is in the evidence and wording, so low.",
+     "fixSpec": "lib/pricing/__fixtures__/random.ts: draw the estimator-change decisions from a per-quote stream independent of the engine (for example mulberry32(seed ^ Math.imul(n + 1, 0x9e3779b1))), always drawing a fixed number of values (coin and factor for each of the three tiers, a fixed number of line picks by index modulo), and apply them to whatever the engine returns. The main stream (areas, crew, drive, pick, dates) then never depends on the engine. Test (lib/accuracy): generate 1,000 quotes with the real engine and with an engine stub that returns one fewer option, and assert the areas, drive, selectedTier, issuedAt and validDays are identical. Then regenerate docs/accuracy/before on b708d67 with the frozen generator, or reword the ledger, baseline.json and about.txt claims."
+    },
+    {
+     "id": "F8",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "t/verify.review.test.ts 'F8': with the F5 template (crawlspace Better = R-30 batts at $1.10), the shown result is Good + Best, with 'Better is not shown ... same work as Good for more ($2,830 against $2,270)', and `checkPricedQuote(...)` returns [] (test passes on expect([])). invariants.ts:84-87 builds shownOptions from the engine's own option_hidden warnings. violations.ts:38-44 checks only the default (shown) result and uses showAll just for the count.",
+     "reasoning": "Partly overstated: checkOptionsStepUp's duplicate test uses the checker's own signature (item descriptions, invariants.ts:102-104), not the engine's, so it is not purely 'by construction', and the price step part is checked on printed dollars. The core claim holds: nothing checks that a hidden option was rightly hidden, so F5-type wrong hides pass with 0 violations. Not a weakening against b708d67. It is a checker gap, not a customer defect, so low. The expectedHeadline comment omits the 'pick hidden -> next shown' case (stale), but behavior equals recommendedTier.",
+     "fixSpec": "lib/pricing/invariants.ts: add checkHiddenRightly({ input, snapshot, coefficients, priced }). It prices showAll and, for each tier absent from the shown options, requires either the same customer work (checker workSignature of the items plus each insulation line's materialId) as a cheaper-or-equal shown option, or a price at or above the next shown option up. It reports wrongly_hidden, and none_shown when showAll has options but nothing is shown. Wire it into scripts/accuracy/violations.ts and the golden script. Test: the F5 configuration reports wrongly_hidden (today it returns [])."
+    },
+    {
+     "id": "F9",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "t/f9.ts with the same JSON bundle on both engines. Daymark (9051b81): 'best 4840 \"Remove, Air Seal + Cellulose\" Remove and dispose ... | Blown Cellulose to R-26.1 (~7.3\" added)'. fdc3eaa: 'better 1500 \"Air Sealing\"' and 'best 4840 ... Blown Cellulose to R-26.1 (fills the 7.25 in cavity)', with the estimator warning 'the 7.25 in cavity already holds 19.6 in of insulation'. Target R-30 on an attic at R-38: Best $5,025 removes it and installs 'Blown Cellulose to R-30' on both engines. scan2 rerun on my worktree: C = 159 at seed 20261118 (same as the reviewer).",
+     "reasoning": "No owner decision or audit rule allows the highest-priced option to leave less R than is there. 'Good, Better and Best always step up' is about value to the customer. Pre-existing on daymark, but the cavity stage makes it starker (Better is now air sealing only). Part of the cause is that an attic's entered depth is treated as a cap for blown fill (L18 'a depth entered is the cavity'), which an attic floor does not have. The 19.6 in in a 7.25 in cavity warning shows the model is inconsistent. Needs an owner decision, so medium.",
+     "fixSpec": "lib/pricing/engine.ts priceTier: when removal comes from the template (tpl.includeRemoval and not area.removalNeeded) and the option would end the area below area.currentR, do not price the removal for that area (keep what is there). Alternatively skip the option with an 'ends_below_existing' warning; the owner chooses. Separately decide whether cavityDepth should return null for attics (see missed M1). lib/pricing/invariants.ts: add labels/step-up kind ends_below_existing. Tests: the two R-E cases (Best no longer ends at R-26.1 / R-30 after removing R-49 / R-38), plus the checker kind on them."
+    },
+    {
+     "id": "F10",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "R-I fails: the markup has 'Recommended (default)' on the only card (Best) but not 'Highlighted on the quote'. t/verify.review.test.ts 'F10b': rim joist 150 sq ft with Better picked -> recommendedTier = {\"tier\":\"best\",\"picked\":false}, so the card says 'Recommended (default)' with no badge, though the estimator picked Better and the quote (lib/quotes/model.ts:185, same function) highlights Best.",
+     "reasoning": "OptionsStep.tsx:312 still hard-codes 'picked, or default and Better'. It disagrees with the quote whenever OD6 hides Better or the pick. The wording 'default' is also wrong when the pick was hidden. Display only, so low.",
+     "fixSpec": "app/field/OptionsStep.tsx:312: show the badge when `recommended !== null`. When draft.selectedTier is set but not shown, label the button 'Recommended (your pick is not shown)', and update the comment. Test: the R-I render shows 'Highlighted on the quote' on Best, and a picked-but-hidden Better case does not say '(default)'."
+    },
+    {
+     "id": "F11",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "Ran the reviewer's find.ts on my worktree (node scripts/accuracy/run.mjs ../t/find.ts 20000 99999 8ebd36f3). Best ccsf line qty 42085 board ft = model (not overridden); item 'Closed-Cell Spray Foam to R-32.7 (~2.1 in added, fills the 10.7 in cavity), 16,032 sq ft'; checker 'finalR 32.650'; checkPricedQuote -> [{ kind: 'qty_below_stated_r', detail: '... gives Commercial area R-32.6' }]. The cavity holds 19 + 2.1 x 6.5 = R-32.65.",
+     "reasoning": "fmtR rounds half up, so a cavity-capped R of x.x5 is stated 0.05 above what the cavity holds, against L23b's 'never more R than the cavity holds'. The checker catches it only because 32.7 - 0.05 is 32.650000000000006 in floating point, so pass or fail rests on float noise. Seed 99999 is not 0. The input is random-generator only (the phone hides depth for commercial areas), so low.",
+     "fixSpec": "lib/pricing/engine.ts: when the cavity caps the R (room !== null and the thickness reaches room - tolerance), state Math.floor(achievedR * 10 + 1e-6) / 10. lib/pricing/invariants.ts: compare with an explicit epsilon (stated - R_TOLERANCE - 1e-9) so float noise no longer decides. Test: the 8ebd36f3 area (commercial 16,032.4 sq ft, depth 10.7, existing 8.6 in vermiculite R-19, target 38, Best) reads R-32.6, and violations 20000 99999 is 0."
+    },
+    {
+     "id": "F12",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "R-G fails: an attic of 0.04 sq ft prints a description matching /\\b0 sq ft/. lib/sync/draft.ts:18 `sqft: positive.max(200_000)` accepts it (priceableAreas = areaSchema.safeParse). engine.ts:962 fmtSqft uses maximumFractionDigits 1.",
+     "reasoning": "L17's 'a tiny area never reads 0 sq ft' is false below 0.05 sq ft. The input is absurd but accepted, so low.",
+     "fixSpec": "lib/pricing/engine.ts fmtSqft: under 1 sq ft use maximumSignificantDigits 2 (0.04 -> '0.04'). Do not tighten areaSchema, which would reject stored drafts. Test: phase1.test.ts L17 adds 0.04 sq ft -> '0.04 sq ft'."
+    },
+    {
+     "id": "F13",
+     "verdict": "plausible",
+     "severity": "low",
+     "reproduction": "Could not read the chart: WebFetch to www.greenfiber.com fails with 'getaddrinfo ENOTFOUND' (host not in this session's allowed network). A WebSearch summary gives SANCTUARY dense-pack 2x4 at 3.5 pcf as R-13, 35.0 sq ft per bag at 16 in o.c. and 33.8 at 24 in o.c. It lists separate documents for INS765 (TM-INS765 attic card, INS765LD) and SANCTUARY (fact sheet). The migration (20261119000001_accuracy.sql:40-42) and the ledger cite 'Greenfiber SANCTUARY (INS765)'.",
+     "reasoning": "122.5 = 35 x 3.5 matches SANCTUARY at 16 in o.c. only. At 24 in o.c. a 1,000 sq ft 2x4 wall needs 32 bags, not 31. The citation conflates two product cards. Engine R-12.6 against the chart's R-13 follows L24's single per-inch table (S2-F19), which understates, so it is not a defect. OD7 already flags the row 'Needs owner input', and I could not fetch the source to confirm the bag weight of INS765LD.",
+     "fixSpec": "Docs only: cite one card (product, bag weight, revision, stud spacing) in the migration comment and ledger L20, and add an owner question on which stud spacing to price. No code change unless the owner picks 24 in o.c. (then 118.3 sq ft x in, in a new additive migration that updates only the untouched seeded value)."
+    }
+   ],
+   "missed": [
+    "M1 (high, pre-existing on daymark, not a regression): an area keeps a hidden cavity depth after its job type is changed to attic (or commercial), and the engine caps the attic by it. app/field/AreasStep.tsx:130 sets only { jobType: v }, so depthIn stays. The Cavity depth field is rendered only for CAVITY_JOBS (walls, rim_joist, crawlspace, garage; line 25 and 195), so the estimator can neither see nor clear it. rPerInch.cavityDepth returns depthIn for any job type. Reproduction (verify/t/missed.review.test.ts on fdc3eaa, seeded bundle): attic 1,000 sq ft R-0 with no depth -> Good $2,995 'Blown Cellulose to Code' [to R-49]. The same attic with depthIn 3.5 left from walls -> Good $1,500 'Blown Cellulose to R-12.6' [fills the 3.5 in cavity], Better $1,635, Best hidden. Attic R-11 with depth 3.5 -> Good skipped (cavity_full), Better 'Air Sealing' $1,500, Best $4,085 to R-12.6. checkPricedQuote reports 0 violations in all three. Daymark gives the same Good $1,500 to R-12.6, so this predates the branch, but it undersells by about half with no visible input. Fix: clear depthIn when the job type changes to one without a depth field (AreasStep set), or have cavityDepth return null for attic and commercial (the owner decides, as in F9). Test: an AreasStep/draft unit test that switching walls (3.5) to attic leaves depthIn null, plus an engine test that an attic prices to R-49.",
+    "M2 (part of F1, worth its own test): on attic 1,000 sq ft with Good at $4,500, typing any Better price of $4,499 or more on the only visible card also hides Better as a duplicate of Best (sweep in verify/t/verify.review.test.ts: better=4499..50000 -> 'best:4390' only). Trying to follow the warning then strands a second override on a hidden tier. Any fix for F1 must render every hidden tier that carries an override, not only the tier the warning names."
+   ]
+  },
+  {
+   "verdicts": [
+    {
+     "id": "DOC-1",
+     "verdict": "confirmed",
+     "severity": "high",
+     "reproduction": "Fresh database from all migrations at fdc3eaa: psql createdb koala_reva_docs_seed; tests/sql/00_supabase_stub.sql, then every supabase/migrations/*.sql; `select key,value,description from app_settings` gives branding {\"company\":\"Koala Insulation of Newark\",license:null,phone:null} with description 'PLACEHOLDER \u2014 PDF branding', and quote_terms '...authorizes Koala Insulation of Newark...' with description 'Terms printed on every quote \u2014 PLACEHOLDER, owner to replace'. Dumped the rows to JSON. Vitest /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/tests/docs-verify.test.ts (run in a worktree at fdc3eaa as lib/zz-verify, `npx vitest run lib/zz-verify --reporter=verbose --silent=false`). It replays the owner's 'Save the business profile': the page form with its default values, the 4 named fields filled (license, phone, IL, warranty), then parseSettingsForm, the branding merge and the description strip exactly as saveSettings does them. Output: 'FRESH gaps: ...add the license number, the office phone, the state and the warranty.' / 'AFTER SAVE gaps: 0 | newEstimate: {\"city\":\"Newark\",\"state\":\"IL\"}' / 'AFTER SAVE company: Koala Insulation of Newark | terms: ...A signed quote authorizes Koala Insulation of Newark to schedule the work...'. Then buildQuoteDocument + renderQuotePdf, as the send route does after the gate. pdftotext shows 5 'Newark' hits: the masthead 'Koala Insulation of Newark', the footer 'Koala Insulation of Newark | KN-2026-0001-v1', the terms, and the property line 'Newark, IL 62701'. Test passes, so the behaviour is confirmed.",
+     "reasoning": "isGap (lib/quotes/profile.ts:56-61) only treats an empty value or the word 'placeholder' inside the value as a gap. The seeded company and terms carry PLACEHOLDER only in app_settings.description, which loadQuoteSettingRows does not even select. Ledger L30 says a required field 'still a seed PLACEHOLDER' blocks sending, and the Phase 1 item says the profile (incl. terms) is required 'so PLACEHOLDER never reaches a customer'. The terms seed is marked PLACEHOLDER by its own description, so the code does not meet its own spec. No OD or hard rule makes this intended. The existing L30 test uses company 'A franchise' and never checks the seeded company. It does not affect production (Newark), where these values are correct. It does hit every new franchise database, which is the product's stated goal, and the result is a signed legal document naming another company. Mitigation: the owner sees the prefilled Newark values on /admin/business, but the long terms textarea is easy to miss. The seeded quote_number_prefix 'KN' also passes, but that is an explicit owner-question default.",
+     "fixSpec": "Treat a required profile field as a gap while its setting row's description is still a seed placeholder. (1) lib/quotes/settings.ts loadQuoteSettingRows: select 'key, value, description'. (2) lib/quotes/profile.ts: SettingRow gets an optional description. In businessProfileGaps, mark 'branding.company' a gap when the 'branding' row's description matches isPlaceholder (lib/admin/forms.ts), and mark 'quote_terms' a gap when its own row's description does. Keep the value checks. Wording: 'confirm the company name' / 'confirm the terms'. (3) app/admin/business/page.tsx: select description too. The bundle route picks this up through loadQuoteSettingRows. saveSettings already strips the marker on save (stripPlaceholder), so one save of the Business profile clears both, in production too; record the possible 4 -> 6 gap change for production in the ledger L30 entry. No migration needed (hard rule 2). Test in lib/quotes/quotes-stage.test.ts (L30 block): rows as a fresh migration leaves them (branding description 'PLACEHOLDER \u2014 PDF branding', quote_terms description '... PLACEHOLDER, owner to replace'), with license, phone, state IL and warranty filled. Expect businessProfileGaps keys ['branding.company','quote_terms']; this fails now, which returns []. With both descriptions stripped, expect []."
+    },
+    {
+     "id": "DOC-2",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "Same vitest file (/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/tests/docs-verify.test.ts), test 'DOC-2', on fresh-migration rows. The owner saves state PA with Town empty, and the seeded shop_address 'Newark, DE 19711' is kept (its description still 'PLACEHOLDER, set the shop address'; the shop address is not on the Business page). Output: 'PA profile: {\"city\":\"Newark\",\"state\":\"PA\"}'. With shop '500 Market St, Philadelphia, PA 19106' and state NJ: 'NJ profile, PA shop: {\"city\":\"Philadelphia\",\"state\":\"NJ\"}'. In the DOC-1 run the IL franchise's new estimate starts in Newark, IL, and the quote PDF's property line printed 'Newark, IL 62701'.",
+     "reasoning": "newEstimateDefaults (profile.ts:93-101) chooses city and state independently: profile town, else shop town; profile state, else shop state. Ledger L32 says 'the profile's town and state, else the shop address's', which reads as a pair. For any new franchise the seeded shop address (a PLACEHOLDER) gives every estimate the town 'Newark' with that franchise's own state. The existing tests only cover the cases where the pair agrees (Bear/DE; Springfield/IL). Mitigation: /admin/business previews 'New estimates start in: Newark, PA', and the estimator can retype the town. Production is unaffected once its state is DE.",
+     "fixSpec": "lib/quotes/profile.ts newEstimateDefaults: with a profile town, return {profile town, profile state or ''}. Otherwise, with a valid profile state, use the shop town only when townOf(shop).state equals the profile state, else ''; return {that town, profile state}. With no profile state, return the shop pair or blank. This leaves production (DE + 'Newark, DE 19711') and the e2e 'starts in the town of the shop address' unchanged. Test in lib/quotes/quotes-stage.test.ts 'the profile, then the shop address': newEstimateDefaults([{key:'default_state',value:'PA'},{key:'shop_address',value:'Newark, DE 19711'}]) toEqual {city:'',state:'PA'}; this fails now with Newark/PA. The NJ state with a 'Philadelphia, PA' shop gives {city:'',state:'NJ'}, and DE with 'Newark, DE 19711' still gives Newark/DE."
+    },
+    {
+     "id": "DOC-3",
+     "verdict": "confirmed",
+     "severity": "low",
+     "reproduction": "Vitest /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/tests/sendstep.test.tsx renders app/field/SendStep with a bundle whose business.gaps is non-empty (offline db/sync modules mocked). Output: 'estimator -> Ask the owner or the office to finish the business profile.', 'office -> Open the business profile', 'owner -> Open the business profile'. RLS check on the fresh DB, as an office profile (set local role authenticated; request.jwt.claim.sub = office id): 'select count(*) from app_settings' = 1, and 'update app_settings set value=jsonb_set(value,'{license}','\"X\"') where key='branding' returning 1' updates 0 rows. Policy app_settings_owner_write is has_role('owner'). Code: business/page.tsx:30 readOnly = role !== 'owner'; saveSettings ownerDb() refuses a non-owner.",
+     "reasoning": "The office link is a documented choice (quotes.json: 'a link to the profile for owner and office'; owner question 'Office staff can view but not edit'), so the link alone is defensible. But the estimator's sentence 'Ask the owner or the office to finish the business profile' is untrue: the office cannot finish it, by page, action and RLS. The office reaches a read-only page that says 'Only the owner can change it', so the cost is one wasted hop while sending is blocked after deploy. The audit lists 'Send is blocked by messages an estimator can't act on' as a demo risk. It is wording only, with no wrong number or document, hence low.",
+     "fixSpec": "app/field/SendStep.tsx: change both sentences (around lines 168 and 231) to 'Ask the owner to finish the business profile.' Show the 'Open the business profile' link to the owner only (canFixProfile = role === 'owner'). For office, render the link as 'See what the business profile is missing' with 'Only the owner can change it.' Test in a new app/field/SendStep.test.tsx (vitest include covers app/**), with vi.mock for '@/lib/offline/db' and '@/lib/offline/sync' as in the verifier's sendstep.test.tsx. Estimator markup contains 'Ask the owner to finish the business profile.' and not 'or the office'; this fails now. Office markup does not contain 'Open the business profile'; this fails now."
+    },
+    {
+     "id": "DOC-4",
+     "verdict": "confirmed",
+     "severity": "medium",
+     "reproduction": "Script /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/scripts/zz-tall.ts, copied to scripts/accuracy in the worktree and run with `node scripts/accuracy/run.mjs scripts/accuracy/zz-tall.ts out.pdf <areas> <nameLen> 0 0`. It builds an engine-priced quote (priceEstimate on the seed fixture, buildQuoteDocument, renderQuotePdf), with N attic areas whose names are within the draft schema's 80-character limit and the engine's own bullets. '8 60': Better = 17 items + 1 bullet (kept together), react-pdf warns 'Node of type VIEW can't wrap between pages and it's bigger than available page height'. '7 80' does the same with Better 15+1. '8 55' warns; '8 50' and '8 45' do not. Rasterized page 1 (pdftoppm, /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/out/p860-1.png and p780-1.png): the WHOLE first page is compressed, not only the tall block. 'License L-1' overlaps the phone, 'PREPARED FOR' overlaps 'Pat Lee', 'YOUR ESTIMATOR' overlaps 'Valid until: December 19, 2026', the Good block's area names stack on each other, and Better's rows overlap. The same document rendered as legacy (no format, so no keep-together; out/L860-1.png) lays out cleanly across 5 pages with no warning.",
+     "reasoning": "OptionSection (lib/quotes/pdf.tsx:76-80) sets wrap={false} whenever items+bullets <= 18, whatever the rendered height. When the block is taller than a page, react-pdf cannot place it and shrinks the page's content, so the header (customer, Valid until) and the previous option become unreadable on the customer's quote and signed PDF. This stage introduced the regression: legacy layout is fine. The trigger is rare, since it needs about 7-8 areas with long (55-80 character) names. It is still inside the app's own limits and silent, because sending goes ahead and nobody sees the warning. The impact is larger than the reviewer described (whole page 1, not only the block), hence medium.",
+     "fixSpec": "lib/quotes/pdf.tsx: keep an option together only when it fits a page. Add estimateOptionHeight(option): head about 33pt; each bullet ceil(len/90) lines x 13.2 + 2; item header 20; each item max(ceil(areaName.length/24), ceil(description.length/60), 1) x 13.2 + 8.5; total 25; financing 12. Set together = keepTogether && lines <= KEEP_TOGETHER_MAX_LINES && estimateOptionHeight(option) <= 640 (page content is 792-36-48 = 708pt; leave a margin). Alternatively drop wrap={false} on the whole block and give the head minPresenceAhead = min(estimated height, 640). Legacy documents are unchanged (hard rule 1: keepTogether is already false for them). Test in lib/quotes/quotes-stage.test.ts (L39 block): an engine-priced makeDoc variant with 7 attic areas named with 80 characters. Spy on console.warn during renderQuotePdf and expect no call matching /bigger than available page height/; this fails now. pdfPages(page 1) should contain 'Good total:' after 'PREPARED FOR' with no extra pages squeezed. The existing 'no option starts on one page and ends on the next' test must still pass."
+    },
+    {
+     "id": "DOC-5",
+     "verdict": "refuted",
+     "severity": "low",
+     "reproduction": "Read docs/accuracy/after-quotes/hard-rule-1.txt at fdc3eaa, section 'How the code keeps it': 'What is not part of a sent document follows the new rules for every quote: the thank-you page says the copy was emailed only when it was (L33), and the office list's headline is the recommended option (L9).' SignForm.tsx:371 switches only the email sentence on `emailed`. The price in that sentence keeps cents for a legacy document (centsInSentences / sentenceMoney), as the reviewer's own output '$2,935.00' shows. origin/main and 9051b81 print 'We emailed you a copy' unconditionally (git show ...:app/q/[token]/SignForm.tsx).",
+     "reasoning": "Hard rule 1 freezes a sent quote's items, prices, number, dates, consent and PDF. The post-signing thank-you is transient client state, not part of the stored document, and none of those fields change: price, cents, option and number are identical. The change is the deliberate L33 fix (RF-12: 'We emailed you a copy' shown when email is off was an audit demo-risk). The hard-rule-1 record already states this exception explicitly, so the suggested documentation fix is already in place. What is left is only that render-stored.ts does not render SignedThanks. That is a coverage nicety, and quotes-stage.test.ts 'with email not set up, the thank-you page points to the download' already covers both branches.",
+     "fixSpec": "None required. Optional: render SignedThanks (emailed true/false) per option in scripts/accuracy/render-stored.ts, so a future change to the price formatting in that sentence is caught."
+    },
+    {
+     "id": "DOC-6",
+     "verdict": "refuted",
+     "severity": "low",
+     "reproduction": "git show {origin/main,9051b81,7c6b08c}:lib/quotes/settings.ts all contain the same `DEFAULT_COMPANY = 'Koala Insulation of Newark'` and DEFAULT_TERMS at lines 6-10 and 59/67, so they predate this round. Reachability: brandingSchema in lib/admin/settings.ts has company: textField('Company name') -> requiredString, so the owner cannot save an empty company. The init migration seeds a company. The send route's gate refuses a quote with an empty company or terms (businessProfileGaps). getSettingsBranding (app/q/[token]/data.ts) is used only by not-found.tsx and returns the settings' company, which is always set. On a fresh DB that company is the seeded 'Koala Insulation of Newark' (DOC-1), not the constant.",
+     "reasoning": "The constants are inherited from the live site, not introduced by this stage. In practice the fallback is reached only by deleting the company with direct SQL. Hard rule 3 has been applied in this round as 'add no franchise text' (spec R8: 'the diff has no new Newark, Delaware or (302) text'). The audit roadmap schedules removing the remaining hard-coded Newark details for Phase 4 ('A franchise profile replaces all 26 kinds of hard-coded Newark details'). The customer-visible Newark name on a new franchise comes from the seed, which DOC-1 covers.",
+     "fixSpec": "None for this stage. Fixing DOC-1 covers the reachable path. In Phase 4, replace DEFAULT_COMPANY/DEFAULT_TERMS with neutral fallbacks."
+    },
+    {
+     "id": "DOC-7",
+     "verdict": "refuted",
+     "severity": "low",
+     "reproduction": "python over /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/golden/live-quote-docs.json: Counter({'KN-2026-DE0000-v1': 75, 'KN-2026-A0C1DB-v1': 1, 'KN-2026-A0C1DB-v2': 1}). All 75 belong to estimate ids starting de000000 (the demo seed's uuid() in lib/demo/seed.ts:23). By status: 45 signed (the route answers 409 to re-quote a signed estimate), 24 declined, 5 expired, 1 viewed. On origin/main the old quoteNumber(estimateId, version, issuedAt) is the same formula as legacyQuoteNumber, so re-quoting any demo estimate already gives 'KN-2026-DE0000-v2' on the live site today.",
+     "reasoning": "Keeping the legacy base for a new version is the specified behaviour. Ledger L12 says 'A new version keeps the estimate's number (\"-0001-v2\"), including a number given before the counter', and the spec's L12 says 'an estimate first quoted before the counter keeps its old base'. The repeated base is a pre-existing artifact of the demo seed's ids, not a regression. quotes.json notDone already documents that the demo seed keeps its old numbering by design. Real estimates' legacy numbers come from random UUIDs (the 2 real quotes share one estimate, v1/v2, which is correct).",
+     "fixSpec": "None for this stage. If wanted later as an owner decision: give a new version of a legacy-numbered estimate whose base is shared by other estimates a fresh counter number, and give the demo seed ids unique in their first 6 hex characters."
+    }
+   ],
+   "missed": [
+    "DOC-4 is larger than reported: when a kept-together option is taller than a page, react-pdf compresses the WHOLE first page, not only that option. On the customer's PDF the masthead (license over phone), 'PREPARED FOR' over the customer name, 'YOUR ESTIMATOR' over 'Valid until', and the preceding Good option all overlap. It needs only 7 attic areas with 80-character names, or 8 with 55-character names, from the engine's own output. Repro: node scripts/accuracy/run.mjs scripts/accuracy/zz-tall.ts out.pdf 7 80 0 0 (script at /tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/scripts/zz-tall.ts), then pdftoppm page 1 (/tmp/claude-0/-home-user/e9b02a42-cb4a-5aa1-bf7b-e82e27ad6b23/scratchpad/accuracy/revA/documents/verify/out/p780-1.png). The legacy render of the same document is clean (out/L860-1.png). The fix is in the DOC-4 fixSpec.",
+    "Low, pre-existing (same on origin/main), hard rule 3 on a customer-facing document: lib/env.ts:17 quoteFromEmail() falls back to 'Koala Insulation of Newark <onboarding@resend.dev>', and .env.example:12 sets 'Koala Insulation of Newark <quotes@yourdomain.com>'. lib/quotes/email.ts:56 uses it as the From of every quote, signed-confirmation and office email. A franchise that leaves QUOTE_FROM_EMAIL unset, or copies the example, emails customers as 'Koala Insulation of Newark', and the business-profile gate does not cover it. Repro: git grep -n 'Insulation of Newark' fdc3eaa -- lib/env.ts .env.example lib/quotes/email.ts. Fix: build the display name from the profile's branding.company and only the address from the env, or drop the name from the fallback; add an email.test.ts case that the From name equals the settings company."
+   ]
+  }
+ ]
+}

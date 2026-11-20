@@ -1,0 +1,118 @@
+ACCURACY ROUND: BEFORE AND AFTER (for the owner)
+
+What this compares
+  "Before" is the app as it was before any accuracy fix (docs/accuracy/before/). "After" is the
+  final commit of the round on branch claude/accuracy: Phase 1, then the fixes from review A and
+  review B and your decisions OD12-OD16. Two sets of estimates were priced both ways:
+  - Newark's real estimates: 78 estimates exported read-only from the live database (Nov 19, 2026).
+    This summary and report.json keep their estimate ids, statuses and amounts only.
+  - 65 made-up estimates that cover the problems the audit found and the unusual cases (walls with
+    no depth, insulation already in a wall, tiny and huge areas, typed prices with cents ...).
+  Every difference is listed in report.json with the estimate, the option, the old and new value,
+  why it changed, the ledger entries (docs/accuracy/ledger.txt) and your decision behind it.
+  Nothing is left unexplained (0 of 121 differences).
+  Quotes already sent or signed do not change at all (hard rule 1): this report is about what the
+  same estimates would show if they were quoted again today.
+
+The checks every quote must pass (estimates breaking each rule, before -> after)
+                                     Real (78)    Made-up (65)
+  Items add up to the total          13 -> 0      7 -> 0
+  Same work, same price              60 -> 0      35 -> 0
+  Options step up                    18 -> 0      16 -> 0
+  Words match the work priced        6 -> 0       7 -> 0
+  Insulation fits the cavity         0 -> 0       12 -> 0
+  No blank or negative amounts       0 -> 0       0 -> 0
+  One price, one way of writing it   78 -> 0      64 -> 0
+  "Valid until" is the real expiry   16 -> 0      3 -> 0
+  Random quotes: 10,000 at seed 20261118 and 20,000 each at seeds 7 and 99999 break no rule
+  (docs/accuracy/after/violations.txt).
+
+Your real estimates (78)
+  - Not one price changed. All 204 option prices that are still shown are exactly the same.
+  - The total of the headline prices is the same: $359,290 before and after.
+  - 30 options are no longer shown to the customer (your decision OD6: an option that repeats a
+    cheaper one, or does not cost more than it, is hidden and the estimator is told):
+    - 12 small rim-joist jobs had all three options at one price (the $1,500 minimum, or one price
+      the estimator set). They now show only Best, at the same price, so their headline moves from
+      Better to Best at the same amount. These are 5 signed, 4 lost, 2 expired and 1 ready.
+    - 6 estimates lose a Best that was the same work as Better: $3,830, $6,005, $4,295, $3,850,
+      $9,500 and $10,135.
+  - 1 lost estimate's Best no longer promises "Old, dirty or damaged insulation removed": that
+    option does not price any removal (ledger L15).
+  - On the office Estimates list, one draft with no option picked showed the stored model price of
+    Good, $2,020; it now shows its recommended option, Better, $2,730, as the phone and the quote do
+    (estimate c6b22b65, your decision OD1, ledger L9).
+
+The made-up estimates (65)
+  - 136 option prices are unchanged; 25 moved; 28 options are no longer shown.
+  - Headline total $3,222,490 -> $3,211,205 (one of them is a 200,000 sq ft test attic).
+  - Why prices moved (each one is in report.json):
+    - Walls with no depth entered are priced as a 2x4 wall, 3.5 in (OD5, L18). Foam fills 3.5 in to
+      R-13 instead of 5.4 in to R-20: walls 1,000 sq ft Better $3,795 -> $2,660; walls 2,400 sq ft
+      $8,865 -> $5,770; walls 650 sq ft $2,810 -> $2,005.
+    - Walls blown with cellulose are dense-packed, so a bag covers less (OD7, L20). This is the one
+      change that raises prices: walls 2,200 sq ft Good $2,090 -> $3,070; 1,400 sq ft (2x6) $1,920
+      -> $2,900; empty walls 1,600 sq ft $1,500 -> $2,195. Please confirm the bag coverage with your
+      supplier (it is marked Needs owner input).
+    - Insulation already in a wall takes its room (OD5, L19): walls 800 sq ft with 2 in of
+      cellulose Better $2,245 -> $1,500 (the minimum job), Best $3,115 -> $2,295. A wall already
+      full of R-11 batts gets no options at all.
+    - A price typed with cents is whole dollars: $4,321.50 -> $4,322 (OD4, L5).
+    - A price typed under $1 is not used: $0.40 -> the model price $2,735 (L6).
+    - An estimator's extra bags are cut to what fills the wall (L23).
+  - Titles and bullets only promise work that is priced (L15, L23): for example "Blown Cellulose to
+    Code" -> "Blown Cellulose to R-30" where the attic stays below code, and "Fills the full
+    cavity" is no longer said where the cavity is not filled.
+
+What the two reviews changed (no option price on either set moved)
+  The fixes after Phase 1 (review A, review B and your decisions OD12-OD16) leave every price,
+  option and headline on both sets exactly as above: the made-up and the real estimates price
+  byte for byte the same as before those fixes (docs/accuracy/after-fixa/, after-fixb/), and the
+  random quotes still break no rule. What they change is the words on new quotes and the screens:
+  - Every new quote, PDF, email and customer page names the company "Koala Insulation" (it said
+    "Koala Insulation of Newark"), and the warranty reads "Limited lifetime warranty" (it said
+    "Workmanship warranty — PLACEHOLDER, owner to replace."). The terms no longer name a town.
+    Your saved settings are changed only where they still held the original seed (OD12, OD13).
+  - Nothing asks anyone to finish a business profile, and nothing holds a quote back for it: the
+    Business profile page is optional. A missing license or office phone is left off the quote;
+    without an office phone the customer is pointed to the estimator's email (OD12).
+  - The e-sign sentence names the property's state, else the shop address's state, else no state
+    ("ESIGN Act and the Uniform Electronic Transactions Act"); a send never fails over it. New
+    estimates start in the shop address's town and state, as a pair (OD14).
+  - With no option picked and Better not shown, the recommended option is the one doing Better's
+    work (normally Best), as when Better is picked (OD15). No estimate in either set is in that
+    case, so no headline above moved; of the random quotes, 24 of 10,000 (seed 20261118) and 50
+    and 42 of 20,000 (seeds 7, 99999) are, each Good -> Best, all listed with their reason in
+    docs/accuracy/after-fixb/headline-changes.txt. No picked quote moves.
+  - Quote numbers keep the KN start (OD16).
+  - Price approvals are tied to the cost they were asked at: a later change that raises the cost
+    needs a new approval, and only the server writes approval requests. The approval queue drops
+    requests that no longer apply (review B).
+  - The Send step waits, and says so, while Koala cannot be reached; "Shorten the notes" goes to
+    the notes; Fix buttons land in the box to fix; small buttons are 48 px; empty boxes look empty
+    in Sun+ (review B).
+
+What else changed in Phase 1 (no prices)
+  - The phone's Send checklist says each problem in plain words, with a Fix button that goes to
+    it, instead of "Too small: expected number to be >0" (L34).
+  - A price beyond what an estimator may quote alone says the price, the model price and the range
+    they can quote, and offers Request approval. You (or the office, within its own limits) approve
+    it on the Estimates page; the estimator can then send exactly that price (L34).
+  - When a customer signs while the estimator's phone holds an unsent change, the phone shows the
+    signed quote, read-only, and says the change was not applied, instead of "changed on another
+    device" (L35).
+  - When the database is down, staff are no longer sent to the sign-in page: the field app opens
+    from the phone with "Can't reach Koala right now", and office pages say so (L36).
+  - Pricing: the margin setting is called "Target net margin (after overhead)" and shows the gross
+    margin it makes (63% overhead and 15% net is about 48% gross); a material cost far outside its
+    usual range must be confirmed; the code banner reads your own code rows (L10, L11, L38).
+
+Decisions to look at
+  Your decisions OD1-OD16 are applied. Quotes already sent or signed are unchanged: every stored
+  quote's PDFs, emails and page text render exactly as before (docs/accuracy/final/hard-rule-1.txt).
+  The open questions are in docs/release/owner-questions.txt, one list of every question still open
+  (release review C CLAIM-4; final.json alone missed several). The ones that touch
+  the numbers above: the dense-pack bag coverage and batt costs (OD7, OD8), whether small jobs at
+  the minimum should still offer three options (OD6), and the material ranges, which start at half
+  to twice today's cost; and, new in review B, whether "This cost is right" should widen a
+  material's usual range for good.

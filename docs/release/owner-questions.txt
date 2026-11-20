@@ -1,0 +1,208 @@
+KOALA: EVERY OPEN QUESTION FOR THE OWNER, IN ONE PLACE (claude/release, Nov 19 2026)
+
+This is the one list of questions still waiting for you. It replaces looking through the accuracy
+round's results files (final.json, flow.json, quotes.json, fixa.json, fixb-screens.json), the blower
+door notes (docs/blower-door/build.txt section 6) and docs/release/release.txt section 7: every
+question still open there is here once, in plain words. Questions your decisions OD12-OD16 already
+answered are listed at the end, so you can see where they went.
+
+None of these stops the release. Until you answer, the app keeps doing what each question says it
+does today. Where you can change something yourself in the app, it says where.
+
+
+A. QUOTES AND SIGNING
+---------------------
+A1. New York homes: which law does the signature sentence name?
+    New York never passed the Uniform Electronic Transactions Act ("UETA"), which the sentence
+    names for every other state. Until review C, a New York quote said "(ESIGN Act and New York
+    UETA)", a law that does not exist. A new New York quote now says "(ESIGN Act and the New York
+    Electronic Signatures and Records Act)", New York's own law. Is that right, or should New York
+    quotes use the general wording ("ESIGN Act and the Uniform Electronic Transactions Act"), or
+    should a lawyer word it? Quotes already sent keep the sentence they were sent with.
+    (Was quotes.json; dropped from final.json; review C DOC-2 and CLAIM-1.)
+
+A2. The signature sentence for a home with no state.
+    A property with no real US state, and no shop address the app can read, gets "ESIGN Act and the
+    Uniform Electronic Transactions Act" with no state, as your decision OD14 says. Should a lawyer
+    confirm that wording? (final.json 6)
+
+A3. The 16 older quotes whose "Valid until" date is one day late.
+    Sixteen quotes sent before this work print a "Valid until" date one day after their link really
+    stops working. They are kept exactly as sent (quotes already sent never change). Keep them as
+    they are, or keep those 16 links open until the end of the printed day?
+    (quotes.json 5, flow.json 4)
+
+A4. Town and state an owner saved on the old business form.
+    New estimates now start in the town and state of the shop address (Pricing page), as OD14 says,
+    and ignore a town or state typed on the old business form. Your database has neither saved. Is
+    that all right for another franchise that did save them? (final.json 7)
+
+A5. The seeded shop address for a new franchise.
+    A brand-new database starts with the shop address "Newark, DE 19711", so its new estimates start
+    in Newark, DE until its owner changes the shop address on Pricing. Should a new franchise start
+    with a blank shop address instead? (final.json 8)
+
+A6. Who may change the optional Business profile page?
+    Only the owner can change it; the office can look but not edit. Keep it that way? (quotes.json 6)
+
+
+B. PRICES, MATERIALS AND OPTIONS
+--------------------------------
+B1. Dense-pack wall coverage (decision OD7, marked "Needs owner input").
+    Cellulose blown into walls is dense-packed, so a bag covers less. The app uses a
+    manufacturer's chart for 16 in on-center studs (122.5 sq ft x in per bag). Should it use the
+    24 in on-center figure (118.3) instead? And is the bag 25 lb, as the material's name says?
+    (final.json 4, flow.json 4)
+
+B2. Batt prices (decision OD8, marked "Needs owner input").
+    The seven batt sizes (R-11 to R-30) have sourced starting costs. Please check each one on the
+    Pricing page against what you pay. (flow.json 4)
+
+B3. Small jobs at the minimum charge (decision OD6).
+    When a small job is lifted to the minimum job charge, Good, Better and Best can come to the
+    same price; the copies are not shown, so the customer may see only Best. Should a small job
+    still offer three different options? (flow.json 4)
+
+B4. Usual cost ranges for materials.
+    Each material has a "usual" cost range used to catch typing mistakes. The ranges start at
+    half to twice today's cost. Replace them with your suppliers' real ranges on the Pricing page.
+    (flow.json 3)
+
+B5. "This cost is right" widens the usual range for good.
+    When someone confirms a cost outside the usual range, the range now grows to include it (for
+    example $0.06-$0.30), so a later typo up to that cost is no longer caught. Keep that, or should
+    the confirmation count only for that exact cost? (final.json 10)
+
+B6. Removing old insulation in an option.
+    When an option would remove what is there and leave the area with less R than it has now, the
+    option keeps what is there (it is then usually the same as Better and not shown). Keep that, or
+    leave such an option out entirely? (final.json 1)
+
+B7. Attic joist depth.
+    Should the depth of an attic floor's joists ever limit how much loose fill an option blows in?
+    The phone no longer sends a depth for attics. (final.json 2)
+
+B8. How an R-value that fills the cavity is written.
+    When a wall cavity limits the R-value, it is rounded half up (a 2x4 of open-cell foam reads
+    R-13, the exact figure is 12.9). Should it always be rounded down, so it never reads above what
+    the cavity holds? (final.json 3)
+
+B9. A quantity of 0.
+    A quantity of 0 now means nothing is installed. Material already on site is a price change, and
+    the phone says so. Keep? (final.json 5)
+
+B10. Which option is recommended when the picked one is hidden.
+    Your decision OD15 covers a hidden Better. The same rule is used for a hidden Good or Best pick
+    too (the shown option doing the same work, else the nearest above, else below); it chose the
+    same option as the old rule in every quote checked. Keep it for all three, or only for Better?
+    (final.json 9)
+
+B11. Price approvals: what may the office approve?
+    The office may approve a price within its own limits (never below the floor margin); the owner
+    and the office decide. Keep? (flow.json 1)
+
+B12. An approval belongs to the price it was given for.
+    An approval is tied to the model price too, so if the estimate is re-priced it needs a new
+    approval. Keep (the safer choice)? (flow.json 2)
+
+
+C. BLOWER DOOR AND REBATES
+--------------------------
+C1. The rebate programs a new franchise starts with.
+    The blower door setup gives every new database this franchise's two Energize Delaware programs
+    until its owner edits or removes them on Rebate programs. Keep that, or should a new franchise
+    start with no program? (release.txt 7a)
+
+C2. The gauge name.
+    Before a phone has its settings, the tool says "Retrotec Model 5000". Keep it, or say "the
+    gauge" until the franchise sets one? (release.txt 7b)
+
+C3. Rebates rounded down to the dollar.
+    A capped rebate is rounded down to whole dollars ($1,499 for 75% of $1,999). If your program
+    pays to the cent and you want cents shown, say so. (release.txt 7c)
+
+C4. Where the air sealing price for the cost cap should come from.
+    The office job page takes it from the newest reading saved with a price (normally the
+    estimator's, with the test-in). Crews never type it. When no reading has a price, the page now
+    says "up to $900 (before the 75% cost cap: no air sealing price saved)" instead of a bare $900.
+    Should the price come from the signed quote's air sealing line instead, or from a field on the
+    office job page? (build.txt c; review C FLOW-1)
+
+C5. What crews see.
+    Crews see rebate amounts on the blower door page; the rest of the crew app shows no money.
+    With no price on the crew's phone, the amount now reads "UP TO $2,000" and the copied summary
+    "rebate up to $2,000 (before the 75% cost cap)". Is that all right, or should crews see only
+    the tier reached? (build.txt k; review C DOC-4)
+
+C6. The office and the blower door tool.
+    The office also has the tool in its menu. Say if it should not. (build.txt a)
+
+C7. Mistaken readings.
+    Readings are never edited or deleted; a new test replaces them, and the office page lists the
+    earlier ones. Should the owner be able to delete one? (build.txt b)
+
+C8. Whole-number CFM50.
+    Does your program decide the tier on the whole-number CFM50 of the Test Out Form? The tool
+    decides on the exact figure. If the program uses whole numbers, turn on "Decide on whole-number
+    CFM50" on Rebate programs. (build.txt d)
+
+C9. Which program a job uses.
+    The crew's phone starts on the program saved with the test-in, and the crew can change it (the
+    office page then warns). Should crews be able to change it at all? (build.txt e)
+
+C10. N-factor.
+    Does your audit software give the zone's 1-story N-factor, or one already corrected for
+    stories? The tool asks for the 1-story value. The default is a setting on Rebate programs.
+    (build.txt f)
+
+C11. Ventilation standard.
+    Should the tool also work out ASHRAE 62.2-2013 ventilation, or is the 62-89 BAS check enough?
+    (build.txt g)
+
+C12. Occupants.
+    The tool uses the actual number of people. Does your program use "occupants or bedrooms + 1,
+    whichever is greater"? (build.txt h)
+
+C13. The 11/01/2024 rebate schedule.
+    Is it still current? The air sealing / heat pump bundling bonus is not in the tool; do you want
+    it? (build.txt i)
+
+C14. The mechanical ventilation rebate.
+    Is it also capped at a share of the installed cost? The tool shows it only as "up to".
+    (build.txt j)
+
+C15. Who may save readings.
+    Any member of the job's crew can record readings. Should only crew leads save the test-out?
+    (build.txt l)
+
+C16. Tiers that pay less.
+    A higher tier paying less than a lower one is refused when saving programs. Say if a program you
+    work with does that. (build.txt m)
+
+
+D. FRANCHISES AND GOING LIVE
+----------------------------
+D1. Each franchise's time zone.
+    Every date and time the app prints is in one time zone per franchise. It is New York time
+    unless the franchise's deployment sets NEXT_PUBLIC_BUSINESS_TIME_ZONE (for example
+    America/Chicago or America/Los_Angeles) before it is built; a quote keeps the zone it was sent
+    in. Should a franchise owner be able to choose the time zone on a page in the app instead?
+    (review C DOC-1, FLOW-7)
+
+D2. The Next.js security upgrade.
+    The build shows a Next.js security notice. Nothing was upgraded in this work, as you asked. The
+    upgrade is your call. (flow.json 5)
+
+
+ALREADY ANSWERED BY YOUR DECISIONS (no longer open)
+---------------------------------------------------
+  - "A license number is required before a quote can go out" (quotes.json 1): OD12, nothing is
+    required; a missing license is left off.
+  - "Quote number prefix KN, set on the Business profile page" (quotes.json 3): OD16, quotes keep
+    KN; the Business profile page is optional (OD12).
+  - "One state in the profile serves the signature sentence and new estimates" (quotes.json 4):
+    OD14, the sentence names the property's state and new estimates start in the shop address's
+    town and state.
+  - "Logo, office email and website are optional for sending" (quotes.json 7): OD12, nothing blocks
+    a send.
+  - The earlier-stage roll-up (flow.json 4) is split into A1, A3, B1, B2 and B3 above.

@@ -1,0 +1,367 @@
+{
+  "stage": "final (integration of review B fixes)",
+  "branch": "claude/accuracy",
+  "base": "a59649e (001050c, the review A fixes, plus the review B digest)",
+  "merges": [
+    "b8a69e6 merge of origin/claude/accuracy-fixb-docs b03b22a (no conflicts)",
+    "372f068 merge of origin/claude/accuracy-fixb-screens 0b111fa (one conflict, docs/accuracy/ledger.txt: both review B sections kept under one heading)"
+  ],
+  "integrationCommits": [
+    "8016653 the dead { step: 'business' } Fix target and EstimateEditor's router.push('/admin/business') removed (nothing produced it after OD12); fix.ts keeps 'notes' (docs) and field / edit 'price' (screens)",
+    "763bc25 comments in lib/quotes/model.ts and lib/quotes/invariants.ts describe the OD15 rule",
+    "0e1679c report.ts traces the fixa and fixb stages; after files, violations and report refreshed"
+  ],
+  "codeHeadCommit": "763bc25 (the commits after it change docs, the report script's stage list and a hard-rule-1 diff helper only)",
+  "headCommit": "the commit that adds this file (see git log on claude/accuracy)",
+  "pushed": true,
+  "reconciled": {
+    "flow-B13 town/state": "lib/field/newPlace.ts newEstimatePlace reads bundle.business.newEstimate, which /api/bundle fills with the docs fix's businessInfo -> newEstimateDefaults (the shop address pair, OD14). Verified in the final e2e ('a phone's first /field?new=1 starts in the shop address's town and state').",
+    "lib/field/fix.ts": "CustomerField 'notes' (flow-B5) and the areas target's field / the options target's edit 'price' (flow-B12) are both in; the dead 'business' target removed.",
+    "public/sw.js": "v12.",
+    "tests": "all tests either side added pass on the merged code (vitest 1,708; e2e 356 with both branches' new steps)."
+  },
+  "statusById": {
+    "database-B1": {
+      "status": "fixed",
+      "commit": "fe27ed6",
+      "what": "safeNext takes unknown, refuses non-strings and checks the pathname after dot segments resolve (no //host or /\\host), so /unreachable, /login, /auth/confirm and /auth/demo never send anyone off the site; a repeated next= no longer 500s /login.",
+      "tests": [
+        "lib/safeNext.test.ts (2 new)",
+        "lib/server/sessionState.test.ts",
+        "e2e /unreachable?next=/.//evil.example/x stays on the site; /login?next=/a&next=/b -> 200"
+      ]
+    },
+    "database-B2": {
+      "status": "fixed",
+      "commit": "09ab16c, 24dc1d4",
+      "what": "price_approvals.loaded_cost (additive, nullable, frozen by the guard trigger, written by the server); an approval stops covering a price once the option's loaded cost rose; a below-floor price needs an owner approval given for a below-floor price; the phone offers Request approval again; quotes record each used approval's cost.",
+      "tests": [
+        "lib/pricing/support.test.ts (4 new)",
+        "lib/quotes/approvals.test.ts",
+        "lib/field/sendChecks.test.ts",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e 'the request keeps the loaded cost the option had when it was asked'"
+      ]
+    },
+    "database-B3 = flow-B1": {
+      "status": "fixed",
+      "commit": "57de6fb",
+      "what": "The documents were made safe before the gate went: /placeholder/i counts as unset, the consent sentence never throws (production has no default_state), a bad stored prefix falls back to KN, and the phone's copy of the gate (sendChecks 'profile', bundle business.gaps, SendStep setup_incomplete) went with the server's 409.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts (built from the migration-seeded rows and from production's rows as they are today)",
+        "app/field/SendStep.test.tsx",
+        "e2e 'send: nothing about a business profile holds it back'"
+      ]
+    },
+    "database-B4": {
+      "status": "fixed",
+      "commit": "09ab16c",
+      "what": "insert on price_approvals revoked from signed-in users; /api/approvals POST checks the role, prices the request, confirms can_edit_estimate and writes with the service role.",
+      "tests": [
+        "tests/sql/40_accuracy.test.sql (L34 block)",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e 'a request written straight to the database with the estimator's token is refused'"
+      ]
+    },
+    "database-B5": {
+      "status": "fixed",
+      "commit": "09ab16c",
+      "what": "tests/sql/00_supabase_stub.sql carries production's default privileges (read from production's pg_default_acl with a read-only SELECT); 01_grants.sql no longer re-grants; grant asserts run before any re-run of the migration; scripts/e2e.sh refuses a test database that grants more than production.",
+      "tests": [
+        "tests/sql/40_accuracy.test.sql first-run grant block",
+        "scripts/e2e.sh grant check (passed in the final e2e)"
+      ]
+    },
+    "database-B6": {
+      "status": "not fixed (by decision)",
+      "why": "OD16: quote numbers keep the KN start the live site prints (KN-2026-0001-v1). The only related change is defensive: a bad stored prefix falls back to KN (57de6fb, lib/quotes/owner-decisions-2.test.ts)."
+    },
+    "database-B7 = flow-B14": {
+      "status": "fixed",
+      "commit": "09ab16c",
+      "what": "scripts/e2e.sh lower-cases E2E_DB_NAME and refuses names that are not letters, digits and _.",
+      "tests": [
+        "setup-only run with a mixed-case name: exit 2 before, runs after (fixer's scratch logs b7-before.log, b7-after.log)"
+      ]
+    },
+    "flow-B2": {
+      "status": "fixed",
+      "commit": "e8f02ec",
+      "what": "The Send checklist reads reachability, not only signal: while Koala is unreachable its 'Online' item says \"Can't reach Koala right now. Sending needs Koala; your work is saved.\" and Send and Request approval wait.",
+      "tests": [
+        "lib/field/sendChecks.test.ts",
+        "e2e Send checklist with the database down"
+      ]
+    },
+    "flow-B3": {
+      "status": "fixed",
+      "commit": "09ab16c",
+      "what": "The owner's queue drops requests on signed, lost or void estimates or whose option price or cost moved (isLiveRequest); PATCH /api/approvals/<id> on a signed estimate answers 409 'signed'.",
+      "tests": [
+        "lib/quotes/approvals.test.ts (4)",
+        "e2e PATCH on a signed estimate -> 409, queue empty"
+      ]
+    },
+    "flow-B4": {
+      "status": "fixed (OD15)",
+      "commit": "4046e01",
+      "what": "With no pick, Better is the implied pick; a hidden recommended option moves to the shown option doing the same work (PricedOption.sameWorkAs), else the nearest shown above, else below; one function (lib/field/recommended.ts) feeds the dock, cards, list, Send step, office list, sync model_total_price, quote and checker.",
+      "tests": [
+        "lib/field/recommended.test.ts 'OD15 (review B flow-B4): with no pick, Better is the implied pick' (5; 4 failed before)",
+        "e2e 'with no pick and Better not shown, Best is the default recommendation (was Good, the cheapest)'"
+      ]
+    },
+    "flow-B5": {
+      "status": "fixed",
+      "commit": "e8f02ec",
+      "what": "'Shorten the notes' goes to the notes box (#customer-notes, maxLength 5,000; the Fix focus also focuses a text area).",
+      "tests": [
+        "lib/field/sendChecks.test.ts 'notes too long: the Fix goes to the notes box'"
+      ]
+    },
+    "flow-B6": {
+      "status": "fixed",
+      "commit": "14e4b20",
+      "what": "A --placeholder colour token: unchanged in Day and Night, grey #4b5563 and italic in both Sun+ blocks; Form.tsx and ShapeEditor.tsx use it.",
+      "tests": [
+        "lib/design/contrast.test.ts 'Placeholders look empty (review B flow-B6)' and the new contrast pairs",
+        "e2e computed colours in Sun+: rgb(75, 85, 99) italic vs typed rgb(0, 0, 0)"
+      ]
+    },
+    "flow-B7": {
+      "status": "fixed",
+      "commit": "2358bc8",
+      "what": "No franchise name in lib/env.ts's sender fallback, .env.example, the roof takeoff COMPANY or the utility suggestions (now the names already used on this phone); a parser-based scan keeps app/, lib/ and components/ free of franchise text (two documented exceptions in lib/quotes/consent.ts).",
+      "tests": [
+        "lib/env.test.ts",
+        "lib/roof/roofing.test.ts",
+        "lib/field/utilities.test.ts",
+        "lib/franchise-text.test.ts",
+        "e2e roof report header and Copy summary"
+      ]
+    },
+    "flow-B8": {
+      "status": "fixed",
+      "commit": "c801b1e",
+      "what": "/unreachable offers 'Open the estimates on this phone' only when the phone holds a saved copy; otherwise 'This phone has no saved copy of the app yet; it needs Koala once.'",
+      "tests": [
+        "components/shell/unreachable.test.tsx",
+        "lib/offline/phoneCopy.test.ts (2)",
+        "e2e fresh context gets no link, the phone with a copy does"
+      ]
+    },
+    "flow-B9": {
+      "status": "fixed",
+      "commit": "7984926",
+      "what": "A cost saved with 'This cost is right' widens the stored usual range, so the next save is not refused; the refusal measures from the nearest edge.",
+      "tests": [
+        "lib/admin/pricingForms.test.ts (2 new, both failed before)",
+        "e2e widened range, save after reload without ticking, the 25% wording"
+      ]
+    },
+    "flow-B10": {
+      "status": "fixed",
+      "commit": "e8f02ec",
+      "what": "Server actions refused while Koala is unreachable say \"Can't reach Koala right now. Nothing was saved.\" (Pricing, Team, Insights, Jobs, mark lost) instead of 'Only the owner…'.",
+      "tests": [
+        "lib/server/actionAuth.test.ts (3)",
+        "e2e saving Pricing with the database down"
+      ]
+    },
+    "flow-B11": {
+      "status": "fixed",
+      "commit": "3df5397",
+      "what": "'Use {n}' on the Areas step, the approval queue's customer link and the customer quote's estimator email link are 48 px tall.",
+      "tests": [
+        "app/tap-targets.test.tsx (3, all failed before)",
+        "e2e 117x48, 63x48 and 100x48 (were 71x21, 107x24, 100x20)"
+      ]
+    },
+    "flow-B12": {
+      "status": "fixed",
+      "commit": "7f98c48",
+      "what": "'Change the price' opens that option's price editor with the cursor in Customer price; 'Finish measuring' puts the cursor in the first box to finish.",
+      "tests": [
+        "app/field/OptionsStep.test.tsx",
+        "lib/measure/measure.test.ts firstUnfinishedField (2)",
+        "e2e document.activeElement for both buttons"
+      ]
+    },
+    "flow-B13": {
+      "status": "fixed",
+      "commit": "3e2544d (reconciled in the merge 372f068)",
+      "what": "On a phone's first open a new estimate waits up to 3 s for the bundle; if it comes later, City and State are filled together while both are still blank. The pair is the docs fix's: newEstimatePlace reads bundle.business.newEstimate, which /api/bundle fills with businessInfo -> newEstimateDefaults (the shop address's town and state as a pair, else blank, OD14).",
+      "tests": [
+        "lib/field/newPlace.test.ts (4)",
+        "e2e \"a phone's first /field?new=1 starts in the shop address's town and state\" (Newark, DE)"
+      ]
+    },
+    "OD12": {
+      "status": "fixed",
+      "commit": "57de6fb, 2358bc8, 24dc1d4; 8016653 (merge: the dead { step: 'business' } Fix target and its router.push removed)",
+      "what": "Koala Insulation everywhere; no gate or nag for any role; /placeholder/i counts as unset; a missing license or phone is left off; the signing page and closed states point to the office phone, else the estimator's email; /admin/business optional; the conditional migration replaces the seeded company and terms only where still the seed.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts (12)",
+        "app/field/SendStep.test.tsx (3)",
+        "lib/field/sendChecks.test.ts 'no business-profile item for any role'",
+        "lib/quotes/contact.test.ts (2)",
+        "tests/sql/41_owner_decisions.test.sql",
+        "e2e 'the Business profile page is optional (OD12)'",
+        "final screenshot send-step-no-business-profile-390.png"
+      ]
+    },
+    "OD13": {
+      "status": "fixed",
+      "commit": "57de6fb",
+      "what": "The warranty line reads exactly 'Limited lifetime warranty' (DEFAULT_WARRANTY; the stored seed replaced only when exactly equal).",
+      "tests": [
+        "tests/sql/41_owner_decisions.test.sql",
+        "lib/quotes/owner-decisions-2.test.ts",
+        "e2e business page warranty",
+        "final screenshots quote-pdf-page1.png, customer-quote-warranty-390.png"
+      ]
+    },
+    "OD14": {
+      "status": "fixed",
+      "commit": "57de6fb (+ 3e2544d uses the same pair on a first open)",
+      "what": "New estimates take town and state as a pair from the shop address, else both blank; the consent sentence names the property's state, else the shop's, else no state, and never throws.",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts OD14 and DOC-2 tests",
+        "lib/quotes/quotes-stage.test.ts L31, L32",
+        "lib/field/newPlace.test.ts"
+      ]
+    },
+    "OD15": {
+      "status": "fixed",
+      "commit": "4046e01",
+      "what": "See flow-B4.",
+      "tests": [
+        "lib/field/recommended.test.ts",
+        "scripts/accuracy/od15-headlines.ts re-run on the merged head: 24 of 10,000 at seed 20261118, as on the screens branch"
+      ]
+    },
+    "OD16": {
+      "status": "no change (by decision)",
+      "why": "Quote numbers keep KN (database-B6); a bad stored prefix now falls back to KN (57de6fb)."
+    },
+    "DOC-1 (review A)": {
+      "status": "fixed",
+      "commit": "57de6fb",
+      "what": "Resolved by OD12: the seeded company and terms are replaced where still the seed; no gate remains.",
+      "tests": [
+        "tests/sql/41_owner_decisions.test.sql"
+      ]
+    },
+    "DOC-2 (review A)": {
+      "status": "fixed",
+      "commit": "57de6fb",
+      "what": "newEstimateDefaults returns the shop address's town and state as a pair ('Newark, PA' -> 'Newark, DE').",
+      "tests": [
+        "lib/quotes/owner-decisions-2.test.ts"
+      ]
+    },
+    "DOC-3 (review A)": {
+      "status": "fixed",
+      "commit": "57de6fb",
+      "what": "No 'finish the business profile' text or link for any role.",
+      "tests": [
+        "app/field/SendStep.test.tsx (failed before for all three roles)"
+      ]
+    },
+    "database MISSED: /login with a repeated next= returned 500": {
+      "status": "fixed",
+      "commit": "fe27ed6",
+      "tests": [
+        "lib/safeNext.test.ts",
+        "e2e /login?next=/a&next=/b -> 200"
+      ]
+    },
+    "flow MISSED variants (PATCH on a signed estimate, /field?new=1 deep link, .env.example sender, the phone's copy of the gate)": {
+      "status": "fixed",
+      "commit": "09ab16c, 3e2544d, 2358bc8, 57de6fb",
+      "why": "Covered by flow-B3, flow-B13, flow-B7 and flow-B1 above."
+    }
+  },
+  "valueChanges": [
+    "Golden sets vs the previous docs/accuracy/after/ files (the flow stage's): no option total, item, title, bullet, shown/hidden option or headline changed in either set (synthetic 65, live 78); both re-priced files equal after-fixa's and after-fixb's byte for byte, and only their 'about' text changes. 0 violations on every rule in both.",
+    "docs/accuracy/after/violations.txt vs the flow stage's: every rule still 0 at all three seeds; the counts of options drawn moved because review A changed the random generator (RA-F7: draws no longer follow the engine) and what is shown (RA-F4, RA-F9): seed 20261118 options priced 26,333 -> 26,531, shown 22,145 -> 22,113, quotes with no option 967 -> 899; seed 7 52,750 -> 52,670, 44,048 -> 43,764, 1,939 -> 1,933; seed 99999 52,690 -> 52,739, 43,943 -> 43,903, 1,935 -> 1,920. Each output is byte-identical to after-fixa's (and after-fixb's).",
+    "docs/accuracy/report/report.json: the same 121 differences against the before set (synthetic 77, live 43 plus 1 office-list headline), 0 unexplained; none is new from review A or review B. Only its 'about' changes; report.ts now traces differences through the fixa and fixb stages too.",
+    "RB-OD12a (OD12): company 'Koala Insulation of Newark' -> 'Koala Insulation' on new quotes' email subject, masthead, PDF header and footer, customer page and roof takeoff. Example: 'Your insulation quote from Koala Insulation of Newark (KN-2026-0001-v1)' -> '... from Koala Insulation (KN-2026-0001-v1)'; final e2e stack: 'Your insulation quote from Koala Insulation (KN-2026-0005-v1)'.",
+    "RB-OD12b (OD12): terms 'authorizes Koala Insulation of Newark to schedule the work' -> 'authorizes Koala Insulation to schedule the work'.",
+    "RB-OD13 (OD13): warranty 'Workmanship warranty — PLACEHOLDER, owner to replace.' (and the old code default 'Workmanship warranty details are available from our office.') -> 'Limited lifetime warranty'.",
+    "RB-OD12c (OD12): stored PLACEHOLDER text counts as unset: license 'PLACEHOLDER' -> no license line; company 'PLACEHOLDER company' -> 'Koala Insulation'.",
+    "RB-OD12d (OD12, DOC-3): POST /api/quotes on the seeded settings 409 setup_incomplete -> sent; the checklist's business-profile item, the business page's gap banner, the Pricing nags and 'A quote cannot be sent until...' are gone; the business page opens 'Optional. Quotes go out without it...'; the menu hint 'Optional: office phone, license, warranty and terms on quotes'.",
+    "RB-OD12e (OD12): sign route errors 'Please contact our office.' / '... or call our office.' -> 'please email Sam Rivera at sam@example.com', or 'call (555) 010-0199' when the quote has an office phone.",
+    "RB-OD14a (OD14): consent with no state 500 'Not a US state: ' -> '(ESIGN Act and the Uniform Electronic Transactions Act)'; property state 'XX' with a Springfield, IL shop -> Illinois; a Newark, DE property unchanged (Delaware).",
+    "RB-OD14b (OD14, DOC-2): new estimate town/state: default_state PA with shop 'Newark, DE 19711': 'Newark, PA' -> 'Newark, DE'; Bear/DE saved with a Springfield shop: 'Bear, DE' -> 'Springfield, IL'. Production unchanged.",
+    "RB-B1c (database-B3): an empty stored prefix gave '-2026-0001-v1' -> 'KN-2026-0001-v1'.",
+    "RB-B7 (flow-B7): email sender 'Koala Insulation of Newark <onboarding@resend.dev>' -> 'Koala Insulation <onboarding@resend.dev>'; roof takeoff 'Koala Insulation of Newark: roof takeoff' -> 'Koala Insulation: roof takeoff'; utility suggestions: a fixed Delaware list -> the names already used on this phone.",
+    "RB-B2 (database-B2, no price moves): Good $3,500 approved at a cost of $3,249.20, then labour hours x4 (cost $4,938.40): before it was sent; now it is refused and the phone offers Request approval again.",
+    "RB-FB2 / RB-FB10 (flow-B2, flow-B10; staff wording): the checklist's 'Online' item reads \"Can't reach Koala right now. Sending needs Koala; your work is saved.\" while unreachable; 'Only the owner can change pricing.' -> \"Can't reach Koala right now. Nothing was saved.\" while unreachable.",
+    "RB-FB5 (flow-B5): the 'Shorten the notes' Fix target customer/firstName -> customer/notes.",
+    "RB-flow-B4 (OD15): with no pick, Better hidden, Good and Best shown: headline Good -> Best on the dock, phone list, office list, sync model_total_price and the quote's RECOMMENDED badge. Example: attic 1,386 sq ft at R-0, Better raised to $7,538: Good $4,195 -> Best $6,070. Golden sets: 0 of 65 and 0 of 78 headlines change. Random quotes: 24/10,000 (seed 20261118; re-run on the merged head: 24), 50/20,000 (seed 7), 42/20,000 (seed 99999), all no pick, Good -> Best (e.g. 0f23b856 $7,350 -> $10,730). No picked quote changes; sent quotes keep their stored recommendedTier.",
+    "RB-flow-B9 (flow-B9, owner screen): '$0.30 per board ft is 2.0 times more than the usual $0.06 to $0.24' -> 'is 25% above the usual high of $0.24. The usual range is $0.06 to $0.24 (...)'; $15.25: '102 times' -> '64 times the usual high of $0.24'; $0.05: '3.0 times less' -> '17% below the usual low of $0.06'. A ticked save of $0.30 widens the stored range $0.06-$0.24 -> $0.06-$0.30.",
+    "RB-flow-B13 (flow-B13): /field?new=1 on a phone with no bundle yet: City/State '' / '' -> 'Newark' / 'DE' (the e2e's shop address).",
+    "flow-B8 (staff wording): /unreachable on a phone with no saved copy: 'Open the estimates on this phone' (which looped back) -> 'This phone has no saved copy of the app yet; it needs Koala once.'",
+    "Look only, no words (flow-B6, flow-B11, flow-B12): Sun+ placeholders grey #4b5563 italic (were #000000); 48 px tap targets for 'Use 1,200' (71x21 -> 117x48), the queue's customer link (107x24 -> 63x48) and the estimator's email link (100x20 -> 100x48); Fix buttons focus the box to fix.",
+    "Stored quotes (hard rule 1): no word, price, date, number or consent sentence of any stored quote changed. Their customer-page markup differs only by two class names from flow-B11 (the estimator email link, 30 pages) and flow-B6 (the sign form's placeholder token, 231 open pages); docs/accuracy/final/hard-rule-1.txt.",
+    "The merge itself (8016653, 763bc25, report.ts) changes no price, title, bullet, quantity, headline or customer word."
+  ],
+  "checks": {
+    "typecheck": "pass: npm run typecheck (app and scripts/accuracy), 0 errors, on the merged code (763bc25) and again on the final head",
+    "lint": "pass: npm run lint (eslint .), 0 problems, on 763bc25 and again on the final head",
+    "vitest": "pass: npx vitest run, 1,708 tests in 94 files (docs branch 1,674 in 90; screens branch 1,665 in 87; base 001050c 1,631 in 83). None skipped, deleted or weakened. Every test name either branch has is on the merged code, except 6 base names that one branch renamed for its own fix (the other branch kept the base name): 5 renamed by the docs fix (quotes-stage L30/L31/L32, sendChecks 'business profile') and 1 by the screens fix (recommended 'falls back to Better, then the first option').",
+    "testDb": "pass: npm run test:db, tests/sql 10, 20, 30, 31, 40, 41 all ok ('All database tests passed'), with production's default privileges in the stub",
+    "violations": "pass: npm run accuracy:violations -- 10000 20261118, -- 20000 7, -- 20000 99999: 0 quotes / 0 violations on every rule (items_add_up, same_work_same_price, options_step_up, labels_match_work, cavity_not_overfilled, finite_amounts, same_price_text, valid_until_is_expiry); each output byte-identical to after-fixa's; docs/accuracy/after/violations.txt",
+    "e2e": "pass: APP_PORT=3560 PGRST_PORT=3561 MOCK_PORT=54760 E2E_DB_NAME=koala_final (E2E_KEEP=1) bash scripts/e2e.sh on 763bc25: 356 ok (322 after review A + 15 docs + 19 screens), 0 failed, console errors: none (docs/accuracy/final/e2e.txt). The first attempt stopped at the Next.js security-upgrade notice; the same command was retried once; nothing was upgraded and the notice was not followed. Stack stopped and koala_final dropped after the screenshots.",
+    "compatMain": "pass: a temporary worktree of origin/main c0ae5f1 with only supabase/migrations/20261119000001_accuracy.sql added; origin/main's own e2e on 3000/3001/54321 and koala_e2e: 225 ok, 0 failed, EXIT 0, console errors none; the same 225 checks and steps as origin/main without the migration (only the clock's AM/PM differs). Attempt 1 could not build (Turbopack refuses a symlinked node_modules; replaced by a copy), attempt 2 stopped at the security-upgrade notice, the retry passed. koala_e2e dropped, worktree removed. docs/accuracy/final/compat-main.txt",
+    "hardRule1": "pass for every sent quote document: 2,926 renders of the 77 stored production quotes. Against the before code rendered now: PDFs 308/308, emails 1,078/1,078, page text 770/770 identical; 252 page markups differ only by two class names (flow-B11, flow-B6), byte-identical once those are put back. Against the quotes stage's before set: the same, plus the 2 quotes whose links expired after that set was made (their stored page equals its expired page there). PDFs and emails vs origin/main's code: 1,386/1,386 identical. docs/accuracy/final/hard-rule-1.txt",
+    "golden": "price-golden.ts synthetic and live --with-accuracy-rows (existing export, not re-exported): 65 and 78 estimates, 0 violations, 0 headline changes; byte-identical to after-fixa and after-fixb; docs/accuracy/after/golden-*-after.json",
+    "report": "scripts/accuracy/report.ts: 121 differences against the before set, 0 unexplained, the same list as before review A and B (only the about text changes); docs/accuracy/report/report.json and report-summary.txt",
+    "serviceWorker": "public/sw.js VERSION v11 -> v12 (once past claude/accuracy's v11; the docs branch did not bump it), so phones pick up the merged code"
+  },
+  "ownerQuestions": [
+    "(review A, fixa.json) F9: when an option's own removal would leave less R than is there, keep what is there (done: the option keeps it, and is usually then the same as Better and not shown), or skip the option outright?",
+    "(review A, fixa.json) M1/F9: should an attic floor's joist depth ever cap blown fill (the engine still reads a depth on any job type; the phone no longer sends one for attics)?",
+    "(review A, fixa.json) F11: should an R that the cavity caps be said rounded down (2x4 open-cell R-12.9, not R-13) so it never reads above what the cavity holds, even by the 0.05 of rounding? Today: rounded half up (L18, L23c).",
+    "(review A, fixa.json) F13: price dense-pack walls at 16 in o.c. (122.5 sq ft x in per bag, today) or 24 in o.c. (118.3)? And confirm the bag weight in the row name ('25 lb').",
+    "(review A, fixa.json) F4: a quantity of 0 now means nothing installed (R3). Material already on site is a price change; the phone says so. Keep?",
+    "(review B docs fixer) The consent sentence for a property with no real US state and no parsable shop address names the 'ESIGN Act and the Uniform Electronic Transactions Act' with no state, as OD14 says. Should counsel confirm that wording?",
+    "(review B docs fixer) New estimates now ignore a town or state an owner saved on the old business form; OD14 takes the shop address only. Production has neither saved. Is that acceptable for any other franchise that did save them?",
+    "(review B docs fixer) The seeded shop address 'Newark, DE 19711' still starts every new database's estimates in Newark, DE until the owner sets the shop address on Pricing. Should a new franchise's seeded shop address be blank instead?",
+    "(review B screens fixer, fixb-screens.json) OD15 says what happens when Better is hidden. The same rule (a hidden pick moves to the shown option doing the same work, else the nearest above, else below) is applied to a hidden Good or Best pick too, so one rule covers every pick; in every golden and random quote checked it names the same option the old 'next shown after the pick' rule did. Keep it general, or apply the same-work step to Better only?",
+    "(review B screens fixer, fixb-screens.json) flow-B9: a cost confirmed with 'This cost is right' now widens the stored usual range for good (e.g. $0.06-$0.30), so later typos up to that cost are no longer caught. Is that what you want, or should the confirmation only stick for that exact cost?"
+  ],
+  "leftovers": [
+    "The office Estimates list reads stored options (tier and price only), so it takes OD15's nearest-above step without the same-work step. It names the same option as the phone in every golden, production-stored and random quote checked. Closing it for good needs the recommended tier stored with the estimate (an additive migration). (screens fixer)",
+    "The office phone link inside the OfficeContact sentence on closed quote pages ('call (555) 010-0199') is 130x22: an inline link in a sentence (WCAG 2.5.8's inline exception). Every closed page also shows the contact card beside it, and the superseded, declined and expired pages a 48 px Call/Email button for the same action (ReachUsAction). Not one of flow-B11's named targets; left as is so stored quotes' closed pages keep their markup.",
+    "The checker's informational list of price surfaces points at lib/quotes/pdf.tsx:108 and :194, lines that moved in review A's DOC-4 change (the other 11 pointers are current). It does not affect any check; fixing it changes the violations output, so it was left.",
+    "Franchise text outside app code remains where the hard rule 3 scan does not look: package.json's description, PLAN.md/README.md, migration comments, lib/demo/seed.ts (demo data) and google/apps-script/Code.gs (a Sheets dashboard title 'Koala Insulation of Newark'). None reaches a quote.",
+    "lib/learning/observations.ts still falls back to 'Better, then the first option' for old snapshots without recommendedTier (learning only, not a headline).",
+    "default_city / default_state settings are no longer read by the app (OD14); the SQL sync function's fallback to default_state for an empty property state is unchanged."
+  ],
+  "screenshots": [
+    "docs/accuracy/final/screens/send-step-no-business-profile-390.png (complete estimate, settings as the migration leaves them: no license, no phone; 'Ready to send?', Send enabled, nothing about a business profile)",
+    "docs/accuracy/final/screens/quote-pdf-page1.png (the sent quote's PDF, page 1 at 144 dpi: Koala Insulation, Limited lifetime warranty, terms naming no town)",
+    "docs/accuracy/final/screens/customer-quote-top-390.png and customer-quote-warranty-390.png (the customer's page: 'Koala Insulation' masthead; 'Limited lifetime warranty')",
+    "docs/accuracy/final/screens/quote-email-640.png (the quote email's HTML, through lib/quotes/email.ts quoteEmail on the stored document)",
+    "docs/accuracy/final/screens/options-option-not-shown-390.png (rim joist 150 sq ft: Best recommended, Good and Better 'Not shown to the customer' with the reason)",
+    "docs/accuracy/final/screens/approval-queue-1280.png (owner's Estimates page: 1 price waiting for approval)",
+    "docs/accuracy/final/screens/unreachable-390.png (Koala's database down, the phone that holds its copy: 'Open the estimates on this phone')"
+  ],
+  "evidence": {
+    "e2e": "docs/accuracy/final/e2e.txt",
+    "compatMain": "docs/accuracy/final/compat-main.txt",
+    "hardRule1": "docs/accuracy/final/hard-rule-1.txt",
+    "violations": "docs/accuracy/after/violations.txt",
+    "golden": [
+      "docs/accuracy/after/golden-synthetic-after.json",
+      "docs/accuracy/after/golden-live-after.json"
+    ],
+    "report": [
+      "docs/accuracy/report/report.json",
+      "docs/accuracy/report/report-summary.txt"
+    ],
+    "ledger": "docs/accuracy/ledger.txt section 'Review B fixes and owner decisions OD12-OD16'"
+  }
+}

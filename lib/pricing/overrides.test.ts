@@ -3,10 +3,14 @@
 // overrides) and price (the customer price override, else adjustedPrice).
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { priceEstimate } from './engine';
+import { priceEstimate as priceShown } from './engine';
+import { money } from './finance';
 import { canSendQuote } from './policy';
 import { ACCESS_LEVELS, JOB_TYPES, lineKey, type EstimateInput, type LineOverride, type PricedEstimate, type Tier } from './types';
 import { area, coefficients, estimate, snapshot } from './__fixtures__/seed';
+
+// Pricing math: every priced option, including those the customer is not shown (OD6).
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const price = (input: EstimateInput) => priceEstimate(input, snapshot, coefficients);
 const tier = (r: PricedEstimate, t: Tier) => {
@@ -47,7 +51,9 @@ describe('line overrides change cost and price', () => {
     const mat = good.lines.find((l) => l.key === FG_MAT)!;
     expect(mat).toMatchObject({ qty: 70, cost: 2660, modelQty: 58, modelCost: 2204, designQty: 53.33, isOverridden: true, overrideReason: 'Deep joist bays' });
     expect(good.materialCost).toBe(2660);
-    expect(good.directCost).toBe(tier(plain, 'good').directCost + 456);
+    // 12 more bags ($456) and the install labor for them: 10 h -> 11.72 h, +$68.80 (L7).
+    expect(good.directCost).toBe(money(tier(plain, 'good').directCost + 456 + 68.8));
+    expect(good.lines.find((l) => l.key === FG_LABOR)).toMatchObject({ hours: 11.72, modelHours: 10, isOverridden: false });
     expect(good.modelPrice).toBe(5420);
     expect(good.adjustedPrice).toBeGreaterThan(5420);
     expect(good.price).toBe(good.adjustedPrice);
@@ -92,7 +98,7 @@ describe('line overrides change cost and price', () => {
     expect(good.lines.find((l) => l.key === FG_LABOR)!.hours).toBe(12.35);
   });
 
-  it('a zero override is valid (e.g. materials already on site)', () => {
+  it('a zero override is valid: the line keeps it (the option then installs none of it: review A F4)', () => {
     const good = tier(price(withLines({ [FG_MAT]: { qty: 0, reason: 'Customer supplied' } })), 'good');
     expect(good.lines.find((l) => l.key === FG_MAT)).toMatchObject({ qty: 0, cost: 0, isOverridden: true });
   });
@@ -198,7 +204,14 @@ describe('canSendQuote with line overrides', () => {
     expect(Math.abs(good.price - good.modelPrice) / good.modelPrice).toBeGreaterThan(0.1);
     const r = canSendQuote('estimator', far, settings);
     expect(r.ok).toBe(false);
-    expect(r.reasons).toEqual([expect.stringMatching(/^good: price is \d+\.\d% from the model price; estimators may change it up to 10%/)]);
+    // L34: the message names the price, the model price and what the estimator may quote alone (here
+    // nothing: with 88 bags no price within 10% of the model clears the floor margin).
+    const dollars = (n: number) => `$${n.toLocaleString('en-US')}`;
+    const off = Math.round((Math.abs(good.price - good.modelPrice) / good.modelPrice) * 100);
+    expect(r.reasons).toEqual([
+      `Good: ${dollars(good.price)} is ${off}% above the model price of ${dollars(good.modelPrice)}. With these changes no price you can quote on your own (within 10% of the model price) clears the 25% floor margin. Request approval to send ${dollars(good.price)}.`,
+    ]);
+    expect(r.problems[0]).toMatchObject({ tier: 'good', kind: 'over_limit', price: good.price, modelPrice: good.modelPrice, approver: 'office' });
     expect(canSendQuote('office', far, settings).ok).toBe(true);
     expect(canSendQuote('owner', far, settings).ok).toBe(true);
   });

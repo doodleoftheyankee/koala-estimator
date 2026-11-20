@@ -68,6 +68,10 @@ export function buildLineOverride(metric: LineMetric, value: number | null, reas
     return { ok: false, error: metric === 'qty' ? 'Enter a quantity.' : 'Enter the person-hours.' };
   }
   if (value < 0) return { ok: false, error: 'The number cannot be negative.' };
+  // A material quantity is what is installed (R3): 0 installs nothing (review A F4).
+  if (metric === 'qty' && value === 0) {
+    return { ok: false, error: 'A quantity of 0 installs nothing. Enter the quantity to install; for material already on site, change the price instead.' };
+  }
   const candidate: LineOverride = metric === 'qty' ? { qty: value, reason: reason.trim() } : { hours: value, reason: reason.trim() };
   if (tier) candidate.tier = tier;
   const parsed = lineOverrideSchema.safeParse(candidate);

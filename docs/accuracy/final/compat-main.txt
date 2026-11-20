@@ -1,0 +1,64 @@
+ORIGIN/MAIN COMPATIBILITY ON THE SAME DATABASE (hard rule 2), Nov 19 2026
+
+What ran
+  A temporary git worktree of origin/main (c0ae5f1, the live site's code), with one file added:
+  supabase/migrations/20261119000001_accuracy.sql from claude/accuracy (the round's only new
+  migration, with the review B sections: OD12/OD13 conditional seed replacements, price_approvals
+  loaded_cost and its guard, insert revoked from signed-in users). origin/main's own scripts/e2e.sh
+  and tests/e2e/run.mjs ran it, on their fixed ports 3000/3001/54321 and database koala_e2e
+  (nothing else was on those ports). node_modules was a copy of claude/accuracy's (origin/main's
+  dependencies are a subset); Turbopack refuses a symlinked one, so the first attempt stopped at the
+  build with "Could not find the Next.js package" before any check ran. The second attempt stopped
+  at the Next.js build's security-upgrade notice; the same command was retried once (nothing
+  upgraded, the notice not followed).
+
+Result
+  225 ok, 0 failed, EXIT=0, console errors: none.
+  The same 225 checks and the same steps as origin/main's e2e without the migration (the flow
+  stage's baseline run: 225 ok); the one difference in the check text is the clock ("AM" -> "PM")
+  in the Roof lookup page's recent-lookups line. The baseline's single console line,
+  net::ERR_INTERNET_DISCONNECTED on /api/estimates in its offline step, did not appear this time;
+  it is a timing artefact of origin/main's own offline step, not related to the migration.
+  The database koala_e2e was dropped and the worktree removed afterwards.
+
+Tail of the log (origin/main's e2e with the new migration)
+  ok: and the report still prints on one letter page
+  ok: Print names the PDF after the house on the page too
+• offline estimate
+  ok: offline, the Roof lookup page opens and says it needs internet
+  ok: the satellite lookup is off without signal
+  ok: and says why
+  offline prices [ '$2,375', '$4,095', '$4,650' ]
+  db before reconnect: 1
+  db after reconnect: 2 estimates; Lee:false,Offline:true
+• owner screens
+  ok: the owner's menu has Roof lookup, with everyone's recent lookups and who looked each up
+  estimates rows mention Lee/Offline: true true
+  material audit: 1
+  estimator on /admin/pricing ends at: /field
+• office schedules the job and assigns Crew A
+  ok: job scheduled for Crew A today
+• crew starts the job on a phone
+  ok: crew started the job
+  ok: crew screens show no prices
+  ok: crew jobs API returns no prices or costs
+• crew enters actuals and completes the job
+  ok: crew completed the job
+  actuals: 3 rows; 36.400 h
+  ok: whole-job actuals synced
+  ok: crew is kept out of the priced field app
+• office verifies the actuals
+  ok: all actuals verified
+  ok: actuals changes are audited
+• nightly learning run (cron)
+  ok: cron refuses a request without the secret
+  cron 200 {"startedAt":"2026-11-19T14:43:57.228Z","finishedAt":"2026-11-19T14:43:57.469Z","trigger":"cron","expiredQuotes":0,"calibration":{"runId":"9b5cd7c0-d11f-4e2a-b216-2777620c0127","status":"succeeded","jobsConsidered":1,"jobsUsed":1,"candidateSetId":null,"changedCount":0,"promoted":false,"gates":[{"name":"sanity","passed":true,"detail":"All 27 coefficients are finite, positive and within bounds."},{"name":"bounds","passed":true,"detail":"0 clamped to bounds."},{"name":"step_limit","passed":true,"detail":"0 limited to ±10% of the active value."},{"name":"min_evidence","passed":true,"detail":"4 hel
+  ok: nightly run succeeded
+  ok: learning run recorded
+• owner learning dashboard
+  run now: Learning run finished. Calibration: no coefficient moved (1 of 1 completed job usable). Win model not trained: Only 1 decided quote; the win model needs at least 40. Showing win rates by bucket only.
+  estimator on /admin/learning ends at: /field
+  ok: estimators cannot open the learning dashboard
+console errors: none
+Screenshots: /tmp/tmp.is2XY9eq5q/shots
+EXIT=0

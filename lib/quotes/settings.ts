@@ -3,12 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { DEFAULT_BRAND_COLOR, type Branding } from './model';
 
-export const DEFAULT_COMPANY = 'Koala Insulation of Newark';
+// What a quote prints when a setting is not filled in (OD12, OD13): the brand, terms that name no
+// town, and the warranty the owner gave. The accuracy migration writes the same words over the seeds
+// (supabase/migrations/20261119000001_accuracy.sql, "owner decisions OD12 and OD13").
+export const DEFAULT_COMPANY = 'Koala Insulation';
 export const DEFAULT_VALID_DAYS = 30;
 export const DEFAULT_TERMS =
-  'Quote valid for the period shown. A signed quote authorizes Koala Insulation of Newark to schedule the work. ' +
+  'Quote valid for the period shown. A signed quote authorizes Koala Insulation to schedule the work. ' +
   'Final price may change only if hidden conditions are found; any change requires your written approval.';
-export const DEFAULT_WARRANTY = 'Workmanship warranty details are available from our office.';
+export const DEFAULT_WARRANTY = 'Limited lifetime warranty';
 
 export interface QuoteSettings {
   branding: Branding;
@@ -17,11 +20,18 @@ export interface QuoteSettings {
   validDays: number;
 }
 
+/**
+ * A stored text a quote can print: trimmed, and not empty. Anything that still says PLACEHOLDER (a
+ * seed nobody replaced, or one typed in) counts as not filled in, so the default is printed or the
+ * detail is left off (OD12): a customer never reads "PLACEHOLDER".
+ */
+function toText(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() && !/placeholder/i.test(v) ? v.trim() : null;
+}
+
 const optText = z
-  .string()
-  .trim()
-  .nullish()
-  .transform((v) => (v ? v : null))
+  .unknown()
+  .transform(toText)
   .catch(null);
 
 const brandingSchema = z
@@ -38,10 +48,6 @@ const brandingSchema = z
   .catch({});
 
 const HEX = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
-
-function toText(v: unknown): string | null {
-  return typeof v === 'string' && v.trim() ? v.trim() : null;
-}
 
 /** Pure mapping from app_settings rows; exported for tests. */
 export function quoteSettingsFromRows(rows: Array<{ key: string; value: unknown }>): QuoteSettings {
@@ -71,10 +77,17 @@ export function quoteSettingsFromRows(rows: Array<{ key: string; value: unknown 
 }
 
 export async function loadQuoteSettings(supabase: SupabaseClient): Promise<QuoteSettings> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('key, value')
-    .in('key', ['branding', 'quote_terms', 'warranty_text', 'quote_valid_days']);
+  return quoteSettingsFromRows(await loadQuoteSettingRows(supabase));
+}
+
+/**
+ * Every setting a quote is built from: what quoteSettingsFromRows reads, and what lib/quotes/profile.ts
+ * reads (the quote number prefix, and the shop address for new estimates' town and the consent state).
+ */
+export const QUOTE_SETTING_KEYS = ['branding', 'quote_terms', 'warranty_text', 'quote_valid_days', 'quote_number_prefix', 'shop_address'] as const;
+
+export async function loadQuoteSettingRows(supabase: SupabaseClient): Promise<Array<{ key: string; value: unknown }>> {
+  const { data, error } = await supabase.from('app_settings').select('key, value').in('key', [...QUOTE_SETTING_KEYS]);
   if (error) throw new Error(`Loading quote settings failed: ${error.message}`);
-  return quoteSettingsFromRows((data ?? []) as Array<{ key: string; value: unknown }>);
+  return (data ?? []) as Array<{ key: string; value: unknown }>;
 }

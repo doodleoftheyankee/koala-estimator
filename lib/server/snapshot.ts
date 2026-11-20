@@ -2,8 +2,10 @@
 // Pure (no I/O) so it can be tested; loadPricingBundle in bundle.ts does the queries.
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { PRIMARY_ASSEMBLY, pricedCodeRequirement } from '@/lib/admin/codes';
 import type {
   CoefficientSet,
+  JobType,
   PricingBundle,
   WinModel,
   PricingSettings,
@@ -75,7 +77,18 @@ export function settingString(rows: SettingRow[], key: string): string | null {
 export interface SnapshotRows {
   settings: SettingRow[];
   products: Array<{ id: string; code: string; label: string; unit: string; r_per_inch: number | string | null; is_r_bearing: boolean }>;
-  materials: Array<{ id: string; product_id: string; name: string; unit: string; cost_per_unit: number | string; coverage_sqft_in: number | string | null }>;
+  materials: Array<{
+    id: string;
+    product_id: string;
+    name: string;
+    unit: string;
+    cost_per_unit: number | string;
+    coverage_sqft_in: number | string | null;
+    /** Absent in rows read before the accuracy migration (20261119000001). */
+    job_type?: string | null;
+    r_value?: number | string | null;
+    thickness_in?: number | string | null;
+  }>;
   crews: Array<{ id: string; name: string; size: number; blended_hourly_cost: number | string }>;
   codeRequirements: Array<{ job_type: string; min_r: number | string; code_edition: string; assembly: string }>;
   tierTemplates: Array<{
@@ -122,14 +135,6 @@ const n = (v: number | string) => Number(v);
 const nn = (v: number | string | null) => (v === null ? null : Number(v));
 
 // Which assembly's code minimum drives the default target for each job type.
-const PRIMARY_ASSEMBLY: Record<string, string> = {
-  attic: 'ceiling',
-  walls: 'wood_frame_wall',
-  crawlspace: 'floor',
-  rim_joist: 'basement_wall',
-  garage: 'ceiling',
-  commercial: 'ceiling',
-};
 
 export function buildSnapshot(rows: SnapshotRows): { snapshot: PricingSnapshot; coefficientSet: CoefficientSet } {
   const settings = parseSettings(rows.settings);
@@ -154,13 +159,14 @@ export function buildSnapshot(rows: SnapshotRows): { snapshot: PricingSnapshot; 
         unit: m.unit as ProductUnit,
         costPerUnit: n(m.cost_per_unit),
         coverageSqftIn: nn(m.coverage_sqft_in),
+        // Only on a job-type or sized material, so a general material reads as it always has.
+        ...(m.job_type ? { jobType: m.job_type as JobType } : {}),
+        ...(m.r_value != null && m.thickness_in != null ? { rValue: n(m.r_value), thicknessIn: n(m.thickness_in) } : {}),
       })),
     crews: rows.crews.map((c) => ({ id: c.id, name: c.name, size: c.size, blendedHourlyCost: n(c.blended_hourly_cost) })),
     defaultCrewId,
-    codeRequirements: Object.entries(PRIMARY_ASSEMBLY).flatMap(([jobType, assembly]) => {
-      const r =
-        rows.codeRequirements.find((c) => c.job_type === jobType && c.assembly === assembly) ??
-        rows.codeRequirements.find((c) => c.job_type === jobType);
+    codeRequirements: Object.keys(PRIMARY_ASSEMBLY).flatMap((jobType) => {
+      const r = pricedCodeRequirement(rows.codeRequirements, jobType);
       return r
         ? [{ jobType: jobType as PricingSnapshot['codeRequirements'][number]['jobType'], minR: n(r.min_r), edition: r.code_edition }]
         : [];
@@ -212,7 +218,14 @@ export function makeBundle(rows: SnapshotRows, now = new Date()): PricingBundle 
   const { snapshot, coefficientSet } = buildSnapshot(rows);
   // Sort for a stable hash regardless of query order.
   snapshot.products.sort((a, b) => a.code.localeCompare(b.code));
-  snapshot.materials.sort((a, b) => a.productCode.localeCompare(b.productCode));
+  // Each product's general material first, then its job-type materials, then its sizes by R.
+  snapshot.materials.sort(
+    (a, b) =>
+      a.productCode.localeCompare(b.productCode) ||
+      (a.jobType ?? '').localeCompare(b.jobType ?? '') ||
+      (a.rValue ?? 0) - (b.rValue ?? 0) ||
+      a.name.localeCompare(b.name),
+  );
   snapshot.crews.sort((a, b) => a.name.localeCompare(b.name));
   snapshot.tierTemplates.sort((a, b) => `${a.jobType}/${a.tier}`.localeCompare(`${b.jobType}/${b.tier}`));
   coefficientSet.coefficients.sort((a, b) =>

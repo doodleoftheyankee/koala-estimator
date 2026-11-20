@@ -1,0 +1,32 @@
+AFTER THE CAVITY STAGE (L18-L24: insulation that fits)
+
+What these files are
+  violations-20261118.txt                npm run accuracy:violations -- 10000 20261118 (seeded pricing,
+                                         now with the accuracy migration's rows)
+  violations-before-cavity-20261118.txt  the same run on the engine after the money stage (50814c5),
+                                         counted with this stage's checker, so the two compare kind for kind
+  golden-synthetic-after-cavity.json     price-golden.ts synthetic
+  golden-live-after-cavity.json          price-golden.ts live --with-accuracy-rows: the read-only production
+                                         export's rows plus the rows the migration adds; counts and option
+                                         totals keyed by estimate id only (no names or addresses)
+
+10,000 random quotes, seed 20261118 (after money -> after cavity, same checker)
+  items_add_up            0 -> 0
+  same_work_same_price    0 -> 0
+  options_step_up         0 -> 0
+  labels_match_work       1,168 quotes / 1,468 -> 0 (full_cavity_not_filled 731, code_below_code 472,
+                          qty_below_stated_r 265 -> 0)
+  cavity_not_overfilled   2,004 / 4,654 -> 0 (overfilled 2,715, overfilled_no_depth 1,939 -> 0)
+  finite_amounts          0 -> 0
+  same_price_text         9,329 / 116,642 -> 9,033 / 111,893 (the next stage: L8 whole dollars on the
+                          accept sentence, signed page, signed PDF and emails; L9 the office list headline)
+  valid_until_is_expiry   1,684 -> 1,626 (the next stage: L13)
+  Options priced 27,400 -> 26,333; shown 23,083 -> 22,145; quotes with no option 671 -> 967 (cavities
+  already full, and batts that do not fit, get no option: cavity_full).
+  The quote-text and valid-until counts move only because fewer options and quotes are priced.
+
+Golden sets (estimates failing, after money -> after cavity)
+  Synthetic (65): cavity 11 -> 0; items, same work, step up, labels 0 -> 0; same price text 64 -> 63
+                  (R-L19 has no option now); valid until 3 -> 3.
+  Live (78):      every money and cavity rule 0 -> 0; same price text 78 -> 78; valid until 16 -> 16.
+                  No shown option total changed; 20 batt items name their size.

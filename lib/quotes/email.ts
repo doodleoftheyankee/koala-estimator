@@ -2,13 +2,14 @@
 // Without RESEND_API_KEY, emails are logged instead of sent so local dev works.
 import { Resend } from 'resend';
 import { serverEnv } from '@/lib/env';
+import { calendarDay, formatDateLong } from '@/lib/format';
 import type { Financing, Tier } from '@/lib/pricing';
-import { formatUsd, type QuoteDocument } from './model';
+import { documentTimeZone, quoteMoney, sentenceMoney, type QuoteDocument } from './model';
 
 /** "As low as $X/mo for N months at Y% APR, subject to credit approval" (+ provider when set). */
 export function financingLine(f: Financing): string {
   const apr = Number((f.apr * 100).toFixed(2));
-  const base = `As low as ${formatUsd(Math.ceil(f.monthly))}/mo for ${f.termMonths} months at ${apr}% APR, subject to credit approval`;
+  const base = `As low as ${quoteMoney(Math.ceil(f.monthly))}/mo for ${f.termMonths} months at ${apr}% APR, subject to credit approval`;
   return f.provider ? `${base}. Financing through ${f.provider}.` : `${base}.`;
 }
 
@@ -99,10 +100,8 @@ function firstName(doc: QuoteDocument): string {
   return doc.customer.name.split(/\s+/)[0] || 'there';
 }
 
-function formatDate(isoDate: string): string {
-  const d = new Date(isoDate.length === 10 ? `${isoDate}T12:00:00Z` : isoDate);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
-}
+/** "December 17, 2026" (lib/format.ts, in the document's zone; a stored calendar day reads as that day). */
+const formatDate = (isoDate: string, doc: Pick<QuoteDocument, 'timeZone'>): string => formatDateLong(calendarDay(isoDate), documentTimeZone(doc));
 
 function layout(doc: QuoteDocument, bodyHtml: string): string {
   const b = doc.branding;
@@ -133,7 +132,7 @@ export function quoteEmail(doc: QuoteDocument, url: string): EmailTemplate {
   const optionRows = doc.options
     .map(
       (o) =>
-        `<tr><td style="padding:6px 0;">${escapeHtml(optionName(doc, o.tier))}${o.tier === doc.recommendedTier ? ' <strong>(recommended)</strong>' : ''}</td><td style="padding:6px 0;text-align:right;font-weight:bold;">${escapeHtml(formatUsd(o.price))}</td></tr>`,
+        `<tr><td style="padding:6px 0;">${escapeHtml(optionName(doc, o.tier))}${o.tier === doc.recommendedTier ? ' <strong>(recommended)</strong>' : ''}</td><td style="padding:6px 0;text-align:right;font-weight:bold;">${escapeHtml(quoteMoney(o.price))}</td></tr>`,
     )
     .join('');
   const html = layout(
@@ -142,7 +141,7 @@ export function quoteEmail(doc: QuoteDocument, url: string): EmailTemplate {
 <p>Thank you for having us out to ${escapeHtml(doc.property.line1)}. Your quote <strong>${escapeHtml(doc.quoteNumber)}</strong> is ready. You can review each option, pick the one that fits, and sign online.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:12px 0;">${optionRows}</table>
 ${button(doc, url, 'View and sign your quote')}
-<p style="font-size:14px;color:#475569;">This quote is valid until ${escapeHtml(formatDate(doc.validUntil))}. Questions? Reply to this email or contact ${escapeHtml(doc.estimator.name)}${doc.estimator.email ? ` at ${escapeHtml(doc.estimator.email)}` : ''}.</p>
+<p style="font-size:14px;color:#475569;">This quote is valid until ${escapeHtml(formatDate(doc.validUntil, doc))}. Questions? Reply to this email or contact ${escapeHtml(doc.estimator.name)}${doc.estimator.email ? ` at ${escapeHtml(doc.estimator.email)}` : ''}.</p>
 <p style="font-size:12px;color:#64748b;word-break:break-all;">If the button does not work, copy this link into your browser:<br>${escapeHtml(url)}</p>`,
   );
   const text = [
@@ -151,12 +150,12 @@ ${button(doc, url, 'View and sign your quote')}
     `Thank you for having us out to ${doc.property.line1}. Your quote ${doc.quoteNumber} is ready.`,
     '',
     ...doc.options.map(
-      (o) => `- ${optionName(doc, o.tier)}: ${formatUsd(o.price)}${o.tier === doc.recommendedTier ? ' (recommended)' : ''}`,
+      (o) => `- ${optionName(doc, o.tier)}: ${quoteMoney(o.price)}${o.tier === doc.recommendedTier ? ' (recommended)' : ''}`,
     ),
     '',
     `View and sign your quote: ${url}`,
     '',
-    `This quote is valid until ${formatDate(doc.validUntil)}. Questions? Contact ${doc.estimator.name}${doc.estimator.email ? ` at ${doc.estimator.email}` : ''}.`,
+    `This quote is valid until ${formatDate(doc.validUntil, doc)}. Questions? Contact ${doc.estimator.name}${doc.estimator.email ? ` at ${doc.estimator.email}` : ''}.`,
     '',
     textFooter(doc),
   ].join('\n');
@@ -170,7 +169,7 @@ export function signedConfirmationEmail(doc: QuoteDocument, tier: Tier, price: n
     doc,
     `<p>Hi ${escapeHtml(firstName(doc))},</p>
 <p>Thank you! We received your signed quote <strong>${escapeHtml(doc.quoteNumber)}</strong>.</p>
-<p style="font-size:15px;background:#f8fafc;border-radius:8px;padding:12px;">Option: <strong>${escapeHtml(optionName(doc, tier))}</strong><br>Price: <strong>${escapeHtml(formatUsd(price, true))}</strong><br>Property: ${escapeHtml(doc.property.line1)}, ${escapeHtml(doc.property.line2)}</p>
+<p style="font-size:15px;background:#f8fafc;border-radius:8px;padding:12px;">Option: <strong>${escapeHtml(optionName(doc, tier))}</strong><br>Price: <strong>${escapeHtml(sentenceMoney(doc, price))}</strong><br>Property: ${escapeHtml(doc.property.line1)}, ${escapeHtml(doc.property.line2)}</p>
 ${pdfUrl ? button(doc, pdfUrl, 'Download your signed quote') : ''}
 <p>Our office will contact you shortly to schedule the work${phone ? `. You can also reach us at ${escapeHtml(phone)}` : ''}.</p>`,
   );
@@ -179,7 +178,7 @@ ${pdfUrl ? button(doc, pdfUrl, 'Download your signed quote') : ''}
     '',
     `Thank you! We received your signed quote ${doc.quoteNumber}.`,
     `Option: ${optionName(doc, tier)}`,
-    `Price: ${formatUsd(price, true)}`,
+    `Price: ${sentenceMoney(doc, price)}`,
     `Property: ${doc.property.line1}, ${doc.property.line2}`,
     ...(pdfUrl ? ['', `Download your signed quote: ${pdfUrl}`] : []),
     '',
@@ -192,17 +191,17 @@ ${pdfUrl ? button(doc, pdfUrl, 'Download your signed quote') : ''}
 
 export function officeSignedNotice(doc: QuoteDocument, tier: Tier, price: number, estimateId: string): EmailTemplate {
   const url = `${serverEnv.appUrl()}/field?e=${encodeURIComponent(estimateId)}`;
-  const subject = `Quote signed: ${doc.customer.name} - ${formatUsd(price)} (${doc.quoteNumber})`;
+  const subject = `Quote signed: ${doc.customer.name} - ${quoteMoney(price)} (${doc.quoteNumber})`;
   const html = layout(
     doc,
     `<p><strong>${escapeHtml(doc.customer.name)}</strong> signed quote <strong>${escapeHtml(doc.quoteNumber)}</strong>.</p>
-<p style="font-size:15px;background:#f8fafc;border-radius:8px;padding:12px;">Option: <strong>${escapeHtml(optionName(doc, tier))}</strong><br>Price: <strong>${escapeHtml(formatUsd(price, true))}</strong><br>Property: ${escapeHtml(doc.property.line1)}, ${escapeHtml(doc.property.line2)}<br>Customer: ${escapeHtml([doc.customer.email, doc.customer.phone].filter(Boolean).join(' / ') || 'no contact on file')}<br>Estimator: ${escapeHtml(doc.estimator.name)}</p>
+<p style="font-size:15px;background:#f8fafc;border-radius:8px;padding:12px;">Option: <strong>${escapeHtml(optionName(doc, tier))}</strong><br>Price: <strong>${escapeHtml(sentenceMoney(doc, price))}</strong><br>Property: ${escapeHtml(doc.property.line1)}, ${escapeHtml(doc.property.line2)}<br>Customer: ${escapeHtml([doc.customer.email, doc.customer.phone].filter(Boolean).join(' / ') || 'no contact on file')}<br>Estimator: ${escapeHtml(doc.estimator.name)}</p>
 ${button(doc, url, 'Open the estimate')}`,
   );
   const text = [
     `${doc.customer.name} signed quote ${doc.quoteNumber}.`,
     `Option: ${optionName(doc, tier)}`,
-    `Price: ${formatUsd(price, true)}`,
+    `Price: ${sentenceMoney(doc, price)}`,
     `Property: ${doc.property.line1}, ${doc.property.line2}`,
     `Customer: ${[doc.customer.email, doc.customer.phone].filter(Boolean).join(' / ') || 'no contact on file'}`,
     `Estimator: ${doc.estimator.name}`,

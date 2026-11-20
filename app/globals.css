@@ -1,32 +1,652 @@
 @import 'tailwindcss';
 
-/* Brand tokens. Koala's real colors go here once the owner supplies them. */
-@theme {
-  --color-brand-50: #f0fdfa;
-  --color-brand-100: #ccfbf1;
-  --color-brand-500: #14b8a6;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
-  --color-brand-800: #115e59;
-  --color-brand-900: #134e4a;
-}
+/* =================================================================================================
+   DAYMARK: Koala Estimator's visual system.
+   Black ink on chalk-white, one hi-vis action colour (#D4F53C) that always carries ink text and a
+   2px ink edge, condensed gauge numerals and wide sign labels. Spec: the Daymark DIRECTION.md.
+   The living sheet is the /design page (staff only).
 
-:root {
+   THEMES (set by the inline script in app/layout.tsx from the device's choice; see lib/theme.ts)
+     Day    default                      :root, [data-theme='day']
+     Night  [data-theme='night']         and prefers-color-scheme: dark while the choice is "system"
+     Sun+   [data-theme='sun']           and prefers-contrast: more while the choice is "system"
+   The theme selectors work on any element, so a wrapper can show another theme (the /design page
+   does). Night and Sun+ are screen-only: print always uses Day.
+
+   REGISTERS
+     field  default. Full Daymark for estimator and crew phone screens: 2px edges, keel shadows,
+            hi-vis on the chosen value and on the one primary action.
+     quiet  [data-register='quiet'] on a wrapper: the customer quote and the desktop office, owner
+            and admin screens. 1px rules, no keel shadow, chosen values get the pale hi-vis wash
+            with an ink edge (hi-vis fill only on the one primary action), and every digit in
+            running text comes from Archivo, whose zero is plain (Atkinson's zero is slashed).
+
+   Every token below is a CSS variable; Tailwind utilities for them are declared in @theme inline
+   (bg-surface, text-ink, border-edge, bg-hivis, text-on-hivis, bg-ok-fill ...). The contrast
+   promises are tested in lib/design/contrast.test.ts, which reads this file.
+   ================================================================================================= */
+
+/* ---------- Day (default) ---------- */
+:root,
+[data-theme='day'],
+[data-theme='sun'] {
   color-scheme: light;
+  /* surfaces */
+  --canvas: #edede7;
+  --surface: #ffffff;
+  --sunken: #f5f5f1;
+  --scrim: rgba(12, 14, 16, 0.55);
+  /* ink */
+  --ink: #0c0e10;
+  --ink-2: #31363b;
+  --ink-3: #535a61;
+  /* placeholder text in a field: never the colour of a typed value (review B flow-B6) */
+  --placeholder: #535a61;
+  --on-ink: #ffffff;
+  --ink-accent: #d4f53c;
+  --line: #d6d8d1;
+  --line-strong: #6e747a;
+  --edge: #0c0e10;
+  --rule: #0c0e10;
+  /* the one action colour: always with ink text (--on-hivis) and a 2px ink edge (--hivis-edge) */
+  --hivis: #d4f53c;
+  --hivis-press: #bfe021;
+  --on-hivis: #0c0e10;
+  --hivis-edge: #0c0e10;
+  --hivis-wash: #f3fbd2;
+  /* status */
+  --ok: #0b6e35;
+  --ok-fill: #ddf3e3;
+  --on-ok: #ffffff;
+  --warn: #6b4200;
+  --warn-fill: #ffe8a6;
+  --hazard: #f5b700;
+  --on-hazard: #0c0e10;
+  --bad: #b3171c;
+  --bad-fill: #ffe2df;
+  --on-bad: #ffffff;
+  --info: #1b44c2;
+  --info-fill: #e0e8ff;
+  --viewed: #5b21b6;
+  --viewed-fill: #eee3ff;
+  --draft-fill: #e4e5df;
+  --track: #d6d8d1;
+  --track-edge: transparent;
+  --focus: #0c0e10;
+  /* shape */
+  --bw: 2px;
+  --bw-x: 3px;
+  --bw-go: 2px;
+  --keel: 0 4px 0 0 #0c0e10;
+  --keel-s: 0 3px 0 0 #0c0e10;
+  --keel-go: 0 4px 0 0 #0c0e10;
+  --lift: 0 10px 24px -8px rgba(12, 14, 16, 0.35);
 }
 
-html,
-body {
-  background: #f8fafc;
-  color: #0f172a;
-  -webkit-tap-highlight-color: transparent;
+/* ---------- Night ---------- */
+@media screen {
+  [data-theme='night'] {
+    color-scheme: dark;
+    --canvas: #0a0b0c;
+    --surface: #15171a;
+    --sunken: #0f1113;
+    --scrim: rgba(0, 0, 0, 0.65);
+    --ink: #f2f3ee;
+    --ink-2: #c9cdd1;
+    --ink-3: #a0a7ae;
+    --placeholder: #a0a7ae;
+    --on-ink: #15171a;
+    --ink-accent: #0b6e35;
+    --line: #2b2f34;
+    --line-strong: #7d858d;
+    --edge: #5e666e;
+    --rule: #5e666e;
+    --hivis: #d4f53c;
+    --hivis-press: #bfe021;
+    --on-hivis: #0c0e10;
+    --hivis-edge: #0c0e10;
+    --hivis-wash: #232b0e;
+    --ok: #5bd68a;
+    --ok-fill: #10301d;
+    --on-ok: #0c0e10;
+    --warn: #ffc94a;
+    --warn-fill: #33270a;
+    --hazard: #f5b700;
+    --on-hazard: #0c0e10;
+    --bad: #ff7a6e;
+    --bad-fill: #3a1512;
+    --on-bad: #0c0e10;
+    --info: #8db0ff;
+    --info-fill: #14234a;
+    --viewed: #c7a6ff;
+    --viewed-fill: #2a1a47;
+    --draft-fill: #24282c;
+    --track: #2b2f34;
+    --track-edge: transparent;
+    --focus: #d4f53c;
+    --bw: 2px;
+    --bw-x: 3px;
+    --bw-go: 2px;
+    --keel: 0 4px 0 0 #000000;
+    --keel-s: 0 3px 0 0 #000000;
+    --keel-go: 0 4px 0 0 #7e9620;
+    --lift: 0 10px 24px -8px rgba(0, 0, 0, 0.6);
+  }
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --canvas: #0a0b0c;
+    --surface: #15171a;
+    --sunken: #0f1113;
+    --scrim: rgba(0, 0, 0, 0.65);
+    --ink: #f2f3ee;
+    --ink-2: #c9cdd1;
+    --ink-3: #a0a7ae;
+    --placeholder: #a0a7ae;
+    --on-ink: #15171a;
+    --ink-accent: #0b6e35;
+    --line: #2b2f34;
+    --line-strong: #7d858d;
+    --edge: #5e666e;
+    --rule: #5e666e;
+    --hivis: #d4f53c;
+    --hivis-press: #bfe021;
+    --on-hivis: #0c0e10;
+    --hivis-edge: #0c0e10;
+    --hivis-wash: #232b0e;
+    --ok: #5bd68a;
+    --ok-fill: #10301d;
+    --on-ok: #0c0e10;
+    --warn: #ffc94a;
+    --warn-fill: #33270a;
+    --hazard: #f5b700;
+    --on-hazard: #0c0e10;
+    --bad: #ff7a6e;
+    --bad-fill: #3a1512;
+    --on-bad: #0c0e10;
+    --info: #8db0ff;
+    --info-fill: #14234a;
+    --viewed: #c7a6ff;
+    --viewed-fill: #2a1a47;
+    --draft-fill: #24282c;
+    --track: #2b2f34;
+    --track-edge: transparent;
+    --focus: #d4f53c;
+    --bw: 2px;
+    --bw-x: 3px;
+    --bw-go: 2px;
+    --keel: 0 4px 0 0 #000000;
+    --keel-s: 0 3px 0 0 #000000;
+    --keel-go: 0 4px 0 0 #7e9620;
+    --lift: 0 10px 24px -8px rgba(0, 0, 0, 0.6);
+  }
 }
 
-/* Large, glove-friendly inputs; no iOS zoom on focus (needs >= 16px). */
-input,
-select,
-textarea {
-  font-size: 16px;
+/* ---------- Sun+ : maximum contrast for direct sun (Day plus these) ---------- */
+@media screen {
+  [data-theme='sun'] {
+    --canvas: #ffffff;
+    --sunken: #ffffff;
+    --ink: #000000;
+    --ink-2: #000000;
+    --ink-3: #000000;
+    /* grey (7.56:1 on white) and italic, so an empty field never reads as filled */
+    --placeholder: #4b5563;
+    --line: #000000;
+    --line-strong: #000000;
+    --edge: #000000;
+    --rule: #000000;
+    --on-hivis: #000000;
+    --hivis-edge: #000000;
+    --focus: #000000;
+    --track: #ffffff;
+    --track-edge: #000000;
+    --bw: 3px;
+    --bw-x: 3px;
+    --bw-go: 3px;
+    --keel: 0 4px 0 0 #000000;
+    --keel-s: 0 3px 0 0 #000000;
+    --keel-go: 0 4px 0 0 #000000;
+  }
+}
+@media screen and (prefers-contrast: more) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --canvas: #ffffff;
+    --surface: #ffffff;
+    --sunken: #ffffff;
+    --scrim: rgba(12, 14, 16, 0.55);
+    --ink: #000000;
+    --ink-2: #000000;
+    --ink-3: #000000;
+    --placeholder: #4b5563;
+    --on-ink: #ffffff;
+    --ink-accent: #d4f53c;
+  --ink-accent: #d4f53c;
+    --line: #000000;
+    --line-strong: #000000;
+    --edge: #000000;
+    --rule: #000000;
+    --hivis: #d4f53c;
+    --hivis-press: #bfe021;
+    --on-hivis: #000000;
+    --hivis-edge: #000000;
+    --hivis-wash: #f3fbd2;
+    --ok: #0b6e35;
+    --ok-fill: #ddf3e3;
+    --on-ok: #ffffff;
+    --warn: #6b4200;
+    --warn-fill: #ffe8a6;
+    --hazard: #f5b700;
+    --on-hazard: #0c0e10;
+    --bad: #b3171c;
+    --bad-fill: #ffe2df;
+    --on-bad: #ffffff;
+    --info: #1b44c2;
+    --info-fill: #e0e8ff;
+    --viewed: #5b21b6;
+    --viewed-fill: #eee3ff;
+    --draft-fill: #e4e5df;
+    --track: #ffffff;
+    --track-edge: #000000;
+    --focus: #000000;
+    --bw: 3px;
+    --bw-x: 3px;
+    --bw-go: 3px;
+    --keel: 0 4px 0 0 #000000;
+    --keel-s: 0 3px 0 0 #000000;
+    --keel-go: 0 4px 0 0 #000000;
+    --lift: 0 10px 24px -8px rgba(12, 14, 16, 0.35);
+  }
+}
+
+/* ---------- Theme-independent tokens ---------- */
+:root {
+  /* Roof map (aerial photo). Every edge line is drawn on a 2px ink casing (--e-casing) so it
+     stands out from lawn and shingles alike; each colour is checked against the casing. */
+  --e-casing: #0c0e10;
+  --e-ridge: #ff453a;
+  --e-hip: #ff9f0a;
+  --e-valley: #2fd0ff;
+  --e-eave: #ffffff;
+  --e-rake: #c58bff;
+  --e-break: #ffe14d;
+  /* Flashing edges DIRECTION.md does not list; both are well above 4.5:1 on the casing. */
+  --e-step: #ff7ad0;
+  --e-headwall: #4cd07d;
+  --face-badge: #0c0e10;
+  --on-face-badge: #ffffff;
+  /* Photo frames, lightboxes and the map key stay dark in every theme. */
+  --frame: #0c0e10;
+  --on-frame: #ffffff;
+  /* radii */
+  --r-s: 8px;
+  --r-tag: 7px;
+  --r-m: 12px;
+  --r-l: 16px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+  /* type */
+  --f-text: var(--font-atkinson, 'Atkinson Hyperlegible Next'), ui-sans-serif, system-ui, sans-serif;
+  --f-num: var(--font-archivo, 'Archivo'), 'Arial Narrow', Arial, sans-serif;
+  /* motion */
+  --t-press: 80ms;
+  --t-quick: 140ms;
+  --t-move: 220ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* safe areas */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* register (field by default): what a chosen value looks like, and control heights */
+  --chosen-fill: var(--hivis);
+  --on-chosen: var(--on-hivis);
+  --chosen-edge: var(--hivis-edge);
+  /* the register's main action (Button variant "main", and ui.tsx's primary): hi-vis here,
+     ink in the quiet register, where a page may still carry several of them */
+  --main-fill: var(--hivis);
+  --on-main: var(--on-hivis);
+  --main-edge: var(--hivis-edge);
+  --main-keel: var(--keel-go);
+  --ctl-h: 56px;
+  --ctl-h-go: 64px;
+}
+
+/* ---------- Quiet register ---------- */
+[data-register='quiet'] {
+  --bw: 1px;
+  --bw-x: 2px;
+  /* No keel: a transparent zero shadow (not "none") so shadow lists that include it stay valid. */
+  --keel: 0 0 #0000;
+  --keel-s: 0 0 #0000;
+  --keel-go: 0 0 #0000;
+  --chosen-fill: var(--hivis-wash);
+  --on-chosen: var(--ink);
+  --chosen-edge: var(--ink);
+  --main-fill: var(--ink);
+  --on-main: var(--on-ink);
+  --main-edge: var(--ink);
+  --main-keel: 0 0 #0000;
+  --ctl-h: 48px;
+  --ctl-h-go: 56px;
+  /* Digits from Archivo (plain zero), everything else from Atkinson. */
+  --f-text: var(--font-plain-digits, 'Archivo'), var(--font-atkinson, 'Atkinson Hyperlegible Next'), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--f-text);
+}
+/* Sun+ keeps its 3px edges even in the quiet register. */
+@media screen {
+  [data-theme='sun'] [data-register='quiet'],
+  [data-theme='sun'][data-register='quiet'] {
+    --bw: 3px;
+    --bw-x: 3px;
+  }
+}
+@media screen and (prefers-contrast: more) {
+  :root:not([data-theme]) [data-register='quiet'] {
+    --bw: 3px;
+    --bw-x: 3px;
+  }
+}
+
+/* =================================================================================================
+   Tailwind: Daymark utilities, and the legacy palette remapped onto Daymark.
+   `inline` makes each utility use the Daymark variable directly, so it follows the theme of the
+   element it sits in (a [data-theme] wrapper included).
+   ================================================================================================= */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-scrim: var(--scrim);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-placeholder: var(--placeholder);
+  --color-on-ink: var(--on-ink);
+  --color-ink-accent: var(--ink-accent);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-edge: var(--edge);
+  --color-rule: var(--rule);
+  --color-hivis: var(--hivis);
+  --color-hivis-press: var(--hivis-press);
+  --color-on-hivis: var(--on-hivis);
+  --color-hivis-edge: var(--hivis-edge);
+  --color-hivis-wash: var(--hivis-wash);
+  --color-chosen: var(--chosen-fill);
+  --color-on-chosen: var(--on-chosen);
+  --color-chosen-edge: var(--chosen-edge);
+  --color-ok: var(--ok);
+  --color-ok-fill: var(--ok-fill);
+  --color-on-ok: var(--on-ok);
+  --color-warn: var(--warn);
+  --color-warn-fill: var(--warn-fill);
+  --color-hazard: var(--hazard);
+  --color-on-hazard: var(--on-hazard);
+  --color-bad: var(--bad);
+  --color-bad-fill: var(--bad-fill);
+  --color-on-bad: var(--on-bad);
+  --color-info: var(--info);
+  --color-info-fill: var(--info-fill);
+  --color-viewed: var(--viewed);
+  --color-viewed-fill: var(--viewed-fill);
+  --color-draft-fill: var(--draft-fill);
+  --color-track: var(--track);
+  --color-focus: var(--focus);
+  --color-frame: var(--frame);
+  --color-on-frame: var(--on-frame);
+  --color-e-casing: var(--e-casing);
+  --color-e-ridge: var(--e-ridge);
+  --color-e-hip: var(--e-hip);
+  --color-e-valley: var(--e-valley);
+  --color-e-eave: var(--e-eave);
+  --color-e-rake: var(--e-rake);
+  --color-e-break: var(--e-break);
+  --color-e-step: var(--e-step);
+  --color-e-headwall: var(--e-headwall);
+  --color-face-badge: var(--face-badge);
+  --color-on-face-badge: var(--on-face-badge);
+
+  --font-sans: var(--f-text);
+  --font-text: var(--f-text);
+  --font-num: var(--f-num);
+
+  --radius-tag: var(--r-tag);
+  --radius-control: var(--r-m);
+  --radius-plate: var(--r-l);
+  --radius-sheet: var(--r-xl);
+
+  --shadow-keel: var(--keel);
+  --shadow-keel-s: var(--keel-s);
+  --shadow-keel-go: var(--keel-go);
+  --shadow-lift: var(--lift);
+  /* No soft shadows in the field (sun washes them out); legacy shadow-sm cards become flat. */
+  --shadow-sm: 0 0 #0000;
+  --shadow: 0 0 #0000;
+
+  --ease-daymark: var(--ease);
+
+  /* Reading sizes: 15px is the floor for text (Daymark body is 17px), so the legacy text-xs is
+     15px too: no screen can drop below the floor by keeping an old class. */
+  --text-xs: 0.9375rem;
+  --text-xs--line-height: 1.35;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.4;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.4;
+
+  /* ----- Legacy palette → Daymark, so screens not yet converted already follow the theme. -----
+     white = surface. slate = the ink and line greys. brand (old teal) = ink, its tints = the
+     hi-vis wash. Status hues = the Daymark status pairs (tints → *-fill, strong → the text tone). */
+  --color-white: var(--surface);
+  --color-slate-50: var(--sunken);
+  --color-slate-100: var(--draft-fill);
+  --color-slate-200: var(--line);
+  --color-slate-300: var(--line-strong);
+  --color-slate-400: var(--ink-3);
+  --color-slate-500: var(--ink-3);
+  --color-slate-600: var(--ink-2);
+  --color-slate-700: var(--ink-2);
+  --color-slate-800: var(--ink);
+  --color-slate-900: var(--ink);
+  --color-slate-950: var(--ink);
+  --color-brand-50: var(--hivis-wash);
+  --color-brand-100: var(--hivis-wash);
+  --color-brand-200: var(--hivis);
+  --color-brand-300: var(--hivis);
+  --color-brand-400: var(--hivis);
+  --color-brand-500: var(--hivis);
+  --color-brand-600: var(--ink);
+  --color-brand-700: var(--ink);
+  --color-brand-800: var(--ink);
+  --color-brand-900: var(--ink);
+  --color-brand-950: var(--ink);
+  --color-teal-700: var(--ink);
+  --color-teal-800: var(--ink);
+  --color-teal-900: var(--ink);
+  --color-emerald-50: var(--ok-fill);
+  --color-emerald-100: var(--ok-fill);
+  --color-emerald-200: var(--ok);
+  --color-emerald-300: var(--ok);
+  --color-emerald-400: var(--ok);
+  --color-emerald-500: var(--ok);
+  --color-emerald-600: var(--ok);
+  --color-emerald-700: var(--ok);
+  --color-emerald-800: var(--ok);
+  --color-emerald-900: var(--ok);
+  --color-emerald-950: var(--ok);
+  --color-amber-50: var(--warn-fill);
+  --color-amber-100: var(--warn-fill);
+  --color-amber-200: var(--warn);
+  --color-amber-300: var(--hazard);
+  --color-amber-400: var(--hazard);
+  --color-amber-500: var(--hazard);
+  --color-amber-600: var(--warn);
+  --color-amber-700: var(--warn);
+  --color-amber-800: var(--warn);
+  --color-amber-900: var(--warn);
+  --color-amber-950: var(--warn);
+  --color-red-50: var(--bad-fill);
+  --color-red-100: var(--bad-fill);
+  --color-red-200: var(--bad);
+  --color-red-300: var(--bad);
+  --color-red-400: var(--bad);
+  --color-red-500: var(--bad);
+  --color-red-600: var(--bad);
+  --color-red-700: var(--bad);
+  --color-red-800: var(--bad);
+  --color-red-900: var(--bad);
+  --color-red-950: var(--bad);
+  --color-sky-50: var(--info-fill);
+  --color-sky-100: var(--info-fill);
+  --color-sky-200: var(--info);
+  --color-sky-300: var(--info);
+  --color-sky-400: var(--info);
+  --color-sky-500: var(--info);
+  --color-sky-600: var(--info);
+  --color-sky-700: var(--info);
+  --color-sky-800: var(--info);
+  --color-sky-900: var(--info);
+  --color-sky-950: var(--info);
+  --color-violet-50: var(--viewed-fill);
+  --color-violet-100: var(--viewed-fill);
+  --color-violet-200: var(--viewed);
+  --color-violet-300: var(--viewed);
+  --color-violet-400: var(--viewed);
+  --color-violet-500: var(--viewed);
+  --color-violet-600: var(--viewed);
+  --color-violet-700: var(--viewed);
+  --color-violet-800: var(--viewed);
+  --color-violet-900: var(--viewed);
+  --color-violet-950: var(--viewed);
+}
+
+/* Daymark helpers usable as class names (with variants: hover:, md:, ...). */
+@utility gauge {
+  /* Gauge numerals: Archivo 800 at 72% width, tabular lining figures. Set the size separately. */
+  font-family: var(--f-num);
+  font-stretch: 72%;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  line-height: 0.92;
+}
+@utility gauge-m {
+  /* Gauge M: table numbers, legends, dock totals (80% width). */
+  font-family: var(--f-num);
+  font-stretch: 80%;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+}
+@utility sign-label {
+  /* Sign label: Archivo 700 at 118% width, caps, wide tracking. Size via --sign-size. */
+  font-family: var(--f-num);
+  font-stretch: 118%;
+  font-weight: 700;
+  font-size: var(--sign-size, 12.5px);
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+@utility hatch {
+  /* Hazard hatch: only for "look again" (check on site, unsynced, offline). Always beside an
+     icon and a word. */
+  background-image: repeating-linear-gradient(-45deg, var(--hazard) 0 7px, var(--on-hazard) 7px 14px);
+}
+@utility plate {
+  /* The basic container: surface, edge, 16px radius. */
+  background-color: var(--surface);
+  border: var(--bw) solid var(--edge);
+  border-radius: var(--r-l);
+}
+@utility press {
+  /* Pressable on a keel: drops onto it when tapped. Pair with shadow-keel-s / shadow-keel-go. */
+  transition:
+    transform var(--t-press) var(--ease),
+    box-shadow var(--t-press) var(--ease),
+    background-color var(--t-quick) var(--ease);
+  &:active:not(:disabled):not([aria-disabled='true']) {
+    transform: translateY(3px);
+    box-shadow: none;
+  }
+}
+
+@keyframes dm-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes dm-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@layer base {
+  html {
+    background-color: var(--canvas);
+  }
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--f-text);
+    font-weight: 450;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Focus: a thick ink ring with a gap (hi-vis in Night, where ink surfaces are light). */
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 3px;
+  }
+  ::selection {
+    background-color: var(--hivis);
+    color: var(--on-hivis);
+  }
+  ::placeholder {
+    color: var(--placeholder);
+    opacity: 1;
+  }
+  /* Sun+: everything else is pure black, so a placeholder is also set in italics (flow-B6). */
+  @media screen {
+    [data-theme='sun'] ::placeholder {
+      font-style: italic;
+    }
+  }
+  @media screen and (prefers-contrast: more) {
+    :root:not([data-theme]) ::placeholder {
+      font-style: italic;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Large, glove-friendly inputs; no iOS zoom on focus (needs >= 16px). In the base layer so a
+   text-* utility can set a larger size. */
+@layer base {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 input[type='number']::-webkit-inner-spin-button,
@@ -57,7 +677,7 @@ input[type='number']::-webkit-outer-spin-button {
   html:has(.roof-report),
   body:has(> .roof-report) {
     background: #fff !important;
-    color: #0f172a;
+    color: var(--ink);
     /* The area sheet stops the page behind it from scrolling; paper must not be cut off by that. */
     overflow: visible !important;
     height: auto !important;
@@ -67,7 +687,7 @@ input[type='number']::-webkit-outer-spin-button {
     page: roof-report;
     font-size: 9pt;
     line-height: 1.3;
-    color: #0f172a;
+    color: var(--ink);
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -80,4 +700,44 @@ input[type='number']::-webkit-outer-spin-button {
   .roof-report-faces {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+}
+
+/* =================================================================================================
+   APP SHELL (components/shell): the staff menu. A bottom tab bar on phones, a left sidebar from
+   1024px. These variables tell fixed things (docks, toasts) where the free space is:
+     --shell-left    the sidebar's width (0 on phones)
+     --shell-bottom  the tab bar's height, safe area included (0 when it is hidden or on desktop)
+     --shell-safe    the safe area still left for a bottom bar (0 when the tab bar already pads it)
+   A Dock (components/daymark/Dock) and the `shell-dock` class below use them; any other fixed
+   bottom bar should too.
+   ================================================================================================= */
+:root {
+  --tabbar-h: 64px;
+  --sidebar-w: 256px;
+  --shell-left: 0px;
+  --shell-bottom: 0px;
+  --shell-safe: var(--safe-bottom);
+}
+@media screen and (max-width: 1023.98px) {
+  :root:has([data-shell-tabbar]:not([hidden])) {
+    --shell-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+    --shell-safe: 0px;
+  }
+}
+@media screen and (min-width: 1024px) {
+  :root:has([data-shell-sidebar]) {
+    --shell-left: var(--sidebar-w);
+  }
+}
+/* Inside the shell, a page that fills the screen fills the space above the tab bar. */
+[data-shell-content] .min-h-dvh {
+  min-height: calc(100dvh - var(--shell-bottom));
+}
+/* A fixed bottom bar that sits above the tab bar and beside the sidebar. */
+.shell-dock {
+  position: fixed;
+  left: var(--shell-left);
+  right: 0;
+  bottom: var(--shell-bottom);
+  padding-bottom: max(0.75rem, var(--shell-safe));
 }

@@ -1,30 +1,31 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
-import { num } from '@/lib/format';
+import { formatDateTime, formatMoney, formatPhone, num, pct } from '@/lib/format';
+import { Ban, Banner, ButtonLink, CircleDashed, Download, Icon, jobBadgeStatus, Mail, PencilLine, Phone, ShieldCheck, StatusBadge, Tag } from '@/components/daymark';
+import { PageHeader } from '@/components/shell';
+import { FactStrip } from '@/components/office';
 import { UNIT_LABELS } from '@/lib/jobs/crew';
 import { formatNyDateTime, formatYmd, nyDate } from '@/lib/jobs/dates';
 import { compareActuals, costTotals, signedOption, type CompareRow, type OfficeActual } from '@/lib/jobs/office';
-import { allowedTransitions, JOB_STATUS_LABELS, officeGroup, OFFICE_GROUP_LABELS, type JobStatus } from '@/lib/jobs/status';
+import { allowedTransitions, JOB_STATUS_LABELS, VERIFIED_STATUS_TEXT, type JobStatus } from '@/lib/jobs/status';
 import { formatVariance, varianceTone } from '@/lib/jobs/variance';
 import type { ProductCode, ProductUnit } from '@/lib/pricing';
 import { ActionForm, ToggleInput } from '../../admin/pricing/ActionForm';
 import { NumberField, TextField } from '../../admin/pricing/fields';
 import { changeStatus, saveActual, saveSchedule, setExcluded, unverifyActuals, verifyActuals } from '../actions';
 import { loadCrews, loadJob } from '../data';
+import { BlowerDoorCard } from './BlowerDoorCard';
 
 export const metadata: Metadata = { title: 'Job' };
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const usdCents = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+/** Costs and revenue with cents, as the actuals were entered. */
+const usdCents = { format: (n: number) => formatMoney(n, { cents: 'always' }) };
 
-const STATUS_TONE: Record<JobStatus, 'slate' | 'green' | 'amber' | 'blue'> = { scheduled: 'blue', in_progress: 'amber', completed: 'green', cancelled: 'slate' };
 const ACTION_LABEL: Record<JobStatus, string> = {
   scheduled: 'Back to scheduled',
   in_progress: 'Mark in progress',
@@ -42,13 +43,20 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
   if (!job) {
     return (
-      <>
-        <AppNav profile={profile} />
-        <main className="mx-auto max-w-6xl space-y-4 px-4 py-6">
-          <BackLink />
-          <Alert tone="red">Could not load this job: {error}</Alert>
-        </main>
-      </>
+      <main className="@container mx-auto max-w-6xl space-y-5 px-4 py-6 md:px-6">
+        <PageHeader back={{ href: '/jobs', label: 'Jobs' }} title="This job did not load" />
+        <Banner
+          tone="bad"
+          title="Could not load this job"
+          action={
+            <ButtonLink href={`/jobs/${id}`} size="sm" prefetch={false}>
+              Try again
+            </ButtonLink>
+          }
+        >
+          {error}
+        </Banner>
+      </main>
     );
   }
 
@@ -62,61 +70,83 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     driveMinutesEstFallback: job.driveMinutesEst,
   });
   const costs = costTotals(job.actuals);
-  const transitions = allowedTransitions(job.status, profile.role);
   const verifiedCount = job.actuals.filter((a) => a.verifiedAt).length;
-  const group = officeGroup({ status: job.status, actualsCount: job.actuals.length, verifiedCount });
+  const transitions = allowedTransitions(job.status, profile.role, verifiedCount);
+  const badge = jobBadgeStatus({ status: job.status, scheduledStart: job.scheduledStart, actualsCount: job.actuals.length, verifiedCount });
   const revenue = option?.price ?? job.revenue;
   const crewOptions = crews.filter((c) => c.active || c.id === job.crewId);
+  const phoneHref = job.customer.phone ? `tel:${job.customer.phone.replace(/[^\d+]/g, '')}` : null;
 
   return (
     <>
-      <AppNav profile={profile} />
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-        <BackLink />
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-slate-900">{job.customer.name}</h1>
-            <p className="text-slate-600">{job.address}</p>
-            <p className="text-sm text-slate-600">
-              {job.customer.phone ? (
-                <a className="font-medium text-brand-800 underline" href={`tel:${job.customer.phone.replace(/[^\d+]/g, '')}`}>
-                  {job.customer.phone}
-                </a>
-              ) : (
-                'No phone'
-              )}
-              {job.customer.email ? ` · ${job.customer.email}` : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge tone={STATUS_TONE[job.status]}>{JOB_STATUS_LABELS[job.status]}</Badge>
-            {job.status === 'completed' ? <Badge tone={group === 'verified' ? 'green' : 'amber'}>{OFFICE_GROUP_LABELS[group]}</Badge> : null}
-          </div>
+      <main className="@container mx-auto max-w-6xl space-y-5 px-4 py-6 md:px-6">
+        <PageHeader back={{ href: '/jobs', label: 'Jobs' }} title={job.customer.name} meta={<StatusBadge status={badge} />} description={job.address} />
+        <div className="-mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[16px] font-semibold text-ink-2">
+          {phoneHref ? (
+            <a href={phoneHref} className="-ml-1 inline-flex min-h-12 items-center gap-2 rounded-control px-1 font-bold text-ink underline underline-offset-4 hover:bg-sunken">
+              <Icon icon={Phone} size="s" />
+              {formatPhone(job.customer.phone)}
+            </a>
+          ) : (
+            <span className="inline-flex min-h-12 items-center gap-2">
+              <Icon icon={Phone} size="s" />
+              No phone
+            </span>
+          )}
+          {job.customer.email ? (
+            <a href={`mailto:${job.customer.email}`} className="inline-flex min-h-12 items-center gap-2 rounded-control px-1 font-bold text-ink underline underline-offset-4 hover:bg-sunken [overflow-wrap:anywhere]">
+              <Icon icon={Mail} size="s" />
+              {job.customer.email}
+            </a>
+          ) : null}
         </div>
 
-        <Card>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <Item label="Signed option">
-              {option ? `${option.label}${option.price != null ? ` · ${usd.format(option.price)}` : ''}` : '—'}
-            </Item>
-            <Item label="Quote">
-              {job.quote ? `v${job.quote.version}${job.quote.signedAt ? `, signed ${formatNyDateTime(job.quote.signedAt)}` : ''}` : '—'}
-              {job.quote ? (
-                <>
-                  {' · '}
-                  <a className="font-medium text-brand-800 underline" href={`/api/quotes/${job.quote.id}/pdf`} target="_blank" rel="noopener">
+        <FactStrip
+          title="About this job"
+          facts={[
+            {
+              key: 'option',
+              label: 'Signed option',
+              value: option ? (
+                <span className="flex flex-col gap-1">
+                  <span>{option.label}</span>
+                  {option.price != null ? <span className="gauge-m text-[22px]">{formatMoney(option.price)}</span> : null}
+                </span>
+              ) : (
+                '—'
+              ),
+            },
+            {
+              key: 'quote',
+              label: 'Quote',
+              value: job.quote ? (
+                <span className="flex flex-col gap-1">
+                  <span>
+                    Quote v{job.quote.version}
+                    {job.quote.signedAt ? `, signed ${formatDateTime(job.quote.signedAt)}` : ''}
+                  </span>
+                  <a className="-my-2 inline-flex min-h-12 items-center gap-1.5 self-start rounded-control font-bold text-ink underline underline-offset-4 hover:bg-sunken" href={`/api/quotes/${job.quote.id}/pdf`} target="_blank" rel="noopener">
+                    <Icon icon={Download} size="s" />
                     PDF
                   </a>
+                </span>
+              ) : (
+                '—'
+              ),
+            },
+            { key: 'estimator', label: 'Estimator', value: job.estimator ?? '—' },
+            {
+              key: 'work',
+              label: 'Work',
+              value: (
+                <>
+                  {job.startedAt ? `Started ${formatDateTime(job.startedAt)}` : 'Not started'}
+                  {job.completedAt ? <span className="block">Done {formatDateTime(job.completedAt)}</span> : null}
                 </>
-              ) : null}
-            </Item>
-            <Item label="Estimator">{job.estimator ?? '—'}</Item>
-            <Item label="Work">
-              {job.startedAt ? `Started ${formatNyDateTime(job.startedAt)}` : 'Not started'}
-              {job.completedAt ? ` · completed ${formatNyDateTime(job.completedAt)}` : ''}
-            </Item>
-          </dl>
-        </Card>
+              ),
+            },
+          ]}
+        />
 
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
@@ -127,7 +157,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             </p>
             <ActionForm action={saveSchedule} readOnly={false} submitLabel="Save schedule">
               <input type="hidden" name="id" value={job.id} />
-              <div className="grid gap-3 sm:grid-cols-3">
+              {/* Crew on its own row; the date keeps room for a whole date (11/18/2026) at every width. */}
+              <div className="grid gap-3">
                 <Field label="Crew">
                   <Select name="crew_id" defaultValue={job.crewId ?? ''}>
                     <option value="">Unassigned</option>
@@ -139,10 +170,12 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                     ))}
                   </Select>
                 </Field>
-                <Field label="Start date">
-                  <Input type="date" name="scheduled_start" defaultValue={job.scheduledStart ?? ''} />
-                </Field>
-                <NumberField label="Days" name="scheduled_days" defaultValue={job.scheduledDays} required={false} />
+                <div className="grid grid-cols-[minmax(11.5rem,1fr)_minmax(5rem,7rem)] gap-3">
+                  <Field label="Start date">
+                    <Input type="date" name="scheduled_start" defaultValue={job.scheduledStart ?? ''} />
+                  </Field>
+                  <NumberField label="Days" name="scheduled_days" defaultValue={job.scheduledDays} required={false} />
+                </div>
               </div>
             </ActionForm>
           </Card>
@@ -150,14 +183,20 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <Card>
             <h2 className="mb-1 text-lg font-semibold text-slate-900">Status</h2>
             <p className="mb-3 text-sm text-slate-600">Crews start and complete jobs from the crew app. Change it here when they cannot.</p>
-            {transitions.length === 0 ? <p className="text-sm text-slate-500">No status changes are possible from {JOB_STATUS_LABELS[job.status].toLowerCase()}.</p> : null}
+            {transitions.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                {verifiedCount > 0
+                  ? VERIFIED_STATUS_TEXT[profile.role === 'owner' ? 'owner' : 'office']
+                  : `No status changes are possible from ${JOB_STATUS_LABELS[job.status].toLowerCase()}.`}
+              </p>
+            ) : null}
             <div className="space-y-3">
               {transitions.map((t) => (
-                <ActionForm key={t} action={changeStatus} readOnly={false} submitLabel={ACTION_LABEL[t]}>
+                <ActionForm key={t} action={changeStatus} readOnly={false} submitLabel={ACTION_LABEL[t]} submitVariant={t === 'cancelled' ? 'danger' : 'secondary'}>
                   <input type="hidden" name="id" value={job.id} />
                   <input type="hidden" name="status" value={t} />
                   {t === 'cancelled' ? (
-                    <label className="flex min-h-11 items-center gap-3 text-sm text-slate-700">
+                    <label className="flex min-h-12 items-center gap-3 text-sm text-slate-700">
                       <input type="checkbox" name="confirm" value="true" className="h-5 w-5" />
                       Yes, cancel this job (the crew stops seeing it)
                     </label>
@@ -237,6 +276,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           </table>
         </Card>
 
+        <BlowerDoorCard db={db} jobId={job.id} estimateId={job.estimateId} label={`${job.customer.name}, ${job.address.split(',')[0] ?? ''}`.replace(/, $/, '')} />
+
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
             <h2 className="mb-2 text-lg font-semibold text-slate-900">Verification</h2>
@@ -258,7 +299,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 <Alert tone="blue">Actuals can be verified once the job is completed.</Alert>
               ) : null}
               {profile.role === 'owner' && verifiedCount > 0 ? (
-                <ActionForm action={unverifyActuals} readOnly={false} submitLabel="Unverify">
+                <ActionForm action={unverifyActuals} readOnly={false} submitLabel="Unverify" submitVariant="danger">
                   <input type="hidden" name="id" value={job.id} />
                   <p className="text-sm text-slate-700">Owner only: unlocks the rows so they can be corrected. They leave learning until verified again.</p>
                 </ActionForm>
@@ -273,9 +314,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
               <Item label="Labor">{costs.labor !== null ? usdCents.format(costs.labor) : '—'}</Item>
               <Item label="Other">{costs.other !== null ? usdCents.format(costs.other) : '—'}</Item>
               <Item label="Total">{costs.total !== null ? usdCents.format(costs.total) : '—'}</Item>
-              <Item label="Revenue">{revenue != null ? usdCents.format(revenue) : '—'}</Item>
+              <Item label="Revenue">{revenue != null ? formatMoney(revenue, { cents: 'never' }) : '—'}</Item>
               <Item label="Gross margin">
-                {costs.total !== null && revenue != null && revenue > 0 ? `${usdCents.format(revenue - costs.total)} (${(((revenue - costs.total) / revenue) * 100).toFixed(1)}%)` : '—'}
+                {costs.total !== null && revenue != null && revenue > 0 ? `${usdCents.format(revenue - costs.total)} (${pct((revenue - costs.total) / revenue, 1)})` : '—'}
               </Item>
             </dl>
             <p className="mt-2 text-xs text-slate-500">From invoices and payroll, entered per row below. Office and owner only.</p>
@@ -296,14 +337,6 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   );
 }
 
-function BackLink() {
-  return (
-    <Link href="/jobs" className="inline-flex min-h-11 items-center rounded-xl px-2 font-semibold text-brand-800 hover:bg-brand-50">
-      ‹ All jobs
-    </Link>
-  );
-}
-
 function Item({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -320,11 +353,31 @@ function VarianceBadge({ pct }: { pct: number | null }) {
   return tone ? <Badge tone={tone}>{formatVariance(pct)}</Badge> : <span className="text-slate-400">—</span>;
 }
 
+/** One actuals row's state: icon + word + colour, Verified as on the job's own badge. */
 function RowBadge({ actual }: { actual: OfficeActual | null }) {
-  if (!actual) return <Badge tone="amber">Not entered</Badge>;
-  if (actual.excluded) return <Badge tone="slate">Excluded</Badge>;
-  if (actual.verifiedAt) return <Badge tone="green">Verified</Badge>;
-  return <Badge tone="blue">Entered</Badge>;
+  if (!actual)
+    return (
+      <Tag tone="warn" icon={CircleDashed}>
+        Not entered
+      </Tag>
+    );
+  if (actual.excluded)
+    return (
+      <Tag tone="draft" icon={Ban}>
+        Excluded
+      </Tag>
+    );
+  if (actual.verifiedAt)
+    return (
+      <Tag tone="ok" icon={ShieldCheck}>
+        Verified
+      </Tag>
+    );
+  return (
+    <Tag tone="info" icon={PencilLine}>
+      Entered
+    </Tag>
+  );
 }
 
 function lastVerifier(actuals: OfficeActual[]): string {
@@ -379,7 +432,7 @@ function RowEditor({ jobId, row }: { jobId: string; row: CompareRow }) {
   return (
     <Card>
       <details>
-        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-slate-900">
             {row.areaName} · {row.label}
           </span>
@@ -427,7 +480,7 @@ function JobRowEditor({ jobId, actual }: { jobId: string; actual: OfficeActual |
   return (
     <Card>
       <details>
-        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-slate-900">Whole job: drive, days, crew size, other costs</span>
           <span className="flex items-center gap-2">
             <RowBadge actual={actual} />

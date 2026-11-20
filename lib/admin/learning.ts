@@ -1,7 +1,7 @@
 // Pure helpers for the owner's learning dashboard (app/admin/learning, PLAN.md §6): plain-English
 // names for coefficient kinds and scopes, the candidate-vs-active diff, row schemas for the
 // learning tables, lenient parsers for the jsonb the nightly job writes (gate results, backtest,
-// accuracy, win-rate buckets), the action forms, and number/date formatting in Newark, DE time.
+// accuracy, win-rate buckets), the action forms, and number/date formatting in the business time zone.
 // No I/O and no server-only imports, so client components can use the formatters too.
 import { z } from 'zod';
 import {
@@ -18,9 +18,26 @@ import {
 import type { AccuracyReport, BacktestMetrics, GateResult, WinRateBucket } from '@/lib/learning';
 import type { NightlySummary } from '@/lib/learning/nightly';
 import { optionalTextField, textField, uuidField } from './forms';
+import { BUSINESS_TIME_ZONE, formatTime, timeZoneWord } from '@/lib/format';
 
-/** Business dates and times are Newark, DE local time. */
-export const BUSINESS_TZ = 'America/New_York';
+/** Business dates and times are in the business time zone (one place: lib/format.ts). */
+export const BUSINESS_TZ = BUSINESS_TIME_ZONE;
+
+/** When Vercel Cron starts the nightly job, in UTC (vercel.json "15 7 * * *"). */
+export const NIGHTLY_UTC = { hour: 7, minute: 15 } as const;
+
+/**
+ * The Insights schedule line, in the business zone (release review C FLOW-7): "Runs nightly at about
+ * 2:15 AM Eastern (3:15 AM while daylight saving time is on). All times on this page are Eastern."
+ * A zone without daylight saving time gives one time.
+ */
+export function nightlyScheduleWords(tz: string = BUSINESS_TZ): string {
+  const at = (month: number) => formatTime(new Date(Date.UTC(2026, month, 15, NIGHTLY_UTC.hour, NIGHTLY_UTC.minute)), tz);
+  const [winter, summer] = [at(0), at(6)];
+  const zone = timeZoneWord(tz);
+  const when = winter === summer ? `${winter} ${zone}` : `${winter} ${zone} (${summer} while daylight saving time is on)`;
+  return `Runs nightly at about ${when}. All times on this page are ${zone}.`;
+}
 
 // ---------------------------------------------------------------------------
 // Coefficient kinds and scopes
@@ -651,8 +668,8 @@ export function parseWinMetrics(metrics: unknown): WinMetrics {
 /** Cold-start explanation shown while no win model is active. */
 export function winColdStartMessage(minQuotes: number, nQuotes: number | null, reason: string | null = null): string {
   const need = `${formatCount(minQuotes)} decided ${plural(minQuotes, 'quote')}`;
-  if (nQuotes === null) return `Price recommendations start after ${need}. The first nightly run will count yours.`;
-  if (nQuotes < minQuotes) return `Price recommendations start after ${need} (you have ${formatCount(nQuotes)}).`;
+  if (nQuotes === null) return `Price suggestions start after ${need}. The first nightly run will count yours.`;
+  if (nQuotes < minQuotes) return `Price suggestions start after ${need} (you have ${formatCount(nQuotes)}).`;
   return `You have ${formatCount(nQuotes)} decided ${plural(nQuotes, 'quote')}, enough to train, but no price model is active yet${reason ? `: ${reason}` : '.'}`;
 }
 
@@ -923,13 +940,13 @@ function toDate(iso: string | null | undefined): Date | null {
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-/** "Oct 20, 2026, 2:15 AM" in Eastern time; "—" when missing or invalid. */
+/** "Oct 20, 2026, 2:15 AM" in the business time zone; "—" when missing or invalid. */
 export function formatDateTime(iso: string | null | undefined): string {
   const d = toDate(iso);
   return d ? clean(dateTimeFmt.format(d)) : DASH;
 }
 
-/** "Oct 20, 2026" in Eastern time. */
+/** "Oct 20, 2026" in the business time zone. */
 export function formatDate(iso: string | null | undefined): string {
   const d = toDate(iso);
   return d ? clean(dateFmt.format(d)) : DASH;

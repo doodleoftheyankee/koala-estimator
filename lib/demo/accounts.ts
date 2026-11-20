@@ -2,7 +2,7 @@
 // without email codes. The accounts and sample history come from scripts/demo-seed.ts; their
 // shared password lives only in the server environment (DEMO_PASSWORD). Turn it off for real use.
 export const DEMO_ACCOUNTS = {
-  owner: { email: 'owner.demo@example.com', label: 'Owner', who: 'Richard', home: '/estimates', blurb: 'Every estimate, jobs, pricing and the learning dashboard' },
+  owner: { email: 'owner.demo@example.com', label: 'Owner', who: 'Richard', home: '/estimates', blurb: 'Every estimate, jobs, pricing and insights' },
   estimator: { email: 'estimator.demo@example.com', label: 'Estimator', who: 'Erin', home: '/field', blurb: 'Build and send a quote on a phone, even offline' },
   crew: { email: 'crew.demo@example.com', label: 'Crew lead', who: 'Carlos', home: '/crew', blurb: "Today's jobs, start, enter actuals, complete" },
 } as const;

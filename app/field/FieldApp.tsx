@@ -1,12 +1,15 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
-import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
-import { AuthRequiredError, fetchEstimate, syncAll } from '@/lib/offline/sync';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { db, getCachedBundle, getMeta, META, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
+import { AuthRequiredError, fetchEstimate, isReachable, onReachChange, refreshBundle, syncAll } from '@/lib/offline/sync';
+import { bundleForNewEstimate, newEstimatePlace } from '@/lib/field/newPlace';
 import { newDraft } from '@/lib/sync/draft';
-import { Alert } from '@/components/ui';
+import { menuFor, phoneTabs } from '@/lib/nav';
+import { Banner, Button, ButtonLink, LoadingSteps } from '@/components/daymark';
+import { useHideTabBar } from '@/components/shell';
 import { EstimateEditor } from './EstimateEditor';
 import { EstimateList } from './EstimateList';
-import { useOnline } from './hooks';
+import { useLive, useOnline } from './hooks';
 
 type View = { kind: 'list' } | { kind: 'edit'; id: string };
 
@@ -17,13 +20,31 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [ready, setReady] = useState(false);
   const [signedOut, setSignedOut] = useState(false);
+  // A sync the person asked for (Sync now): the header says "Syncing…" until it ends. Background
+  // syncs (every minute, on reconnect) stay quiet and only move "Synced 2 min ago" along.
+  const [syncing, setSyncing] = useState(false);
+  // A new estimate waiting (at most 3 s) for the phone's first bundle, and one that started
+  // without a town and state, which the editor fills when the bundle comes (review B flow-B13).
+  const [starting, setStarting] = useState(false);
+  const [placePending, setPlacePending] = useState<string | null>(null);
+  const lastSync = useLive(() => getMeta<string>(META.lastSync), [], null as string | null);
+  // Koala's database or sign-in service not answering (L36): the phone keeps working on its own copy.
+  const reachable = useSyncExternalStore(onReachChange, isReachable, () => true);
+  // An open estimate has its own bottom bar (price, Previous, Next): the menu's tab bar steps aside.
+  useHideTabBar(view.kind === 'edit');
 
-  const runSync = useCallback(() => {
-    syncAll(profile.userId).catch((e) => {
-      if (e instanceof AuthRequiredError) setSignedOut(true);
-      else console.error(e);
-    });
-  }, [profile.userId]);
+  const runSync = useCallback(
+    () =>
+      syncAll(profile.userId).catch((e) => {
+        if (e instanceof AuthRequiredError) setSignedOut(true);
+        else console.error(e);
+      }),
+    [profile.userId],
+  );
+  const syncNow = useCallback(() => {
+    setSyncing(true);
+    void runSync().finally(() => setSyncing(false));
+  }, [runSync]);
 
   // Views are kept in component state + history.replaceState (not the Next router) so
   // switching screens never needs the network.
@@ -35,8 +56,17 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, []);
 
   const createEstimate = useCallback(async () => {
-    const draft = newDraft();
+    // A new estimate starts in the town and state the bundle names, as a pair (L32, OD14), as the
+    // phone last downloaded it, so it works offline too. On a phone's first open there is no bundle
+    // yet: online, it waits for it, at most 3 s; one that starts blank is filled when it comes.
+    const cached = await getCachedBundle();
+    const wait = !cached && navigator.onLine;
+    if (wait) setStarting(true);
+    const place = newEstimatePlace(await bundleForNewEstimate(cached, refreshBundle, navigator.onLine));
+    const draft = newDraft(new Date(), undefined, place ?? undefined);
     await db().estimates.put(newLocalEstimate(draft, profile.userId));
+    setPlacePending(place ? null : draft.id);
+    setStarting(false);
     go({ kind: 'edit', id: draft.id });
   }, [go, profile.userId]);
 
@@ -65,7 +95,7 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
   }, [online, runSync]);
 
   useEffect(() => {
-    const t = setInterval(runSync, SYNC_INTERVAL_MS);
+    const t = setInterval(() => runSync(), SYNC_INTERVAL_MS);
     const onVisible = () => document.visibilityState === 'visible' && runSync();
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -74,26 +104,72 @@ export function FieldApp({ profile }: { profile: CachedProfile }) {
     };
   }, [runSync]);
 
-  if (!ready) return <div className="p-6 text-center text-slate-500">Loading…</div>;
+  // The dock offers Roof lookup only when the menu has no Roof lookup tab (an estimator's has one).
+  const roofIsTab = phoneTabs(menuFor(profile.role)).some((i) => i.href === '/field/roof');
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl">
-      {signedOut ? (
-        <div className="p-3">
-          <Alert tone="red">
-            Your session expired. Your work is saved on this phone.{' '}
-            <a className="font-semibold underline" href="/login?next=/field">
-              Sign in again
-            </a>{' '}
-            to sync it.
-          </Alert>
+    <main className="mx-auto w-full max-w-2xl">
+      {!ready || starting ? (
+        <div className="px-4 pt-6">
+          <LoadingSteps steps={[{ label: starting ? 'Starting the estimate' : 'Opening the estimates on this phone', state: 'doing' }]} />
         </div>
-      ) : null}
-      {view.kind === 'list' ? (
-        <EstimateList profile={profile} online={online} onOpen={(id) => go({ kind: 'edit', id })} onNew={createEstimate} onSync={runSync} />
       ) : (
-        <EstimateEditor key={view.id} id={view.id} profile={profile} online={online} onBack={() => go({ kind: 'list' })} requestSync={runSync} />
+        <>
+          {signedOut ? (
+            <div className="px-4 pt-4">
+              <Banner
+                tone="bad"
+                title="Your session expired."
+                action={
+                  <ButtonLink href="/login?next=/field" size="sm" prefetch={false}>
+                    Sign in again
+                  </ButtonLink>
+                }
+              >
+                Your work is saved on this phone. Sign in again to sync it.
+              </Banner>
+            </div>
+          ) : null}
+          {online && !reachable && !signedOut ? (
+            <div className="px-4 pt-4">
+              <Banner
+                tone="warn"
+                title="Can't reach Koala right now."
+                action={
+                  <Button size="sm" onClick={syncNow} disabled={syncing}>
+                    Try again
+                  </Button>
+                }
+              >
+                Your work is saved on this phone. It syncs when Koala is back.
+              </Banner>
+            </div>
+          ) : null}
+          {view.kind === 'list' ? (
+            <EstimateList
+              title={profile.role === 'estimator' ? 'Estimates' : 'Field app'}
+              profile={profile}
+              online={online}
+              syncing={syncing}
+              lastSync={lastSync}
+              showRoofLookup={!roofIsTab}
+              onOpen={(id) => go({ kind: 'edit', id })}
+              onNew={createEstimate}
+              onSync={syncNow}
+            />
+          ) : (
+            <EstimateEditor
+              key={view.id}
+              id={view.id}
+              profile={profile}
+              online={online}
+              onBack={() => go({ kind: 'list' })}
+              requestSync={runSync}
+              fillPlace={placePending === view.id}
+            />
+          )}
+        </>
       )}
-    </div>
+    </main>
   );
 }

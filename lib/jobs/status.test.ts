@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedTransitions, groupForCrew, groupForOffice, isJobStatus, officeGroup, type JobStatus } from './status';
+import { allowedTransitions, groupForCrew, groupForOffice, isJobStatus, officeGroup, VERIFIED_STATUS_TEXT, type JobStatus } from './status';
 
 describe('allowedTransitions', () => {
   it('lets crews start, complete and un-start their jobs', () => {
@@ -21,6 +21,24 @@ describe('allowedTransitions', () => {
     expect(isJobStatus('completed')).toBe(true);
     expect(isJobStatus('done')).toBe(false);
     expect(isJobStatus(null)).toBe(false);
+  });
+});
+
+describe('a verified job shows only what makes sense (L37, RF-16)', () => {
+  it('offers no status changes once its actuals are verified', () => {
+    // Was 'Mark in progress' and 'Cancel job' on a verified job.
+    expect(allowedTransitions('completed', 'office', 3)).toEqual([]);
+    expect(allowedTransitions('completed', 'owner', 3)).toEqual([]);
+    // Partly verified: the verified rows are locked, so the status is too.
+    expect(allowedTransitions('completed', 'owner', 1)).toEqual([]);
+    expect(allowedTransitions('completed', 'crew', 3)).toEqual([]);
+    // Nothing verified yet: as before.
+    expect(allowedTransitions('completed', 'office', 0)).toEqual(['in_progress', 'cancelled']);
+    expect(allowedTransitions('completed', 'owner')).toEqual(['in_progress', 'cancelled']);
+  });
+  it('says why, and that only the owner can Unverify', () => {
+    expect(VERIFIED_STATUS_TEXT.owner).toBe('Its actuals are verified, so the status stays as it is. To change it, Unverify the actuals below first.');
+    expect(VERIFIED_STATUS_TEXT.office).toBe('Its actuals are verified, so the status stays as it is. Only the owner can Unverify them.');
   });
 });
 

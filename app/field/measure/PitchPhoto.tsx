@@ -24,6 +24,7 @@ import {
   type Pt,
 } from '@/lib/measure/pitchPhoto';
 import { Alert, Button, cx } from '@/components/ui';
+import { Camera, Icon, Image as ImageIcon } from '@/components/daymark';
 import { Section, Tile } from './RoofTakeoff';
 
 /** The marks on the photo: orange shows on sky, siding and shingles alike. */
@@ -143,7 +144,10 @@ export function PitchPhotoSheet({ field, onUse, onClose }: { field: string; onUs
       <div className="sticky top-0 z-10 bg-white shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-2">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold leading-tight">📷 Pitch from a photo</h2>
+            <h2 className="flex min-w-0 items-center gap-2 text-lg font-bold leading-tight">
+              <Icon icon={Camera} />
+              <span className="truncate">Pitch from a photo</span>
+            </h2>
             <p className="truncate text-xs text-slate-600">For the {field}</p>
           </div>
           <Button variant="secondary" onClick={onClose}>
@@ -166,8 +170,9 @@ export function PitchPhotoSheet({ field, onUse, onClose }: { field: string; onUs
                 Clear points
               </Button>
               {/* Without capture the phone offers its camera and its photos. */}
-              <Button variant="secondary" disabled={opening} onClick={() => library.current?.click()}>
-                📷 New photo
+              <Button variant="secondary" className="px-3!" disabled={opening} onClick={() => library.current?.click()}>
+                <Icon icon={Camera} />
+                New photo
               </Button>
             </div>
           </div>
@@ -175,11 +180,13 @@ export function PitchPhotoSheet({ field, onUse, onClose }: { field: string; onUs
           <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
             <p className="text-slate-800">Take a photo of a gable end from straight in front, with the phone upright (not tipped back). Then tap the two bottom corners of the roof triangle and its peak.</p>
             <div className="grid grid-cols-2 gap-2">
-              <Button disabled={opening} onClick={() => camera.current?.click()}>
-                📷 Take photo
+              <Button className="px-3!" disabled={opening} onClick={() => camera.current?.click()}>
+                <Icon icon={Camera} />
+                Take photo
               </Button>
-              <Button variant="secondary" disabled={opening} onClick={() => library.current?.click()}>
-                🖼 Choose
+              <Button variant="secondary" className="px-3!" disabled={opening} onClick={() => library.current?.click()}>
+                <Icon icon={ImageIcon} />
+                Choose
               </Button>
             </div>
             <p className="text-xs text-slate-500">The photo isn&apos;t uploaded or saved.</p>
@@ -264,7 +271,6 @@ function Reading({ reading, check }: { reading: Extract<PitchReading, { bad: fal
           <p className="text-sm text-slate-600">{check.text}</p>
         ) : (
           <Alert tone={CHECK_TONE[check.tone]}>
-            {check.tone === 'ok' ? '✓ ' : null}
             {check.text}
           </Alert>
         )}
@@ -395,11 +401,11 @@ function PitchBoard({ photo, points, setPoints }: { photo: HTMLCanvasElement; po
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={up}
-          className="mx-auto block touch-none select-none rounded-2xl bg-slate-800 shadow-sm ring-1 ring-slate-200"
+          className="mx-auto block touch-none select-none rounded-2xl bg-frame shadow-sm ring-1 ring-slate-200"
           style={{ width: layout.w, height: layout.h }}
         />
       ) : (
-        <div className="h-60 w-full rounded-2xl bg-slate-800" />
+        <div className="h-60 w-full rounded-2xl bg-frame" />
       )}
     </div>
   );

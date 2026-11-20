@@ -2,28 +2,40 @@
  *
  * Goal: the field app (/field) and the crew app (/crew) open and work with no signal. The Roof
  * lookup page (/field/roof) is its own shell, so with no signal it opens and says it needs one.
+ * The blower door tool (/field/blower-door) is its own price-free shell for every staff role,
+ * crews included: it works fully offline (its data lives in IndexedDB) and reads its job or
+ * estimate from the query, so one cached copy serves every ?job= and ?estimate=.
  *  - On install, precache each app shell and every /_next/static asset it references. A shell
  *    the user's role cannot open (a redirect) is skipped.
  *  - Navigations to a shell path: network-first, fall back to that cached shell. A crew phone
  *    has no /field shell (crews are redirected away), so an offline launch at /field (the
  *    manifest start_url) falls back to the cached /crew shell. Never the other way round: the
  *    /field shell can show prices, which crews must not see.
- *  - /_next/static/* and /icons/* : cache-first (file names are content-hashed).
+ *  - /_next/static/* and /icons/* : cache-first (file names are content-hashed). That includes the
+ *    self-hosted Daymark fonts (/_next/static/media/*.woff2): they are preloaded from each shell's
+ *    HTML and also picked out of the shell's stylesheets, so the offline app keeps its look.
  *  - /api/* and everything else: network only. Offline data lives in IndexedDB, not here.
  *  - The shells are per device, not per user. A shell the server refuses (redirect, 401, 403:
  *    signed out, or the role changed) is deleted, sign-out deletes them all ('clear-user-data'),
- *    and offline a /field launch opens the /crew shell when /crew was the last shell loaded, so
- *    a crew member never gets someone else's priced /field shell.
+ *    and offline a /field launch opens the /crew shell when /crew was the last role shell loaded,
+ *    so a crew member never gets someone else's priced /field shell. Only the role shells (/field
+ *    and /crew) count as "last": the tools every role opens (/field/blower-door) say nothing about
+ *    whose phone it is.
+ *  - Koala's database or sign-in service not answering is not a sign-out (L36): the server sends a
+ *    page to /unreachable (or answers 503). For a shell, the phone's cached copy opens instead and
+ *    says "Can't reach Koala right now"; the cached copy is kept, never deleted for that.
  * Bump VERSION to force clients onto a new cache.
  */
-const VERSION = 'v4';
+const VERSION = 'v14';
 const LAST_SHELL = '/__last-shell';
 const SHELL_CACHE = `koala-shell-${VERSION}`;
 const STATIC_CACHE = `koala-static-${VERSION}`;
-// Most specific first: /field/roof is not part of the /field shell.
-const SHELLS = ['/field/roof', '/field', '/crew'];
+// Most specific first: /field/roof and /field/blower-door are not part of the /field shell.
+const SHELLS = ['/field/roof', '/field/blower-door', '/field', '/crew'];
 // Offline only: which cached shell may stand in when a shell is missing (price-free shells only).
 const FALLBACK = { '/field': '/crew' };
+// The shells that say whose phone this is (the role's own app), for LAST_SHELL.
+const ROLE_SHELLS = ['/field', '/crew'];
 
 /** The shell a path belongs to ("/crew", "/field/x"), or null. */
 function shellFor(pathname) {
@@ -34,19 +46,49 @@ function assetsIn(html) {
   return [...new Set(html.match(/\/_next\/static\/[^"'\s)\\]+/g) || [])];
 }
 
+/** Files a stylesheet points at with url(...) (fonts, images), as same-origin /_next/static paths. */
+function assetsInCss(css, cssPath) {
+  const out = new Set();
+  for (const m of css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)) {
+    if (m[1].startsWith('data:')) continue;
+    const u = new URL(m[1], self.location.origin + cssPath);
+    if (u.origin === self.location.origin && u.pathname.startsWith('/_next/static/')) out.add(u.pathname);
+  }
+  return [...out];
+}
+
+/**
+ * Caches the given assets, then whatever their stylesheets use. refetch: fetch even when cached
+ * (the install-time precache does, as before); otherwise only what is missing.
+ */
+async function cacheAssets(urls, refetch = false) {
+  const staticCache = await caches.open(STATIC_CACHE);
+  const add = (url) => staticCache.match(url).then((hit) => (hit && !refetch ? hit : staticCache.add(url))).catch(() => undefined);
+  await Promise.all(urls.map(add));
+  for (const css of urls.filter((u) => u.endsWith('.css'))) {
+    const res = await staticCache.match(css);
+    if (res) await Promise.all(assetsInCss(await res.text(), css).map(add));
+  }
+}
+
 async function precacheShell(shellUrl) {
   const res = await fetch(shellUrl, { credentials: 'include', cache: 'no-store' });
   const cache = await caches.open(SHELL_CACHE);
+  // Koala not answering: keep the copy we have.
+  if (unreachable(res)) return;
   // Signed out or wrong role: drop any copy cached for an earlier user. Other errors: keep it.
   if (refused(res)) return cache.delete(shellUrl);
   if (!res.ok) return;
   await cache.put(shellUrl, res.clone());
-  const staticCache = await caches.open(STATIC_CACHE);
-  await Promise.all(
-    [...assetsIn(await res.text()), '/manifest.webmanifest', '/icons/icon-192.png'].map((url) =>
-      staticCache.add(url).catch(() => undefined),
-    ),
-  );
+  await cacheAssets([...assetsIn(await res.text()), '/manifest.webmanifest', '/icons/icon-192.png'], true);
+}
+
+/** Koala's database or sign-in service did not answer: the server sent the page to /unreachable, or a 503. */
+function unreachable(res) {
+  if (res.status === 503) return true;
+  if (!res.redirected) return false;
+  const to = new URL(res.url);
+  return to.origin === self.location.origin && to.pathname === '/unreachable';
 }
 
 function refused(res) {
@@ -96,31 +138,42 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+/** The cached copy of a shell for this device (see FALLBACK), or undefined. */
+async function cachedShell(cache, shell) {
+  const last = await cache.match(LAST_SHELL).then((r) => (r ? r.text() : null));
+  // A device last used for the crew app never opens a priced shell offline.
+  const preferred = last && FALLBACK[shell] === last ? last : shell;
+  return (await cache.match(preferred)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
+}
+
 async function shellNavigation(req, shell) {
   const cache = await caches.open(SHELL_CACHE);
   try {
-    const res = await fetch(req);
+    // Redirects are followed here, so where they lead is known: /unreachable (Koala is not
+    // answering: open the phone's copy) or anywhere else (signed out or the wrong role: drop it).
+    const res = await fetch(req.url, { credentials: 'include', redirect: 'follow', headers: req.headers });
+    if (unreachable(res)) {
+      const cached = await cachedShell(cache, shell);
+      if (cached) return cached;
+      return res.redirected ? Response.redirect(res.url, 302) : res;
+    }
     if (refused(res)) {
       await cache.delete(shell);
+      // A navigation cannot take a followed redirect as its answer: send the browser there itself.
+      return res.redirected ? Response.redirect(res.url, 302) : res;
     } else if (res.ok) {
       cache.put(shell, res.clone());
-      cache.put(LAST_SHELL, new Response(shell));
+      if (ROLE_SHELLS.includes(shell)) cache.put(LAST_SHELL, new Response(shell));
       // Keep the shell's assets cached as deployments change them.
       res
         .clone()
         .text()
-        .then(async (html) => {
-          const staticCache = await caches.open(STATIC_CACHE);
-          for (const a of assetsIn(html)) if (!(await staticCache.match(a))) staticCache.add(a).catch(() => undefined);
-        })
+        .then((html) => cacheAssets(assetsIn(html)))
         .catch(() => undefined);
     }
     return res;
   } catch {
-    const last = await cache.match(LAST_SHELL).then((r) => (r ? r.text() : null));
-    // A device last used for the crew app never opens a priced shell offline.
-    const preferred = last && FALLBACK[shell] === last ? last : shell;
-    const cached = (await cache.match(preferred)) || (FALLBACK[shell] ? await cache.match(FALLBACK[shell]) : undefined);
+    const cached = await cachedShell(cache, shell);
     if (cached) return cached;
     return new Response(
       '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title>' +

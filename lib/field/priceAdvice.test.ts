@@ -69,6 +69,44 @@ describe('priceAdvice', () => {
     expect(at.current.expectedProfit).toBeCloseTo(at.best.expectedProfit, 2);
   });
 
+  it('readiness walk W4: suggests a price only when the most profit lies inside the allowed prices', () => {
+    // This market's win chance falls steeply enough that raising the price further loses money
+    // before the ceiling: that price is suggested.
+    const learned = priceAdvice(model, better, features, settings)!;
+    const i = learned.best.curve.findIndex((p) => p.price === learned.best.price);
+    expect(i).toBeGreaterThan(0);
+    expect(i).toBeLessThan(learned.best.curve.length - 1);
+    expect(learned.learnedPrice).toBe(true);
+    // A model that barely reacts to price puts the most profit at the top of the range: "charge as
+    // much as you may" is no advice, so none is given.
+    const flat: WinModel = { ...model, weights: { ...model.weights, markup: -0.02 } };
+    const none = priceAdvice(flat, better, features, settings)!;
+    expect(none.best.price).toBe(none.best.curve.at(-1)!.price);
+    expect(none.learnedPrice).toBe(false);
+    // The win chance at the estimator's price is still given.
+    expect(none.current.winProbability).toBeGreaterThan(0);
+  });
+
+  it("readiness walk W4: production's win model (2026-11-19) suggests no price; it put every job at the top", () => {
+    const prod: WinModel = {
+      ...model,
+      nQuotes: 76,
+      weights: { markup: -0.5669335240015756, log_sqft: -0.3174060057377513, intercept: 3.246897868870137, 'job:rim_joist': -0.31100376834411475, 'job:crawlspace': 0.25501012523512745 },
+      jobTypes: ['crawlspace', 'rim_joist'],
+    };
+    const prodSettings = { ...settings, floorMarginPct: 0.05, ceilingMarginPct: 0.3, minimumJobPrice: 1500, priceRounding: 5 };
+    for (const [jobType, sqft, loadedCost] of [['attic', 1200, 4000], ['attic', 400, 1300], ['walls', 1500, 6000], ['crawlspace', 800, 2500], ['rim_joist', 200, 900]] as const) {
+      const a = priceAdvice(prod, { price: loadedCost / 0.8, loadedCost }, { jobType, source: null, sqft }, prodSettings)!;
+      expect(a.learnedPrice).toBe(false);
+    }
+  });
+
+  it('a small job held at the minimum job price (one allowed price) suggests nothing and claims nothing', () => {
+    const small = priceAdvice(model, { price: settings.minimumJobPrice + 400, loadedCost: settings.minimumJobPrice * 0.3 }, features, settings)!;
+    expect(small.best.curve).toHaveLength(1);
+    expect(small.learnedPrice).toBe(false);
+  });
+
   it('a higher price always has a lower win chance with this model', () => {
     const lo = priceAdvice(model, { price: better.price, loadedCost: better.loadedCost }, features, settings)!;
     const hi = priceAdvice(model, { price: better.price * 1.3, loadedCost: better.loadedCost }, features, settings)!;
@@ -113,7 +151,8 @@ describe('priceAdvice', () => {
 
 describe('recommendationReason', () => {
   it('names the evidence behind the price', () => {
-    expect(recommendationReason(model)).toBe('Expected-profit recommendation (win model, 87 quotes)');
+    // "Suggested", so "Recommended" on the Options step only means the option the quote highlights (W4).
+    expect(recommendationReason(model)).toBe('Suggested price (win model, 87 quotes)');
   });
 });
 

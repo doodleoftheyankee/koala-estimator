@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACCESS_LEVELS,
   lineKey,
-  priceEstimate,
+  priceEstimate as priceShown,
   type CoefficientSet,
   type EstimateInput,
   type LineOverride,
@@ -12,6 +12,10 @@ import {
 } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { computeDeviationFlags, deviationOutcome } from './deviation';
+
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
 
 const bundle = { snapshot, coefficientSet: coefficients };
 
@@ -307,9 +311,10 @@ describe('computeDeviationFlags — total price flags', () => {
     expect(run(estimate({ overrides: { good: { price: 6233, reason: 'r' } } }))).toEqual([]);
   });
 
-  it('formats cents and a missing reason', () => {
-    const [flag] = run(estimate({ overrides: { better: { price: 5560.5, reason: '  ' } } }));
-    expect(flag!.message).toBe('Better option price 15.5% above model: you are quoting $5,560.50, the model price is $4,815.');
+  it('quotes a price typed with cents in whole dollars, and says when there is no reason', () => {
+    // Prices are whole dollars (L5, OD4): $7,224.50 is quoted at $7,225 (15.5% above $6,255).
+    const [flag] = run(estimate({ overrides: { better: { price: 7224.5, reason: '  ' } } }));
+    expect(flag!.message).toBe('Better option price 15.5% above model: you are quoting $7,225, the model price is $6,255.');
     expect(flag!.reasons).toEqual([{ code: 'price_override', text: 'Price set by hand: no reason given.' }]);
   });
 

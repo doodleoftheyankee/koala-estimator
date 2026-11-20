@@ -3,7 +3,9 @@
 // this week's crew schedule and an open pipeline. Produces SQL batches (run by app/api/demo/seed
 // through a temporary database function, or by scripts/demo-seed.ts). Deterministic for a seed.
 import { priceEstimate, type PricedEstimate, type PricingBundle, type Tier } from '@/lib/pricing';
-import { buildQuoteDocument } from '@/lib/quotes/model';
+import { esignConsent, LEGACY_ESIGN_CONSENT, stateName } from '@/lib/quotes/consent';
+import { buildQuoteDocument, legacyQuoteNumber } from '@/lib/quotes/model';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
 import { newArea, newDraft, priceableAreas, toEstimateInput, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { buildSyncPayload } from '@/lib/sync/payload';
 import { DEMO_USER_IDS as DEMO } from './accounts';
@@ -23,6 +25,8 @@ export function buildDemoSeed(args: { bundle: PricingBundle; settings: Array<{ k
 const FIRST = ['James', 'Maria', 'Robert', 'Linda', 'Michael', 'Patricia', 'David', 'Jennifer', 'William', 'Susan', 'Joseph', 'Karen', 'Thomas', 'Nancy', 'Daniel', 'Lisa', 'Mark', 'Betty', 'Paul', 'Sandra', 'Kevin', 'Donna', 'Brian', 'Carol', 'George', 'Michelle', 'Ed', 'Amanda', 'Ron', 'Melissa'];
 const LAST = ['Smith', 'Johnson', 'Brown', 'Miller', 'Davis', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas', 'Jackson', 'White', 'Harris', 'Martin', 'Thompson', 'Garcia', 'Martinez', 'Clark', 'Lewis', 'Walker', 'Hall', 'Young', 'King', 'Wright', 'Scott', 'Green', 'Baker', 'Adams', 'Nelson', 'Carter'];
 const STREETS = ['Elkton Rd', 'Main St', 'Paper Mill Rd', 'Kirkwood Hwy', 'Polly Drummond Hill Rd', 'Capitol Trl', 'Chestnut Hill Rd', 'Old Baltimore Pike', 'Possum Park Rd', 'Barksdale Rd', 'Red Mill Rd', 'Salem Church Rd', 'Pike Creek Rd', 'Limestone Rd', 'Delaware Ave'];
+/** The demo towns' state (the demo history is one franchise's). */
+const TOWN_STATE = 'DE';
 const TOWNS: Array<[string, string, number]> = [['Newark', '19711', 12], ['Newark', '19702', 16], ['Bear', '19701', 22], ['Hockessin', '19707', 25], ['Wilmington', '19808', 28], ['Middletown', '19709', 35]];
 const SOURCES = ['Website', 'Google Local Services', 'Referral', 'Energize Delaware', 'Angi / HomeAdvisor', 'Facebook'];
 const LOST_REASONS = ['Price too high', 'Went with another contractor', 'Decided to wait', 'No response after follow-ups', 'Financing not available'];
@@ -87,8 +91,8 @@ interface Planned {
 }
 
 function plan(createdAt: Date, outcome: Planned['outcome'], stage?: Planned['stage']): Planned {
-  const d = newDraft(createdAt, uuid);
   const [town, zip, drive] = pick(TOWNS);
+  const d = newDraft(createdAt, uuid, { city: town, state: TOWN_STATE });
   d.customer = { ...d.customer, firstName: pick(FIRST), lastName: pick(LAST), email: '', phone: `302-555-${String(Math.floor(between(1000, 9999)))}` };
   d.customer.email = `${d.customer.firstName}.${d.customer.lastName}@example.com`.toLowerCase();
   d.property = { ...d.property, street: `${Math.floor(between(10, 999))} ${pick(STREETS)}`, city: town, zip, yearBuilt: Math.floor(between(1955, 2008)) };
@@ -193,10 +197,15 @@ function sqlFor(p: Planned): string {
 
   const sentAt = new Date(p.createdAt.getTime() + between(0.1, 1.5) * DAY);
   const quoteId = uuid();
+  // Demo history is numbered the way quotes were before the counter (it never takes a number from
+  // the real counter, so it cannot collide with one), and signed under the profile's state.
+  const state = String(setting('default_state') ?? '');
   const document = buildQuoteDocument({
     draft: d,
     options: p.priced.options,
     version: 1,
+    quoteNumber: legacyQuoteNumber(d.id, 1, sentAt),
+    consent: stateName(state) ? esignConsent(state) : LEGACY_ESIGN_CONSENT,
     issuedAt: sentAt,
     validDays: Number(setting('quote_valid_days') ?? 30),
     branding: setting('branding') as never,
@@ -241,7 +250,7 @@ function sqlFor(p: Planned): string {
   out.push(`update estimates set status = 'signed', selected_tier = ${s(p.signedTier)}, decided_at = ${ts(decided)} where id = ${est};`);
   const jobRef = `(select id from jobs where quote_id = ${s(quoteId)})`;
   const crew = `(select id from crews where name = 'Crew A')`;
-  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T12:00:00Z');
+  const today = new Date(NOW.toLocaleDateString('en-CA', { timeZone: BUSINESS_TIME_ZONE }) + 'T12:00:00Z');
   if (p.stage === 'verified' || p.stage === 'awaiting') {
     const start = new Date(Math.min(decided.getTime() + between(5, 20) * DAY, NOW.getTime() - 2 * DAY));
     const done = new Date(Math.min(start.getTime() + Math.max(1, Math.ceil(option.crewDays)) * DAY * 0.8, NOW.getTime() - 0.5 * DAY));

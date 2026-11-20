@@ -1,17 +1,25 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { fontVariables } from './fonts';
+import { ThemeInitScript, ThemeRestore } from '@/components/daymark/ThemeRestore';
+import { ToastProvider } from '@/components/daymark/Toast';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { THEME_COLORS } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: { default: 'Koala Estimator', template: '%s · Koala Estimator' },
-  description: 'Koala Insulation of Newark: estimates and quotes',
+  description: 'Insulation estimates and quotes',
   applicationName: 'Koala Estimator',
   appleWebApp: { capable: true, title: 'Koala Estimator', statusBarStyle: 'default' },
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f766e',
+  // The page canvas per theme; the theme switcher updates these when a theme is chosen by hand.
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLORS.night },
+    { media: '(prefers-color-scheme: light)', color: THEME_COLORS.day },
+  ],
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
@@ -19,10 +27,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // data-theme is set before first paint by the script below, so React must not complain that
+    // the server sent <html> without it.
+    <html lang="en" className={fontVariables} suppressHydrationWarning>
+      <head>
+        <ThemeInitScript />
+      </head>
       <body className="min-h-dvh antialiased">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
         <ServiceWorkerRegistrar />
+        <ThemeRestore />
       </body>
     </html>
   );

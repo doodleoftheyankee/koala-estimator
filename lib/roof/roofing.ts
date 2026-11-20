@@ -24,21 +24,20 @@ import {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Each edge type's name, what it is in plain words, and its colour on the photo and in the legend
- * (picked to read on an aerial photo; a pitch break is dashed). The Roof Takeoff page's colours.
+ * Each edge type's name and what it is in plain words (a pitch break is drawn dashed). The colours
+ * the map, legend and printed report draw with are the Daymark map tokens in lib/roof/draw.ts
+ * (MAP_COLORS, edgeColor); lib/roof/draw.test.ts pins them.
  */
-export const EDGE_INFO: Record<EdgeType, { label: string; what: string; color: string; dash?: readonly [number, number] }> = {
-  ridge: { label: 'Ridge', what: 'Top line where two faces meet', color: '#FF5A5A' },
-  hip: { label: 'Hip', what: 'Sloped outside corner between two faces', color: '#FFC21A' },
-  valley: { label: 'Valley', what: 'Inside corner where two faces drain together', color: '#3FA9FF' },
-  eave: { label: 'Eave', what: 'Low, level edge at the gutter', color: '#4CD07D' },
-  rake: { label: 'Rake', what: 'Sloped edge at a gable end', color: '#FF7AD0' },
-  step: { label: 'Step', what: 'Sloped side of a roof against a wall', color: '#B794FF' },
-  headwall: { label: 'Headwall', what: 'Level top of a roof against a wall', color: '#4FE3E3' },
-  break: { label: 'Pitch break', what: 'Pitch changes between two faces', color: '#FFFFFF', dash: [7, 5] },
+export const EDGE_INFO: Record<EdgeType, { label: string; what: string; dash?: readonly [number, number] }> = {
+  ridge: { label: 'Ridge', what: 'Top line where two faces meet' },
+  hip: { label: 'Hip', what: 'Sloped outside corner between two faces' },
+  valley: { label: 'Valley', what: 'Inside corner where two faces drain together' },
+  eave: { label: 'Eave', what: 'Low, level edge at the gutter' },
+  rake: { label: 'Rake', what: 'Sloped edge at a gable end' },
+  step: { label: 'Step', what: 'Sloped side of a roof against a wall' },
+  headwall: { label: 'Headwall', what: 'Level top of a roof against a wall' },
+  break: { label: 'Pitch break', what: 'Pitch changes between two faces', dash: [7, 5] },
 };
-/** The roof outline on the photo. */
-export const OUTLINE_COLOR = '#FFFFFF';
 
 export const EDGES_NOT_MEASURED = "Roof edge lengths weren't measured for this house. Measure them on site.";
 
@@ -138,7 +137,8 @@ export function orderFor(roofSqft: number, wastePct: number): Order {
 // The takeoff as a report or a summary
 // ---------------------------------------------------------------------------------------------
 
-export const COMPANY = 'Koala Insulation of Newark';
+/** The name on every roof takeoff report and summary: the brand (OD12), for every franchise's estimators. */
+export const COMPANY = 'Koala Insulation';
 export const LOW_SLOPE_LABEL = 'Low-slope roof (under 2/12, not shingles)';
 export const NO_SHINGLES = 'No shingle area: flat or low-slope roof.';
 /** "Squares", or "Squares (2/12 and up)" when low-slope faces were kept out. */

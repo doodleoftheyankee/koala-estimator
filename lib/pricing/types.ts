@@ -38,7 +38,7 @@ export interface PricingSettings {
   floorMarginPct: number;
   ceilingMarginPct: number;
   minimumJobPrice: number;
-  priceRounding: number; // round customer price UP to this many dollars
+  priceRounding: number; // round customer price UP to this many dollars (at least $1: priceStep)
   productiveHoursPerDay: number; // per crew member
   vehicleCostPerTrip: number; // per crew-day
   disposalCostPerSqft: number;
@@ -65,6 +65,14 @@ export interface MaterialConfig {
   costPerUnit: number;
   /** sqft x inches covered by one unit (bags). Null for per-sqft / per-board-ft products. */
   coverageSqftIn: number | null;
+  /**
+   * Used only for this job type (dense-pack walls: a wall is blown dense, so a bag covers less).
+   * Absent or null on a product's general material.
+   */
+  jobType?: JobType | null;
+  /** A sized material (a batt): its rated R-value and its thickness in inches. Absent on general materials. */
+  rValue?: number | null;
+  thicknessIn?: number | null;
 }
 
 export interface CrewConfig {
@@ -94,7 +102,8 @@ export interface TierTemplate {
 export interface PricingSnapshot {
   settings: PricingSettings;
   products: ProductConfig[];
-  materials: MaterialConfig[]; // default material per product
+  /** Each product's general (default) material, plus job-type materials (dense-pack walls) and sizes (batts). */
+  materials: MaterialConfig[];
   crews: CrewConfig[];
   defaultCrewId: string | null;
   codeRequirements: CodeRequirement[];
@@ -142,6 +151,14 @@ export interface PricingBundle {
   snapshot: PricingSnapshot;
   coefficientSet: CoefficientSet;
   winModel: WinModel | null;
+  /**
+   * What the phone needs to know from the settings (app/api/bundle, lib/quotes/profile.ts
+   * businessInfo): the town and state a new estimate starts in. Outside the pricing hash: it never
+   * changes a price. (A bundle cached before OD12 may still carry `gaps`; nothing reads them.)
+   */
+  business?: { newEstimate: { city: string; state: string } };
+  /** The ETag the bundle was served with (the pricing hash and the business info), for the next refresh. */
+  etag?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,9 +240,23 @@ export interface PricedLine {
   overrideReason: string | null;
 }
 
-/** What the customer sees: one row per area scope item, sell price allocated by cost share. */
+/**
+ * What a customer line is:
+ *  - work: one area scope item (removal, insulation, air sealing), priced from its own cost, so the
+ *    same work costs the same in every option (OD2);
+ *  - travel: "Travel and setup", the rest of the model price (drive, trips and rounding);
+ *  - minimum: "Minimum job charge", the top-up to the minimum job price;
+ *  - adjustment: "Price adjustment", the estimator's price change (OD3), plus or minus.
+ */
+export const CUSTOMER_ITEM_KINDS = ['work', 'travel', 'minimum', 'adjustment'] as const;
+export type CustomerItemKind = (typeof CUSTOMER_ITEM_KINDS)[number];
+
+/** What the customer sees. Whole dollars; the items of an option always add up to its price (OD4). */
 export interface CustomerItem {
+  kind: CustomerItemKind;
+  /** The area a work item belongs to; null for the job-level lines. */
   areaId: string | null;
+  /** The area's name; '' for the job-level lines. */
   areaName: string;
   description: string;
   price: number;
@@ -255,7 +286,7 @@ export interface PricedOption {
   modelPrice: number;
   /** Price after the estimator's line overrides, before any price override. */
   adjustedPrice: number;
-  /** Customer price: the price override if set, else adjustedPrice. */
+  /** Customer price, whole dollars: the price override (rounded to the dollar) if set, else adjustedPrice. */
   price: number;
   /** A customer-price override is set. */
   isOverridden: boolean;
@@ -266,6 +297,12 @@ export interface PricedOption {
   belowFloor: boolean;
   crewDays: number;
   financing: Financing | null;
+  /**
+   * The options OD6 leaves out of what the customer is shown because they do the same work as this
+   * one for as much or more; absent when there are none. An estimator whose pick is one of them is
+   * recommended this option when it is shown (OD15, lib/field/recommended.ts).
+   */
+  sameWorkAs?: Tier[];
 }
 
 export interface PricingWarning {
@@ -276,13 +313,29 @@ export interface PricingWarning {
     | 'tier_skipped'
     | 'override_below_floor'
     | 'no_crew'
-    | 'tier_price_order';
+    | 'tier_price_order'
+    /** OD6: an option that duplicates another or does not step up is not shown to the customer. */
+    | 'option_hidden'
+    /** A price under $1 was typed; it is not used. */
+    | 'override_too_low'
+    /** The cavity has no room left for the product (existing insulation fills it, or no batt fits). */
+    | 'cavity_full'
+    /** An estimator's quantity was more than the cavity holds; the quantity priced was cut to a full cavity. */
+    | 'override_capped'
+    /**
+     * An option's own removal (from its template, not required by the estimator) would leave the
+     * area with less R than it has; the option keeps what is there instead (review A F9).
+     */
+    | 'removal_kept'
+    /** An estimator's quantity of 0 for a product: the option installs none of it there (review A F4). */
+    | 'product_zero';
   areaId: string | null;
   tier: Tier | null;
   message: string;
 }
 
 export interface PricedEstimate {
+  /** The options the customer is shown (OD6), in tier order; every priced option with showAll. */
   options: PricedOption[];
   warnings: PricingWarning[];
   crewId: string;

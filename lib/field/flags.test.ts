@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
-import { lineKey, priceEstimate, type PricingBundle } from '@/lib/pricing';
+import { lineKey, priceEstimate as priceShown, type PricingBundle } from '@/lib/pricing';
 import { coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { draftSchema, newArea, newDraft, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import {
@@ -25,12 +25,16 @@ import {
 } from './flags';
 import { applyLineOverride, removeLineOverride, setPriceOverride } from './lineOverrides';
 
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
+
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const bundle: PricingBundle = { hash: 'abc', builtAt: '2026-10-20T00:00:00.000Z', snapshot, coefficientSet: coefficients, winModel: null };
 
 function draftWithAttic(): EstimateDraft {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid, { city: 'Springfield', state: 'IL' });
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic', uuid), sqft: 1000, accessLevel: 'easy' }];

@@ -11,4 +11,10 @@ export interface RemoteEstimate {
   rowVersion: number;
   updatedAt: string;
   doc: unknown;
+  /**
+   * The list's headline price, as the office list has it (lib/office/estimates.ts headlinePrice:
+   * the signed price, else the recommended option's): the phone's row shows it (release review C
+   * FLOW-2). Null when the estimate has no price; absent from an older server.
+   */
+  headline?: { price: number; tier: 'good' | 'better' | 'best' | null } | null;
 }

@@ -2,7 +2,10 @@
 // Sign-out that first drops this device's cached app shells (public/sw.js 'clear-user-data'):
 // they embed the signed-in user's profile, and the /field shell shows prices. Unsynced drafts in
 // IndexedDB stay, parked until their owner signs back in (lib/offline/db.ts switchUser).
+// The account menu (components/shell) shows it on every staff page.
 import type { FormEvent } from 'react';
+import { buttonClass } from './daymark/Button';
+import { Icon, LogOut } from './daymark/icons';
 
 async function clearShells(): Promise<void> {
   const sw = navigator.serviceWorker?.controller;
@@ -15,7 +18,7 @@ async function clearShells(): Promise<void> {
   });
 }
 
-export function SignOutButton() {
+export function SignOutButton({ block = false, disabled = false, className }: { block?: boolean; disabled?: boolean; className?: string }) {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -23,8 +26,11 @@ export function SignOutButton() {
     form.submit();
   }
   return (
-    <form action="/auth/signout" method="post" onSubmit={onSubmit}>
-      <button className="rounded-lg px-3 py-2 font-medium hover:bg-slate-100">Sign out</button>
+    <form action="/auth/signout" method="post" onSubmit={onSubmit} className={block ? 'w-full' : undefined}>
+      <button type="submit" disabled={disabled} className={buttonClass({ variant: 'secondary', size: 'sm', block, disabled }, className)}>
+        <Icon icon={LogOut} />
+        Sign out
+      </button>
     </form>
   );
 }

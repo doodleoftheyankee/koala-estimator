@@ -1,11 +1,13 @@
 'use client';
-// The Roof lookup page: the whole roof takeoff for any address, without an estimate. One address box
-// (?address= fills it in but never looks it up: each lookup is a paid Google request; "lat,lng", from
-// an old Roof Takeoff map-pin link, is looked up as that spot), the same takeoff as the area sheet
-// without its Use buttons, the person's recent lookups (opening one shows the saved lookup, no new
-// Google call), and "Start an estimate here": a new estimate with the house's address and an Attic
-// area that already has this lookup (a roof tapped on the photo too).
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from 'react';
+// The Roof lookup page: the whole roof takeoff for any address, without an estimate, in the
+// Daymark field register. One address box (?address= fills it in but never looks it up; "lat,lng",
+// from an old Roof Takeoff map-pin link, is looked up as that spot), then the same parts as the
+// area sheet in this page's own layout (the photo and the house check first, then the attic floor
+// and roof deck, beside each other on a desktop), the recent lookups (opening one shows the saved
+// lookup, no new Google call; a roof tapped on the photo is titled by the house it is near), and
+// "Start an estimate here" in the dock: a new estimate with the house's address and an Attic area
+// that already has this lookup (a roof tapped on the photo too).
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { db, newLocalEstimate, switchUser, type CachedProfile } from '@/lib/offline/db';
 import { fetchRecentLookups, fetchSavedLookup, houseLookup, LookupFailed, seedHouse, showLookup, startRoofLookup } from '@/lib/offline/roofLookup';
 import { lookupAddress, NOT_CONFIGURED_MESSAGE, parseLatLng, pitchText, roundSqft, whenText, type LatLng } from '@/lib/roof/lookup';
@@ -13,9 +15,11 @@ import { atticFloorNote } from '@/lib/roof/roofing';
 import { estimateAddress } from '@/lib/roof/address';
 import type { RecentLookup } from '@/lib/roof/recent';
 import { newArea, newDraft } from '@/lib/sync/draft';
-import { Alert, Button, Card, cx, Field, Input } from '@/components/ui';
+import { num } from '@/lib/format';
+import { Banner, Button, Card, CloudOff, cx, Dock, Field, House, HousePlus, Icon, Input, LoaderCircle, Pointer, Satellite, Search, SignLabel } from '@/components/daymark';
+import { PageHeader } from '@/components/shell';
 import { useOnline } from '../hooks';
-import { comma, TakeoffBody, useTakeoff, type Takeoff } from '../measure/RoofTakeoff';
+import { sqftValue, TakeoffBody, useTakeoff, type Takeoff } from '../measure/RoofTakeoff';
 import { useRoofConfigured } from '../measure/RoofLookup';
 
 const noSubscribe = () => () => undefined;
@@ -40,7 +44,16 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
   const text = typed ?? prefill;
   const [formError, setFormError] = useState<string | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
-  const t = useTakeoff({ estimateId: null, areaId: null, address: shown?.key ?? '', job: 'attic', near: shown?.near ?? null });
+  const t = useTakeoff({
+    estimateId: null,
+    areaId: null,
+    address: shown?.key ?? '',
+    job: 'attic',
+    near: shown?.near ?? null,
+  });
+  const box = useRef<HTMLInputElement>(null);
+  const owner = profile.role === 'owner';
+  const docked = Boolean(t.result && t.last && shown);
 
   const lookUp = (e: FormEvent) => {
     e.preventDefault();
@@ -54,69 +67,79 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
     if (pin) {
       // A spot ("lat,lng"): looked up there, like a roof tapped on the photo.
       const key = `Map pin ${pin.lat},${pin.lng}`;
-      setShown({ key, label: `the map pin at ${pin.lat}, ${pin.lng}`, near: null });
+      setShown({
+        key,
+        label: `the map pin at ${pin.lat}, ${pin.lng}`,
+        near: null,
+      });
       startIfNew(key, pin);
       return;
     }
     setShown({ key: address, label: address, near: address });
-    // A house already looked up on this page shows again; "Look up again" pays for a new one.
+    // A house already looked up on this page shows again; "Look up again" makes a new lookup.
     startIfNew(address, null);
   };
 
-  return (
-    <div className="mx-auto min-h-dvh max-w-2xl pb-32">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold">🛰️ Roof lookup</h1>
-            <p className="text-xs text-slate-500">
-              {profile.fullName} · <span className={online ? 'text-emerald-700' : 'text-amber-700'}>{online ? 'Online' : 'Offline'}</span>
-            </p>
-          </div>
-          <a href="/field" className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50">
-            ← Estimates
-          </a>
-        </div>
-      </header>
+  const editAddress = () => {
+    box.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    box.current?.focus();
+    box.current?.select();
+  };
 
-      <main className="space-y-4 p-4">
+  return (
+    <>
+      <main className="mx-auto w-full max-w-2xl space-y-5 px-4 pt-5 pb-8 lg:max-w-5xl lg:px-8 lg:pt-8">
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-2.5">
+              <Icon icon={Satellite} size="l" />
+              Roof lookup
+            </span>
+          }
+          description="Measure any roof from Google's aerial photo. No estimate needed."
+        />
+
         {!online ? (
-          <div role="alert">
-            <Alert tone="amber">No signal. The roof lookup needs internet. Your estimates still work offline.</Alert>
-          </div>
+          <Banner tone="hazard" icon={CloudOff} title="Offline." live={false}>
+            The roof lookup needs internet. Your estimates still work offline.
+          </Banner>
         ) : !configured ? (
-          <Alert tone="amber">{NOT_CONFIGURED_MESSAGE}</Alert>
+          <Banner tone="warn" live={false}>
+            {NOT_CONFIGURED_MESSAGE}
+          </Banner>
         ) : null}
 
-        <Card>
-          <form onSubmit={lookUp} className="space-y-3" noValidate>
-            <Field label="Address" hint="Each lookup is a paid Google request. A house looked up in the last day comes back free." error={formError}>
+        <Card className="lg:max-w-2xl">
+          <form onSubmit={lookUp} className="space-y-4" noValidate>
+            <Field
+              label="Address"
+              hint={owner ? 'Each lookup is a paid Google request. A house looked up in the last day comes back free.' : 'The street and town, or the whole address with the ZIP.'}
+              error={formError}
+            >
               <Input
+                ref={box}
                 value={text}
                 onChange={(e) => setTyped(e.target.value)}
                 type="text"
                 autoComplete="street-address"
                 enterKeyHint="search"
                 maxLength={200}
-                placeholder="12 Main St, Newark, DE 19711"
+                placeholder="Street, town and ZIP"
+                aria-invalid={formError ? true : undefined}
               />
             </Field>
-            <Button type="submit" size="lg" className="w-full" disabled={!online || !configured || Boolean(t.state.running)}>
+            {/* Hi-vis until there is a result (then the dock's "Start an estimate here" is the one action) or an error (then its next step is). */}
+            <Button type="submit" variant={docked || t.state.error ? 'secondary' : 'primary'} size="lg" block icon={Search} disabled={!online || !configured || Boolean(t.state.running)}>
               Look up
             </Button>
           </form>
         </Card>
 
-        {shown ? (
-          <>
-            <Headline t={t} />
-            <TakeoffBody t={t} mode="page" label={shown.label} />
-          </>
-        ) : null}
+        {shown ? <TakeoffBody t={t} mode="page" layout="split" label={shown.label} numbers={<PageNumbers t={t} />} steps={{ onEditAddress: editAddress }} /> : null}
 
         <RecentCard
           online={online}
-          owner={profile.role === 'owner'}
+          owner={owner}
           refreshKey={t.last?.lookupId ?? ''}
           onOpen={(r, lookup) => {
             const key = r.tapped ? `${r.label} ${r.id}` : r.label;
@@ -126,10 +149,13 @@ export function RoofLookupPage({ profile }: { profile: CachedProfile }) {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         />
+
+        {/* Room for the dock, so the last lookups are never under it. */}
+        {docked ? <div aria-hidden className="h-[calc(150px+var(--shell-safe))]" /> : null}
       </main>
 
       {t.result && t.last && shown ? <StartBar t={t} typed={shown.near} profile={profile} /> : null}
-    </div>
+    </>
   );
 }
 
@@ -139,29 +165,33 @@ function startIfNew(key: string, pin: LatLng | null) {
   if (!h.running && !h.last) startRoofLookup({ estimateId: null, areaId: null, address: key, pin });
 }
 
-/** The two numbers that matter most here: the attic floor and the roof surface. */
-function Headline({ t }: { t: Takeoff }) {
-  if (!t.f || !t.data || !t.result || !t.houseChoices) return null;
-  const tile = (label: string, value: number | null) => (
-    <div className="min-w-0 rounded-xl bg-brand-50 px-3 py-2 text-brand-800">
-      <div className="text-xs font-bold uppercase tracking-wide">{label}</div>
-      {/* The unit wraps under a five-digit number on a narrow phone instead of running out of the tile. */}
-      <div className="flex flex-wrap items-baseline gap-x-1 text-3xl font-extrabold tabular-nums">
-        <span>{value === null ? '—' : comma(roundSqft(value))}</span>
-        {value === null ? null : <span className="text-sm font-semibold">sq ft</span>}
-      </div>
+/** One reading: a sign label, its meaning, the gauge and its unit (not a choice here: no Use). */
+function Reading({ label, meaning, value, unit, small }: { label: string; meaning: string; value: string; unit: string | null; small: boolean }) {
+  return (
+    <div data-readout className="plate flex min-w-0 flex-col items-start gap-2 p-4">
+      <SignLabel tone="ink">{label}</SignLabel>
+      <span className="text-[15px] leading-snug font-semibold text-ink-2">{meaning}</span>
+      <span className={cx('gauge mt-1 max-w-full text-ink', small ? 'text-[36px]' : 'text-[56px]')}>{value}</span>
+      {unit ? <SignLabel tone="ink">{unit}</SignLabel> : null}
     </div>
   );
+}
+
+/** The same two numbers as an attic area's sheet: the attic floor and the roof deck. */
+function PageNumbers({ t }: { t: Takeoff }) {
+  if (!t.f || !t.result || !t.choices) return null;
+  const floor = sqftValue(t.f.floorSqft);
+  const deck = sqftValue(t.f.deckSqft);
+  // Five digits and a comma step down a size, so they stay inside a phone's tile.
+  const small = [floor, deck].some((v) => v.length >= 6);
   return (
-    <Card className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
-        {tile('Attic floor', t.f.floorSqft)}
-        {tile('Roof surface', t.data.roofSqft)}
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Reading label="Attic floor" meaning="Blown-in, on the ceiling" value={floor} unit="square feet" small={small} />
+        <Reading label="Roof deck" meaning="Spray foam, under the roof" value={deck} unit={t.f.deckSqft === null ? null : 'square feet'} small={small} />
       </div>
-      <p className="text-xs leading-snug text-slate-600">
-        Attic floor: {atticFloorNote(t.result, t.houseChoices)} Roof surface: every face along the slope, overhangs included.
-      </p>
-    </Card>
+      <p className="text-[15px] leading-snug font-medium text-ink-2">Attic floor: {atticFloorNote(t.result, t.choices)}</p>
+    </>
   );
 }
 
@@ -179,7 +209,7 @@ function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; pro
       ? "Google's address for this roof isn't a full street address. Start the estimate from the estimate list."
       : 'Google gave no street address for the roof you tapped. Start the estimate from the estimate list.'
     : t.needsConfirm
-      ? 'Check the house on the photo first: tap “Yes, this is the house”.'
+      ? 'Check the house first: tap Right house.'
       : null;
   const start = async () => {
     if (!parsed || !t.last || reason) return;
@@ -210,30 +240,46 @@ function StartBar({ t, typed, profile }: { t: Takeoff; typed: string | null; pro
     }
   };
   return (
-    <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur">
-      <div className="mx-auto max-w-2xl">
-        <Button size="lg" className="w-full" disabled={Boolean(reason) || busy || Boolean(t.state.running)} onClick={start}>
-          {busy ? 'Starting…' : 'Start an estimate here'}
-        </Button>
-        <p className={cx('mt-1 text-center text-xs', reason || error ? 'font-medium text-amber-800' : 'text-slate-500')}>
-          {error ?? reason ?? `A new estimate for ${parsed!.street}, ${parsed!.city}, with an Attic area. Its Look up has these numbers: no new charge.`}
-        </p>
-      </div>
-    </div>
+    <Dock blocked={error ?? reason} note={parsed ? `A new estimate for ${parsed.street}, ${parsed.city}, with an Attic area that already has these numbers.` : null}>
+      <Button variant="primary" size="lg" block icon={busy ? LoaderCircle : HousePlus} disabled={Boolean(reason) || busy || Boolean(t.state.running)} onClick={start}>
+        {busy ? 'Starting…' : 'Start an estimate here'}
+      </Button>
+    </Dock>
   );
 }
 
 /** The recent lookups (the owner sees everyone's). Opening one shows it as it was saved: no new Google call. */
-function RecentCard({ online, owner, refreshKey, onOpen }: { online: boolean; owner: boolean; refreshKey: string; onOpen: (r: RecentLookup, lookup: Awaited<ReturnType<typeof fetchSavedLookup>>) => void }) {
-  const [list, setList] = useState<{ items: RecentLookup[]; error: string | null } | null>(null);
-  const [opening, setOpening] = useState<{ id: string; error: string | null } | null>(null);
+function RecentCard({
+  online,
+  owner,
+  refreshKey,
+  onOpen,
+}: {
+  online: boolean;
+  owner: boolean;
+  refreshKey: string;
+  onOpen: (r: RecentLookup, lookup: Awaited<ReturnType<typeof fetchSavedLookup>>) => void;
+}) {
+  const [list, setList] = useState<{
+    items: RecentLookup[];
+    error: string | null;
+  } | null>(null);
+  const [opening, setOpening] = useState<{
+    id: string;
+    error: string | null;
+  } | null>(null);
   useEffect(() => {
     // navigator.onLine too: the first render after the page opens offline still says online.
     if (!online || !navigator.onLine) return;
     let live = true;
     fetchRecentLookups().then(
       (items) => live && setList({ items, error: null }),
-      (e: unknown) => live && setList((prev) => ({ items: prev?.items ?? [], error: e instanceof LookupFailed ? e.message : "Couldn't load the recent lookups." })),
+      (e: unknown) =>
+        live &&
+        setList((prev) => ({
+          items: prev?.items ?? [],
+          error: e instanceof LookupFailed ? e.message : "Couldn't load the recent lookups.",
+        })),
     );
     return () => {
       live = false;
@@ -246,46 +292,64 @@ function RecentCard({ online, owner, refreshKey, onOpen }: { online: boolean; ow
       onOpen(r, await fetchSavedLookup(r.id));
       setOpening(null);
     } catch (e) {
-      setOpening({ id: r.id, error: e instanceof LookupFailed ? e.message : "Couldn't open that lookup. Try again." });
+      setOpening({
+        id: r.id,
+        error: e instanceof LookupFailed ? e.message : "Couldn't open that lookup. Try again.",
+      });
     }
   };
 
+  const note = 'text-[15px] font-medium text-ink-2';
   return (
-    <Card>
-      <h2 className="font-semibold">Recent lookups</h2>
-      <p className="text-xs text-slate-500">{owner ? "Everyone's lookups. " : ''}Opening one shows it as it was saved: no new charge.</p>
+    <section aria-labelledby="recent-head" className="space-y-3 lg:max-w-2xl">
+      <div className="space-y-1">
+        <h2 id="recent-head" className="text-[22px] leading-tight font-extrabold text-ink">
+          Recent lookups
+        </h2>
+        <p className={note}>{owner ? "Everyone's lookups. " : ''}Opening one shows it as it was saved, without a new lookup.</p>
+      </div>
       {!online ? (
-        <p className="mt-2 text-sm text-slate-600">Recent lookups need a connection.</p>
+        <p className={note}>Recent lookups need a connection.</p>
       ) : !list ? (
-        <p className="mt-2 text-sm text-slate-600">Loading…</p>
+        <p className={note}>Loading…</p>
       ) : list.error && !list.items.length ? (
-        <p className="mt-2 text-sm text-red-700">{list.error}</p>
+        <p className="text-[15px] font-bold text-bad">{list.error}</p>
       ) : !list.items.length ? (
-        <p className="mt-2 text-sm text-slate-600">No lookups yet.</p>
+        <p className={note}>No lookups yet. Look up an address above and it shows here.</p>
       ) : (
-        <ul className="mt-2 divide-y divide-slate-100">
+        <ul className="plate divide-y divide-solid divide-line overflow-hidden">
           {list.items.map((r) => {
             const numbers = [
-              r.atticFloorSqft !== null ? `attic floor ${comma(roundSqft(r.atticFloorSqft))} sq ft` : null,
-              r.roofSqft !== null ? `roof ${comma(roundSqft(r.roofSqft))} sq ft` : null,
+              r.atticFloorSqft !== null ? `attic floor ${num(roundSqft(r.atticFloorSqft))} sq ft` : null,
+              r.roofSqft !== null ? `roof ${num(roundSqft(r.roofSqft))} sq ft` : null,
               r.mainPitch !== null ? pitchText(r.mainPitch) : null,
             ].filter(Boolean);
             return (
               <li key={r.id}>
-                <button type="button" onClick={() => open(r)} disabled={opening?.id === r.id && !opening.error} className="block min-h-12 w-full py-2.5 text-left active:bg-slate-50 disabled:opacity-60">
-                  <span className="block truncate font-semibold">{r.label}</span>
-                  <span className="block text-xs text-slate-600">
-                    {whenText(new Date(r.lookedUpAt))}
-                    {r.by ? ` · by ${r.by}` : ''}
+                <button
+                  type="button"
+                  onClick={() => open(r)}
+                  disabled={opening?.id === r.id && !opening.error}
+                  className="flex min-h-16 w-full items-start gap-3 px-4 py-3 text-left hover:bg-sunken disabled:opacity-60"
+                >
+                  <span className="mt-0.5 text-ink-2">
+                    <Icon icon={r.tapped ? Pointer : House} size="s" />
                   </span>
-                  {numbers.length ? <span className="block text-xs text-slate-500">{numbers.join(' · ')}</span> : null}
-                  {opening?.id === r.id ? <span className={cx('block text-xs', opening.error ? 'text-red-700' : 'text-slate-600')}>{opening.error ?? 'Opening…'}</span> : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[17px] leading-snug font-bold text-ink [overflow-wrap:anywhere]">{r.label}</span>
+                    <span className="block text-[15px] font-medium text-ink-3">
+                      {whenText(new Date(r.lookedUpAt))}
+                      {r.by ? ` · by ${r.by}` : ''}
+                    </span>
+                    {numbers.length ? <span className="block text-[15px] font-semibold text-ink-2">{numbers.join(' · ')}</span> : null}
+                    {opening?.id === r.id ? <span className={cx('block text-[15px] font-bold', opening.error ? 'text-bad' : 'text-ink-2')}>{opening.error ?? 'Opening…'}</span> : null}
+                  </span>
                 </button>
               </li>
             );
           })}
         </ul>
       )}
-    </Card>
+    </section>
   );
 }

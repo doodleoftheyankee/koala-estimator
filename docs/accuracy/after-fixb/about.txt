@@ -1,0 +1,32 @@
+AFTER THE REVIEW B SCREENS FIXES (branch claude/accuracy-fixb-screens)
+
+Review B (database/security/compatibility and flow/screens, each finding checked by an adversarial
+verifier) was fixed on two branches in parallel. This branch has the screens findings: flow-B4 (with
+owner decision OD15), flow-B6, flow-B8, flow-B9, flow-B11, flow-B12 and flow-B13. The documents,
+database and security findings are on claude/accuracy-fixb-docs. Each value change is in
+docs/accuracy/ledger.txt under "Review B fixes and owner decisions OD12-OD16" (RB-flow-B…).
+
+What these files are
+  headline-changes.txt              OD15: every headline that moves, with the estimate, before ->
+                                    after and why (golden sets: none; random quotes: 24 / 50 / 42,
+                                    all no pick, Good -> Best)
+  golden-synthetic-after-fixb.json  price-golden.ts synthetic (byte for byte the same as after-fixa)
+  golden-live-after-fixb.json       price-golden.ts live --with-accuracy-rows, from the read-only
+                                    production export already made (not re-exported); counts and
+                                    option totals keyed by estimate id only (the same as after-fixa)
+  violations-20261118.txt           npm run accuracy:violations -- 10000 20261118
+  violations-7.txt                  npm run accuracy:violations -- 20000 7
+  violations-99999.txt              npm run accuracy:violations -- 20000 99999
+                                    0 on every rule; byte for byte the same as after-fixa's (the
+                                    checker reads the headline through recommendedTier, so the OD15
+                                    change moves both sides of same_price_text together)
+  e2e-fixb-checks.txt               the e2e lines of the new checks, verbatim from the run
+  screens/                          the changed screens at deviceScaleFactor 2 (phone 390 px wide,
+                                    office 1280 px), from the e2e run of this branch's last commit
+
+Random quotes, the OD15 rule against the rule before it (scripts/accuracy/od15-headlines.ts)
+  seed 20261118 (10,000): 24 headlines change; seed 7 (20,000): 50; seed 99999 (20,000): 42.
+  Every one has no pick, Good and Best shown and Better not: Good -> Best. No picked quote moves.
+
+Stored quotes (hard rule 1): untouched. No migration. A sent quote keeps its stored document
+(recommendedTier included) and the estimate's selected_tier that the send stored.

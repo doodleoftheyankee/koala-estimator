@@ -1,0 +1,123 @@
+ORIGINAL AUDIT SUMMARY (from the Koala Estimator Franchise Plan page, Nov 18 2026)
+
+What the check found
+ Accuracy and ease of use
+ Every price, measurement and screen was checked by role: owner, office, estimator, crew and customer. Thousands of random quotes were run through the pricing engine. The real PDF, email and signing page were rendered and read.
+ 25 number problems 
+ 9 change what a customer sees or pays 
+ Customer One price, three readings
+ The same price shows as $4,322, $4,321.50 and $4,321.5. On the signing page the text says $4,321.50 and the button says $4,322.
+ Customer Line items don't add up to the total
+ In about 1 in 5 multi-line options. One real PDF lists items totaling $42,941 under "Best total: $42,940".
+ Customer The same work costs different amounts in each option
+ The same removal was $11,663 in Good and $10,730 in Better. This happens in 98% of quotes that share an item.
+ Customer Insulation that can't fit
+ A wall with no depth entered is quoted at R-20 with 5.6 in. of insulation, more than a 2×4 wall holds. Already-full cavities get more, and batts are never limited by the cavity.
+ Customer Option names promise work that isn't priced
+ "To Code" when the target is below code, "Remove…" with no removal. Better and Best come out identical whenever removal is needed.
+ Customer "Valid until" is a day late
+ The link expires a day before the date printed on the quote.
+ Customer Dense-pack wall cellulose is about 57% short on bags
+ The learning loop's limits stop it from correcting this on its own.
+ Inside "Target margin" means something other than its label
+ It is labeled gross but works as net after overhead. A new owner who types the usual 48% gross margin would overprice every quote by about 63%. Newark's prices are fine as set.
+ Inside No sales tax
+ Fine in Delaware. Most other states need it on the quote.
+ Inside Also found
+ A pitch typed as degrees is read as rise per 12 (+133% roof area). A broken measurement keeps the old square feet. Quote numbers will collide once there are many franchises. Phone and office lists can show different totals. In the satellite takeoff, carport parts are on by default and add about 270 sq ft.
+ 20 screen problems 
+ 4 would lose a demo 
+ Demo risk Unfinished text on the customer's quote
+ "Workmanship warranty — PLACEHOLDER" prints on a signed PDF. "We emailed you a copy" shows when email is off. "Call our office" gives no number.
+ Demo risk The same quote has different statuses on different screens
+ "Draft" next to "Quote v1 sent", "Sent" next to "declined", and a job badge that says Scheduled on a card that says "Not scheduled yet".
+ Demo risk No shared menu, and no sign-out in the field and crew apps
+ Three separate apps. Two pages are called Estimates and two are called Jobs.
+ Demo risk Send is blocked by messages an estimator can't act on
+ "Too small: expected number to be >0", with no link to the area that caused it.
+ Ease of use Long, dense screens
+ One area card runs up to 3,000 pixels tall on a phone. The owner's pricing page is about 12,500 pixels with about 25 Save buttons. The satellite sheet hides "Yes, this is the house" about 900 pixels down.
+ Ease of use Jargon and internals on screen
+ "Pricing v1 · ed7d0f4", "n_eff", "±SE", "MAPE", product codes. The Learning page reads like a statistics report.
+ Ease of use No home screen for any role, and no search
+ Every role lands on a plain list. Nothing says "needs you now".
+ Ease of use Failures look like something else
+ When the database is down, every page sends you to sign-in, which looks like being signed out. After a customer signs, the estimator's phone shows a false "changed on another device" warning.
+ Built for one shop
+ These are hard-coded today and become settings each franchise fills in:
+ "Koala Insulation of Newark" in about 12 places 
+ Teal brand color 
+ "KN-" quote numbers 
+ "Delaware UETA" signing text 
+ Newark, DE address defaults 
+ Delmarva and City of Newark utilities 
+ Energize Delaware lead source 
+ Climate zone 4A code minimums 
+ New York time zone in 11+ places 
+ Delaware labor and market prices 
+ Newark demo data 
+ One email sender and one set of API keys 
+ Checked and correct
+ Every quote total splits to the cent.
+ Financing is rounded once and matches everywhere. A 0% APR works.
+ No blank, infinite or negative numbers across 6 job types with extreme sizes, R-values and drive times.
+ Attic floor and wall run are exact on a rectangle. Roofing squares and bundles round up correctly.
+ The phone's price matches the server's to the cent when a quote is sent.
+ All 934 automated tests pass.
+
+ROADMAP PHASES (from the same page)
+
+const PHASES = [
+    { step: 'Phase 0', name: 'Decide and get ready', weeks: '1 to 2 weeks', items: [
+      'Sign off the decisions below; legal questions continue alongside the build',
+      'The 15-minute look test: Daymark against Datum, outdoors at midday',
+      "Save a set of Newark's real past quotes to compare every pricing fix against",
+      "Move the audit's checks into the app's permanent tests",
+      'Check the security notice the build tool reported, and update if needed',
+    ], done: 'Decisions are written down, and every change runs the 934 tests plus the new checks.' },
+    { step: 'Phase 1', name: 'Every number right, plus the demo blockers', weeks: '6 to 8 weeks', items: [
+      'One money format everywhere; line items always add up to the total; the same work costs the same in every option',
+      'Option names describe only what is priced; Good, Better and Best always step up',
+      'Insulation that fits: wall depth required (2×4 by default), existing insulation counts, batts chosen by R-value and thickness, dense-pack bags corrected',
+      'Measuring guards: degrees understood, broken measurements flagged, carport parts off by default in the satellite takeoff',
+      '"Valid until" matches when the link expires; one business time zone and date format',
+      'A business profile (license, phone, logo, warranty, terms) required before a quote can go out, so "PLACEHOLDER" never reaches a customer',
+      'Plain Send checklist with a Fix button per item; sign-out in the field and crew apps; no false conflict after signing; "Can\'t reach Koala, your work is saved" instead of the sign-in page',
+    ], done: 'Thousands of random quotes pass the checks, and you approve the before-and-after report on Newark\'s quotes. The look doesn\'t change yet.' },
+    { step: 'Phase 2', name: 'The new look, one app for every role', weeks: '10 to 14 weeks', items: [
+      'The chosen look as one design system, in light, dark and outdoor themes, with one icon set in place of emoji',
+      'One app shell: tabs on a phone, a sidebar on a desktop, sign-out and help everywhere, one set of status words',
+      'A home screen per role: owner totals and approvals, office scheduling, estimator follow-ups with a "good time to call" nudge, crew\'s jobs for today',
+      'A quick quote that starts from the address, with about 40% fewer screens',
+      'A premium customer quote and PDF: logo and phone, estimator card, attic cut-away, monthly payment, sticky Sign bar',
+      'Settings split into short pages with one Save bar; Learning becomes Insights, in plain English',
+    ], done: 'Every screen is re-shot and checked. This is the version to show corporate.' },
+    { step: 'Phase 3', name: 'Many franchises, safely apart', weeks: '9 to 11 weeks', items: [
+      'Every record carries its franchise, and the database enforces the walls; with no franchise chosen, nothing shows',
+      'One person can belong to several franchises, with a different role and a switcher',
+      "Learning runs per franchise, so one franchise's crew results never tune another's prices",
+      "Phones keep each franchise's data and prices separate offline, after a safe one-time move",
+    ], done: 'A two-franchise test passes on every table and page, and Newark moves over with no visible change.' },
+    { step: 'Phase 4', name: 'Each franchise its own: settings and onboarding', weeks: '6 to 8 weeks', items: [
+      'A franchise profile replaces all 26 kinds of hard-coded Newark details',
+      'Code minimums by climate zone, sales tax, state e-sign wording, local utilities and rebates',
+      'Satellite and AI use metered per franchise, with budgets',
+      'A setup wizard with imports for customers, past jobs and a price sheet; sandbox franchises for demos and training',
+    ], done: 'A test franchise in another state is correct on every page, setup takes under an hour, and no "Newark", "Delaware" or "Eastern" is left in the code.' },
+    { step: 'Phase 5', name: 'Pilot, plus security basics', weeks: '4 to 6 weeks', items: [
+      'Before the pilot: two-step sign-in, limits on the public pages, error and uptime alerts, backups that include photos with a restore drill, privacy policy, terms and data agreement',
+      'Newark, one nearby franchise and one in another state, with weekly check-ins',
+      'Measure time to first quote, estimate against crew actuals, close rate, support load and the real monthly cost per franchise',
+    ], done: 'Scorecard targets are met, the real cost is known, and pilot owners will act as references.' },
+    { step: 'Phase 6', name: 'Corporate console and billing', weeks: '8 to 10 weeks', items: [
+      'Franchise list with setup status, suspend, transfer on resale and export on termination',
+      'Network dashboard with metric definitions agreed in writing; no customer names unless the contract allows it',
+      'Brand control of quote wording and warranty; shared catalog releases',
+      'Plans and monthly invoices through Stripe',
+    ], done: 'Corporate runs a real monthly review from the console, and invoices match the usage records.' },
+    { step: 'Alongside 3 to 6', name: 'Hardening and the sales kit', weeks: 'Several months', items: [
+      'Outside penetration test; SOC 2 Type I, then Type II (a 3 to 12 month observation window)',
+      'Status page, service agreement, incident process, a second maintainer and documentation',
+      'A demo franchise with realistic names, filled-in security answers, a pricing sheet and the pilot results',
+    ], done: "Clean pen test, a SOC 2 Type I report, and corporate's security questions answered yes on the core items." },
+  ];

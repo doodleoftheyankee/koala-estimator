@@ -4,8 +4,9 @@
 /* eslint-disable jsx-a11y/alt-text */
 import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer';
 import type { Tier } from '@/lib/pricing';
+import { calendarDay, formatAuditTime, formatDateLong } from '@/lib/format';
 import { financingLine } from './email';
-import { DEFAULT_BRAND_COLOR, formatUsd, type QuoteDocument, type QuoteOptionDoc } from './model';
+import { DEFAULT_BRAND_COLOR, documentTimeZone, isLegacyDocument, quoteMoney, sentenceMoney, type QuoteDocument, type QuoteOptionDoc } from './model';
 
 export interface PdfSignature {
   signerName: string;
@@ -57,60 +58,175 @@ const s = StyleSheet.create({
   footerRight: { position: 'absolute', bottom: 20, left: 40, right: 40, textAlign: 'right', fontSize: 8.5, color: '#64748b' },
 });
 
-function formatDate(iso: string): string {
-  const d = new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+/** "December 17, 2026" (lib/format.ts, in the document's zone; a stored calendar day reads as that day). */
+const formatDate = (iso: string, tz: string): string => formatDateLong(calendarDay(iso), tz);
+
+/**
+ * An option with more lines than this may run past one page, so it is allowed to break; any
+ * shorter option is kept on one page (L39) when it fits one (KEEP_TOGETHER_MAX_HEIGHT).
+ */
+export const KEEP_TOGETHER_MAX_LINES = 18;
+
+/** The height a page gives its content: letter (792 pt) less the top and bottom padding. */
+export const PAGE_CONTENT_HEIGHT = 792 - 36 - 48;
+
+/**
+ * The tallest option kept on one page, in points: a page's content height less a margin for the
+ * estimate below. react-pdf cannot place a block kept together that is taller than a page: it
+ * squeezes the whole page and the lines print over each other (review A DOC-4).
+ */
+export const KEEP_TOGETHER_MAX_HEIGHT = 640;
+
+/** Lines a text takes in a column that fits about `perLine` characters (on the high side: words wrap early). */
+const linesOf = (text: string, perLine: number) => Math.max(1, Math.ceil(text.length / perLine));
+
+/**
+ * About how tall an option block prints, in points, from its text and the styles above, erring
+ * high: about 20 characters a line in the Area column, 44 in Work, 78 for a bullet and 46 in the
+ * title, at 11 pt (13.2 pt a line; the title 13 pt bold, 15.6 pt a line).
+ */
+export function estimateOptionHeight(option: Pick<QuoteOptionDoc, 'tier' | 'label' | 'bullets' | 'items' | 'financing'>): number {
+  const LINE = 13.2;
+  const frame = 14 + 2 + 16; // margin above, border, body padding
+  const head = 16 + linesOf(`${TIER_NAMES[option.tier]}: ${option.label}`, 46) * 15.6;
+  const bullets = option.bullets.reduce((h, b) => h + linesOf(b, 78) * LINE + 2, 0);
+  const itemHead = 8 + 10.2 + 3 + 1;
+  const items = option.items.reduce((h, it) => h + Math.max(linesOf(it.areaName, 20), linesOf(it.description, 44)) * LINE + 8.5, 0);
+  const total = 6 + 16.8;
+  const financing = option.financing ? 4 + 2 * 11.4 : 0;
+  return frame + head + bullets + itemHead + items + total + financing;
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZone: 'America/New_York',
-    timeZoneName: 'short',
-  });
-}
-
-function OptionSection({ option, color, recommended }: { option: QuoteOptionDoc; color: string; recommended: boolean }) {
-  return (
-    <View style={s.option}>
-      <View style={[s.optionHead, { backgroundColor: color }]} wrap={false} minPresenceAhead={90}>
-        <Text style={s.optionTitle}>
-          {TIER_NAMES[option.tier]}: {option.label}
+/**
+ * One option: its title bar, bullets, lines, total and financing. `keepTogether` (documents sent
+ * from the accuracy round on, L39) keeps the whole block on one page, so an option's lines are
+ * never split from its title or total. An option too long or too tall for a page still breaks, and
+ * then (release review C DOC-5) its title bar moves with its first bullet, and the column header
+ * with its first line, so neither is ever left alone at the foot of a page. (react-pdf's
+ * minPresenceAhead does nothing for a first child, such as the title bar: it only breaks a page
+ * between siblings.) A document sent before lays out exactly as it did (hard rule 1).
+ */
+export function OptionSection({ option, color, recommended, keepTogether = false }: { option: QuoteOptionDoc; color: string; recommended: boolean; keepTogether?: boolean }) {
+  const together =
+    keepTogether && option.items.length + option.bullets.length <= KEEP_TOGETHER_MAX_LINES && estimateOptionHeight(option) <= KEEP_TOGETHER_MAX_HEIGHT;
+  const head = (
+    <View style={[s.optionHead, { backgroundColor: color }]} wrap={false} minPresenceAhead={90}>
+      <Text style={s.optionTitle}>
+        {TIER_NAMES[option.tier]}: {option.label}
+      </Text>
+      {recommended ? <Text style={[s.badge, { color }]}>RECOMMENDED</Text> : null}
+    </View>
+  );
+  const bullet = (b: string, i: number) => (
+    <View key={i} style={s.bullet}>
+      <Text style={s.bulletDot}>{'•'}</Text>
+      <Text style={{ flex: 1 }}>{b}</Text>
+    </View>
+  );
+  const itemHead = (
+    <View style={s.itemHead} wrap={false}>
+      <Text style={[s.colArea, s.label]}>Area</Text>
+      <Text style={[s.colDesc, s.label]}>Work</Text>
+      <Text style={[s.colPrice, s.label]}>Price</Text>
+    </View>
+  );
+  const item = (it: QuoteOptionDoc['items'][number], i: number) => (
+    <View key={i} style={s.item} wrap={false}>
+      <Text style={s.colArea}>{it.areaName}</Text>
+      <Text style={s.colDesc}>{it.description}</Text>
+      <Text style={s.colPrice}>{quoteMoney(it.price)}</Text>
+    </View>
+  );
+  const totals = (
+    <>
+      <View style={s.total} wrap={false}>
+        <Text style={s.totalText}>
+          {TIER_NAMES[option.tier]} total: {quoteMoney(option.price)}
         </Text>
-        {recommended ? <Text style={[s.badge, { color }]}>RECOMMENDED</Text> : null}
       </View>
+      {option.financing ? <Text style={s.financing}>{financingLine(option.financing)}</Text> : null}
+    </>
+  );
+
+  if (keepTogether && !together) {
+    // Breaks across pages: the title bar with the first bullet (or, with none, the column header
+    // and the first line), and the column header with the first line, each moved as one.
+    const [firstBullet, ...moreBullets] = option.bullets;
+    const [firstItem, ...moreItems] = option.items;
+    const headerAndFirst = (
+      <>
+        {itemHead}
+        {firstItem ? item(firstItem, 0) : null}
+      </>
+    );
+    return (
+      <View style={s.option}>
+        <View wrap={false}>
+          {head}
+          <View style={[s.optionBody, { paddingBottom: 0 }]}>{firstBullet !== undefined ? bullet(firstBullet, 0) : headerAndFirst}</View>
+        </View>
+        <View style={[s.optionBody, { paddingTop: 0 }]}>
+          {firstBullet !== undefined ? (
+            <>
+              {moreBullets.map((b, i) => bullet(b, i + 1))}
+              <View wrap={false}>{headerAndFirst}</View>
+            </>
+          ) : null}
+          {moreItems.map((it, i) => item(it, i + 1))}
+          {totals}
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    // No wrap prop at all unless kept together: react-pdf lays out an explicit `wrap={undefined}`
+    // differently from none, and a document sent before must lay out exactly as it did (hard rule 1).
+    <View style={s.option} {...(together ? { wrap: false } : {})}>
+      {head}
       <View style={s.optionBody}>
-        {option.bullets.map((b, i) => (
-          <View key={i} style={s.bullet}>
-            <Text style={s.bulletDot}>{'•'}</Text>
-            <Text style={{ flex: 1 }}>{b}</Text>
-          </View>
-        ))}
-        <View style={s.itemHead} wrap={false}>
-          <Text style={[s.colArea, s.label]}>Area</Text>
-          <Text style={[s.colDesc, s.label]}>Work</Text>
-          <Text style={[s.colPrice, s.label]}>Price</Text>
-        </View>
-        {option.items.map((it, i) => (
-          <View key={i} style={s.item} wrap={false}>
-            <Text style={s.colArea}>{it.areaName}</Text>
-            <Text style={s.colDesc}>{it.description}</Text>
-            <Text style={s.colPrice}>{formatUsd(it.price)}</Text>
-          </View>
-        ))}
-        <View style={s.total} wrap={false}>
-          <Text style={s.totalText}>
-            {TIER_NAMES[option.tier]} total: {formatUsd(option.price)}
-          </Text>
-        </View>
-        {option.financing ? <Text style={s.financing}>{financingLine(option.financing)}</Text> : null}
+        {option.bullets.map(bullet)}
+        {itemHead}
+        {option.items.map(item)}
+        {totals}
       </View>
     </View>
+  );
+}
+
+/**
+ * A notes, warranty or terms section. A document sent from the accuracy round on keeps a short one
+ * on one page, so its heading is never left alone at the foot of a page (release review C DOC-5);
+ * a long one keeps its heading with the first lines of its text. A document sent before lays out
+ * exactly as it did (hard rule 1).
+ */
+const SECTION_KEEP_MAX_CHARS = 900;
+function Section({ title, text, legacy }: { title: string; text: string; legacy: boolean }) {
+  if (legacy) {
+    return (
+      <View style={s.section}>
+        <Text style={s.sectionTitle}>{title}</Text>
+        <Text style={s.para}>{text}</Text>
+      </View>
+    );
+  }
+  if (text.length <= SECTION_KEEP_MAX_CHARS) {
+    return (
+      <View style={s.section} wrap={false}>
+        <Text style={s.sectionTitle}>{title}</Text>
+        <Text style={s.para}>{text}</Text>
+      </View>
+    );
+  }
+  // Too long to keep on one page: the heading is a child of the page, after the options, so
+  // minPresenceAhead keeps it with the first lines of the text.
+  return (
+    <>
+      <Text style={[s.sectionTitle, { marginTop: s.section.marginTop }]} minPresenceAhead={42}>
+        {title}
+      </Text>
+      <Text style={s.para}>{text}</Text>
+    </>
   );
 }
 
@@ -119,6 +235,10 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
   const color = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(b.primaryColor) ? b.primaryColor : DEFAULT_BRAND_COLOR;
   const contact = [b.phone, b.email, b.website].filter((x): x is string => !!x);
   const signedOption = signature ? doc.options.find((o) => o.tier === signature.tier) : undefined;
+  // A quote sent before the accuracy round prints as it did then (hard rule 1).
+  const legacy = isLegacyDocument(doc);
+  // Its dates and times read in the zone it was sent in (New York for a quote sent before that was kept).
+  const tz = documentTimeZone(doc);
 
   return (
     <Document title={`Quote ${doc.quoteNumber}`} author={b.company} subject="Insulation quote" creator={b.company} producer={b.company}>
@@ -133,8 +253,8 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
           <View>
             <Text style={s.quoteTitle}>{signature ? 'Signed Quote' : 'Quote'}</Text>
             <Text style={[s.small, s.right]}>No. {doc.quoteNumber}</Text>
-            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt)}</Text>
-            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil)}</Text>
+            <Text style={[s.small, s.right]}>Date: {formatDate(doc.issuedAt, tz)}</Text>
+            <Text style={[s.small, s.right]}>Valid until: {formatDate(doc.validUntil, tz)}</Text>
           </View>
         </View>
 
@@ -163,23 +283,12 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
         </Text>
 
         {doc.options.map((o) => (
-          <OptionSection key={o.tier} option={o} color={color} recommended={o.tier === doc.recommendedTier} />
+          <OptionSection key={o.tier} option={o} color={color} recommended={o.tier === doc.recommendedTier} keepTogether={!legacy} />
         ))}
 
-        {doc.notes ? (
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Notes</Text>
-            <Text style={s.para}>{doc.notes}</Text>
-          </View>
-        ) : null}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Warranty</Text>
-          <Text style={s.para}>{doc.warranty}</Text>
-        </View>
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Terms</Text>
-          <Text style={s.para}>{doc.terms}</Text>
-        </View>
+        {doc.notes ? <Section title="Notes" text={doc.notes} legacy={legacy} /> : null}
+        <Section title="Warranty" text={doc.warranty} legacy={legacy} />
+        <Section title="Terms" text={doc.terms} legacy={legacy} />
 
         <View style={s.sigBox} wrap={false}>
           <Text style={s.sectionTitle}>Acceptance</Text>
@@ -189,17 +298,18 @@ function QuotePdf({ doc, signature }: { doc: QuoteDocument; signature?: PdfSigna
                 Option accepted: <Text style={s.bold}>{signedOption ? `${TIER_NAMES[signature.tier]}: ${signedOption.label}` : TIER_NAMES[signature.tier]}</Text>
               </Text>
               <Text style={s.para}>
-                Price: <Text style={s.bold}>{formatUsd(signature.price, true)}</Text>
+                Price: <Text style={s.bold}>{sentenceMoney(doc, signature.price)}</Text>
               </Text>
               <Image src={{ data: Buffer.from(signature.imagePng), format: 'png' }} style={s.sigImage} />
               <Text>Signed electronically by {signature.signerName}</Text>
-              <Text style={s.small}>Date: {formatDateTime(signature.signedAt)}</Text>
+              <Text style={s.small}>Date: {formatAuditTime(signature.signedAt, tz)}</Text>
               <Text style={s.small}>IP address: {signature.ip ?? 'not recorded'}</Text>
             </>
           ) : (
             <>
               <View style={s.sigLine} />
-              <Text style={s.para}>Sign online at the link in your email.</Text>
+              {/* The link may have been sent by text or by hand when email is not set up (L33). */}
+              <Text style={s.para}>{legacy ? 'Sign online at the link in your email.' : 'Sign online at the link we sent you.'}</Text>
             </>
           )}
         </View>

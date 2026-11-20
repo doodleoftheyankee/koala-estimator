@@ -1,8 +1,11 @@
-// Business dates for jobs. Koala works in Newark, DE: "today", "recently completed" and every
-// date a person reads are America/New_York, whatever the time zone of the server or the phone.
+// Business dates for jobs: "today", "recently completed" and every date a person reads are in the
+// business time zone (BUSINESS_TIME_ZONE, lib/format.ts), whatever the zone of the server or phone.
 // Pure (callers pass `now`), so it is testable across DST switches.
 
-export const BUSINESS_TZ = 'America/New_York';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
+
+/** The business time zone (one place: lib/format.ts). */
+export const BUSINESS_TZ = BUSINESS_TIME_ZONE;
 
 const partsFmt = new Intl.DateTimeFormat('en-US', {
   timeZone: BUSINESS_TZ,

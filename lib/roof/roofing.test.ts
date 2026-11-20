@@ -17,7 +17,6 @@ import {
   NO_SHINGLES,
   oneDecimal,
   orderFor,
-  OUTLINE_COLOR,
   photoText,
   presentEdges,
   REPORT_FOOTER,
@@ -40,21 +39,14 @@ const choices = (overhangIn: number, excluded: number[], unmatchedOut = false): 
 const noon = new Date(2026, 10, 17, 12, 5);
 const roundSqftTo10 = (n: number) => Math.round(n / 10) * 10;
 
-describe('edge colours', () => {
-  it('has one colour and a plain description for every edge type, as on the Roof Takeoff page', () => {
+describe('edge names', () => {
+  it('has a name and a plain description for every edge type (colours live in lib/roof/draw.ts)', () => {
     expect(Object.keys(EDGE_INFO)).toEqual([...EDGE_TYPES]);
-    expect(EDGE_INFO.ridge.color).toBe('#FF5A5A');
-    expect(EDGE_INFO.hip.color).toBe('#FFC21A');
-    expect(EDGE_INFO.valley.color).toBe('#3FA9FF');
-    expect(EDGE_INFO.eave.color).toBe('#4CD07D');
-    expect(EDGE_INFO.rake.color).toBe('#FF7AD0');
-    expect(EDGE_INFO.step.color).toBe('#B794FF');
-    expect(EDGE_INFO.headwall.color).toBe('#4FE3E3');
-    expect(EDGE_INFO.break).toMatchObject({ label: 'Pitch break', color: '#FFFFFF', dash: [7, 5] });
-    const colors = EDGE_TYPES.filter((k) => k !== 'break').map((k) => EDGE_INFO[k].color);
-    expect(new Set(colors).size).toBe(colors.length);
-    expect(colors).not.toContain(OUTLINE_COLOR);
-    for (const k of EDGE_TYPES) expect(EDGE_INFO[k].what).toMatch(/^[A-Z][a-z ,]+$/);
+    expect(EDGE_INFO.break).toMatchObject({ label: 'Pitch break', dash: [7, 5] });
+    for (const k of EDGE_TYPES) {
+      expect(EDGE_INFO[k].what).toMatch(/^[A-Z][a-z ,]+$/);
+      expect(EDGE_INFO[k]).not.toHaveProperty('color');
+    }
   });
 });
 
@@ -293,6 +285,21 @@ describe('the report and the summary', () => {
       REPORT_FOOTER,
     ]);
     expect(REPORT_FOOTER).toBe('Estimates from Google aerial imagery. Verify on site.');
+  });
+
+  // Review B flow-B7, owner decision OD12: every franchise's estimators see the brand, not one franchise's name.
+  it('the report and the summary name Koala Insulation, no franchise town', () => {
+    expect(COMPANY).toBe('Koala Insulation');
+    expect(summaryText(takeoffData(crossGable(), choices(12, [5]), 15, noon)).startsWith('Koala Insulation: roof takeoff\n')).toBe(true);
+  });
+
+  it('a low-slope face never reads 2/12 (L29, S3-F22)', () => {
+    const r = crossGable();
+    const low = { ...r, segments: r.segments.map((s) => (s.n === 5 ? { ...s, rise: 1.96, lowSlope: true } : s)) };
+    const d = takeoffData(low, choices(12, [5]), 15, noon);
+    expect(d.faces.find((f) => f.n === 5)).toMatchObject({ pitch: '1.9/12', lowSlope: true });
+    expect(summaryText(d)).toContain('  5. 1.9/12 (low slope), faces south');
+    expect(summaryText(d)).not.toContain('2/12 (low slope)');
   });
 
   it('lists the warnings and says when the edges were not measured', () => {

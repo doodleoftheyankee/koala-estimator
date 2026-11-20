@@ -5,7 +5,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
 import { TIERS } from '@/lib/pricing';
-import { ESIGN_CONSENT } from '@/lib/quotes/consent';
+import { consentFor } from '@/lib/quotes/consent';
+import { reachUs } from '@/lib/quotes/contact';
 import { officeSignedNotice, sendEmail, signedConfirmationEmail } from '@/lib/quotes/email';
 import { findQuoteByToken, isExpired } from '@/lib/quotes/lookup';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
@@ -57,6 +58,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
   const png = decodePng(signaturePng);
   if (!png) return NextResponse.json({ error: 'The signature image is invalid or too large. Clear it and sign again.' }, { status: 400 });
 
+  let reach: string | null = null;
   try {
     const admin = createAdminClient();
     const quote = await findQuoteByToken(admin, token);
@@ -64,8 +66,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
 
     if (quote.status === 'signed' || quote.signed_at) return conflict('This quote has already been signed.');
     if (quote.status === 'superseded') return conflict('A newer version of this quote was sent. Please use the latest link.');
-    if (quote.status === 'declined') return conflict('This quote was declined. Please contact our office.');
-    if (quote.status === 'expired' || isExpired(quote)) return conflict('This quote has expired. Please contact our office for an updated quote.');
+    // Who to ask comes from the quote itself: the office phone, else the estimator (OD12: never tell
+    // a customer to call the office without giving a number).
+    reach = reachUs(quote.document);
+    if (quote.status === 'declined') return conflict(`This quote was declined. To go ahead, please ${reach}.`);
+    if (quote.status === 'expired' || isExpired(quote)) return conflict(`This quote has expired. For an updated quote, please ${reach}.`);
 
     const doc = quote.document;
     const option = doc.options.find((o) => o.tier === tier);
@@ -104,7 +109,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
         esign_audit: {
           ip,
           userAgent,
-          consentText: ESIGN_CONSENT,
+          // The sentence the customer saw beside the checkbox: the quote's own (L31), or for a quote
+          // sent before quotes carried one, the sentence it was sent with.
+          consentText: consentFor(doc),
           documentSha256: quote.pdf_sha256,
           signedPdfSha256: sha256Hex(signedPdf),
           signatureSha256: sha256Hex(png),
@@ -127,29 +134,30 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
     const est = await admin.from('estimates').update({ status: 'signed', selected_tier: tier }).eq('id', quote.estimate_id);
     if (est.error) console.error('[sign] updating the estimate failed', est.error.message);
 
-    // Emails are best-effort: the signature is already recorded.
+    // Emails are best-effort: the signature is already recorded. The page says the signed copy was
+    // emailed only when it really was (L33).
+    let emailed = false;
     try {
       const pdfUrl = `${serverEnv.appUrl()}/api/public/quotes/${token}/pdf`;
-      const jobs: Array<Promise<unknown>> = [];
-      if (doc.customer.email) {
-        jobs.push(
-          sendEmail({
+      const customer = doc.customer.email
+        ? sendEmail({
             to: doc.customer.email,
             ...signedConfirmationEmail(doc, tier, option.price, pdfUrl),
             attachments: [{ filename: `${doc.quoteNumber}-signed.pdf`, content: signedPdf }],
-          }),
-        );
-      }
+          })
+        : Promise.resolve({ sent: false });
       const office = serverEnv.officeNotifyEmail();
+      const jobs: Array<Promise<unknown>> = [customer];
       if (office) jobs.push(sendEmail({ to: office, ...officeSignedNotice(doc, tier, option.price, quote.estimate_id) }));
-      await Promise.allSettled(jobs);
+      const [sent] = await Promise.allSettled(jobs);
+      emailed = sent?.status === 'fulfilled' && (sent.value as { sent: boolean }).sent === true;
     } catch (e) {
       console.error('[sign] email failed', e instanceof Error ? e.message : e);
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, emailed });
   } catch (e) {
     console.error('[sign] failed', e instanceof Error ? e.message : e);
-    return NextResponse.json({ error: 'We could not record your signature. Please try again or call our office.' }, { status: 500 });
+    return NextResponse.json({ error: `We could not record your signature. Please try again${reach ? `, or ${reach}` : ' in a minute'}.` }, { status: 500 });
   }
 }

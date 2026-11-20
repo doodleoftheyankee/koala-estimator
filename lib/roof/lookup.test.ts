@@ -344,7 +344,7 @@ describe('compactTakeoff', () => {
       'Google has no roof data for this spot. Wrong house? Tap the right roof under the photo.',
     );
     expect(koalaWording('Odd outline. Tap the right roof on the photo')).toBe('Odd outline. Wrong house? Tap the right roof under the photo.');
-    expect(koalaWording('No faces, so measure this one from photos.')).toBe('No faces, so measure it with 📐 Measure this area.');
+    expect(koalaWording('No faces, so measure this one from photos.')).toBe('No faces, so measure it by hand.');
     expect(koalaWording('Lower-detail imagery. Check the pitch on site.')).toBe('Lower-detail imagery. Check the pitch on site.');
     const r = compactTakeoff(takeoffSchema.parse({ ...clone(fixture), warnings: ['Wrong building? Tap the right roof on the image.'] }));
     expect(r.warnings).toEqual(['Wrong building? Wrong house? Tap the right roof under the photo.']);
@@ -464,6 +464,31 @@ describe('the parts with no roof data', () => {
   });
 });
 
+describe('the parts with no roof data start switched off (L28, RF-15)', () => {
+  it('a carport Google has no roof faces for is left out until the estimator turns it on', () => {
+    const r = withCarport();
+    expect(defaultFaces(r, 'house')).toEqual({ excluded: [5], unmatchedOut: true });
+    // 9 Carport Ct in the e2e mock (this house): the attic floor was 2,230 sq ft with the carport counted.
+    const counted = roofFigures(r, { overhangIn: 12, excluded: [5], unmatchedOut: false });
+    const start = roofFigures(r, { overhangIn: 12, ...defaultFaces(r, 'house') });
+    expect(roundSqft(counted.floorSqft)).toBe(2230);
+    expect(roundSqft(start.floorSqft)).toBe(1990);
+    expect(start.unmatchedOut).toBe(true);
+    expect(roundSqft(start.excludedSqft - counted.excludedSqft)).toBe(270);
+    // The prep note says it was left out.
+    expect(noteLine(r, start, defaultFaces(r, 'house'), 'attic')).toMatch(/left out face 5 at 1\/12 and 270 sq ft with no roof data\)/);
+  });
+
+  it('a part too small to offer stays counted, as Roof Takeoff counts it; the wall run never uses it', () => {
+    const small = { ...result(), footprintM2: 400, unmatchedM2: 19 }; // under 5% of the footprint
+    expect(defaultFaces(small, 'house')).toEqual({ excluded: [5], unmatchedOut: false });
+    expect(defaultFaces({ ...result(), segments: [], unmatchedM2: 217 }, 'house').unmatchedOut).toBe(false);
+    const r = withCarport();
+    const walls = roofFigures(r, { overhangIn: 12, ...defaultFaces(r, 'house') });
+    expect(walls.wallRunFt).toBe(roofFigures(r, choices(12, [5])).wallRunFt);
+  });
+});
+
 describe('what each area uses', () => {
   it('attic and commercial areas choose attic floor or roof deck; the rest have one number', () => {
     expect(roofJob('attic')).toBe('attic');
@@ -526,8 +551,13 @@ describe('check on site', () => {
     expect(checkOnSite(box, f(box), 'attic', true)).toEqual([]);
     expect(checkOnSite({ ...base, segments: [] }, f(base), 'attic', true)).toEqual(['Google has no roof faces for this house, so no faces can be left out.']);
     const carport = { ...withCarport(), precision: 'ROOFTOP', warnings: [] };
+    // Counted (turned on): say how to leave it out.
     expect(checkOnSite(carport, f(carport), 'attic', true)).toEqual(["270 sq ft of the outline has no roof data (a carport or flat part?). Turn it off below if it isn't over the attic."]);
-    expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
+    expect(checkOnSite(carport, f(carport), 'garage', true)[0]).toMatch(/Turn it off below if it isn't part of the garage\.$/);
+    // Left out (how it starts, L28): say so, and how to count it.
+    const out = (r: RoofResult) => roofFigures(r, choices(12, [], true));
+    expect(checkOnSite(carport, out(carport), 'attic', true)).toEqual(['270 sq ft of the outline has no roof data (a carport or flat part?). It is left out. Turn it on below if it is over the attic.']);
+    expect(checkOnSite(carport, out(carport), 'garage', true)[0]).toMatch(/Turn it on below if it is part of the garage\.$/);
     expect(checkOnSite(carport, f(carport), 'walls', true)).toEqual([]);
   });
 
@@ -555,8 +585,25 @@ describe('words', () => {
     // A nearly flat roof is said in tenths, as pitchText says it: 0.5/12, not 1/12 or 0/12.
     expect(mainPitch([seg(1, 0.5, 300), seg(2, 8, 100)])).toBe(0.5);
     expect(mainPitch([seg(1, 0.3, 300)])).toBe(0.3);
-    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(2);
+    // A low-slope face is never counted as 2/12 (L29): 1.96 is 1.9/12, its own pitch, not 2/12 with the 2.4 face.
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50), seg(3, 6, 100)])).toBe(6);
     expect(mainPitch([])).toBeNull();
+  });
+
+  it('low slope reads under 2/12 (L29, S3-F22)', () => {
+    expect(pitchText(1.96)).toBe('1.9/12');
+    expect(pitchText(1.999)).toBe('1.9/12');
+    expect(pitchText(1.94)).toBe('1.9/12');
+    expect(pitchText(1.86)).toBe('1.9/12');
+    expect(pitchText(2)).toBe('2/12');
+    expect(pitchText(2.04)).toBe('2/12');
+    expect(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50)])).toBe(1.9);
+    expect(pitchText(mainPitch([seg(1, 1.96, 60), seg(2, 2.4, 50)])!)).toBe('1.9/12');
+    // Worked out from the angle: 9.45 degrees is a rise of 1.997, a low slope that reads 1.9/12.
+    const t = clone(fixture);
+    t.segments = t.segments.map((s) => ({ ...s, pitchDeg: 9.45, rise: undefined, lowSlope: undefined })) as unknown as typeof t.segments;
+    const r = compactTakeoff(takeoffSchema.parse(t));
+    expect(r.segments.every((s) => s.lowSlope && s.rise < 2 && pitchText(s.rise) === '1.9/12')).toBe(true);
   });
 
   it('pitch and direction', () => {
@@ -582,7 +629,7 @@ describe('words', () => {
 
   it('plain words for the estimator: no setup jargon, no steps this app does not have', () => {
     expect(NOT_CONFIGURED_MESSAGE).toBe("Satellite lookup isn't set up yet. Ask the office.");
-    expect(NO_ROOF_MESSAGE).toBe('Google has no roof data for this house. Measure it with 📐 Measure this area.');
+    expect(NO_ROOF_MESSAGE).toBe('Google has no roof data for this house. Measure it by hand.');
   });
 
   it('when a saved lookup was made', () => {

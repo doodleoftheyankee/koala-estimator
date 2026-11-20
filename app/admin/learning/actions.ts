@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { runNightly } from '@/lib/learning/nightly';
 import { errorMessage, failure, formToObject, parseWith, success, UNIQUE_VIOLATION, type ActionResult } from '@/lib/admin/forms';
 import {
@@ -75,7 +76,7 @@ function done(notice: LearningNotice): never {
 /** Takes no form fields; useActionState's (prev, formData) arguments are ignored. */
 export async function runLearningNow(): Promise<ActionResult> {
   const profile = await getSessionProfile();
-  if (!profile || profile.role !== 'owner') return failure(NOT_OWNER);
+  if (!profile || profile.role !== 'owner') return failure(await actionRefusal(NOT_OWNER));
 
   let admin: ReturnType<typeof createAdminClient>;
   try {
@@ -102,7 +103,7 @@ export async function runLearningNow(): Promise<ActionResult> {
 
 export async function approveCandidate(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const parsed = parseWith(approveForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;
@@ -122,7 +123,7 @@ export async function approveCandidate(_prev: ActionResult | null, fd: FormData)
 
 export async function rejectCandidate(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const parsed = parseWith(decisionForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;
@@ -144,7 +145,7 @@ export async function rejectCandidate(_prev: ActionResult | null, fd: FormData):
 
 export async function restoreSet(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const parsed = parseWith(decisionForm, formToObject(fd));
   if (!parsed.ok) return failure(parsed.error);
   const { set_id, reason } = parsed.data;

@@ -1,0 +1,80 @@
+AFTER THE REVIEW A FIXES (branch claude/accuracy-fixa)
+
+Review A (docs/accuracy/review/review-a.json) reviewed the pricing engine, the checker and the quote
+documents at fdc3eaa; an adversarial verifier checked every finding. This branch fixes the engine
+findings F1-F13, the verifier's M1 and M2, and DOC-4. Each value change is in docs/accuracy/ledger.txt
+under "Review A fixes" (RA-…). The flow stage (origin/claude/accuracy 587ce69) is merged in, so these
+files are the flow stage plus the review A fixes.
+
+What these files are
+  violations-20261118.txt          npm run accuracy:violations -- 10000 20261118 (seeded pricing)
+  violations-7.txt                 npm run accuracy:violations -- 20000 7
+  violations-99999.txt             npm run accuracy:violations -- 20000 99999
+  violations-before-fixa-*.txt     the same quotes and the same checker, priced by the engine before
+                                   these fixes (lib/pricing/engine.ts of e88c305, the flow stage's
+                                   engine): like for like
+  violations-b708d67-same-quotes-20261118.txt
+                                   the baseline engine and checker (b708d67, the "before" of the whole
+                                   round) on the same 10,000 quotes as above: the like-for-like
+                                   "before" that review A F7 found missing (docs/accuracy/before/ was
+                                   drawn by a generator whose draws followed the engine)
+  golden-synthetic-after-fixa.json price-golden.ts synthetic
+  golden-live-after-fixa.json      price-golden.ts live --with-accuracy-rows (the read-only production
+                                   export's rows plus the migration's rows; counts and option totals
+                                   keyed by estimate id only, no names or addresses)
+  doc4-before-page1.png, doc4-after-page1.png, doc4-after-page2.png
+                                   DOC-4: a quote of 7 attics with 80-character names, page 1 before
+                                   (squeezed, overlapping) and pages 1-2 after
+  f1-option-not-shown.png          F1: the phone's Options step with Good priced above Better: Good's
+                                   collapsed card under "Not shown to the customer" (e2e screenshot)
+
+The random quotes are drawn by the generator of RA-F7: the same seed draws the same areas, crews,
+drives, picks and dates whatever the engine; and 5% of line changes are now 0 (RA-F4).
+
+Random quotes, before these fixes -> after (same quotes, same checker)
+  seed 20261118 (10,000)
+    options_step_up    140 quotes / 140 -> 0 (ends_below_existing, RA-F9)
+    labels_match_work  137 quotes / 188 -> 0 (area_not_covered 165, RA-F3; product_not_installed 23, RA-F4)
+    finite_amounts       2 quotes / 3   -> 0 (zero_work_item, RA-F4)
+    every other rule   0 -> 0
+    Options priced 26,531 -> 26,531; shown 22,184 -> 22,113; quotes with no option 897 -> 899.
+  seed 7 (20,000)
+    options_step_up    274 quotes / 275 -> 0 (ends_below_existing)
+    labels_match_work  276 quotes / 361 -> 0 (area_not_covered 310, product_not_installed 51)
+    finite_amounts       1 quote / 1    -> 0 (zero_work_item)
+    Options shown 43,911 -> 43,764; quotes with no option 1,933 -> 1,933.
+  seed 99999 (20,000)
+    options_step_up    289 quotes / 291 -> 0 (ends_below_existing)
+    labels_match_work  242 quotes / 330 -> 0 (area_not_covered 261, product_not_installed 69)
+    Options shown 44,046 -> 43,903; quotes with no option 1,919 -> 1,920.
+  The new kinds (area_not_covered, product_not_installed, zero_work_item, ends_below_existing,
+  wrongly_hidden, none_shown) are review A's; wrongly_hidden and none_shown read 0 before and after.
+  Fewer options are shown because a Best that kept the insulation there (RA-F9) is then the same work
+  as Better, an option emptied by a quantity of 0 is not shown (RA-F4), and a Best whose only extra
+  was a product at 0 is the same work as Better (RA-F4 follow-up). The extra quotes with no option
+  are quotes whose every option was emptied by a quantity of 0.
+
+Golden sets against after-quotes (docs/accuracy/after-quotes/)
+  Synthetic (65) and live (78): no option total, title, bullet, item or shown/hidden option changed,
+  and no headline. Both files are byte for byte the same as after-quotes' (and the flow stage's
+  docs/accuracy/after/ files are the same too). 0 violations in each, on every rule, with the new
+  kinds and with the showAll check of RA-F8.
+  Why nothing moves there: each fix acts on inputs neither set has.
+    F3   a batt or air-sealing quantity typed below or above the area: none in either set.
+    F4   a quantity of 0: none.
+    F5   two materials of one product in two tiers: the seeded and live templates use batts in Good only.
+    F6   a half-cent tie in install hours: none among these sizes and drives.
+    F9   an option's own removal ending below the R there: attics have at most R-49 in place
+         (synthetic; R-30 live) and Best goes to R-60; the two attics with a typed target (synthetic
+         S1-F7b R-11 to R-30, live c6b22b65 R-14 to R-49) end above what they have.
+    F11  the checker's float epsilon: no item text changes (R-32.7 and R-13 stay; see RA-F11).
+    F12  areas under 1 sq ft: the smallest is 0.3 sq ft (synthetic), which reads "0.3 sq ft" as before.
+    M1   a depth on an attic or commercial area: none (no live estimate has a depth entered).
+    F2   learning only: no promoted calibration, no price moves.
+    F1, F10 the phone; DOC-4 the PDF layout; F7, F8 the checker and generator; F13 a citation.
+  The flow stage's report (scripts/accuracy/report.ts) run on this branch gives the same report.json
+  and the same after/ files as the flow stage: 0 unexplained.
+
+Stored quotes (hard rule 1): untouched. No migration value changed (one comment in the accuracy
+migration now cites one dense-pack card, RA-F13). A sent quote's document, items, prices and PDF are
+the stored ones; DOC-4 changes only how a new-format document lays out an option taller than a page.

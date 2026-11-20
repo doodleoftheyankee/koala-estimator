@@ -1,19 +1,27 @@
 'use client';
 // Full-screen measuring for one estimate area (the AtticScan tools). Every change is saved to the
 // draft as it happens; when the measurement is complete its net becomes the area's square feet.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AreaDraft } from '@/lib/sync/draft';
-import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type Measurement } from '@/lib/measure/measure';
-import { parsePitch } from '@/lib/measure/units';
+import { computeMeasurement, CUTOUT_NAMES, MEASURE_MODES, MODE_INFO, newCutout, pitchFactor, type MeasureField, type Measurement } from '@/lib/measure/measure';
+import { degreesSuggestion, readPitch } from '@/lib/measure/units';
+import { num } from '@/lib/format';
 import { Alert, Button, Card, Chips, Field, Input, Toggle } from '@/components/ui';
+import { Camera, Icon, Ruler } from '@/components/daymark';
 import { LengthInput, ShapeEditor } from './ShapeEditor';
 import { PitchPhotoSheet } from './PitchPhoto';
 
-const sq = (n: number) => Math.round(n).toLocaleString('en-US');
+const sq = (n: number) => num(Math.round(n));
 
 function factorText(pitch: string): string {
-  const p = parsePitch(pitch);
-  return p === null ? '' : `×${pitchFactor(p).toFixed(3)}`;
+  const p = readPitch(pitch);
+  return p?.ok ? `×${pitchFactor(p.rise).toFixed(3)}` : '';
+}
+
+/** "6.93/12" for "30°". */
+function degreesRise(degrees: string): string {
+  const p = readPitch(degrees);
+  return p?.ok ? `${Math.round(p.rise * 100) / 100}/12` : '';
 }
 
 /** The two pitch fields, by the words the photo sheet uses for them. */
@@ -22,16 +30,25 @@ type PitchField = keyof typeof PITCH_FIELDS;
 
 /** A pitch field with its factor, and "Pitch from a photo" under it. */
 function PitchInput({ label, value, placeholder, field, onChange, onPhoto }: { label: string; value: string; placeholder: string; field: PitchField; onChange: (v: string) => void; onPhoto: () => void }) {
+  // A bare number read as a very steep roof (or refused as steeper than 24/12) offers its degrees reading.
+  const asDegrees = degreesSuggestion(value);
   return (
     <div className="space-y-2">
       <div className="flex items-end gap-3">
         <Field label={label} className="flex-1">
-          <Input inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+          {/* A text keyboard: a pitch takes "/" and degrees ("30°" or "30 deg"), which a number pad can't type. */}
+          <Input value={value} placeholder={placeholder} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(e) => onChange(e.target.value)} />
         </Field>
         <span className="mb-3 w-20 font-bold text-brand-800">{factorText(value)}</span>
       </div>
+      {asDegrees ? (
+        <Button variant="secondary" className="w-full" onClick={() => onChange(asDegrees)}>
+          Use {asDegrees} ({degreesRise(asDegrees)})
+        </Button>
+      ) : null}
       <Button variant="secondary" className="w-full" onClick={onPhoto} aria-label={`Pitch from a photo, for the ${PITCH_FIELDS[field]}`}>
-        📷 Pitch from a photo
+        <Icon icon={Camera} />
+        Pitch from a photo
       </Button>
     </div>
   );
@@ -43,18 +60,35 @@ export function MeasureSheet({
   onChange,
   onRemove,
   onClose,
+  focusField = null,
 }: {
   area: AreaDraft;
   measurement: Measurement;
   onChange: (m: Measurement) => void;
   onRemove: () => void;
   onClose: () => void;
+  /** Opened by "Finish measuring": the part to finish, whose box gets the cursor (review B flow-B12). */
+  focusField?: MeasureField | null;
 }) {
   const r = computeMeasurement(m);
   const set = (patch: Partial<Measurement>) => onChange({ ...m, ...patch });
   const isWalls = m.mode === 'walls';
   /** The pitch field "Pitch from a photo" is open for. */
   const [photoFor, setPhotoFor] = useState<PitchField | null>(null);
+
+  // "Finish measuring": the cursor goes to the box to finish (the one it can't read, else the first
+  // empty one, else the first) in the part named, once, when the sheet opens.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [toFocus] = useState(focusField);
+  useEffect(() => {
+    if (!toFocus) return;
+    const part = sheetRef.current?.querySelector(`[data-measure-field="${CSS.escape(toFocus)}"]`);
+    const boxes = part ? [...part.querySelectorAll<HTMLInputElement>('input:not([type=hidden]):not([type=checkbox])')] : [];
+    const box = boxes.find((b) => b.getAttribute('aria-invalid') === 'true') ?? boxes.find((b) => !b.value.trim()) ?? boxes[0];
+    if (!box) return;
+    box.focus({ preventScroll: true });
+    box.scrollIntoView({ block: 'center' });
+  }, [toFocus]);
 
   // Behind the sheet the page shouldn't scroll; Escape closes it on a keyboard.
   useEffect(() => {
@@ -69,10 +103,13 @@ export function MeasureSheet({
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Measure ${area.name}`} className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-100">
+    <div ref={sheetRef} role="dialog" aria-modal="true" aria-label={`Measure ${area.name}`} className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-100">
       <div className="sticky top-0 z-10 bg-white shadow-sm" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-2">
-          <h2 className="truncate text-lg font-bold">📐 {area.name}</h2>
+          <h2 className="flex min-w-0 items-center gap-2 text-lg font-bold">
+            <Icon icon={Ruler} />
+            <span className="truncate">{area.name}</span>
+          </h2>
           <Button onClick={onClose}>{r.net > 0 && !r.errors.length ? `Use ${sq(r.net)} sq ft` : 'Done'}</Button>
         </div>
         <div className="mx-auto grid max-w-2xl grid-cols-[1fr_1fr_1.3fr] gap-2 px-4 pb-3" aria-live="polite">
@@ -114,33 +151,45 @@ export function MeasureSheet({
         {m.mode === 'roofline' ? (
           <Card className="space-y-3">
             <h3 className="font-semibold">Pitch</h3>
-            <PitchInput label="Roof pitch (rise / 12)" value={m.pitch} placeholder="e.g. 6/12" field="pitch" onChange={(pitch) => set({ pitch })} onPhoto={() => setPhotoFor('pitch')} />
+            <div data-measure-field="pitch">
+              <PitchInput label="Roof pitch (rise / 12 or degrees)" value={m.pitch} placeholder="e.g. 6/12 or 30°" field="pitch" onChange={(pitch) => set({ pitch })} onPhoto={() => setPhotoFor('pitch')} />
+            </div>
             <Toggle checked={m.twoSlope} onChange={(twoSlope) => set({ twoSlope })} label="Two different slopes" />
             {m.twoSlope ? (
               <>
-                <PitchInput label="Second pitch (rise / 12)" value={m.pitch2} placeholder="e.g. 12/12" field="pitch2" onChange={(pitch2) => set({ pitch2 })} onPhoto={() => setPhotoFor('pitch2')} />
-                <Field label="% of footprint at the first pitch">
-                  <Input inputMode="decimal" value={m.splitPct} onChange={(e) => set({ splitPct: e.target.value })} />
-                </Field>
+                <div data-measure-field="pitch2">
+                  <PitchInput label="Second pitch (rise / 12 or degrees)" value={m.pitch2} placeholder="e.g. 12/12 or 45°" field="pitch2" onChange={(pitch2) => set({ pitch2 })} onPhoto={() => setPhotoFor('pitch2')} />
+                </div>
+                <div data-measure-field="splitPct">
+                  <Field label="% of footprint at the first pitch">
+                    <Input inputMode="decimal" value={m.splitPct} onChange={(e) => set({ splitPct: e.target.value })} />
+                  </Field>
+                </div>
               </>
             ) : null}
-            <p className="text-xs text-slate-500">Roof area = footprint × √(1 + (rise/12)²). Measure skylights on the roof surface.</p>
+            <p className="text-xs text-slate-500">Roof area = footprint × √(1 + (rise/12)²). Nothing steeper than 24/12 (63°). Measure skylights on the roof surface.</p>
           </Card>
         ) : null}
 
         {isWalls ? (
           <Card className="space-y-3">
             <h3 className="font-semibold">Walls</h3>
-            <LengthInput label="Average wall height" value={m.wallHeight} placeholder={`e.g. 8' or 3'6"`} onChange={(wallHeight) => set({ wallHeight })} />
-            <LengthInput label="Total wall length (optional)" value={m.perimeter} placeholder="Blank = perimeter of the outline below" onChange={(perimeter) => set({ perimeter })} />
+            <div data-measure-field="wallHeight">
+              <LengthInput label="Average wall height" value={m.wallHeight} placeholder={`e.g. 8' or 3'6"`} onChange={(wallHeight) => set({ wallHeight })} />
+            </div>
+            <div data-measure-field="perimeter">
+              <LengthInput label="Total wall length (optional)" value={m.perimeter} placeholder="Blank = perimeter of the outline below" onChange={(perimeter) => set({ perimeter })} />
+            </div>
           </Card>
         ) : null}
 
         {!(isWalls && m.perimeter.trim()) ? (
-          <Card>
-            <h3 className="mb-3 font-semibold">{isWalls ? 'Outline (its perimeter is the wall length)' : m.mode === 'roofline' ? 'Footprint (plan view)' : 'Shape'}</h3>
-            <ShapeEditor shape={m.shape} onChange={(shape) => set({ shape })} />
-          </Card>
+          <div data-measure-field="shape">
+            <Card>
+              <h3 className="mb-3 font-semibold">{isWalls ? 'Outline (its perimeter is the wall length)' : m.mode === 'roofline' ? 'Footprint (plan view)' : 'Shape'}</h3>
+              <ShapeEditor shape={m.shape} onChange={(shape) => set({ shape })} />
+            </Card>
+          </div>
         ) : null}
 
         <Card className="space-y-3">
@@ -150,7 +199,7 @@ export function MeasureSheet({
             const cr = r.cutoutResults.find((x) => x.id === c.id);
             const patch = (p: Partial<typeof c>) => set({ cutouts: m.cutouts.map((x) => (x.id === c.id ? { ...x, ...p } : x)) });
             return (
-              <div key={c.id} className="space-y-3 border-t-2 border-dashed border-slate-200 pt-3">
+              <div key={c.id} data-measure-field={`cutout:${c.id}`} className="space-y-3 border-t-2 border-dashed border-slate-200 pt-3">
                 <div className="flex items-center gap-3">
                   <strong>#{i + 1}</strong>
                   <span className="text-sm font-semibold text-slate-600">{cr?.errors.length ? cr.errors[0] : `${sq(cr?.area ?? 0)} sq ft`}</span>

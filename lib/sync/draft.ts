@@ -93,7 +93,9 @@ export const draftSchema = z.object({
   rowVersion: z.number().int().positive().nullable(),
   bundleHash: z.string().nullable(),
   lastQuote: z
-    .object({ quoteId: z.uuid(), version: z.number().int(), sentAt: z.iso.datetime() })
+    // quoteNumber: the number the quote was sent with (from the counter, OD10); quotes sent before
+    // it was kept here have none, and the phone shows their old number (lib/quotes/model.ts legacyQuoteNumber).
+    .object({ quoteId: z.uuid(), version: z.number().int(), sentAt: z.iso.datetime(), quoteNumber: z.string().max(60).optional() })
     .nullable()
     .optional(),
 });
@@ -107,7 +109,11 @@ export const syncableDraftSchema = draftSchema.refine((d) => d.areas.length > 0,
   path: ['areas'],
 });
 
-export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID()): EstimateDraft {
+/**
+ * A new estimate. `place` is the town and state it starts in: the shop address's, as a pair, else
+ * blank (lib/quotes/profile.ts newEstimateDefaults, L32, OD14); no town is typed in here.
+ */
+export function newDraft(now = new Date(), uuid: () => string = () => crypto.randomUUID(), place: { city: string; state: string } = { city: '', state: '' }): EstimateDraft {
   const ts = now.toISOString();
   return {
     id: uuid(),
@@ -115,7 +121,7 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     createdAt: ts,
     updatedAt: ts,
     customer: { id: uuid(), firstName: '', lastName: '', email: '', phone: '', smsConsent: false, emailConsent: true },
-    property: { id: uuid(), street: '', city: 'Newark', state: 'DE', zip: '', yearBuilt: null, utility: null, homeType: null },
+    property: { id: uuid(), street: '', city: place.city, state: place.state, zip: '', yearBuilt: null, utility: null, homeType: null },
     areas: [],
     crewId: null,
     driveMinutesOneWay: null,
@@ -167,7 +173,31 @@ export function toEstimateInput(d: EstimateDraft): EstimateInput {
   };
 }
 
-/** Areas that are complete enough to price (the editor may hold half-filled ones). */
+/**
+ * The job types whose area form has a Cavity depth field (framed cavities). An attic floor and a
+ * commercial area have none, so a depth on one is not something the estimator can see or clear.
+ */
+const DEPTH_JOB_TYPES: ReadonlySet<AreaDraft['jobType']> = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
+
+/** True when the area form shows a Cavity depth for this job type. */
+export function hasDepthField(jobType: AreaDraft['jobType']): boolean {
+  return DEPTH_JOB_TYPES.has(jobType);
+}
+
+/**
+ * The area with another job type. A cavity depth goes with it only to a job type whose form
+ * shows the depth: an area changed from walls to attic keeps no hidden 3.5 in "cavity" that would
+ * cap its insulation (review A M1).
+ */
+export function withJobType<A extends Pick<AreaDraft, 'jobType' | 'depthIn'>>(area: A, jobType: AreaDraft['jobType']): A {
+  return { ...area, jobType, depthIn: hasDepthField(jobType) ? area.depthIn : null };
+}
+
+/**
+ * Areas that are complete enough to price (the editor may hold half-filled ones), as they are
+ * priced: a depth the form does not show for the job type (left by an earlier build when the job
+ * type changed) is not part of the estimate (review A M1).
+ */
 export function priceableAreas(d: EstimateDraft): AreaDraft[] {
-  return d.areas.filter((a) => areaSchema.safeParse(a).success);
+  return d.areas.filter((a) => areaSchema.safeParse(a).success).map((a) => (a.depthIn !== null && !hasDepthField(a.jobType) ? { ...a, depthIn: null } : a));
 }

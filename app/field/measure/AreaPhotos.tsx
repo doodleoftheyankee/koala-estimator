@@ -6,6 +6,7 @@ import { db } from '@/lib/offline/db';
 import { addAreaPhoto, removeAreaPhoto, type LocalPhoto } from '@/lib/offline/photos';
 import { MAX_PHOTOS_PER_AREA, type RemotePhoto } from '@/lib/photos/rules';
 import { Badge, Button } from '@/components/ui';
+import { Camera, Icon, Image as ImageIcon } from '@/components/daymark';
 import { useLive, useOnline } from '../hooks';
 
 interface Shown {
@@ -110,11 +111,13 @@ export function AreaPhotos({ estimateId, areaId, ownerId, remote, onRemoteDelete
         <div className="grid grid-cols-2 gap-2">
           <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void add(e.target.files).then(() => (e.target.value = ''))} />
           <input ref={library} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void add(e.target.files).then(() => (e.target.value = ''))} />
-          <Button variant="secondary" disabled={busy !== null} onClick={() => camera.current?.click()}>
-            📷 Take photo
+          <Button variant="secondary" className="px-3!" disabled={busy !== null} onClick={() => camera.current?.click()}>
+            <Icon icon={Camera} />
+            Take photo
           </Button>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => library.current?.click()}>
-            🖼 Choose
+          <Button variant="secondary" className="px-3!" disabled={busy !== null} onClick={() => library.current?.click()}>
+            <Icon icon={ImageIcon} />
+            Choose
           </Button>
         </div>
       ) : null}
@@ -124,7 +127,7 @@ export function AreaPhotos({ estimateId, areaId, ownerId, remote, onRemoteDelete
         <div role="dialog" aria-modal="true" aria-label="Photo" className="fixed inset-0 z-50 flex flex-col bg-black/90 p-3" onClick={() => setViewing(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={viewing.full} alt="" className="min-h-0 flex-1 object-contain" />
-          {viewing.error ? <p className="mt-2 text-center text-sm text-red-200">Upload problem: {viewing.error}</p> : null}
+          {viewing.error ? <p className="mt-2 text-center text-sm font-bold text-on-frame">Upload problem: {viewing.error}</p> : null}
           <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
             <Button variant="danger" onClick={() => void remove(viewing)}>
               Delete

@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { lineKey, priceEstimate, type PricedLine } from '@/lib/pricing';
+import { lineKey, priceEstimate as priceShown, type PricedLine } from '@/lib/pricing';
 import { area, coefficients, snapshot } from '@/lib/pricing/__fixtures__/seed';
 import { draftSchema, newArea, newDraft, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import {
@@ -16,11 +16,15 @@ import {
   unitLabel,
 } from './lineOverrides';
 
+// Every priced option, including those the customer is not shown (OD6): these tests are about
+// what each option carries, not which options a quote shows.
+const priceEstimate = (...args: Parameters<typeof priceShown>) => priceShown(args[0], args[1], args[2], { showAll: true });
+
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 
 function draftWithAttic(): EstimateDraft {
-  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid);
+  const d = newDraft(new Date('2026-10-20T12:00:00Z'), uuid, { city: 'Springfield', state: 'IL' });
   d.customer = { ...d.customer, firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
   d.property = { ...d.property, street: '1 Main St', zip: '19711' };
   d.areas = [{ ...newArea('attic', uuid), sqft: 1000, accessLevel: 'easy' }];
@@ -138,6 +142,14 @@ describe('buildLineOverride', () => {
     expect(buildLineOverride('hours', null, 'reason')).toEqual({ ok: false, error: 'Enter the person-hours.' });
     expect(buildLineOverride('hours', Number.NaN, 'reason')).toMatchObject({ ok: false });
     expect(buildLineOverride('qty', -1, 'reason')).toEqual({ ok: false, error: 'The number cannot be negative.' });
+  });
+
+  it('refuses a quantity of 0, which installs nothing; 0 hours stays allowed (review A F4)', () => {
+    expect(buildLineOverride('qty', 0, 'Counted on site')).toEqual({
+      ok: false,
+      error: 'A quantity of 0 installs nothing. Enter the quantity to install; for material already on site, change the price instead.',
+    });
+    expect(buildLineOverride('hours', 0, 'Customer does it').ok).toBe(true);
   });
 
   it('needs a reason of at least 3 characters', () => {

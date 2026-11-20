@@ -131,7 +131,13 @@ function LineRow({
             </p>
           ) : (
             <p className="text-slate-600">
-              {formatAmount(view.value, view.unit)} <span className="text-slate-500">(model)</span>
+              {formatAmount(view.value, view.unit)}{' '}
+              {view.value === view.modelValue ? (
+                <span className="text-slate-500">(model)</span>
+              ) : (
+                // Install hours follow a changed quantity (the model's hours are for the model's quantity).
+                <span className="text-slate-500">(for the quantity you entered; model {formatAmount(view.modelValue, view.unit)})</span>
+              )}
             </p>
           )}
           {view.isOverridden && view.reason ? <p className="text-xs text-slate-500">Reason: {view.reason}</p> : null}

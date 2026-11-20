@@ -174,12 +174,20 @@ declare v_seed uuid := (select id from coefficient_sets where source = 'seed');
 begin
   perform promote_coefficient_set((select id from coefficient_sets where status = 'candidate'), 'test');
   assert (select count(*) from coefficient_sets where status = 'active') = 1, 'exactly one active set';
-  assert (select new_value from coefficient_changes where product = 'cellulose' and kind = 'waste_factor') = 1.12,
+  -- Two cellulose waste cells (the shared one and walls, L21): the candidate moved both.
+  assert (select count(*) from coefficient_changes where product = 'cellulose' and kind = 'waste_factor') = 2,
+    'changelog records both cellulose waste cells';
+  assert (select new_value from coefficient_changes where product = 'cellulose' and kind = 'waste_factor' and job_type is null) = 1.12,
     'changelog records the change';
+  assert (select new_value from coefficient_changes where product = 'cellulose' and kind = 'waste_factor' and job_type = 'walls') = 1.12,
+    'changelog records the walls cell change';
   perform rollback_coefficient_set(v_seed, 'bad night');
   assert (select c.value from coefficients c join coefficient_sets s on s.id = c.set_id
-           where s.status = 'active' and c.kind = 'waste_factor' and c.product = 'cellulose') = 1.08,
+           where s.status = 'active' and c.kind = 'waste_factor' and c.product = 'cellulose' and c.job_type is null) = 1.08,
     'rollback restores the seed value';
+  assert (select c.value from coefficients c join coefficient_sets s on s.id = c.set_id
+           where s.status = 'active' and c.kind = 'waste_factor' and c.product = 'cellulose' and c.job_type = 'walls') = 1.08,
+    'rollback restores the walls cell too';
   assert (select source from coefficient_sets where status = 'active') = 'rollback', 'rollback creates a new set';
 end $$;
 

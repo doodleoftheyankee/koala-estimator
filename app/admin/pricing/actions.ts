@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionProfile } from '@/lib/server/auth';
+import { actionRefusal } from '@/lib/server/actionAuth';
 import { loadPricingBundle } from '@/lib/server/bundle';
 import {
   errorMessage,
@@ -25,8 +26,11 @@ import {
 import { crossCheckSettings, parseSettingsForm, SETTING_LABELS, settingObject, toSettingsMap } from '@/lib/admin/settings';
 import {
   codeRequirementForm,
+  costOutsideRange,
+  rangeWithConfirmedCost,
   crewForm,
   materialForm,
+  materialRangeForm,
   newCrewForm,
   parseTierForm,
   productForm,
@@ -36,6 +40,8 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 type DbError = { code?: string; message: string } | null;
 
 const NOT_OWNER = 'Only the owner can change pricing.';
+/** A material's unit in a sentence ("per board ft"). */
+const UNIT_WORDS: Record<string, string> = { board_ft: 'board ft', bag: 'bag', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hour', each: 'each' };
 const PATH = '/admin/pricing';
 
 /** Throws on a Supabase error so restore steps fail loudly. */
@@ -73,6 +79,8 @@ async function verifyOrRestore(db: Db, restore: () => Promise<void>): Promise<Ac
     return failure(`This change would break pricing: ${errorMessage(e)}${note}`);
   }
   revalidatePath(PATH);
+  // The business profile page shows the same settings (branding, warranty, terms).
+  revalidatePath('/admin/business');
   return success();
 }
 
@@ -98,7 +106,7 @@ interface SettingRow {
 
 export async function saveSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db, userId } = owner;
 
   const parsed = parseSettingsForm(formToObject(fd));
@@ -166,24 +174,49 @@ export async function saveSettings(_prev: ActionResult | null, fd: FormData): Pr
 
 export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
-  const parsed = parseWith(materialForm, formToObject(fd));
+  const form = formToObject(fd);
+  const parsed = parseWith(materialForm, form);
   if (!parsed.ok) return failure(parsed.error);
   const input = parsed.data;
+  const rangeParsed = parseWith(materialRangeForm, form);
+  if (!rangeParsed.ok) return failure(rangeParsed.error);
+  const range = rangeParsed.data;
 
   const prev = await db
     .from('materials')
-    .select('id, name, unit, cost_per_unit, coverage_sqft_in, needs_owner_input')
+    .select('id, name, unit, cost_per_unit, coverage_sqft_in, needs_owner_input, typical_min, typical_max, typical_source')
     .eq('id', input.id)
     .maybeSingle();
   if (prev.error) return failure(prev.error.message);
   if (!prev.data) return failure('That material no longer exists. Reload the page.');
-  const before = prev.data as { name: string; unit: string; cost_per_unit: number | string; coverage_sqft_in: number | string | null; needs_owner_input: boolean };
+  const before = prev.data as {
+    name: string;
+    unit: string;
+    cost_per_unit: number | string;
+    coverage_sqft_in: number | string | null;
+    needs_owner_input: boolean;
+    typical_min: number | string | null;
+    typical_max: number | string | null;
+    typical_source: string | null;
+  };
 
   const isBag = before.unit === 'bag';
   if (isBag && input.coverage_sqft_in === null) return failure('Bag materials need a coverage (sq ft × inches per bag).');
+
+  // The usual range (L11): what the owner entered on the form, else the one stored. A cost far
+  // outside it is a typo or a price per something else, so it waits for "This cost is right".
+  const typical = {
+    min: range.typical_min ?? (before.typical_min === null ? null : Number(before.typical_min)),
+    max: range.typical_max ?? (before.typical_max === null ? null : Number(before.typical_max)),
+    source: range.typical_min !== null || range.typical_max !== null ? range.typical_source : (range.typical_source ?? before.typical_source),
+  };
+  const outside = costOutsideRange(input.cost_per_unit, typical, UNIT_WORDS[before.unit] ?? before.unit);
+  if (outside && !range.cost_confirmed) return failure(`Not saved. ${outside}`);
+  // A cost confirmed outside the range widens it, so the next save of the card is not refused again (review B flow-B9).
+  const stored = rangeWithConfirmedCost(typical, input.cost_per_unit, range.cost_confirmed);
 
   const restore = async () => {
     must(
@@ -194,6 +227,9 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
           cost_per_unit: before.cost_per_unit,
           coverage_sqft_in: before.coverage_sqft_in,
           needs_owner_input: before.needs_owner_input,
+          typical_min: before.typical_min,
+          typical_max: before.typical_max,
+          typical_source: before.typical_source,
         })
         .eq('id', input.id),
     );
@@ -207,6 +243,9 @@ export async function saveMaterial(_prev: ActionResult | null, fd: FormData): Pr
       // Coverage only means something for bags; other units keep what they had.
       coverage_sqft_in: isBag ? input.coverage_sqft_in : before.coverage_sqft_in,
       needs_owner_input: false,
+      typical_min: stored.min,
+      typical_max: stored.max,
+      typical_source: stored.source,
     })
     .eq('id', input.id)
     .select('id');
@@ -228,7 +267,7 @@ async function defaultCrewId(db: Db): Promise<string | null> {
 
 export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(crewForm, formToObject(fd));
@@ -272,7 +311,7 @@ export async function saveCrew(_prev: ActionResult | null, fd: FormData): Promis
 
 export async function addCrew(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(newCrewForm, formToObject(fd));
@@ -311,7 +350,7 @@ interface TierBefore {
 
 export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseTierForm(formToObject(fd));
@@ -388,7 +427,7 @@ export async function saveTierTemplates(_prev: ActionResult | null, fd: FormData
 
 export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(codeRequirementForm, formToObject(fd));
@@ -430,7 +469,7 @@ export async function saveCodeRequirement(_prev: ActionResult | null, fd: FormDa
 
 export async function saveProduct(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const owner = await ownerDb();
-  if (!owner) return failure(NOT_OWNER);
+  if (!owner) return failure(await actionRefusal(NOT_OWNER));
   const { db } = owner;
 
   const parsed = parseWith(productForm, formToObject(fd));

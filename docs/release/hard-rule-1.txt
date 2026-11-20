@@ -1,0 +1,80 @@
+HARD RULE 1 ON THE RELEASE HEAD (claude/release = claude/accuracy + claude/blower-door, with the
+review C fixes; refreshed Nov 19 2026)
+
+Quotes already sent or signed never change: their documents, PDFs and emails must render exactly as
+before. This repeats the proof in docs/accuracy/final/hard-rule-1.txt (its last section) on the
+release code after the review C fixes (docs/release/release.txt section 8), which touch the quote
+code: lib/format.ts (dates in a zone), lib/quotes/model.ts (a document keeps its zone),
+lib/quotes/pdf.tsx (page breaks of documents sent from the accuracy round on), lib/quotes/email.ts,
+lib/quotes/consent.ts (New York's own act for new quotes), app/q/[token] (dates in the document's
+zone; the expired time with its zone for documents sent from the accuracy round on). The release
+head before review C (93d9dbc) was checked the same way; its render is the "previous release head
+render" below.
+
+What was rendered
+  The same 77 stored production quotes from the same read-only export (scratchpad
+  accuracy/golden/live-quote-docs.json; manifest md5 2ca0d61ee3371b8dfa44c572dc8a9ca7, file md5
+  15914e91c59ace3fbfd9b0d8cae9ef91, 77 quotes; not re-exported), through the same
+  scripts/accuracy/render-stored.ts and render-run.mjs:
+    node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts <export> <out>
+  2,926 files per run: the quote PDF (77) and the signed PDF per option (231) as text; the quote,
+  signed confirmation and office notice emails (subject + text and HTML, 1,078); the customer page as
+  text and as markup in every state (stored, open and signed per option, superseded, declined,
+  expired; 770 + 770). The release head and 30afd15 were rendered now, one after the other, from
+  the same export; the before and live-site renders are the ones made for the release check
+  earlier the same day (the renders are stable: 30afd15 rendered now is byte-identical to its
+  render from then).
+
+1. Against the accuracy round's final code (claude/accuracy 30afd15, git archive, rendered now):
+     2,926 of 2,926 files byte-identical (diff -rq: no differences). The release head renders
+     every stored quote exactly as the finished accuracy round does. It is also byte-identical, all
+     2,926 files, to the accuracy round's render made earlier the same day, and to the previous
+     release head render (93d9dbc, before review C).
+
+2. Against the before code (7c6b08c, the quotes stage's starting point; its render from the release check):
+     python3 -I scripts/accuracy/hard-rule-1-diff.py <before> <release>:
+       files 2926; identical 2674; differ only by the flow-B11 / flow-B6 class names 252; other
+       differences 0. Text, PDF and email files: 2,156, 0 differing.
+     PDFs 308/308, emails 1,078/1,078 and page text 770/770 identical: every word, price, date,
+     quote number, consent sentence and page break of every stored quote, in every state. The 252
+     markup files differ only in the two class names the accuracy round already documented (review B
+     flow-B11, the estimator email link's 48 px tap target; flow-B6, the sign form's placeholder
+     colour token), exactly as in docs/accuracy/final/hard-rule-1.txt:
+       page-open-<tier>.html (B6) 74 x 3, (B11+B6) 3 x 3; page-stored/-declined/-expired/
+       -superseded/-signed-<tier>.html (B11) 3 each.
+
+3. Against the live site's code (origin/main c0ae5f1, git archive, its render from the release check, made with
+   scripts/accuracy/render-docs-only.ts, the quotes stage's documents-only harness, now in the repo:
+   PDFs and emails):
+     1,386 files compared (the quote PDF, the signed PDF per option and the three emails of the 77
+     stored quotes), 0 differences. A customer who signs an older quote after the release ships gets
+     the signed PDF and emails the live site would make today.
+
+Why the release cannot change a stored quote
+  - Every stored quote is a document sent before the accuracy round: no format, no zone, no consent
+    of its own. Review C's quote changes all go through what such a document already has:
+      * its dates print in documentTimeZone(doc), which is America/New_York for a document without a
+        zone: the zone every quote printed in before, whatever NEXT_PUBLIC_BUSINESS_TIME_ZONE says;
+      * its expired page keeps the printed "Valid until" date (isLegacyDocument), with no zone name;
+      * its PDF keeps exactly the old element tree: the new page-break blocks (DOC-5) and the kept
+        sections apply to documents sent from the accuracy round on only; a unit test
+        (lib/quotes/quotes-stage.test.ts, "a quote sent before the accuracy round lays out exactly
+        as it did") compares their page text with a recording made on the code before the change;
+      * it signs under its own sentence or the legacy one (consentFor); esignConsent (New York's
+        own act) only words new quotes.
+  - The blower door migration's one change in review C (sync_blower_door_test drops a crew's
+    price) touches readings, not quotes. The accuracy migration is unchanged.
+  - The accuracy migration's conditional seed replacements apply only to rows that still equal the
+    seed, and a stored quote reads its company, terms, warranty, consent, number and dates from its
+    own document (docs/accuracy/final/hard-rule-1.txt).
+
+To repeat it
+  1. Render the release head: node scripts/accuracy/render-run.mjs scripts/accuracy/render-stored.ts
+     <export> <release> (about 20 s; 2,926 files).
+  2. git archive 30afd15 into a folder, link node_modules, run the same command there into
+     <accuracy>; diff -rq <accuracy> <release> (expect nothing).
+  3. Render 7c6b08c the same way (with render-run.mjs, render-stored.ts and stubs/ copied in) into
+     <before>; python3 -I scripts/accuracy/hard-rule-1-diff.py <before> <release>.
+  4. git archive origin/main, copy render-run.mjs, stubs/ and render-docs-only.ts into its
+     scripts/accuracy/, run render-docs-only.ts there into <main>, and cmp each of its 1,386 files
+     with the same file in <release>.

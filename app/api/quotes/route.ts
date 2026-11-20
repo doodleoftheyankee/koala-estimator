@@ -3,13 +3,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { serverEnv } from '@/lib/env';
-import { canSendQuote, priceEstimate, TIERS, type PricedOption, type Tier } from '@/lib/pricing';
+import { BUSINESS_TIME_ZONE } from '@/lib/format';
+import { approvalCovers, canSendQuote, priceEstimate, TIERS, type PriceApproval, type PricedOption, type Tier } from '@/lib/pricing';
+import { loadApprovals } from '@/lib/quotes/approvals';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import { acknowledgedNote, unacknowledgedFlags } from '@/lib/field/flags';
 import { quoteEmail, sendEmail } from '@/lib/quotes/email';
-import { buildQuoteDocument } from '@/lib/quotes/model';
+import { buildQuoteDocument, businessYear, counterQuoteNumber, quoteNumberBase, quoteValidUntil } from '@/lib/quotes/model';
 import { renderQuotePdf } from '@/lib/quotes/pdf';
-import { loadQuoteSettings } from '@/lib/quotes/settings';
+import { quoteSettingsForSend } from '@/lib/quotes/profile';
+import { loadQuoteSettingRows } from '@/lib/quotes/settings';
 import { newQuoteToken, sha256Hex } from '@/lib/quotes/token';
 import { authorize } from '@/lib/server/auth';
 import { loadPricingBundle } from '@/lib/server/bundle';
@@ -83,6 +86,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'The saved estimate is incomplete. Sync it from the phone and try again.' }, { status: 400 });
     }
     const draft: EstimateDraft = parsed.data;
+
+    // No business form to fill in (OD12): nothing about the settings stops a send. What nobody
+    // entered prints its default ("Koala Insulation", "Limited lifetime warranty") or is left off,
+    // a PLACEHOLDER text counts as not entered, and the consent sentence names the property's state,
+    // else the shop address's, else no state (OD14).
+    const send = quoteSettingsForSend(await loadQuoteSettingRows(supabase), draft.property.state);
+
     const customerEmail = draft.customer.email?.trim();
     if (!customerEmail) {
       return NextResponse.json({ error: "Add the customer's email address before sending the quote." }, { status: 400 });
@@ -121,33 +131,62 @@ export async function POST(request: Request) {
       );
     }
 
-    const policy = canSendQuote(profile.role, options, bundle.snapshot.settings);
-    if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons }, { status: 403 });
+    // A price beyond what this role may send alone goes out only at the exact price the owner or the
+    // office approved for this estimate's option (L34); the approvals used are kept with the quote.
+    const approvals = await loadApprovals(supabase, estimateId);
+    const policy = canSendQuote(profile.role, options, bundle.snapshot.settings, approvals);
+    if (!policy.ok) return NextResponse.json({ error: 'policy', reasons: policy.reasons, problems: policy.problems }, { status: 403 });
+    const approvalsUsed = canSendQuote(profile.role, options, bundle.snapshot.settings)
+      .problems.map((p) => approvals.find((a) => approvalCovers(a, p)))
+      .filter((a): a is PriceApproval => !!a)
+      .map((a) => ({ id: a.id, tier: a.tier, price: a.price, modelPrice: a.modelPrice, loadedCost: a.loadedCost ?? null, decidedRole: a.decidedRole }));
 
-    const settings = await loadQuoteSettings(supabase);
+    const { settings } = send;
     const admin = createAdminClient();
 
     const { data: last, error: lastErr } = await admin
       .from('quotes')
-      .select('version')
+      .select('version, quote_number:snapshot->document->>quoteNumber')
       .eq('estimate_id', estimateId)
       .order('version', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (lastErr) throw new Error(`Reading quote versions failed: ${lastErr.message}`);
-    const version = ((last as { version: number } | null)?.version ?? 0) + 1;
+    const previous = last as { version: number; quote_number: string | null } | null;
+    const version = (previous?.version ?? 0) + 1;
 
     const now = new Date();
+    // The zone the quote is sent in, kept with it: its number's year, its "Valid until" day and every
+    // date it prints (release review C DOC-1).
+    const timeZone = BUSINESS_TIME_ZONE;
+    // The quote number (OD10): a new version keeps the estimate's number (a number sent before the
+    // counter included); a first quote takes the next number of the business year from the counter.
+    const base = previous?.quote_number ? quoteNumberBase(previous.quote_number) : null;
+    let quoteNumber: string;
+    if (base) quoteNumber = `${base}-v${version}`;
+    else {
+      const year = businessYear(now, timeZone);
+      const { data: counter, error: counterErr } = await admin.rpc('next_quote_number', { year });
+      if (counterErr || typeof counter !== 'number') throw new Error(`Numbering the quote failed: ${counterErr?.message ?? 'no number returned'}`);
+      // A stored prefix that is not 1 to 6 capitals or digits falls back to KN (OD16), never '-2026-…'.
+      quoteNumber = counterQuoteNumber(send.prefix, year, counter, version);
+    }
+
+    const { expiresAt } = quoteValidUntil(now, settings.validDays, timeZone);
     const document = buildQuoteDocument({
       draft,
       options,
       version,
+      quoteNumber,
       issuedAt: now,
       validDays: settings.validDays,
       branding: settings.branding,
       estimator: { name: profile.fullName, email: profile.email },
       terms: settings.terms,
       warranty: settings.warranty,
+      // The sentence the customer signs under, stored with the quote (L31, OD14).
+      consent: send.consent,
+      timeZone,
     });
 
     const pdf = await renderQuotePdf(document);
@@ -156,7 +195,6 @@ export async function POST(request: Request) {
     if (upload.error) throw new Error(`Storing the quote PDF failed: ${upload.error.message}`);
 
     const { token, hash } = newQuoteToken();
-    const expiresAt = new Date(now.getTime() + settings.validDays * 86_400_000);
 
     const { data: inserted, error: insErr } = await admin
       .from('quotes')
@@ -177,6 +215,7 @@ export async function POST(request: Request) {
             driveMinutesOneWay: draft.driveMinutesOneWay,
           },
           flags: flags.map((f) => ({ ...f, ackNote: acknowledgedNote(f, draft.deviationAcks) })),
+          ...(approvalsUsed.length ? { approvals: approvalsUsed } : {}),
         },
         public_token_hash: hash,
         expires_at: expiresAt.toISOString(),
@@ -208,7 +247,7 @@ export async function POST(request: Request) {
       status: 'sent',
       // The row_version trigger bumps by one on this update.
       rowVersion: estimate.row_version + 1,
-      lastQuote: { quoteId, version, sentAt },
+      lastQuote: { quoteId, version, sentAt, quoteNumber: document.quoteNumber },
     };
     const { data: updated, error: updErr } = await admin
       .from('estimates')

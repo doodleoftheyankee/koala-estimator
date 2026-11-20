@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
 import { z } from 'zod';
-import { AppNav } from '@/components/AppNav';
 import { Alert, Badge, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
 import { createClient } from '@/lib/supabase/server';
+import { BUSINESS_TIME_ZONE, formatMoney } from '@/lib/format';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
 import {
-  BRANDING_FIELDS,
   displayValue,
   objectFieldText,
   SETTING_GROUPS,
@@ -19,7 +18,9 @@ import {
   type SettingsMap,
 } from '@/lib/admin/settings';
 import { PRIMARY_PRODUCTS } from '@/lib/admin/pricingForms';
+import { codeEditionsSentence, pricedCodeRequirement } from '@/lib/admin/codes';
 import { ActionForm, ToggleInput } from './ActionForm';
+import { MarginPreview } from './MarginPreview';
 import { NumberField, SectionHeading, TextField } from './fields';
 import { addCrew, saveCodeRequirement, saveCrew, saveMaterial, saveProduct, saveSettings, saveTierTemplates } from './actions';
 
@@ -53,6 +54,12 @@ const schemas = {
       coverage_sqft_in: numOrNull,
       is_default: z.boolean(),
       needs_owner_input: z.boolean(),
+      job_type: z.enum(JOB_TYPES).nullable(),
+      r_value: numOrNull,
+      thickness_in: numOrNull,
+      typical_min: numOrNull,
+      typical_max: numOrNull,
+      typical_source: strOrNull,
     }),
   ),
   crews: z.array(z.object({ id: str, name: str, size: num, blended_hourly_cost: num, active: z.boolean(), needs_owner_input: z.boolean() })),
@@ -106,7 +113,7 @@ async function loadConfig(db: Db) {
     db.from('products').select('id, code, label, unit, r_per_inch, is_r_bearing, active'),
     db
       .from('materials')
-      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input')
+      .select('id, product_id, name, unit, cost_per_unit, coverage_sqft_in, is_default, needs_owner_input, job_type, r_value, thickness_in, typical_min, typical_max, typical_source')
       .eq('active', true),
     db.from('crews').select('id, name, size, blended_hourly_cost, active, needs_owner_input').order('name'),
     db
@@ -185,7 +192,6 @@ export default async function PricingPage() {
 
   return (
     <>
-      <AppNav profile={profile} />
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-slate-900">Pricing</h1>
@@ -202,13 +208,77 @@ export default async function PricingPage() {
   );
 }
 
+/** A numeric setting as stored (NaN when missing). */
+function settingNumber(map: SettingsMap, key: string): number {
+  const v = map[key];
+  return typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN;
+}
+
+type Material = Config['materials'][number];
+
+/** One material's form: name, cost per unit and, for bags, the coverage of one bag. */
+function MaterialCard({ m, title, productInactive, readOnly, note }: { m: Material; title: string; productInactive: boolean; readOnly: boolean; note?: string }) {
+  const unit = UNIT_LABELS[m.unit] ?? m.unit;
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold text-slate-900">{title}</h3>
+        {m.needs_owner_input ? <Badge tone="amber">Needs owner input</Badge> : null}
+        {productInactive ? <Badge>Product inactive</Badge> : null}
+      </div>
+      {note ? <p className="mb-3 text-sm text-slate-600">{note}</p> : null}
+      <ActionForm action={saveMaterial} readOnly={readOnly}>
+        <input type="hidden" name="id" value={m.id} />
+        <TextField label="Name" name="name" defaultValue={m.name} required />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Unit" hint="Set by the product">
+            <Input value={unit} readOnly disabled aria-readonly="true" />
+          </Field>
+          <NumberField
+            label="Cost per unit"
+            name="cost_per_unit"
+            defaultValue={m.cost_per_unit}
+            prefix="$"
+            suffix={`/ ${unit}`}
+            hint={m.typical_min !== null && m.typical_max !== null ? `Usual: ${formatMoney(m.typical_min)} to ${formatMoney(m.typical_max)} per ${unit}` : undefined}
+          />
+        </div>
+        {m.unit === 'bag' ? (
+          <NumberField
+            label="Coverage per bag"
+            name="coverage_sqft_in"
+            defaultValue={m.coverage_sqft_in}
+            suffix="sq ft·in"
+            hint={
+              m.job_type === 'walls'
+                ? 'Square feet × inches one bag fills, blown dense in a wall (e.g. 122.5 = 35 sq ft of a 3.5 in wall).'
+                : 'Square feet × inches one bag covers (e.g. 200 = 40 sq ft at 5 in).'
+            }
+          />
+        ) : null}
+        {/* The usual range (L11): a cost far outside it is refused until "This cost is right" is ticked. */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <NumberField label="Usual cost, low" name="typical_min" defaultValue={m.typical_min} prefix="$" suffix={`/ ${unit}`} required={false} />
+          <NumberField label="Usual cost, high" name="typical_max" defaultValue={m.typical_max} prefix="$" suffix={`/ ${unit}`} required={false} />
+        </div>
+        <TextField label="Where the usual range comes from" name="typical_source" defaultValue={m.typical_source} />
+        <ToggleInput name="cost_confirmed" label="This cost is right" hint="Tick to save a cost far outside the usual range." defaultChecked={false} />
+      </ActionForm>
+    </Card>
+  );
+}
+
 function PricingContent({ config, readOnly }: { config: Config; readOnly: boolean }) {
   const map = toSettingsMap(config.settings);
   const productById = new Map(config.products.map((p) => [p.id, p]));
   const productByCode = new Map(config.products.map((p) => [p.code, p]));
   const jobTypeLabel = (jt: JobType) => config.jobTypes.find((j) => j.code === jt)?.label ?? humanize(jt);
 
-  const placeholderSettings = config.settings.filter((s) => isPlaceholder(s.description) || isPlaceholder(s.value));
+  // What every quote prints (branding, warranty, terms) is on the optional Business profile page.
+  // It never needs filling in (OD12: quotes say Koala Insulation and leave off what is not entered,
+  // and a PLACEHOLDER text is never printed), so it is not on this list of things to set.
+  const onProfilePage = (key: string) => key === 'branding' || key === 'warranty_text' || key === 'quote_terms';
+  const placeholderSettings = config.settings.filter((s) => !onProfilePage(s.key) && (isPlaceholder(s.description) || isPlaceholder(s.value)));
   const placeholderKeys = new Set(placeholderSettings.map((s) => s.key));
   const flaggedMaterials = config.materials.filter((m) => m.needs_owner_input);
   const flaggedCrews = config.crews.filter((c) => c.needs_owner_input);
@@ -218,10 +288,14 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
     ...flaggedCrews.map((c) => ({ href: '#crews', text: `Crew: ${c.name}` })),
   ];
 
-  const defaultMaterials = config.materials
-    .filter((m) => m.is_default && productById.has(m.product_id))
-    .sort((a, b) => PRODUCTS.indexOf(productById.get(a.product_id)!.code) - PRODUCTS.indexOf(productById.get(b.product_id)!.code));
+  const productOrder = (m: Material) => PRODUCTS.indexOf(productById.get(m.product_id)!.code);
+  const defaultMaterials = config.materials.filter((m) => m.is_default && productById.has(m.product_id)).sort((a, b) => productOrder(a) - productOrder(b));
+  // Also priced: a material for one job type (dense-pack walls) and the sizes of a product (batts).
+  const otherMaterials = config.materials
+    .filter((m) => !m.is_default && (m.job_type || m.r_value) && productById.has(m.product_id))
+    .sort((a, b) => productOrder(a) - productOrder(b) || (a.job_type ?? '').localeCompare(b.job_type ?? '') || (a.r_value ?? 0) - (b.r_value ?? 0));
   const activeCrews = config.crews.filter((c) => c.active);
+  const editions = codeEditionsSentence(config.codes.filter((c) => c.is_default));
   const defaultCrewId = typeof map.default_crew_id === 'string' ? map.default_crew_id : null;
 
   return (
@@ -230,10 +304,10 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <Alert tone="amber">
           <p className="font-semibold">Needs owner input ({todo.length})</p>
           <p className="mt-1">These are still seed placeholders. Pricing works, but it will not match how you quote until they are set.</p>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+          <ul className="mt-2 grid gap-x-3 sm:grid-cols-2">
             {todo.map((t) => (
               <li key={t.text}>
-                <a href={t.href} className="underline decoration-amber-400 underline-offset-2 hover:text-amber-950">
+                <a href={t.href} className="flex min-h-12 items-center underline decoration-amber-400 underline-offset-2 hover:text-amber-950">
                   {t.text}
                 </a>
               </li>
@@ -248,7 +322,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <ul className="flex gap-2 whitespace-nowrap">
           {SECTIONS.map((s) => (
             <li key={s.id}>
-              <a href={`#${s.id}`} className="inline-flex min-h-10 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800">
+              <a href={`#${s.id}`} className="inline-flex min-h-12 items-center rounded-full bg-white px-4 text-sm font-medium text-slate-700 ring-1 ring-slate-300 hover:bg-brand-50 hover:text-brand-800">
                 {s.label}
               </a>
             </li>
@@ -271,6 +345,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
                   <SettingInput key={s.key} setting={s} map={map} crews={activeCrews} placeholder={placeholderKeys.has(s.key)} />
                 ))}
               </div>
+              {group.id === 'margins' ? <MarginPreview overheadPct={settingNumber(map, 'overhead_pct')} netMarginPct={settingNumber(map, 'target_margin_pct')} /> : null}
             </ActionForm>
           </Card>
         ))}
@@ -283,10 +358,14 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
             <FinancingForm map={map} readOnly={readOnly} />
           </Card>
           <Card>
-            <h3 className="mb-3 font-semibold text-slate-900">
-              Branding {placeholderKeys.has('branding') ? <Badge tone="amber">Placeholder</Badge> : null}
-            </h3>
-            <BrandingForm map={map} readOnly={readOnly} />
+            <h3 className="mb-3 font-semibold text-slate-900">Business profile</h3>
+            <p className="text-sm text-slate-600">
+              The company name, license, office phone, warranty and terms on every quote, and the prefix of its number, are on the{' '}
+              <a href="/admin/business" className="font-semibold text-brand-800 underline">
+                Business profile
+              </a>{' '}
+              page. It is optional: quotes say Koala Insulation and leave off what is not filled in.
+            </p>
           </Card>
         </div>
       </section>
@@ -297,39 +376,33 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
           The default material for each product. Saving a material marks it as confirmed.
         </SectionHeading>
         <div className="grid gap-4 md:grid-cols-2">
-          {defaultMaterials.map((m) => {
-            const product = productById.get(m.product_id);
-            const unit = UNIT_LABELS[m.unit] ?? m.unit;
-            return (
-              <Card key={m.id}>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-slate-900">{product?.label}</h3>
-                  {m.needs_owner_input ? <Badge tone="amber">Needs owner input</Badge> : null}
-                  {product && !product.active ? <Badge>Product inactive</Badge> : null}
-                </div>
-                <ActionForm action={saveMaterial} readOnly={readOnly}>
-                  <input type="hidden" name="id" value={m.id} />
-                  <TextField label="Name" name="name" defaultValue={m.name} required />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Unit" hint="Set by the product">
-                      <Input value={unit} readOnly disabled aria-readonly="true" />
-                    </Field>
-                    <NumberField label="Cost per unit" name="cost_per_unit" defaultValue={m.cost_per_unit} prefix="$" suffix={`/ ${unit}`} />
-                  </div>
-                  {m.unit === 'bag' ? (
-                    <NumberField
-                      label="Coverage per bag"
-                      name="coverage_sqft_in"
-                      defaultValue={m.coverage_sqft_in}
-                      suffix="sq ft·in"
-                      hint="Square feet × inches one bag covers (e.g. 200 = 40 sq ft at 5 in)."
-                    />
-                  ) : null}
-                </ActionForm>
-              </Card>
-            );
-          })}
+          {defaultMaterials.map((m) => (
+            <MaterialCard
+              key={m.id}
+              m={m}
+              title={productById.get(m.product_id)?.label ?? 'Product'}
+              productInactive={productById.get(m.product_id)?.active === false}
+              readOnly={readOnly}
+              note={otherMaterials.some((o) => o.product_id === m.product_id && o.r_value) ? 'Quotes price batts by the sizes below, so this cost is not used while they are set up.' : undefined}
+            />
+          ))}
         </div>
+        {otherMaterials.length ? (
+          <>
+            <h3 className="pt-2 font-semibold text-slate-900">Also priced</h3>
+            <p className="text-sm text-slate-600">
+              Dense-pack wall cellulose is used for walls instead of the attic bag (a wall is blown dense, so a bag covers less). Batts are priced by size: the engine picks the size whose R-value
+              and thickness fit the cavity.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              {otherMaterials.map((m) => {
+                const label = productById.get(m.product_id)?.label ?? 'Product';
+                const title = m.r_value ? `${label}, R-${m.r_value} (${m.thickness_in} in thick)` : `${label}, ${jobTypeLabel(m.job_type!)} only`;
+                return <MaterialCard key={m.id} m={m} title={title} productInactive={productById.get(m.product_id)?.active === false} readOnly={readOnly} />;
+              })}
+            </div>
+          </>
+        ) : null}
         {defaultMaterials.length === 0 ? <Alert tone="red">No default materials found.</Alert> : null}
       </section>
 
@@ -380,7 +453,8 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         </SectionHeading>
         {JOB_TYPES.map((jt) => {
           const rows = TIERS.map((t) => config.tiers.find((r) => r.job_type === jt && r.tier === t));
-          const codeMin = config.codes.find((c) => c.job_type === jt && c.is_default);
+          // The code minimum the engine prices this job type with (the crawlspace floor, not its walls).
+          const codeMin = pricedCodeRequirement(config.codes.filter((c) => c.is_default), jt);
           return (
             <Card key={jt}>
               <h3 className="mb-3 text-lg font-semibold text-slate-900">{jobTypeLabel(jt)}</h3>
@@ -445,12 +519,18 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
       {/* ------------------------------------------------------------ Code mins */}
       <section className="space-y-4">
         <SectionHeading id="code" title="Code minimums">
-          Minimum R-values by job type and assembly (IECC climate zone 4A).
+          Minimum R-values by job type and assembly. Quotes price each job type with its first assembly here (a crawlspace with its floor).
         </SectionHeading>
         <Alert tone="amber">
-          <strong>Owner to confirm:</strong> these were seeded from the <strong>2021 IECC</strong> (attic R-60). Delaware has used both the 2018
-          (attic R-49) and 2021 editions. Confirm which edition Newark and New Castle County enforce for your permits, then update the values and
-          edition below.
+          <strong>Owner to confirm:</strong>{' '}
+          {editions ? (
+            <>
+              these minimums come from <strong>{editions}</strong>.
+            </>
+          ) : (
+            'no code edition is entered yet.'
+          )}{' '}
+          Confirm which edition your local building department enforces for your permits, then update the values and edition below.
         </Alert>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {config.codes.map((c) => (
@@ -512,7 +592,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
         <Alert tone="blue">
           These values are learned nightly from verified job actuals. Review candidates, approve or reject them, and roll back on the{' '}
           <a href="/admin/learning" className="font-semibold underline">
-            Learning dashboard
+            Insights page
           </a>
           .
         </Alert>
@@ -522,7 +602,7 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
               <h3 className="font-semibold text-slate-900">Active set v{config.activeSet.version}</h3>
               <Badge tone="green">{config.activeSet.source}</Badge>
               {config.activeSet.activated_at ? (
-                <span className="text-sm text-slate-500">since {new Date(config.activeSet.activated_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}</span>
+                <span className="text-sm text-slate-500">since {new Date(config.activeSet.activated_at).toLocaleDateString('en-US', { timeZone: BUSINESS_TIME_ZONE })}</span>
               ) : null}
               {config.activeSet.notes ? <span className="w-full text-sm text-slate-600">{config.activeSet.notes}</span> : null}
             </div>
@@ -654,33 +734,3 @@ function FinancingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean 
   );
 }
 
-function BrandingForm({ map, readOnly }: { map: SettingsMap; readOnly: boolean }) {
-  const brand = settingObject(map, 'branding');
-  const color = objectFieldText(brand, 'primary_color');
-  return (
-    <ActionForm action={saveSettings} readOnly={readOnly}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {BRANDING_FIELDS.map((f) => (
-          <TextField
-            key={f.key}
-            label={f.label}
-            name={`branding.${f.key}`}
-            type={f.type}
-            required={f.key === 'company'}
-            defaultValue={objectFieldText(brand, f.key)}
-            placeholder={f.key === 'primary_color' ? '#0f766e' : undefined}
-            hint={
-              f.key === 'primary_color' && /^#[0-9a-fA-F]{6}$/.test(color) ? (
-                <span className="inline-flex items-center gap-1">
-                  <span aria-hidden className="inline-block h-3 w-3 rounded-sm ring-1 ring-slate-300" style={{ backgroundColor: color }} /> Current color
-                </span>
-              ) : f.key === 'primary_color' ? (
-                'Hex color, e.g. #0f766e'
-              ) : undefined
-            }
-          />
-        ))}
-      </div>
-    </ActionForm>
-  );
-}

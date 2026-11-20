@@ -1,17 +1,21 @@
 'use client';
 import { useState } from 'react';
 import { codeMinimumR, JOB_TYPES, ACCESS_LEVELS, type PricingBundle } from '@/lib/pricing';
-import { areaSchema, newArea, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
+import { areaSchema, hasDepthField, newArea, withJobType, type AreaDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { ACCESS_HINTS, ACCESS_LABELS, JOB_TYPE_LABELS, num } from '@/lib/format';
 import { Alert, Badge, Button, Card, Chips, Field, Input, Select, Textarea, Toggle } from '@/components/ui';
 import { NumberInput } from '@/components/NumberInput';
+import { Button as DmButton, Ruler } from '@/components/daymark';
 import type { Update } from './EstimateEditor';
-import { measuredSqft, measurementSummary, newMeasurement, type Measurement } from '@/lib/measure/measure';
+import type { FixTarget } from '@/lib/field/fix';
+import { measuredSqft, measurementSummary, newMeasurement, type MeasureField, type Measurement } from '@/lib/measure/measure';
+import { measurementChecks, withMeasurement } from '@/lib/field/measuring';
 import { MeasureSheet } from './measure/MeasureSheet';
 import { AreaPhotos, useRemotePhotos } from './measure/AreaPhotos';
 import { removeAreaPhotos } from '@/lib/offline/photos';
 import { PhotoRead } from './measure/PhotoRead';
 import { EXISTING_MATERIALS, type StoredPhotoRead, type Suggestion } from '@/lib/ai/photoRead';
+import { currentRFromDepth, withExistingChange } from '@/lib/pricing/rPerInch';
 import { lookupAddress, mergeNotes, ROOF_LOOKUP_JOBS } from '@/lib/roof/lookup';
 import { RoofLookupButton, RoofLookupSheet, type RoofApply } from './measure/RoofLookup';
 
@@ -22,12 +26,27 @@ const CAVITY_DEPTHS = [
   { value: '7.25', label: '2×8 (7.25")' },
   { value: '9.25', label: '2×10 (9.25")' },
 ] as const;
-const CAVITY_JOBS = new Set(['walls', 'rim_joist', 'crawlspace', 'garage']);
 
-export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateDraft; update: Update; bundle: PricingBundle | null; ownerId: string }) {
+export function AreasStep({
+  draft,
+  update,
+  bundle,
+  ownerId,
+  focus,
+}: {
+  draft: EstimateDraft;
+  update: Update;
+  bundle: PricingBundle | null;
+  ownerId: string;
+  /** Where a Fix button from the Send checklist sent the estimator: this area opens (and its measuring sheet). */
+  focus?: FixTarget | null;
+}) {
   const remotePhotos = useRemotePhotos(draft.id);
-  const [open, setOpen] = useState<string | null>(draft.areas.at(-1)?.id ?? null);
-  const [measuring, setMeasuring] = useState<string | null>(null);
+  const focusArea = focus?.step === 'areas' && focus.areaId && draft.areas.some((a) => a.id === focus.areaId) ? focus : null;
+  const [open, setOpen] = useState<string | null>(focusArea?.areaId ?? draft.areas.at(-1)?.id ?? null);
+  const [measuring, setMeasuring] = useState<string | null>(focusArea?.open === 'measure' && draft.measurements[focusArea.areaId!] ? focusArea.areaId! : null);
+  // "Finish measuring" opens the sheet with the cursor in the part to finish (review B flow-B12).
+  const [measureField, setMeasureField] = useState<MeasureField | null>(focusArea?.open === 'measure' ? (focusArea.field ?? null) : null);
   const [lookingUp, setLookingUp] = useState<string | null>(null);
   const [roofDone, setRoofDone] = useState<{ areaId: string; text: string } | null>(null);
   const address = lookupAddress(draft.property);
@@ -46,16 +65,18 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
     });
   };
 
-  /** Saves the measurement; once it's complete, its net becomes the area's square feet. */
-  const setMeasurement = (id: string, m: Measurement) =>
-    update((d) => {
-      const sqft = measuredSqft(m);
-      return {
-        ...d,
-        measurements: { ...d.measurements, [id]: m },
-        areas: sqft === null ? d.areas : d.areas.map((a) => (a.id === id ? { ...a, sqft } : a)),
-      };
-    });
+  /**
+   * Saves the measurement; once it's complete, its net becomes the area's square feet. One that
+   * breaks takes back the size it gave (L26), so the area is not priced until it is finished.
+   */
+  const setMeasurement = (id: string, m: Measurement) => update((d) => withMeasurement(d, id, m));
+  const unfinished = new Map(measurementChecks(draft).map((c) => [c.areaId, c]));
+  const openMeasure = (id: string, field: MeasureField | null = null) => {
+    if (!draft.measurements[id]) setMeasurement(id, newMeasurement(draft.areas.find((a) => a.id === id)?.jobType ?? 'attic'));
+    setRoofDone(null);
+    setMeasureField(field);
+    setMeasuring(id);
+  };
   const removeMeasurement = (id: string) =>
     update((d) => {
       return { ...d, measurements: without(d.measurements, id) };
@@ -81,13 +102,8 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
       if (!area) return d;
       const prepNotes = mergeNotes(area.prepNotes, a.note);
       if (a.use !== 'walls') return { ...d, areas: d.areas.map((x) => (x.id === id ? { ...x, sqft: a.sqft, prepNotes } : x)) };
-      const m = wallsWith(d.measurements[id], a.wallRunFt);
-      const sqft = measuredSqft(m);
-      return {
-        ...d,
-        measurements: { ...d.measurements, [id]: m },
-        areas: d.areas.map((x) => (x.id === id ? { ...x, prepNotes, ...(sqft === null ? {} : { sqft }) } : x)),
-      };
+      const next = withMeasurement(d, id, wallsWith(d.measurements[id], a.wallRunFt));
+      return { ...next, areas: next.areas.map((x) => (x.id === id ? { ...x, prepNotes } : x)) };
     });
     const wallSqft = a.use === 'walls' ? measuredSqft(wallsWith(draft.measurements[id], a.wallRunFt)) : null;
     const text =
@@ -109,12 +125,13 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
         const codeR = bundle ? codeMinimumR(bundle.snapshot, a.jobType) : null;
         const expanded = open === a.id;
         return (
-          <Card key={a.id}>
-            <button type="button" className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setOpen(expanded ? null : a.id)} aria-expanded={expanded}>
+          <Card key={a.id} id={`area-${a.id}`}>
+            {/* At least 48 px tall, the Daymark minimum, even when its summary fits on one line (release review C FLOW-11). */}
+            <button type="button" className="flex min-h-12 w-full items-center justify-between gap-2 text-left" onClick={() => setOpen(expanded ? null : a.id)} aria-expanded={expanded}>
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{a.name}</span>
                 <span className="block text-sm text-slate-600">
-                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ' 📐' : ''}` : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
+                  {JOB_TYPE_LABELS[a.jobType]} · {a.sqft ? `${num(a.sqft)} sq ft${draft.measurements[a.id] ? ', measured' : ''}` : unfinished.has(a.id) ? '0 sq ft, measuring not finished' : 'no size yet'} · R-{a.currentR} → {a.targetR ? `R-${a.targetR}` : codeR ? `code R-${codeR}` : 'code'}
                 </span>
               </span>
               {valid ? <Badge tone="green">Ready</Badge> : <Badge tone="amber">Incomplete</Badge>}
@@ -126,18 +143,17 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                   <Input value={a.name} onChange={(e) => set(a.id, { name: e.target.value })} />
                 </Field>
                 <Field label="Job type" group>
-                  <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, { jobType: v })} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
+                  <Chips label="Job type" value={a.jobType} onChange={(v) => set(a.id, withJobType({ jobType: a.jobType, depthIn: a.depthIn }, v))} options={JOB_TYPES.map((j) => ({ value: j, label: JOB_TYPE_LABELS[j] }))} />
                 </Field>
-                <MeasureButton
-                  measurement={draft.measurements[a.id]}
-                  sqft={a.sqft}
-                  onOpen={() => {
-                    if (!draft.measurements[a.id]) setMeasurement(a.id, newMeasurement(a.jobType));
-                    setRoofDone(null);
-                    setMeasuring(a.id);
-                  }}
-                  onUseMeasured={(sqft) => set(a.id, { sqft })}
-                />
+                {unfinished.has(a.id) ? (
+                  <Alert tone="amber">
+                    <span className="block">{unfinished.get(a.id)!.label}</span>
+                    <Button size="sm" variant="secondary" className="mt-2" onClick={() => openMeasure(a.id, fieldOf(unfinished.get(a.id)!.fix.target))}>
+                      {unfinished.get(a.id)!.fix.label}
+                    </Button>
+                  </Alert>
+                ) : null}
+                <MeasureButton measurement={draft.measurements[a.id]} sqft={a.sqft} onOpen={() => openMeasure(a.id)} onUseMeasured={(sqft) => set(a.id, { sqft })} />
                 {ROOF_LOOKUP_JOBS.has(a.jobType) ? (
                   <RoofLookupButton
                     estimateId={draft.id}
@@ -151,23 +167,24 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                 ) : null}
                 {roofDone?.areaId === a.id ? (
                   <div role="status">
-                    <Alert tone="green">✓ {roofDone.text}</Alert>
+                    <Alert tone="green">{roofDone.text}</Alert>
                   </div>
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Square feet">
-                    <NumberInput value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
+                    <NumberInput id={`area-${a.id}-sqft`} value={a.sqft || null} onValue={(v) => set(a.id, { sqft: v ?? 0 })} placeholder="0" />
                   </Field>
                   <Field label="Target R" hint={codeR ? `Blank = tier default (code R-${codeR})` : 'Blank = tier default'}>
                     <NumberInput value={a.targetR} onValue={(v) => set(a.id, { targetR: v && v > 0 ? v : null })} placeholder={codeR ? `R-${codeR}` : ''} />
                   </Field>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* The material gets the whole row on phones, so a long name ("Blown fiberglass") is never cut. */}
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Existing insulation">
                     <Select
                       value={a.existingMaterial ?? 'None'}
-                      onChange={(e) => set(a.id, { existingMaterial: e.target.value === 'None' ? null : e.target.value })}
+                      onChange={(e) => set(a.id, withExistingChange(a, { existingMaterial: e.target.value === 'None' ? null : e.target.value }))}
                     >
                       {EXISTING.map((m) => (
                         <option key={m}>{m}</option>
@@ -175,11 +192,21 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                     </Select>
                   </Field>
                   <Field label="Existing depth (in)">
-                    <NumberInput value={a.existingDepthIn} onValue={(v) => set(a.id, { existingDepthIn: v })} />
+                    <NumberInput value={a.existingDepthIn} onValue={(v) => set(a.id, withExistingChange(a, { existingDepthIn: v }))} />
                   </Field>
                 </div>
-                <Field label="Current R-value" hint="Estimate from type and depth if there is no label." group>
-                  <div className="flex gap-2">
+                <Field
+                  label="Current R-value"
+                  hint={(() => {
+                    const fromDepth = currentRFromDepth(a.existingMaterial, a.existingDepthIn);
+                    if (fromDepth === null) return 'Fills in from the type and depth. Use the label if there is one.';
+                    return a.currentR === fromDepth
+                      ? `From ${num(a.existingDepthIn ?? 0, 1)} in of ${(a.existingMaterial ?? '').toLowerCase()}. Use the label if there is one.`
+                      : `${num(a.existingDepthIn ?? 0, 1)} in of ${(a.existingMaterial ?? '').toLowerCase()} is about R-${fromDepth}.`;
+                  })()}
+                  group
+                >
+                  <div className="flex items-start gap-2">
                     <NumberInput aria-label="Current R-value" className="w-24" value={a.currentR} onValue={(v) => set(a.id, { currentR: v ?? 0 })} />
                     <Chips label="Common R-values" value={String(a.currentR)} onChange={(v) => set(a.id, { currentR: Number(v) })} options={['0', '11', '19', '30'].map((r) => ({ value: r, label: `R-${r}` }))} />
                   </div>
@@ -190,8 +217,16 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
                   </Alert>
                 ) : null}
 
-                {CAVITY_JOBS.has(a.jobType) ? (
-                  <Field label="Cavity depth" hint="Caps how much insulation fits. Leave blank for open areas." group>
+                {hasDepthField(a.jobType) ? (
+                  <Field
+                    label="Cavity depth"
+                    hint={
+                      a.jobType === 'walls'
+                        ? 'Caps how much insulation fits, with what is already there. With no depth, a wall is priced as a 2×4 (3.5").'
+                        : 'Caps how much insulation fits, with what is already there. Leave blank for open areas.'
+                    }
+                    group
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <Chips label="Framing" value={a.depthIn === null ? null : (String(a.depthIn) as (typeof CAVITY_DEPTHS)[number]['value'])} onChange={(v) => set(a.id, { depthIn: Number(v) })} options={CAVITY_DEPTHS} />
                       {a.depthIn !== null ? (
@@ -247,6 +282,8 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
 
       {measuringArea && draft.measurements[measuringArea.id] ? (
         <MeasureSheet
+          key={measuringArea.id}
+          focusField={measureField}
           area={measuringArea}
           measurement={draft.measurements[measuringArea.id]!}
           onChange={(m) => setMeasurement(measuringArea.id, m)}
@@ -266,14 +303,21 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
           address={address}
           onApply={(r) => applyRoof(lookingUpArea.id, r)}
           onClose={() => setLookingUp(null)}
+          // "Measure by hand" after a failed lookup opens Measure for this area straight away.
+          onMeasure={() => {
+            if (!draft.measurements[lookingUpArea.id]) setMeasurement(lookingUpArea.id, newMeasurement(lookingUpArea.jobType));
+            setLookingUp(null);
+            setMeasureField(null);
+            setMeasuring(lookingUpArea.id);
+          }}
         />
       ) : null}
 
-      <Card>
+      <Card id="add-area">
         <h2 className="mb-2 font-semibold">Add an area</h2>
         <div className="grid grid-cols-2 gap-2">
           {JOB_TYPES.map((j) => (
-            <Button key={j} variant="secondary" onClick={() => add(j)}>
+            <Button key={j} variant="secondary" className="px-3! whitespace-nowrap" onClick={() => add(j)}>
               + {JOB_TYPE_LABELS[j]}
             </Button>
           ))}
@@ -283,12 +327,17 @@ export function AreasStep({ draft, update, bundle, ownerId }: { draft: EstimateD
   );
 }
 
+/** The Measure sheet part a "Finish measuring" fix names, if any. */
+function fieldOf(t: FixTarget): MeasureField | null {
+  return t.step === 'areas' && t.open === 'measure' ? (t.field ?? null) : null;
+}
+
 function without<T>(record: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 }
 
 /** Opens the measuring tools; shows what was measured and whether the square feet still match. */
-function MeasureButton({
+export function MeasureButton({
   measurement,
   sqft,
   onOpen,
@@ -303,9 +352,9 @@ function MeasureButton({
   const differs = measured !== null && Math.round(sqft) !== measured;
   return (
     <div className="space-y-2">
-      <Button variant="secondary" size="lg" className="w-full" onClick={onOpen}>
-        📐 {measurement ? 'Edit measurement' : 'Measure this area'}
-      </Button>
+      <DmButton size="lg" block icon={Ruler} onClick={onOpen}>
+        {measurement ? 'Edit measurement' : 'Measure this area'}
+      </DmButton>
       {measurement ? (
         <p className="text-sm text-slate-600">
           {measurementSummary(measurement)} · {measured === null ? 'not finished' : `${num(measured)} sq ft net`}
@@ -315,10 +364,11 @@ function MeasureButton({
       )}
       {differs ? (
         <Alert tone="amber">
-          Square feet ({num(sqft)}) don&apos;t match the measurement ({num(measured)}).{' '}
-          <button type="button" className="font-semibold underline" onClick={() => onUseMeasured(measured)}>
+          <p>Square feet ({num(sqft)}) don&apos;t match the measurement ({num(measured)}).</p>
+          {/* A 48 px button under the sentence, not a link-sized word inside it (review B flow-B11). */}
+          <DmButton size="sm" className="mt-2" onClick={() => onUseMeasured(measured)}>
             Use {num(measured)}
-          </button>
+          </DmButton>
         </Alert>
       ) : null}
     </div>

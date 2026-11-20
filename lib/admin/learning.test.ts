@@ -589,9 +589,9 @@ describe('win rate', () => {
   });
 
   it('explains the cold start', () => {
-    expect(winColdStartMessage(40, 12)).toBe('Price recommendations start after 40 decided quotes (you have 12).');
-    expect(winColdStartMessage(1, 0)).toBe('Price recommendations start after 1 decided quote (you have 0).');
-    expect(winColdStartMessage(40, null)).toBe('Price recommendations start after 40 decided quotes. The first nightly run will count yours.');
+    expect(winColdStartMessage(40, 12)).toBe('Price suggestions start after 40 decided quotes (you have 12).');
+    expect(winColdStartMessage(1, 0)).toBe('Price suggestions start after 1 decided quote (you have 0).');
+    expect(winColdStartMessage(40, null)).toBe('Price suggestions start after 40 decided quotes. The first nightly run will count yours.');
     expect(winColdStartMessage(40, 45, 'All 45 decided quotes were won.')).toBe(
       'You have 45 decided quotes, enough to train, but no price model is active yet: All 45 decided quotes were won.',
     );
@@ -877,5 +877,21 @@ describe('formatting', () => {
     expect(formatDuration(t, '2026-10-20T07:14:00Z')).toBe('0 s');
     expect(formatDuration(t, null)).toBeNull();
     expect(formatDuration('bad', t)).toBeNull();
+  });
+});
+
+describe('Insights words the nightly run in the business zone (release review C FLOW-7)', () => {
+  it('says the run time and the zone from the zone, word for word as before in New York', async () => {
+    const m = (await import('./learning')) as Record<string, unknown>;
+    expect(m.nightlyScheduleWords, 'nightlyScheduleWords').toBeTypeOf('function');
+    const words = m.nightlyScheduleWords as (tz?: string) => string;
+    expect(words('America/New_York')).toBe(
+      'Runs nightly at about 2:15 AM Eastern (3:15 AM while daylight saving time is on). All times on this page are Eastern.',
+    );
+    expect(words()).toBe(words('America/New_York'));
+    expect(words('America/Los_Angeles')).toBe(
+      'Runs nightly at about 11:15 PM Pacific (12:15 AM while daylight saving time is on). All times on this page are Pacific.',
+    );
+    expect(words('America/Phoenix')).toBe('Runs nightly at about 12:15 AM Mountain. All times on this page are Mountain.');
   });
 });
