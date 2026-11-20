@@ -240,6 +240,45 @@ export function saveEdit(
   };
 }
 
+/**
+ * What the phone stores once a quote went out. `sentFrom` is the mutation id of the copy that was
+ * synced and sent; `clientDoc` is the server's copy after sending (status sent, the new quote), and
+ * `rowVersion` its row version. If the estimator kept editing while the quote was being made (the
+ * stored copy has another mutation id), that edit is kept as a new revision of the sent quote on
+ * the server's new row version, instead of being replaced by the server's copy and then reported
+ * as "Changed on another device" (walk-fix recheck EE2-R1).
+ */
+export function afterSend(
+  cur: LocalEstimate,
+  sentFrom: string,
+  clientDoc: EstimateDraft | null,
+  rowVersion: number | null,
+  newMutationId: string,
+  now: string,
+): LocalEstimate {
+  if (cur.mutationId !== sentFrom && cur.syncState !== 'locked') {
+    return {
+      ...cur,
+      draft: {
+        ...cur.draft,
+        rowVersion: rowVersion ?? cur.draft.rowVersion,
+        lastQuote: clientDoc?.lastQuote ?? cur.draft.lastQuote,
+        // An edit made after the quote went out starts the next revision (as touch does for a sent quote).
+        status: ['sent', 'viewed', 'expired', 'lost'].includes(cur.draft.status) ? 'draft' : cur.draft.status,
+      },
+      syncState: cur.syncState === 'local' || cur.syncState === 'invalid' ? cur.syncState : 'pending',
+    };
+  }
+  return {
+    ...cur,
+    draft: clientDoc ? { ...clientDoc, rowVersion } : { ...cur.draft, status: 'sent', rowVersion },
+    syncState: 'synced',
+    mutationId: newMutationId,
+    lastError: null,
+    syncedAt: now,
+  };
+}
+
 /** Marks a local edit. Every edit gets a fresh mutation id. */
 export function touch(current: LocalEstimate, draft: EstimateDraft, newMutationId: string, now: string): LocalEstimate {
   // Editing a sent quote starts a new revision; the next send creates quote version n+1.

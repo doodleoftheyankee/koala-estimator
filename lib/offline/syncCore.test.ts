@@ -5,7 +5,7 @@ import { newArea, newDraft, type EstimateDraft } from '@/lib/sync/draft';
 import { toRow, waitingTotal } from '@/lib/field/estimateList';
 import type { LocalEstimate } from './db';
 import type { RemoteEstimate } from '@/lib/sync/protocol';
-import { applySyncResult, mergeRemote, resolveConflict, saveEdit, sameWork, syncBlocker, touch, UNSENT_CHANGE_DROPPED } from './syncCore';
+import { afterSend, applySyncResult, mergeRemote, resolveConflict, saveEdit, sameWork, syncBlocker, touch, UNSENT_CHANGE_DROPPED } from './syncCore';
 
 const NOW = '2026-10-20T12:00:00.000Z';
 /** New drafts start in the business profile's town (L32); these tests' estimates are in this one. */
@@ -275,5 +275,27 @@ describe('walk-fix review EE-2: a save never silently overwrites another device 
     expect(sameWork(a, reordered)).toBe(true);
     expect(sameWork(a, { ...a, rowVersion: 9, status: 'viewed', updatedAt: 'x' })).toBe(true);
     expect(sameWork(a, { ...a, notes: 'different' })).toBe(false);
+  });
+});
+
+describe('walk-fix recheck EE2-R1: an edit made while a quote is sending is kept', () => {
+  const quote = { quoteId: '0b0e3f6a-5a0c-4c8e-9a51-6f1f6b2c9d10', version: 1, sentAt: NOW, quoteNumber: 'KN-2026-0001-v1' };
+  it('no edit meanwhile: the server copy (sent, with its quote) replaces the phone copy', () => {
+    const sentFrom = record({ draft: { ...complete(), rowVersion: 3 }, syncState: 'synced', mutationId: 'm2' });
+    const clientDoc = { ...complete(), status: 'sent' as const, lastQuote: quote };
+    const r = afterSend(sentFrom, 'm2', clientDoc, 4, 'm5', NOW);
+    expect(r).toMatchObject({ syncState: 'synced', mutationId: 'm5', lastError: null });
+    expect(r.draft).toMatchObject({ status: 'sent', rowVersion: 4, lastQuote: quote });
+  });
+  it('an edit saved during the send stays, as the next revision on the new row version, and is not a conflict', () => {
+    const base = { ...complete(), rowVersion: 3 };
+    const edited = touch(record({ draft: base, syncState: 'synced', mutationId: 'm2' }), { ...base, notes: 'typed while sending' }, 'm3', NOW);
+    const clientDoc = { ...base, status: 'sent' as const, lastQuote: quote };
+    const r = afterSend(edited, 'm2', clientDoc, 4, 'm5', NOW);
+    expect(r).toMatchObject({ syncState: 'pending', mutationId: 'm3' });
+    expect(r.draft).toMatchObject({ notes: 'typed while sending', rowVersion: 4, lastQuote: quote, status: 'draft' });
+    // The editor's next save sees its own copy (same mutation id): a normal save, never a conflict.
+    const next = saveEdit(r, { ...r.draft, notes: 'more' }, 'm6', NOW, { mutationId: 'm3', draft: r.draft });
+    expect(next).toMatchObject({ syncState: 'pending', draft: { rowVersion: 4, notes: 'more' } });
   });
 });

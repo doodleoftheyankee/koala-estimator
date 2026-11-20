@@ -4,6 +4,7 @@ import { priceEstimate, type PriceApproval, type PricingBundle } from '@/lib/pri
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
 import { isReachable, onReachChange, refreshBundle, syncEstimate } from '@/lib/offline/sync';
+import { afterSend } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { ackState, parseFlagList, unacknowledgedFlags } from '@/lib/field/flags';
 import { recommendedTier } from '@/lib/field/recommended';
@@ -183,8 +184,10 @@ export function SendStep({
       await db().transaction('rw', db().estimates, async () => {
         const cur = await db().estimates.get(record.id);
         if (!cur) return;
-        const nextDraft = doc.success ? { ...doc.data, rowVersion: body.rowVersion ?? null } : { ...cur.draft, status: 'sent' as const, rowVersion: body.rowVersion ?? null };
-        await db().estimates.put({ ...cur, draft: nextDraft, syncState: 'synced', mutationId: crypto.randomUUID(), lastError: null, syncedAt: new Date().toISOString() });
+        // An edit made while the quote was being made is kept, not replaced (walk-fix recheck EE2-R1).
+        await db().estimates.put(
+          afterSend(cur, synced.mutationId, doc.success ? doc.data : null, body.rowVersion ?? null, crypto.randomUUID(), new Date().toISOString()),
+        );
       });
       setResult({ kind: 'done', url: body.url!, emailed: !!body.emailed, version: body.version ?? 1 });
     } catch {

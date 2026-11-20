@@ -645,3 +645,27 @@ deployed; the go-live steps are in section 6.
   accuracy check 10,000 random quotes, 0 violations; e2e (scripts/e2e.sh, APP_PORT=3730
   E2E_DB_NAME=koala_fix_e2e) 420 ok, 0 failed, console errors none. The e2e caught one regression of
   the first fix (the headline refresh cleared "Your unsent change was not applied"), fixed in 15bba8e.
+
+
+11. GO-LIVE RECORD (2026-11-20, the owner: "just go live")
+------------------------------------------------------------
+  02:00 UTC  Backup: production's fingerprint (46 tables, 4,239 rows, per-table count and md5, in
+             UTC) equal to the export of 00:35-00:52 UTC, which had been restored and verified
+             table by table. Step b: 77 quotes, 97270da0cf331acd0b2e482be7bd73fe; no quote sent or
+             viewed; neither migration applied.
+  02:0x UTC  Migrations through the Supabase MCP apply_migration, from the files at 9ef7fe7
+             (sha256 611d6dcb... accuracy, 78e1ad5d... blower door): "accuracy", then
+             "blower_door". Checked against a reference copy built from the same files on the
+             export: every function body (pg_get_functiondef md5), crew_job_view, the policies,
+             the settings and the 14 material rows identical; 1,149 coefficients; 29 audit rows
+             added; quotes 77, the same md5; crew scope words with a $ amount: 0; the grants
+             false as designed. supabase_migrations now lists accuracy and blower_door.
+  02:1x UTC  Vercel QUOTE_FROM_EMAIL: "Koala Insulation <onboarding@resend.dev>" (all targets).
+             RESEND_API_KEY is still unset: no email is sent until the owner adds it.
+  02:20 UTC  PR #12 (claude/release at 9ef7fe7; CI app and database green, Vercel preview ready)
+             merged into main as a043072. Production deployment dpl_8QefbWP16yTA78ygwyDyrrgECG2d,
+             READY, aliased to koala-estimator-indol.vercel.app; /sw.js serves v14; /login the
+             new sign-in page; no runtime errors in the first minutes.
+  Still the owner's: demo mode (DEMO_MODE=1, the one-tap accounts) is on; RESEND_API_KEY and
+  GOOGLE_MAPS_API_KEY unset; PR #11 (multi-location) open and must be rebased before any merge;
+  no calibration candidate to approve while demo data is in the database.
