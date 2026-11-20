@@ -39,36 +39,13 @@ export interface PriceAdvice {
   /** The current price already is the recommended one (to the cent). */
   atBest: boolean;
   /**
-   * The model has learned how price moves the win chance (learnedPriceSensitivity). When it has
-   * not (past quotes all sat near the model price), the most profit is always the top of the
-   * range, which says nothing about this customer, so the phone suggests no price (readiness walk W4).
+   * The most expected profit falls strictly inside the allowed prices: past quotes show where a
+   * higher price starts costing more jobs than it earns, so that price is suggested. When the most
+   * profit sits at the top (or bottom) of the range, the model only says "as high (low) as you
+   * may", which is no advice: the phone then shows the win chance across the range and suggests no
+   * price (readiness walk W4; production's win model put every job at the top).
    */
   learnedPrice: boolean;
-}
-
-/** How much the win chance must change across the allowed markups before a price is suggested. */
-export const MIN_WIN_SPREAD = 0.05;
-
-/**
- * Whether the win model has learned how price moves the win chance for jobs like this one: across
- * the markups the settings allow (floor to ceiling margin), its win chance changes by at least
- * MIN_WIN_SPREAD. Judged on the model, not on one option's prices: a small job held at the minimum
- * job price has a single price, which says nothing about what the model learned (walk-fix review).
- */
-export function learnedPriceSensitivity(
-  model: WinModel,
-  features: Omit<WinFeatures, 'markup'>,
-  settings: Pick<PricingSettings, 'floorMarginPct' | 'ceilingMarginPct'>,
-): boolean {
-  const lo = Math.min(settings.floorMarginPct, settings.ceilingMarginPct);
-  const hi = Math.max(settings.floorMarginPct, settings.ceilingMarginPct);
-  if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo < 0 || hi >= 1) return false;
-  const chances: number[] = [];
-  for (let i = 0; i <= 10; i++) {
-    const margin = lo + ((hi - lo) * i) / 10;
-    chances.push(predictWin(model, { ...features, markup: 1 / (1 - margin) }));
-  }
-  return Math.max(...chances) - Math.min(...chances) >= MIN_WIN_SPREAD - 1e-9;
 }
 
 /** Null when the option has no usable cost or price, or the settings leave nothing to scan. */
@@ -89,8 +66,14 @@ export function priceAdvice(
     current: { price, winProbability, expectedProfit: money(winProbability * (price - loadedCost)) },
     best,
     atBest: Math.abs(price - best.price) < 0.005,
-    learnedPrice: learnedPriceSensitivity(model, features, settings),
+    learnedPrice: interiorBest(best),
   };
+}
+
+/** The best point lies strictly between the lowest and the highest allowed price. */
+function interiorBest(best: PriceRecommendation): boolean {
+  const i = best.curve.findIndex((p) => p.price === best.price);
+  return i > 0 && i < best.curve.length - 1;
 }
 
 /** The reason stored with a price override taken from the recommendation. */

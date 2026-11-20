@@ -225,14 +225,27 @@ deployed; the go-live steps are in section 6.
 6. GO-LIVE STEPS (for later; nothing is applied now)
 ----------------------------------------------------
   Before
-    a. Take a backup of the production database (Supabase: Database, Backups; or pg_dump).
-    b. Read, with SELECTs only, what the migrations will meet, and keep the answers:
+    a. Take a backup of the production database. This project is on Supabase's free plan, which
+       has no daily dashboard backups (Supabase docs: Pro, Team and Enterprise only), so use
+       pg_dump or "supabase db dump" with the database password (a pg_dump client of version 17 or
+       newer: production runs Postgres 17). Without the password, a SELECT-only data export also
+       works: the go-live rehearsal (2026-11-20) exported every public table and auth.users (id,
+       email) page by page with an md5 per page, and restored it into a fresh database whose 46
+       tables equal production's by row count and md5, with no orphan rows. It keeps the data, not
+       sign-in credentials or stored files (quote PDFs, photos), which the migrations do not touch.
+    b. Read, with SELECTs only, what the migrations will meet, and keep the answers. Run b and the
+       checks after the migrations in the same client with the session in UTC (production's own
+       zone): the quote md5 reads signed_at as text, which prints in the session's time zone.
+         set timezone = 'UTC';
          select key, value from app_settings where key in ('branding','quote_terms','warranty_text',
            'quote_number_prefix','blower_door','shop_address');
          select count(*), md5(string_agg(id::text || status::text || coalesce(snapshot::text, '') ||
            coalesce(pdf_sha256, '') || coalesce(signed_at::text, ''), ',' order by id)) from quotes;
-         select to_regclass('public.price_approvals'), to_regclass('public.blower_door_tests');
-       The two to_regclass answers should be null (neither migration applied yet).
+         select to_regclass('public.price_approvals') as price_approvals,
+                to_regclass('public.blower_door_tests') as blower_door_tests;
+       Both to_regclass answers should be null (neither migration applied yet). Each column has its
+       own name: through a tool that returns JSON (the Supabase MCP), repeated names collapse into
+       one and hide answers.
     c. Decide owner question 7a (the seeded programs: data) or accept the default; 7b and 7c are
        code defaults and can follow later.
   Apply the migrations, in this order, each once, each in one transaction:
@@ -257,10 +270,17 @@ deployed; the go-live steps are in section 6.
       (dense-pack cellulose, seven batt sizes; none is a product's default), materials.typical_min.
     - The two spray foam materials read "Open-cell set (per board ft)" and "Closed-cell set (per
       board ft)" where they were the seed names with a price in them (readiness walk W2).
-    - Grants: select has_table_privilege('anon','blower_door_tests','select'),
-        has_table_privilege('authenticated','blower_door_tests','insert'),
-        has_table_privilege('authenticated','price_approvals','insert'),
-        has_function_privilege('authenticated','next_quote_number(int)','execute');  -> all false.
+    - Grants: select has_table_privilege('anon','blower_door_tests','select') as anon_reads_bd,
+        has_table_privilege('authenticated','blower_door_tests','insert') as users_insert_bd,
+        has_table_privilege('authenticated','price_approvals','insert') as users_insert_approvals,
+        has_function_privilege('authenticated','next_quote_number(int)','execute') as users_number;
+        -> all false.
+    - Crews read no price in a job's scope: crew_job_view's scope words carry no $ amount (on the
+      rehearsal's copy of production, 13 words did before the migrations and 0 after).
+    - Expected, not a problem: about 29 audit_log rows with no actor (the migrations' own inserts
+      and updates of materials and app_settings); the 6 existing materials get row_version + 1 and
+      a new updated_at (their typical cost range and, for spray foam, the name); one coefficient
+      row is added (the walls cellulose waste cell, 1.08, equal to the shared cell).
   Deploy the code
     3. For a franchise outside Eastern time, set NEXT_PUBLIC_BUSINESS_TIME_ZONE in its Vercel
        project (an IANA name such as America/Chicago) before the build: every date and time it
@@ -532,3 +552,61 @@ deployed; the go-live steps are in section 6.
        it, and in Chromium the build reads Chicago; the unset build reads New York.
     c. The service-role client (public quote page, sign and send routes) keeps postgrest-js's
        default retries (about 7 s on a 503). Outside FLOW-3's scope; noted for later.
+
+
+10. GO-LIVE READINESS (2026-11-20; release head d33eb97)
+---------------------------------------------------------
+  A go-live readiness check ran four ways on 44ee4b2: a dress rehearsal of section 6 on a copy of
+  production's data, the hosting settings, a working day in the app (estimator, customer, crew lead,
+  owner) and a coverage pass; each finding was then rechecked independently. No blocker.
+  Rehearsal     production exported with SELECTs only (46 tables, 4,239 rows, auth.users id and
+                email), restored into a fresh database equal to production table by table (count and
+                md5, no orphan rows). Both migrations ran once each, then again: the second run
+                changed nothing. 77 quotes, the same md5 before and after; no customer, estimate,
+                quote, job or actuals row changed. Repeated on d33eb97's migration files: the same,
+                plus the two spray foam renames, and crew_job_view's scope words with a $ amount went
+                from 13 to 0 for the crew member.
+  Settings      the release reads one new variable (NEXT_PUBLIC_BUSINESS_TIME_ZONE, unset = New
+                York); QUOTE_FROM_EMAIL still says "of Newark" (step 4); RESEND_API_KEY,
+                OFFICE_NOTIFY_EMAIL and GOOGLE_MAPS_API_KEY are not set, so no email is sent and
+                drive time cannot be looked up (step 4, and the owner's call). Merging to main is
+                the production deploy. Section 6 now says all of this.
+  Fixed from the working day (f4831b6, 15bba8e), then from an independent review of those fixes
+  (d33eb97), each with a test that fails before and passes after:
+    W1    a signed estimate's dock showed the estimator's earlier pick (Best $20,750) after the
+          customer signed Better $10,610; it now shows the signed price and option. The Options step
+          says what was signed and that its cards are today's pricing; the star stays on the option
+          the quote highlighted; Send hides "The customer will see" for a signed quote.
+    W1-d  a phone holding an unfinished, refused or conflicting edit never learned the customer
+          signed; the signed copy now replaces it, read-only, "Your unsent change was not applied".
+    W3    typing the existing insulation's type and depth left the current R-value at 0, so the
+          area was priced as empty ($1,320 more on the walk's attic); it now fills in (4 in of blown
+          fiberglass = R-10) unless the estimator typed one.
+    W6    a blank drive time priced travel at 0 minutes with no word; Send now asks for it (0 is an
+          answer), with Add drive time.
+    W2    crews saw "Open-cell set (~$1,800/set ...)": the two seed names lose the price (accuracy
+          migration, exact seed names only), the crew API strips prices from scope words, and so
+          does crew_job_view itself (crew_text_without_prices), for a crew session reading it
+          directly.
+    W4    price advice always said to charge the top of the range: production's win model (76
+          quotes, mostly demo data) barely reacts to price (markup weight -0.567), so the most
+          expected profit always sat at the ceiling. A price is now suggested only when the most
+          profit lies strictly inside the allowed prices (the model shows where a higher price
+          starts costing more jobs than it earns), as "Suggested price", so "Recommended" only
+          means the option the quote highlights. Otherwise the phone shows the win chance at the
+          estimator's price and at the lowest and highest allowed prices. With production's model
+          no job gets a suggestion today (a test pins it). A first version gated on a 5-point spread
+          of the win chance; on production's model that flipped from job to job (4.8 to 5.3
+          points), so it was replaced before release.
+    W5    the job page showed revenue with cents; whole dollars now.
+    EE-1  leaving the estimate editor (or the crew actuals screen) within 2.5 s of a save cancelled
+          its sync until the next minute's cycle (Daymark 9dfd9fd); the save now goes out on leave.
+    EE-2  a sync landing while the estimator typed made the next save silently overwrite another
+          device's change (before the release too); the save becomes a conflict, mine or theirs.
+  Kept on purpose: the Pricing page's "Needs owner input" list grows by 8 (the dense-pack cellulose
+  and the batt sizes start at the current bag and batt cost until the owner enters their own).
+  Checks on d33eb97: typecheck pass; lint 0 problems; vitest 105 files, 1,890 tests passed; test:db
+  all passed; scripts/release-migrations.sh: second run changes nothing, blower door alone passes;
+  accuracy check 10,000 random quotes, 0 violations; e2e (scripts/e2e.sh, APP_PORT=3730
+  E2E_DB_NAME=koala_fix_e2e) 420 ok, 0 failed, console errors none. The e2e caught one regression of
+  the first fix (the headline refresh cleared "Your unsent change was not applied"), fixed in 15bba8e.

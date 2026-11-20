@@ -25,16 +25,22 @@ export function PriceAdvicePanel({
 }) {
   const { current, best, atBest, learnedPrice } = advice;
   if (!learnedPrice) {
-    // The model has not learned how price changes the win chance (readiness walk W4): no price to suggest.
+    // The most profit sits at an end of the allowed range (or there is one allowed price): no price
+    // is suggested, only the win chance here and at the ends (readiness walk W4).
+    const low = best.curve[0];
+    const high = best.curve.at(-1);
     return (
       <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-sm">
         <p>
           Win chance at this price: <span className="font-semibold">{pct(current.winProbability, 0)}</span>
           {showCosts ? <span className="text-slate-600"> · expected profit {usd(current.expectedProfit)}</span> : null}
         </p>
-        <p className="text-xs text-slate-500">
-          Learned from {num(nQuotes)} won or lost quotes. They don&apos;t yet show how price changes the win chance, so there is no price to suggest.
-        </p>
+        {low && high && high.price > low.price ? (
+          <p className="text-slate-700">
+            At the lowest allowed price, {usd(low.price)}: {pct(low.winProbability, 0)}. At the highest, {usd(high.price)}: {pct(high.winProbability, 0)}.
+          </p>
+        ) : null}
+        <p className="text-xs text-slate-500">Learned from {num(nQuotes)} won or lost quotes. A guide, not a rule: you know this customer.</p>
       </div>
     );
   }

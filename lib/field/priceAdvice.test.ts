@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { predictWin, recommendPrice } from '@/lib/learning/winRate';
 import { priceEstimate, type WinModel } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
-import { beyondOverrideLimit, learnedPriceSensitivity, MIN_WIN_SPREAD, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
+import { beyondOverrideLimit, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
 
 // A plausible market: win chance falls as the markup rises; walls jobs win a bit more often.
 const model: WinModel = {
@@ -69,31 +69,42 @@ describe('priceAdvice', () => {
     expect(at.current.expectedProfit).toBeCloseTo(at.best.expectedProfit, 2);
   });
 
-  it('readiness walk W4: suggests a price only when the model has learned how price moves the win chance', () => {
-    // This market's win chance falls with the markup: a price is suggested, inside the range.
+  it('readiness walk W4: suggests a price only when the most profit lies inside the allowed prices', () => {
+    // This market's win chance falls steeply enough that raising the price further loses money
+    // before the ceiling: that price is suggested.
     const learned = priceAdvice(model, better, features, settings)!;
+    const i = learned.best.curve.findIndex((p) => p.price === learned.best.price);
+    expect(i).toBeGreaterThan(0);
+    expect(i).toBeLessThan(learned.best.curve.length - 1);
     expect(learned.learnedPrice).toBe(true);
-    // A model that barely reacts to price (past quotes all near the model price) always "suggests"
-    // the top of the range; that is not advice, so there is none.
+    // A model that barely reacts to price puts the most profit at the top of the range: "charge as
+    // much as you may" is no advice, so none is given.
     const flat: WinModel = { ...model, weights: { ...model.weights, markup: -0.02 } };
     const none = priceAdvice(flat, better, features, settings)!;
-    const chances = none.best.curve.map((p) => p.winProbability);
-    expect(Math.max(...chances) - Math.min(...chances)).toBeLessThan(MIN_WIN_SPREAD);
     expect(none.best.price).toBe(none.best.curve.at(-1)!.price);
     expect(none.learnedPrice).toBe(false);
     // The win chance at the estimator's price is still given.
     expect(none.current.winProbability).toBeGreaterThan(0);
   });
 
-  it('walk-fix review: a small job held at the minimum job price still gets the learned model suggestion', () => {
-    // So small that every allowed margin prices at the minimum job price: one price on the curve.
+  it("readiness walk W4: production's win model (2026-11-19) suggests no price; it put every job at the top", () => {
+    const prod: WinModel = {
+      ...model,
+      nQuotes: 76,
+      weights: { markup: -0.5669335240015756, log_sqft: -0.3174060057377513, intercept: 3.246897868870137, 'job:rim_joist': -0.31100376834411475, 'job:crawlspace': 0.25501012523512745 },
+      jobTypes: ['crawlspace', 'rim_joist'],
+    };
+    const prodSettings = { ...settings, floorMarginPct: 0.05, ceilingMarginPct: 0.3, minimumJobPrice: 1500, priceRounding: 5 };
+    for (const [jobType, sqft, loadedCost] of [['attic', 1200, 4000], ['attic', 400, 1300], ['walls', 1500, 6000], ['crawlspace', 800, 2500], ['rim_joist', 200, 900]] as const) {
+      const a = priceAdvice(prod, { price: loadedCost / 0.8, loadedCost }, { jobType, source: null, sqft }, prodSettings)!;
+      expect(a.learnedPrice).toBe(false);
+    }
+  });
+
+  it('a small job held at the minimum job price (one allowed price) suggests nothing and claims nothing', () => {
     const small = priceAdvice(model, { price: settings.minimumJobPrice + 400, loadedCost: settings.minimumJobPrice * 0.3 }, features, settings)!;
     expect(small.best.curve).toHaveLength(1);
-    expect(small.best.price).toBe(settings.minimumJobPrice);
-    expect(small.learnedPrice).toBe(true);
-    expect(small.atBest).toBe(false);
-    expect(learnedPriceSensitivity(model, features, settings)).toBe(true);
-    expect(learnedPriceSensitivity({ ...model, weights: { ...model.weights, markup: -0.02 } }, features, settings)).toBe(false);
+    expect(small.learnedPrice).toBe(false);
   });
 
   it('a higher price always has a lower win chance with this model', () => {
