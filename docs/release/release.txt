@@ -252,12 +252,17 @@ deployed; the go-live steps are in section 6.
     1. supabase/migrations/20261119000001_accuracy.sql
     2. supabase/migrations/20261120000001_blower_door.sql
     Through the same route the earlier ones took (the SQL editor, or the Supabase MCP
-    apply_migration run by the owner): production's migration record does not use this repo's
+    apply_migration run by the owner; in the SQL editor put begin; above the file's text and
+    commit; below it, so an error leaves nothing applied. Only the psql route was rehearsed, on
+    Postgres 16; production runs 17): production's migration record does not use this repo's
     file names (section 4), so "supabase db push" would try to apply every repo migration again.
     With psql: psql "$PROD_URL" -v ON_ERROR_STOP=1 --single-transaction -f <file>. Both files are
     safe to run again: a second run changes nothing (section 4).
     The live site (origin/main) keeps working on the migrated database (compat-main.txt), so the
     migrations can go first and the code a little later, and the code can be rolled back alone.
+    compat-main.txt ran with 44ee4b2's migration files; 15bba8e and d33eb97 changed the accuracy
+    migration (the spray foam renames, crew_job_view), so re-run origin/main's e2e with the exact
+    files to be applied before relying on this.
   Verify after the migrations (SELECTs)
     - app_settings: branding company 'Koala Insulation' and warranty_text 'Limited lifetime
       warranty' where they were still the seed ('Koala Insulation of Newark'; 'Workmanship warranty
@@ -265,7 +270,10 @@ deployed; the go-live steps are in section 6.
       had changed is as it was. quote_number_prefix "KN". blower_door present with two programs.
     - quotes: the same count and the same md5 as in step b (no quote, snapshot or PDF touched).
       Take b and this in a quiet moment: a customer viewing or signing a quote in between changes
-      the answer for a reason that has nothing to do with the migrations.
+      the answer for a reason that has nothing to do with the migrations. Keep b, the migrations and
+      this check clear of the nightly job (vercel.json "15 7 * * *", UTC; on production it ran at
+      07:48 UTC on Nov 18 and 19, 2:48 AM Eastern): it expires stale quotes, which changes the md5,
+      and writes coefficient_sets, win_models and an estimate.
     - New objects: price_approvals, quote_number_counters, blower_door_tests, the new material rows
       (dense-pack cellulose, seven batt sizes; none is a product's default), materials.typical_min.
     - The two spray foam materials read "Open-cell set (per board ft)" and "Closed-cell set (per
@@ -289,7 +297,10 @@ deployed; the go-live steps are in section 6.
        The value is written into the build: changing it later takes a redeploy, and phones pick it
        up once their service worker updates. A name the browser does not know (for example
        "Central") silently means New York, so after the deploy check that a printed time (the
-       estimate list, a test quote's date) is in the franchise's own zone.
+       estimate list, a test quote's date) is in the franchise's own zone. Use the full IANA name
+       (America/Denver, not MST): "EST" and "MST" are accepted but mean Panama and Phoenix time,
+       which have no daylight saving, so they print the right hour from November to March and an
+       hour off from March to November; a November check will not catch it.
     4. The sender name on quote emails. This Vercel project sets QUOTE_FROM_EMAIL to
        "Koala Insulation of Newark <onboarding@resend.dev>" (Production, Preview and Development;
        read 2026-11-19). A set value wins over the code's "Koala Insulation" default (lib/env.ts),
@@ -305,8 +316,20 @@ deployed; the go-live steps are in section 6.
        RESEND_API_KEY on Vercel (OFFICE_NOTIFY_EMAIL for the signed-quote notice to the office and
        OWNER_REPORT_EMAIL for the nightly report are also unset). That is the owner's call; until
        then step 4 has no visible effect.
-    5. Merge claude/release into main through a pull request (never a force-push), and let Vercel
-       build it. The Next.js build may stop once at a "security upgrade" notice: retry the same
+       GOOGLE_MAPS_API_KEY is not set either (names listed 2026-11-20), so "Look up drive time"
+       answers "Drive-time lookup is not set up. Enter minutes by hand." Estimators type the
+       minutes; a blank is priced as 0 minutes of drive labor (the Send checklist asks for it from
+       f4831b6 on). Setting the key is the owner's call.
+    5. Merge the release commit into main through a pull request (never a force-push), and let
+       Vercel build it. claude/release moved four times during the readiness check (44ee4b2,
+       f4831b6, 15bba8e, d33eb97, 697df88): merge only the commit whose checks are recorded
+       (typecheck, lint, vitest, test:db, e2e, migrations twice, compat-main, hard rule 1), check
+       that the pull request's head is exactly that commit with nothing pushed after it, and after
+       the build check that Vercel's production deployment names it. From step b until "Verify
+       after the deploy" is done, merge nothing else into main (it has no branch protection); in
+       particular not pull request #11 (multi-location), which is open and mergeable and whose
+       20261119000001_locations.sql has the accuracy migration's version number and rewrites every
+       security rule: it needs rebasing onto the release first. The Next.js build may stop once at a "security upgrade" notice: retry the same
        build once; do not upgrade and do not follow the notice.
   Do not try the release on a Vercel preview. Every preview of this project (claude/release
   included) uses the production Supabase project with DEMO_MODE=1 (NEXT_PUBLIC_SUPABASE_URL is set
@@ -319,11 +342,18 @@ deployed; the go-live steps are in section 6.
   Verify after the deploy
     - As the owner: the menu has Blower door and Rebate programs (and the optional Business
       profile); Rebate programs shows two programs and saves a change (audited).
+      Pricing opens with "Needs owner input (19)" where it listed 11 before: the 8 new material
+      rows (dense-pack cellulose, the batt sizes) start at today's bag and batt cost until you
+      enter your own. Expected.
     - Open a quote that was already sent: it reads as before (the same number, prices, dates,
-      company and warranty). Make and send a new test quote to yourself: "Koala Insulation",
-      "Limited lifetime warranty", whole dollars, a number like KN-2026-0001-v1, no business form
-      asked for.
-    - Phones: the service worker updates to v14 on the next open with signal; the field app, the
+      company and warranty). Here that means "Koala Insulation of Newark" and "Workmanship
+      warranty — PLACEHOLDER, owner to replace.": all 77 stored (demo) quotes carry both in their
+      own documents, and a sent quote never changes. That is correct, not a failed release. Make
+      and send a new test quote to yourself: "Koala Insulation", "Limited lifetime warranty",
+      whole dollars, a number like KN-2026-0001-v1, no business form asked for. The test quote
+      takes the first number and stays in the quotes and the learning data like any other.
+    - Phones: the service worker updates to the VERSION in the merged commit's public/sw.js (v14
+      at 697df88, v13 at 44ee4b2) on the next open with signal; the field app, the
       crew app and the blower door tool then open with no signal. On a crew phone the blower door
       tool shows no air sealing price.
     - Blower door: save a test-in on an estimate and a test-out on its job; the office job page
@@ -334,9 +364,14 @@ deployed; the go-live steps are in section 6.
   Before real staff and customers use it: the live site runs in demo mode (DEMO_MODE=1 with
   DEMO_PASSWORD: one-tap Owner, Estimator and Crew lead accounts on the sign-in page, and sample
   estimates). Turn demo mode off (unset DEMO_MODE) and give each person their own account; the
-  demo accounts and sample data can then be removed. This is the owner's call and not part of the
+  demo accounts and sample data can then be removed. Until they are, Insights learns from them: every
+  night the learning run builds a calibration candidate from the 40 demo jobs (v35 waiting on
+  Nov 19; none has ever been activated, prices use the seed set v1) and the win model is trained
+  on the demo quotes. Do not approve a calibration candidate while demo data is in the database,
+  and read win chances as demo numbers. This is the owner's call and not part of the
   code release.
-  Rolling back: redeploy origin/main's code (c0ae5f1). It works on the migrated database (hard
+  Rolling back: redeploy origin/main's code (c0ae5f1; on Vercel today that is production
+  deployment dpl_63CFyprAvUPk7xp64pWFSSGy95qb, marked as a rollback candidate). It works on the migrated database (hard
   rule 2); the migrations are additive and stay. Quotes sent before the release read exactly as
   before. Quotes the release sent keep their prices, numbers, dates and stored quote PDF. After a
   rollback, though, their page, signed PDF and signed and office emails print cents ($3,435.00
