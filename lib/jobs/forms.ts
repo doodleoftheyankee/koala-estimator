@@ -88,6 +88,23 @@ export function valuesChanged(next: Record<string, string | number | null>, stor
 
 export const jobIdForm = z.object({ id: uuidField('Job') });
 
+/** The most a note for the crew may hold (jobs.crew_notes, the estimate's crewNotes). */
+export const CREW_NOTES_MAX = 2000;
+
+/**
+ * The office's notes for the crew on a booked job (jobs.crew_notes). Line breaks are stored as the
+ * phone types them (LF) and counted once, before the length check; blank clears the notes.
+ */
+export const crewNotesForm = z.object({
+  id: uuidField('Job'),
+  crew_notes: z
+    .string()
+    .optional()
+    .transform((s) => normalizeNewlines(s ?? '').trim())
+    .pipe(z.string().max(CREW_NOTES_MAX, `Notes for the crew must be ${CREW_NOTES_MAX.toLocaleString('en-US')} characters or fewer`))
+    .transform((s) => (s === '' ? null : s)),
+});
+
 export const excludeForm = z
   .object({
     job_id: uuidField('Job'),

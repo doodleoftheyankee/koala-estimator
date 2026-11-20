@@ -1,9 +1,12 @@
 // GET /api/crew/jobs: the signed-in crew's jobs for the offline crew app. Scheduled and in-progress
 // jobs, plus jobs completed in the last 14 days (New York dates), each with its signed scope
-// (quantities and hours, never money) and the actuals entered so far (no cost columns).
+// (quantities and hours, never money), its notes for the crew and the actuals entered so far (no
+// cost columns); and the owner's always-bring list for the load list (app_settings.load_list, the
+// one setting besides blower_door a crew may read).
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { recentCutoffIso } from '@/lib/jobs/dates';
+import { parseAlwaysBring } from '@/lib/jobs/loadList';
 import {
   actualDbRowSchema,
   CREW_ACTUAL_COLUMNS,
@@ -54,6 +57,11 @@ export async function GET() {
 
   const verified = new Set(actuals.filter((a) => a.verified_at !== null).map((a) => a.job_id));
 
+  // The always-bring list. Not being able to read it never costs the crew its jobs: the phone keeps
+  // the copy it has (alwaysBring left out).
+  const setting = await supabase.from('app_settings').select('value').eq('key', 'load_list').maybeSingle();
+  const alwaysBring = setting.error ? undefined : parseAlwaysBring(setting.data?.value ?? null);
+
   const body: CrewJobsResponse = {
     jobs: jobs.map((j) => ({
       ...j,
@@ -61,6 +69,7 @@ export async function GET() {
       verified: verified.has(j.jobId),
     })),
     fetchedAt: new Date().toISOString(),
+    ...(alwaysBring ? { alwaysBring } : {}),
   };
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } });
 }

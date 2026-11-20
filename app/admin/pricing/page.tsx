@@ -7,6 +7,7 @@ import { BUSINESS_TIME_ZONE, formatMoney } from '@/lib/format';
 import { JOB_TYPES, PRODUCTS, TIERS, type JobType, type ProductCode } from '@/lib/pricing';
 import { errorMessage, fractionToPercent, isPlaceholder } from '@/lib/admin/forms';
 import {
+  ALWAYS_BRING_FIELD,
   displayValue,
   objectFieldText,
   SETTING_GROUPS,
@@ -18,6 +19,7 @@ import {
   type SettingsMap,
 } from '@/lib/admin/settings';
 import { PRIMARY_PRODUCTS } from '@/lib/admin/pricingForms';
+import { ALWAYS_BRING_MAX_ITEMS, parseAlwaysBring } from '@/lib/jobs/loadList';
 import { codeEditionsSentence, pricedCodeRequirement } from '@/lib/admin/codes';
 import { ActionForm, ToggleInput } from './ActionForm';
 import { MarginPreview } from './MarginPreview';
@@ -171,6 +173,7 @@ const SECTIONS = [
   { id: 'business', label: 'Business' },
   { id: 'materials', label: 'Materials' },
   { id: 'crews', label: 'Crews' },
+  { id: 'load-list', label: 'Load list' },
   { id: 'tiers', label: 'Good / better / best' },
   { id: 'code', label: 'Code minimums' },
   { id: 'products', label: 'Products' },
@@ -444,6 +447,24 @@ function PricingContent({ config, readOnly }: { config: Config; readOnly: boolea
             </Card>
           )}
         </div>
+      </section>
+
+      {/* ------------------------------------------------------------ Load list */}
+      <section className="space-y-4">
+        <SectionHeading id="load-list" title="Load list">
+          What every crew loads for every job. The crew app lists it under the day&apos;s materials, to tick off at the shop.
+        </SectionHeading>
+        <Card>
+          <h3 className="mb-3 font-semibold text-slate-900">Always bring</h3>
+          <ActionForm action={saveSettings} readOnly={readOnly} submitLabel="Save the always-bring list">
+            <Field
+              label="Always bring, one item per line"
+              hint={`Equipment and supplies, not the job's materials (those come from the estimate). Up to ${ALWAYS_BRING_MAX_ITEMS} items. Crews get the list on their next sync.`}
+            >
+              <Textarea name={ALWAYS_BRING_FIELD} rows={7} defaultValue={parseAlwaysBring(map.load_list).join('\n')} />
+            </Field>
+          </ActionForm>
+        </Card>
       </section>
 
       {/* ---------------------------------------------------------------- Tiers */}

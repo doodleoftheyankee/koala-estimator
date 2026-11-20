@@ -2288,5 +2288,322 @@ step('PIN sign-in: a stranger cannot lock a person out of the phone she signs in
   await herCtx.close();
 }
 
+// ---------------------------------------------------------------- Load list (notes for the crew)
+// The estimator writes notes for the crew on an estimate that is signed and scheduled for today; the
+// crew app's Load list shows today's materials summed and rounded up, the owner's always-bring list,
+// a blower door kit for the test-out still to do, and the notes; ticks survive a reload and no
+// signal; the office adds a note the crew sees after a sync; no price anywhere on the crew's
+// screens; the customer's quote page and PDF never carry the notes.
+const LOAD_CREW_NOTES = 'Gate code 4411. Dog in the back yard.\nCustomer paid the $500 deposit (about $1,200 left).';
+const LOAD_OFFICE_NOTES = 'Park on the street.\nBring the 28 ft ladder for the garage attic.';
+const { inflateSync } = await import('node:zlib');
+/** A PDF's text: each content stream inflated, its text runs decoded (as lib/quotes tests read it). */
+const pdfText = (buf) => {
+  const raw = buf.toString('latin1');
+  const out = [];
+  const re = /stream\r?\n/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const start = m.index + m[0].length;
+    const end = raw.indexOf('endstream', start);
+    let body;
+    try {
+      body = inflateSync(Buffer.from(raw.slice(start, end), 'latin1')).toString('latin1');
+    } catch {
+      continue;
+    }
+    for (const r of body.matchAll(/\[((?:<[0-9a-fA-F]*>|[-\d.\s])*)\]\s*TJ|<([0-9a-fA-F]*)>\s*Tj/g)) {
+      out.push([...(r[1] ?? `<${r[2]}>`).matchAll(/<([0-9a-fA-F]*)>/g)].map((h) => Buffer.from(h[1], 'hex').toString('latin1')).join(''));
+    }
+    re.lastIndex = end;
+  }
+  return out.join('');
+};
+const UNIT_MANY = { board_ft: 'board ft', bag: 'bags', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hours', each: 'each' };
+const UNIT_ONE = { ...UNIT_MANY, bag: 'bag', hour: 'hour' };
+const qtyWords = (q, unit) => `${q.toLocaleString('en-US')}${unit ? ` ${(q === 1 ? UNIT_ONE : UNIT_MANY)[unit]}` : ''}`;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+let loadEstimate;
+let loadJobId;
+let loadLink;
+let loadExpected = [];
+
+step('load list: the estimator writes notes for the crew on an estimate, sends it, and the customer signs');
+{
+  await page.goto(BASE + '/field');
+  await page.getByRole('heading', { name: 'Estimates' }).waitFor();
+  await page.getByRole('button', { name: 'New estimate', exact: true }).click();
+  await page.getByLabel('First name').fill('Dana');
+  await page.getByLabel('Last name').fill('Loader');
+  await page.getByLabel('Email').fill('dana@example.com');
+  await page.getByLabel('Street address').fill('7 Loading Dock Rd');
+  await page.getByLabel('ZIP').fill('19711');
+  await page.getByLabel('Notes for the quote').fill('Both attics in one visit.');
+  check((await page.getByText('Never printed on the quote. The crew sees it on the job.', { exact: true }).count()) === 1, 'the Customer step has "Notes for the crew": never printed on the quote');
+  await page.getByLabel('Notes for the crew').fill(LOAD_CREW_NOTES);
+  await page.screenshot({ path: SHOTS + '30-crew-notes-customer-step.png', fullPage: true });
+  await page.getByRole('button', { name: 'Next' }).click();
+  // Two attics: the load list adds their material up before rounding.
+  await page.getByRole('button', { name: '+ Attic' }).click();
+  await page.getByLabel('Square feet').fill('1000');
+  await page.getByRole('button', { name: '+ Attic' }).click();
+  await page.getByLabel('Square feet').fill('640');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByText('Better', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Next' }).click();
+  // The drive time, from the Send checklist's Fix (readiness walk W6).
+  await page.locator('li[data-check="drive"][data-ok="no"]').getByRole('button', { name: 'Add drive time' }).click();
+  await page.locator('#drive-minutes').fill('20');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.waitForTimeout(3500); // let auto-sync run
+  loadEstimate = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Loader'");
+  await waitForDb(`select client_doc->>'crewNotes' from estimates where id = '${loadEstimate}'`, LOAD_CREW_NOTES, 'the notes for the crew sync with the estimate (client_doc.crewNotes)');
+  await page.getByRole('button', { name: /Send quote to customer/ }).click();
+  await page.getByText(/Quote v1 sent/).waitFor({ timeout: 30000 });
+  loadLink = await page.locator('a[href*="/q/"]').first().getAttribute('href');
+  check(psql(`select count(*) from quotes where estimate_id = '${loadEstimate}' and snapshot::text like '%4411%'`) === '0', 'the quote as sent (its document and frozen inputs) carries no note for the crew');
+
+  const lc = await browser.newContext(phone);
+  const lcp = await lc.newPage();
+  lcp.on('console', (m) => m.type() === 'error' && !expected(m) && logs.push('LOAD CUSTOMER ' + m.text()));
+  lcp.on('pageerror', (e) => logs.push('LOAD CUSTOMER PAGEERROR ' + e.message));
+  await lcp.goto(loadLink);
+  await lcp.getByRole('button', { name: 'Review and sign' }).waitFor();
+  const quoteText = await lcp.locator('body').innerText();
+  check(quoteText.includes('Both attics in one visit.') && !quoteText.includes('4411') && !quoteText.includes('Dog in the back yard'), "the customer's quote page shows the notes for the quote, never the notes for the crew");
+  const token = new URL(loadLink, BASE).pathname.split('/').pop();
+  const sentPdf = pdfText(Buffer.from(await (await lc.request.get(BASE + `/api/public/quotes/${token}/pdf`)).body()));
+  check(sentPdf.includes('Dana Loader') && sentPdf.includes('Both attics') && !sentPdf.includes('4411') && !sentPdf.includes('Dog in the back'), "the quote PDF prints the customer and the notes for the quote, never the notes for the crew");
+  await lcp.getByRole('button', { name: 'Review and sign' }).click();
+  await lcp.getByLabel(/full name/i).fill('Dana Loader');
+  const canvas = lcp.locator('canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  const box = await canvas.boundingBox();
+  await lcp.mouse.move(box.x + 20, box.y + box.height / 2);
+  await lcp.mouse.down();
+  for (let i = 1; i <= 12; i++) await lcp.mouse.move(box.x + 20 + i * 20, box.y + box.height / 2 + (i % 2 ? -15 : 15));
+  await lcp.mouse.up();
+  await lcp.getByRole('checkbox').check();
+  await lcp.getByRole('button', { name: /^Sign and accept/ }).click();
+  await lcp.getByRole('heading', { name: /thank you/i }).waitFor({ timeout: 30000 });
+  check(!(await lcp.locator('body').innerText()).includes('4411'), 'nor the thank-you page');
+  const signedPdf = pdfText(Buffer.from(await (await lc.request.get(BASE + `/api/public/quotes/${token}/pdf`)).body()));
+  check(signedPdf.includes('Dana Loader') && !signedPdf.includes('4411') && !signedPdf.includes('Dog in the back'), 'nor the signed PDF');
+  await lc.close();
+  loadJobId = psql(`select id from jobs where estimate_id = '${loadEstimate}'`);
+  check(/^[0-9a-f-]{36}$/.test(loadJobId), 'signing made the job');
+  // What the crew should load: each material of the signed option, added up over the two attics, then rounded up.
+  const rows = psql(
+    `select name || '|' || unit || '|' || total || '|' || areas from (
+       select crew_text_without_prices(l->>'description') as name, coalesce(l->>'unit', '') as unit, sum((l->>'qty')::numeric) as total, count(*) as areas
+         from quotes q, jsonb_array_elements(q.snapshot->'options') o, jsonb_array_elements(o->'lines') l
+        where q.estimate_id = '${loadEstimate}' and q.status = 'signed' and o->>'tier' = q.signed_tier::text and l->>'kind' = 'material'
+          and coalesce((l->>'qty')::numeric, 1) > 0 -- a quantity of 0 installs nothing: not loaded
+        group by 1, 2) x order by name`,
+  )
+    .split('\n')
+    .filter(Boolean);
+  loadExpected = rows.map((r) => {
+    const [name, unit, sum, areas] = r.split('|');
+    return { name, unit: unit || null, sum: Number(sum), areas: Number(areas), qty: Math.ceil(Math.round(Number(sum) * 1e6) / 1e6) };
+  });
+  console.log('  materials to load:', loadExpected.map((e) => `${e.name}: ${e.sum} over ${e.areas} areas -> ${qtyWords(e.qty, e.unit)}`).join('; '));
+  check(loadExpected.length > 0 && loadExpected.some((e) => e.areas === 2), 'the signed option has material in both attics');
+}
+
+step('load list: the office schedules the job for today with Crew A, and sees what the crew loads');
+{
+  // A test-in on the estimate: the crew still has the test-out to do, so the load list adds the kit.
+  psql(`insert into blower_door_tests (id, estimate_id, kind, cfm, pa, exponent, cfm50, recorded_by) values (gen_random_uuid(), '${loadEstimate}', 'test_in', 5000, 50, 0.65, 5000, '${EST.id}')`);
+  await op.goto(BASE + '/jobs/' + loadJobId);
+  await op.locator('select[name="crew_id"]').selectOption({ label: 'Crew A' });
+  await op.locator('input[name="scheduled_start"]').fill(today);
+  await op.getByRole('button', { name: 'Save schedule' }).click();
+  await waitForDb(`select (crew_id is not null)::text || ':' || scheduled_start from jobs where id = '${loadJobId}'`, `true:${today}`, 'the job is scheduled for Crew A today');
+  await op.reload();
+  const notesCard = op.getByRole('region', { name: 'Notes for the crew' });
+  check((await notesCard.getByTestId('estimator-crew-notes').innerText()).includes('Gate code 4411. Dog in the back yard.'), "the office job page shows the estimator's notes for the crew, read-only");
+  const loads = await op.getByRole('region', { name: 'What the crew loads' }).innerText();
+  check(loadExpected.every((e) => loads.includes(e.name) && loads.includes(qtyWords(e.qty, e.unit))), `and what the crew loads: ${loadExpected.map((e) => `${qtyWords(e.qty, e.unit)} ${e.name}`).join(', ')}`);
+  check(loads.includes('Ladders') && loads.includes('Insulation blower and hoses'), "with the owner's always-bring list");
+  await op.getByRole('region', { name: 'Notes for the crew' }).scrollIntoViewIfNeeded();
+  await op.screenshot({ path: SHOTS + '31-office-crew-notes.png', fullPage: true });
+}
+
+step("load list: the crew app shows today's load list, summed and rounded up, with the always-bring list, the kit and the notes");
+{
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await list.getByRole('tab', { name: 'Today' }).getAttribute('aria-selected')) === 'true', 'the Load list is at the top of the crew home, on Today');
+  for (const e of loadExpected) {
+    const row = list.getByRole('checkbox', { name: new RegExp(escapeRe(e.name)) });
+    const text = (await row.innerText()).replace(/\s+/g, ' ');
+    check(text.includes(qtyWords(e.qty, e.unit)), `"${e.name}": ${qtyWords(e.qty, e.unit)} (${e.sum} added up over ${e.areas} area${e.areas === 1 ? '' : 's'}, rounded up once)`);
+  }
+  for (const item of ['Insulation blower and hoses', 'Ladders', 'Respirators and safety glasses', 'Tarps and drop cloths', 'Utility knives and tape measure']) {
+    check((await list.getByRole('checkbox', { name: item, exact: true }).count()) === 1, `always bring: ${item}`);
+  }
+  await list.getByRole('checkbox', { name: 'Blower door kit (test-out at 7 Loading Dock Rd)' }).waitFor({ timeout: 20000 });
+  check(true, 'the estimate has a test-in and the job no test-out: "Blower door kit (test-out at 7 Loading Dock Rd)"');
+  const listText = await list.innerText();
+  check(listText.includes('Gate code 4411. Dog in the back yard.') && listText.includes('Customer paid the deposit.'), "the estimator's notes are under the job, the $ amounts taken out");
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'no $ anywhere on the crew home');
+  const api = await cpg.evaluate(async () => (await fetch('/api/crew/jobs')).text());
+  check(!/\$|price|revenue|cost/i.test(api), 'nor in what the crew app downloads');
+  // Big targets at 390 px: every box and button on the list is at least 44 px tall and wide.
+  const small = await list.evaluate((el) =>
+    [...el.querySelectorAll('button, a[href], [role=checkbox], [role=tab]')]
+      .map((b) => ({ b, r: b.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && (r.width < 44 || r.height < 44))
+      .map(({ b, r }) => `${b.textContent.trim().slice(0, 30)} ${Math.round(r.width)}x${Math.round(r.height)}`),
+  );
+  check(small.length === 0, `every tap target on the load list is at least 44 px at 390 px wide${small.length ? `: ${small.join(', ')}` : ''}`);
+  const overflow = await cpg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow <= 0, 'and nothing runs off the side of a 390 px phone');
+  await list.scrollIntoViewIfNeeded();
+  await cpg.screenshot({ path: SHOTS + '32-crew-load-list.png', fullPage: true });
+  for (const theme of ['night', 'sun']) {
+    await cpg.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await cpg.screenshot({ path: SHOTS + `32-crew-load-list-${theme}.png`, fullPage: true });
+  }
+  await cpg.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+  await list.getByRole('tab', { name: 'Tomorrow' }).click();
+  await list.getByText(/no job starts tomorrow/).waitFor();
+  check(true, 'Tomorrow has its own list (nothing starts tomorrow here)');
+  await list.getByRole('tab', { name: 'Today' }).click();
+}
+
+step('load list: a tick stays after a reload and with no signal');
+{
+  const list = cpg.getByTestId('load-list');
+  const first = list.getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) });
+  await first.click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('1 of'));
+  check((await first.getAttribute('aria-checked')) === 'true', `ticked "${loadExpected[0].name}" off`);
+  await cpg.reload();
+  await cpg.getByTestId('load-list').getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await cpg.getByTestId('load-list').getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) }).getAttribute('aria-checked')) === 'true', 'the tick is still there after a reload');
+  await cctx.setOffline(true);
+  offlineStep = true;
+  await cpg.reload();
+  const offlineList = cpg.getByTestId('load-list');
+  await offlineList.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await offlineList.getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) }).getAttribute('aria-checked')) === 'true', 'with no signal the list opens with the tick');
+  await offlineList.getByRole('checkbox', { name: 'Ladders', exact: true }).click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('2 of'));
+  await cpg.reload();
+  await cpg.getByTestId('load-list').getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await cpg.getByTestId('load-list').getByRole('checkbox', { name: 'Ladders', exact: true }).getAttribute('aria-checked')) === 'true', 'a tick made with no signal stays too');
+  check((await cpg.getByTestId('load-progress').innerText()).startsWith('2 of'), 'two lines loaded');
+  await cpg.screenshot({ path: SHOTS + '33-crew-load-list-offline.png', fullPage: true });
+  await cctx.setOffline(false);
+  offlineStep = false;
+  await cpg.evaluate(() => window.dispatchEvent(new Event('online')));
+}
+
+// Review LOAD-TICK-1: a tick holds the amount it was ticked at. The phone's stored tick is set to
+// fewer than the day needs now, as when the crew ticks the evening before and the office then moves
+// a second job onto the day: the row must not count as loaded, and must say what changed.
+step('load list: a material ticked at another amount than the day needs now shows unticked, with what changed');
+{
+  const first = loadExpected[0];
+  const was = first.qty > 1 ? Math.floor(first.qty / 3) || 1 : 2;
+  const meta = (write) =>
+    cpg.evaluate(
+      async ({ key, write }) => {
+        const db = await new Promise((res, rej) => {
+          const r = indexedDB.open('koala-crew');
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        try {
+          const tx = db.transaction('meta', 'readwrite');
+          const store = tx.objectStore('meta');
+          const row = await new Promise((res, rej) => {
+            const r = store.get(key);
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+          const amounts = Object.entries(row?.value ?? {}).filter(([, v]) => v !== null && typeof v === 'object');
+          if (write !== null && amounts.length === 1) store.put({ ...row, value: { ...row.value, [amounts[0][0]]: { ...amounts[0][1], qty: write } } });
+          await new Promise((res, rej) => {
+            tx.oncomplete = res;
+            tx.onerror = () => rej(tx.error);
+          });
+          return amounts.map(([k, v]) => ({ k, v }));
+        } finally {
+          db.close();
+        }
+      },
+      { key: `load:${CREW.id}:${today}`, write },
+    );
+  const kept = await meta(null);
+  check(kept.length === 1 && kept[0].v.qty === first.qty && kept[0].v.plusUnknown === false, `the phone keeps the tick of "${first.name}" with the amount it was ticked at (${qtyWords(first.qty, first.unit)})`);
+  await meta(was);
+  await cpg.reload();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  const row = list.getByRole('checkbox', { name: new RegExp(escapeRe(first.name)) });
+  const changed = `Changed after it was ticked: was ${qtyWords(was, first.unit)}, now ${qtyWords(first.qty, first.unit)}.`;
+  await row.getByText(changed).waitFor({ timeout: 20000 });
+  check((await row.getAttribute('aria-checked')) === 'false', `ticked at ${qtyWords(was, first.unit)}, "${first.name}" is not loaded now that the day needs ${qtyWords(first.qty, first.unit)}: "${changed}"`);
+  check((await cpg.getByTestId('load-progress').innerText()).startsWith('1 of'), 'and it is not counted as loaded (Ladders still is)');
+  await list.scrollIntoViewIfNeeded();
+  await cpg.screenshot({ path: SHOTS + '33-crew-load-list-changed.png', fullPage: true });
+  await row.click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('2 of'));
+  check((await row.getAttribute('aria-checked')) === 'true' && (await list.getByTestId('load-changed').count()) === 0, 'ticked again once the truck is checked: loaded, and the change note is gone');
+  const again = await meta(null);
+  check(again.length === 1 && again[0].v.qty === first.qty, `the tick now holds ${qtyWords(first.qty, first.unit)}`);
+}
+
+step('load list: the office adds a note for the crew; the crew sees it after a sync');
+{
+  await op.goto(BASE + '/jobs/' + loadJobId);
+  const notesCard = op.getByRole('region', { name: 'Notes for the crew' });
+  await notesCard.getByLabel(/From the office/).fill(LOAD_OFFICE_NOTES);
+  await notesCard.getByRole('button', { name: 'Save notes for the crew' }).click();
+  await notesCard.getByText('Notes saved. The crew sees them on the job after their next sync.').waitFor({ timeout: 15000 });
+  check(psql(`select crew_notes from jobs where id = '${loadJobId}'`) === LOAD_OFFICE_NOTES, 'the office saves notes for the crew on the job');
+  check(psql(`select count(*) from audit_log where action = 'job.crew_notes' and row_id = '${loadJobId}' and actor_id = '${OWNER.id}'`) === '1', 'and the change is audited with who made it');
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+  await cpg.getByRole('button', { name: 'Sync now' }).click();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Bring the 28 ft ladder for the garage attic.').waitFor({ timeout: 20000 });
+  check((await list.getByRole('note', { name: 'From the office' }).innerText()).includes('Park on the street.'), "after a sync the crew sees the office's note under the job, with the estimator's");
+  await list.getByRole('button', { name: /Dana Loader/ }).click();
+  const notes = cpg.getByRole('region', { name: 'Notes for the crew' });
+  await notes.waitFor();
+  const notesText = await notes.innerText();
+  check(notesText.includes('Gate code 4411') && notesText.includes('Park on the street.'), "the crew's job page has both notes at the top");
+  const bring = await cpg.getByRole('region', { name: 'What to bring' }).innerText();
+  check(loadExpected.every((e) => bring.includes(e.name) && bring.includes(qtyWords(e.qty, e.unit))), "and \"What to bring\" with this job's materials above the areas");
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'no $ on the crew job page');
+  await cpg.screenshot({ path: SHOTS + '34-crew-job-notes.png', fullPage: true });
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+}
+
+step('load list: the owner edits the always-bring list on Pricing; the crew gets it on the next sync');
+{
+  await op.goto(BASE + '/admin/pricing#load-list');
+  const box = op.getByLabel(/Always bring, one item per line/);
+  const before = await box.inputValue();
+  check(before.split('\n').includes('Ladders'), 'Pricing shows the always-bring list, one item per line');
+  await box.fill(`${before}\nExtension cords`);
+  const form = box.locator('xpath=ancestor::form[1]');
+  await form.getByRole('button', { name: 'Save the always-bring list' }).click();
+  await form.getByText('Saved.').waitFor({ timeout: 15000 });
+  check(psql("select value->'always_bring'->>5 from app_settings where key = 'load_list'") === 'Extension cords', 'the owner adds "Extension cords"');
+  check(psql(`select count(*) from audit_log where table_name = 'app_settings' and row_id = 'load_list' and actor_id = '${OWNER.id}'`) !== '0', 'and the change is audited with who made it');
+  await cpg.getByRole('button', { name: 'Sync now' }).click();
+  await cpg.getByTestId('load-list').getByRole('checkbox', { name: 'Extension cords', exact: true }).waitFor({ timeout: 20000 });
+  check(true, 'the crew gets it on their next sync');
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'still no $ on the crew home');
+}
+
 console.log('console errors:', logs.length ? logs : 'none');
 await browser.close();

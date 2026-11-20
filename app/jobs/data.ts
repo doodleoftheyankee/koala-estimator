@@ -4,7 +4,8 @@ import 'server-only';
 // a one-item array.
 import { z } from 'zod';
 import { PRODUCTS } from '@/lib/pricing';
-import { PRODUCT_UNITS } from '@/lib/jobs/crew';
+import { CREW_VIEW_COLUMNS, crewViewRowSchema, groupViewRows, PRODUCT_UNITS, type CrewJob } from '@/lib/jobs/crew';
+import { parseAlwaysBring } from '@/lib/jobs/loadList';
 import type { OfficeActual } from '@/lib/jobs/office';
 import { fetchRows, isHistoryGroup, officeListQueries, uniqueById, type HistoryGroup, type ListQuery } from '@/lib/jobs/officeList';
 import { JOB_STATUSES } from '@/lib/jobs/status';
@@ -153,6 +154,7 @@ const detailRow = z.object({
   completed_at: z.string().nullable(),
   revenue: numOrNull,
   crew_id: z.guid().nullable(),
+  crew_notes: z.string().nullable().optional(),
   quote: one(
     z.object({
       id: z.guid(),
@@ -167,6 +169,7 @@ const detailRow = z.object({
     z.object({
       id: z.guid(),
       drive_minutes_est: numOrNull,
+      crew_notes: z.string().nullable().optional(),
       estimator: name,
       customer,
       property,
@@ -209,6 +212,10 @@ export interface JobDetail {
   completedAt: string | null;
   revenue: number | null;
   crewId: string | null;
+  /** The office's notes for the crew (jobs.crew_notes). */
+  crewNotes: string | null;
+  /** The estimator's notes for the crew, on the estimate (client_doc crewNotes): read-only here. */
+  estimatorCrewNotes: string | null;
   quote: { id: string; version: number; signedTier: string | null; signedPrice: number | null; signedAt: string | null; snapshot: unknown } | null;
   estimateId: string | null;
   driveMinutesEst: number | null;
@@ -224,9 +231,9 @@ export async function loadJob(db: Db, id: string): Promise<{ job: JobDetail | nu
     db
       .from('jobs')
       .select(
-        `id, status, scheduled_start, scheduled_days, started_at, completed_at, revenue, crew_id,
+        `id, status, scheduled_start, scheduled_days, started_at, completed_at, revenue, crew_id, crew_notes,
          quote:quotes(id, version, signed_tier, signed_price, signed_at, snapshot),
-         estimate:estimates(id, drive_minutes_est,
+         estimate:estimates(id, drive_minutes_est, crew_notes:client_doc->>crewNotes,
            estimator:profiles!estimates_estimator_id_fkey(full_name),
            customer:customers(first_name, last_name, phone, email),
            property:properties(street, city, zip),
@@ -268,6 +275,8 @@ export async function loadJob(db: Db, id: string): Promise<{ job: JobDetail | nu
       completedAt: r.completed_at,
       revenue: r.revenue,
       crewId: r.crew_id,
+      crewNotes: r.crew_notes?.trim() || null,
+      estimatorCrewNotes: est?.crew_notes?.trim() || null,
       quote: r.quote
         ? { id: r.quote.id, version: r.quote.version, signedTier: r.quote.signed_tier, signedPrice: r.quote.signed_price, signedAt: r.quote.signed_at, snapshot: r.quote.snapshot }
         : null,
@@ -308,4 +317,21 @@ export async function loadCrews(db: Db): Promise<Array<{ id: string; name: strin
   const res = await db.from('crews').select('id, name, active').order('name');
   const parsed = z.array(z.object({ id: z.guid(), name: z.string(), active: z.boolean() })).safeParse(res.data ?? []);
   return parsed.success ? parsed.data : [];
+}
+
+/**
+ * What the crew's phone has for this job (crew_job_view, the same rows the crew app reads: the
+ * signed scope's quantities and words, and the notes, without prices), and the owner's always-bring
+ * list, for "What the crew loads" on the office job page.
+ */
+export async function loadCrewCopy(db: Db, id: string): Promise<{ job: Omit<CrewJob, 'actuals' | 'verified'> | null; alwaysBring: string[]; error: string | null }> {
+  const [view, setting] = await Promise.all([
+    db.from('crew_job_view').select(CREW_VIEW_COLUMNS).eq('job_id', id).order('area_sort'),
+    db.from('app_settings').select('value').eq('key', 'load_list').maybeSingle(),
+  ]);
+  const alwaysBring = setting.error ? [] : parseAlwaysBring(setting.data?.value ?? null);
+  if (view.error) return { job: null, alwaysBring, error: view.error.message };
+  const rows = z.array(crewViewRowSchema).safeParse(view.data);
+  if (!rows.success) return { job: null, alwaysBring, error: 'Unexpected scope data from the server.' };
+  return { job: groupViewRows(rows.data)[0] ?? null, alwaysBring, error: null };
 }

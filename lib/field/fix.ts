@@ -4,8 +4,8 @@
 import type { MeasureField } from '@/lib/measure/measure';
 import type { Tier } from '@/lib/pricing';
 
-/** A customer or address field on the Customer step, or the notes for the quote (review B flow-B5). */
-export type CustomerField = 'firstName' | 'lastName' | 'email' | 'street' | 'city' | 'state' | 'zip' | 'notes';
+/** A customer or address field on the Customer step, the notes for the quote (review B flow-B5) or for the crew. */
+export type CustomerField = 'firstName' | 'lastName' | 'email' | 'street' | 'city' | 'state' | 'zip' | 'notes' | 'crewNotes';
 
 export type FixTarget =
   /** Open the Customer step at this field. */

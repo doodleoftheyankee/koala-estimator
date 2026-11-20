@@ -153,6 +153,22 @@ describe('mergeRemote', () => {
     expect(e.draft.measurements).toEqual(server.measurements);
   });
 
+  it("fills the notes for the crew into a copy saved before the load list, so the next edit cannot erase them", () => {
+    const server: EstimateDraft = { ...complete(), crewNotes: 'Gate code 4411. Dog in the yard.' };
+    const oldCopy = JSON.parse(JSON.stringify(complete())) as Record<string, unknown>;
+    delete oldCopy.crewNotes;
+    // The server refused this copy's push (it would have erased the notes): the pull fills them in and
+    // sends the edit again.
+    const outdated = record({ syncState: 'invalid', lastError: OUTDATED_APP_ERROR, draft: { ...(oldCopy as unknown as EstimateDraft), notes: 'mine', rowVersion: 2 } });
+    const r = mergeRemote(outdated, remote({ doc: server }), 'u1', 'm2')!;
+    expect(r.draft.crewNotes).toBe('Gate code 4411. Dog in the yard.');
+    expect(r.draft.notes).toBe('mine');
+    expect(r).toMatchObject({ syncState: 'pending', lastError: null, mutationId: 'm2' });
+    // An up-to-date synced copy just gains the field.
+    const synced = record({ syncState: 'synced', draft: { ...(oldCopy as unknown as EstimateDraft), rowVersion: 2 } });
+    expect(mergeRemote(synced, remote({ doc: server, rowVersion: 2 }), 'u1', 'm3')!.draft.crewNotes).toBe('Gate code 4411. Dog in the yard.');
+  });
+
   it('ignores malformed remote docs and unknown statuses', () => {
     expect(mergeRemote(undefined, remote({ doc: { nope: true } }), 'u1', 'm')).toBeNull();
     expect(mergeRemote(undefined, remote({ status: 'weird' }), 'u1', 'm')!.draft.status).toBe('draft');

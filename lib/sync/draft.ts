@@ -89,7 +89,14 @@ export const draftSchema = z.object({
   /** AI photo reads of each area (lib/ai/photoRead), keyed by area id. */
   photoReads: z.record(z.string(), storedPhotoReadSchema).default({}),
   selectedTier: z.enum(TIERS).nullable(),
+  /** Printed on the customer's quote ("Notes for the quote"). */
   notes: z.string().max(5000),
+  /**
+   * The estimator's notes for the crew ("Notes for the crew"): never printed on the quote, its PDF
+   * or its emails; the crew app shows them on the job and its load list (crew_job_view
+   * estimate_crew_notes, without prices). Added with the load list; older drafts have none.
+   */
+  crewNotes: z.string().max(2000).default(''),
   rowVersion: z.number().int().positive().nullable(),
   bundleHash: z.string().nullable(),
   lastQuote: z
@@ -132,6 +139,7 @@ export function newDraft(now = new Date(), uuid: () => string = () => crypto.ran
     photoReads: {},
     selectedTier: null,
     notes: '',
+    crewNotes: '',
     rowVersion: null,
     bundleHash: null,
     lastQuote: null,

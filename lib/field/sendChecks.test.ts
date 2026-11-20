@@ -173,6 +173,14 @@ describe('the Send checklist in plain words, with a Fix per item (L34, RF-02, UX
     expect(fixElementId(item!.fix!.target)).toBe('customer-notes');
   });
 
+  it('notes for the crew too long: the Fix goes to their box', () => {
+    const d = { ...complete(), crewNotes: 'x'.repeat(2001) };
+    const item = failing(input(d)).find((c) => c.id === 'other');
+    expect(item?.label).toBe('The notes for the crew are too long.');
+    expect(item?.fix).toEqual({ label: 'Shorten the notes', target: { step: 'customer', field: 'crewNotes' } });
+    expect(fixElementId(item!.fix!.target)).toBe('customer-crewNotes');
+  });
+
   // Review B flow-B2: the phone has signal but Koala does not answer. The checklist said "Online" and
   // "Everything the quote needs is here" under a "Can't reach Koala right now" banner.
   it('signal but Koala unreachable: the online item says so and the checklist is not done (review B flow-B2)', () => {

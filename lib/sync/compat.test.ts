@@ -42,7 +42,7 @@ describe('missingDraftFields', () => {
     expect(missingDraftFields(wire(phase2Draft(), ['deviationAcks']))).toEqual(['deviationAcks']);
     expect(missingDraftFields(null)).toEqual([]);
     expect(missingDraftFields([])).toEqual([]);
-    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks', 'measurements', 'photoReads']);
+    expect(LATER_DRAFT_FIELDS).toEqual(['lineOverrides', 'deviationAcks', 'measurements', 'photoReads', 'crewNotes']);
   });
 });
 
@@ -96,5 +96,41 @@ describe('fieldsPushWouldErase', () => {
   it('tells the estimator nothing was saved and to update the app', () => {
     expect(OUTDATED_APP_ERROR).toMatch(/nothing was saved/i);
     expect(OUTDATED_APP_ERROR).toMatch(/reload the app/i);
+  });
+});
+
+describe('crewNotes: the estimator\'s notes for the crew (load list)', () => {
+  /** A build from before the load list: it knows every other field, but not crewNotes. */
+  const preLoadListPush = (d: EstimateDraft) => wire({ ...d, notes: 'Fixed typo' }, ['crewNotes']);
+  const withCrewNotes = (): EstimateDraft => ({ ...phase2Draft(), crewNotes: 'Gate code 4411. Dog in the yard.' });
+
+  it('is a later field: an older build sends no crewNotes key', () => {
+    expect(missingDraftFields(preLoadListPush(withCrewNotes()))).toEqual(['crewNotes']);
+    expect(missingDraftFields(wire(withCrewNotes()))).toEqual([]);
+    // The server parses such a draft with crewNotes '' (the default): the raw JSON is what tells.
+    expect(syncableDraftSchema.parse(preLoadListPush(withCrewNotes())).crewNotes).toBe('');
+  });
+
+  it('a push from an older build never erases the notes on the server', () => {
+    const server = withCrewNotes();
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored(server))).toEqual(['crewNotes']);
+    // A doc stored by an older build itself, or one with blank notes, has nothing to lose.
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored(wire(server, ['crewNotes'])))).toEqual([]);
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored({ ...server, crewNotes: '' }))).toEqual([]);
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored({ ...server, crewNotes: '  \n ' }))).toEqual([]);
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored({ ...server, crewNotes: 42 }))).toEqual([]);
+    // A signed estimate is left to the sync function (locked: nothing is erased).
+    expect(fieldsPushWouldErase(preLoadListPush(server), stored(server, 'signed'))).toEqual([]);
+  });
+
+  it('a current build clearing the notes on purpose sends crewNotes: "" and is applied', () => {
+    const server = withCrewNotes();
+    expect(fieldsPushWouldErase(wire({ ...server, crewNotes: '' }), stored(server))).toEqual([]);
+  });
+
+  it('a draft keeps up to 2,000 characters of notes for the crew, and defaults to none', () => {
+    expect(newDraft().crewNotes).toBe('');
+    expect(syncableDraftSchema.safeParse({ ...withCrewNotes(), crewNotes: 'x'.repeat(2000) }).success).toBe(true);
+    expect(syncableDraftSchema.safeParse({ ...withCrewNotes(), crewNotes: 'x'.repeat(2001) }).success).toBe(false);
   });
 });

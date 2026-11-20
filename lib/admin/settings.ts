@@ -2,6 +2,7 @@
 // parser that turns a submitted form into jsonb values. Pure, so it is unit-tested.
 import { z } from 'zod';
 import { QUOTE_PREFIX_PATTERN } from '@/lib/quotes/model';
+import { alwaysBringFromText } from '@/lib/jobs/loadList';
 import {
   booleanField,
   fractionToPercent,
@@ -105,6 +106,7 @@ export const SETTING_LABELS: Record<string, string> = {
   ...Object.fromEntries(PROFILE_SETTINGS.map((s) => [s.key, s.label])),
   financing: 'Financing partner and terms',
   branding: 'Quote PDF branding',
+  load_list: 'Load list: what every crew brings to every job',
 };
 
 // ---------------------------------------------------------------------------
@@ -159,7 +161,10 @@ const brandingSchema = z.object({
 });
 
 /** Keys this form can write, in the order they are saved. */
-export const EDITABLE_SETTING_KEYS = [...Object.keys(scalarSchemas), 'financing', 'branding'] as const;
+export const EDITABLE_SETTING_KEYS = [...Object.keys(scalarSchemas), 'financing', 'branding', 'load_list'] as const;
+
+/** The Pricing page's always-bring box: one item per line (lib/jobs/loadList.ts). */
+export const ALWAYS_BRING_FIELD = 'load_list.always_bring';
 
 function subObject(obj: Record<string, string>, prefix: string): Record<string, string> | null {
   const entries = Object.entries(obj).filter(([k]) => k.startsWith(`${prefix}.`));
@@ -197,6 +202,12 @@ export function parseSettingsForm(obj: Record<string, string>): ParsedSettings {
     const r = brandingSchema.safeParse(brand);
     if (r.success) values.branding = r.data;
     else errors.push(issuesMessage(r.error));
+  }
+
+  if (ALWAYS_BRING_FIELD in obj) {
+    const r = alwaysBringFromText(obj[ALWAYS_BRING_FIELD] ?? '');
+    if (r.ok) values.load_list = { always_bring: r.items };
+    else errors.push(r.error);
   }
 
   if (errors.length) return { ok: false, error: errors.join(' · ') };

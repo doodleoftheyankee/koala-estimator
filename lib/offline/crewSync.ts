@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { crewJobsResponseSchema, savedActualSchema, serverActualSchema, type ActualsSyncResponse } from '@/lib/jobs/crew';
 import type { JobStatus } from '@/lib/jobs/status';
-import { crewDb, type LocalActuals } from './crewDb';
+import { ALWAYS_BRING_KEY, crewDb, type LocalActuals } from './crewDb';
 import { applyActualsResult, buildActualsBody, mergeServerJobs, withStatus } from './crewSyncCore';
 import { refreshBlowerDoorSettings, syncBlowerDoor } from './blowerDoor';
 
@@ -103,7 +103,10 @@ export async function pullJobs(ownerId: string): Promise<boolean> {
   const parsed = crewJobsResponseSchema.safeParse(await res.json().catch(() => null));
   if (!parsed.success) return false;
   const db = crewDb();
-  await db.transaction('rw', db.jobs, db.actuals, async () => {
+  const alwaysBring = parsed.data.alwaysBring;
+  await db.transaction('rw', db.jobs, db.actuals, db.meta, async () => {
+    // The owner's always-bring list for the load list; kept as it was when the server left it out.
+    if (alwaysBring) await db.meta.put({ key: ALWAYS_BRING_KEY, value: { items: alwaysBring, fetchedAt: parsed.data.fetchedAt } });
     const plan = mergeServerJobs({
       jobs: await db.jobs.toArray(),
       drafts: await db.actuals.toArray(),

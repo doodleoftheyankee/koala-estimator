@@ -71,9 +71,23 @@ export interface LocalJob {
   fetchedAt: string;
 }
 
+/**
+ * meta rows: 'profile' (who last used the crew app here), ALWAYS_BRING_KEY (the owner's
+ * always-bring list, from GET /api/crew/jobs) and one row per person and day of load list ticks
+ * (lib/jobs/loadList.ts ticksKey: line key -> its tick, a material's at its amount), so ticking works with no signal and a new day
+ * starts empty.
+ */
 interface MetaRow {
   key: string;
   value: unknown;
+}
+
+export const ALWAYS_BRING_KEY = 'alwaysBring';
+
+/** The owner's always-bring list as the phone keeps it. */
+export interface CachedAlwaysBring {
+  items: string[];
+  fetchedAt: string;
 }
 
 class CrewDB extends Dexie {

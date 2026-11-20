@@ -109,16 +109,34 @@ export const crewJobSchema = z.object({
   actuals: z.array(serverActualSchema),
   /** The office verified the actuals: the crew can no longer change them. */
   verified: z.boolean(),
+  /**
+   * Notes for the crew, without prices: the estimator's (on the estimate, never on the quote) and
+   * the office's (on the job, added after booking). Absent from a job a phone cached before notes
+   * existed (lib/jobs/loadList.ts notesOf).
+   */
+  notes: z.object({ estimator: z.string().nullable(), office: z.string().nullable() }).optional(),
 });
 export type CrewJob = z.infer<typeof crewJobSchema>;
 
-export const crewJobsResponseSchema = z.object({ jobs: z.array(crewJobSchema), fetchedAt: z.string() });
+export const crewJobsResponseSchema = z.object({
+  jobs: z.array(crewJobSchema),
+  fetchedAt: z.string(),
+  /**
+   * The owner's always-bring list (app_settings.load_list), for the load list. Absent when the
+   * server could not read it: the phone keeps the copy it has.
+   */
+  alwaysBring: z.array(z.string()).optional(),
+});
 export type CrewJobsResponse = z.infer<typeof crewJobsResponseSchema>;
 
 /** Columns read from crew_job_view (no money columns exist there). */
 export const CREW_VIEW_COLUMNS =
   'job_id, status, scheduled_start, scheduled_days, started_at, completed_at, street, city, zip, lat, lng, first_name, last_name, phone, ' +
-  'area_id, area_name, job_type, sqft, access_level, removal_needed, prep_notes, hazards, hazard_disposition, area_sort, signed_tier, scope';
+  'area_id, area_name, job_type, sqft, access_level, removal_needed, prep_notes, hazards, hazard_disposition, area_sort, signed_tier, scope, ' +
+  'estimate_crew_notes, job_crew_notes';
+
+/** Notes as the crew reads them: the view takes prices out of each line; so does the app (twice is harmless). */
+const crewNotes = textOrNull.transform((v) => (v === null ? null : notesWithoutPrices(v)));
 
 export const crewViewRowSchema = z.object({
   job_id: z.guid(),
@@ -155,6 +173,9 @@ export const crewViewRowSchema = z.object({
       const r = scopeLineSchema.safeParse(l);
       return r.success ? [{ ...r.data, description: withoutPrices(r.data.description) }] : [];
     })),
+  // Notes for the crew (the load list migration); a view without them reads as none.
+  estimate_crew_notes: crewNotes,
+  job_crew_notes: crewNotes,
 });
 export type CrewViewRow = z.infer<typeof crewViewRowSchema>;
 
@@ -171,6 +192,20 @@ export function withoutPrices(text: string): string {
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([,.;:])/g, '$1')
     .trim();
+}
+
+/**
+ * Notes for the crew with any price taken out of each line, keeping the line breaks the writer typed
+ * (as the view's crew_notes_without_prices does). Null when nothing is left.
+ */
+export function notesWithoutPrices(text: string): string | null {
+  const out = text
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(withoutPrices)
+    .join('\n')
+    .replace(/^[\s]+|[\s]+$/g, '');
+  return out === '' ? null : out;
 }
 
 /** Columns of crew_actuals_view the crew app reads (the view has no cost columns at all). */
@@ -231,6 +266,7 @@ export function groupViewRows(rows: readonly CrewViewRow[]): Array<Omit<CrewJob,
         address: { street: r.street, city: r.city, zip: r.zip, lat: r.lat, lng: r.lng },
         customer: { name: `${r.first_name} ${r.last_name}`.trim(), phone: r.phone },
         signedTier: r.signed_tier,
+        notes: { estimator: r.estimate_crew_notes, office: r.job_crew_notes },
         areas: [],
         sorts: new Map(),
       };
