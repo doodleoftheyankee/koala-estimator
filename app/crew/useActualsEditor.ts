@@ -85,9 +85,15 @@ export function useActualsEditor(jobId: string, requestSync: () => void) {
     return () => {
       document.removeEventListener('visibilitychange', onHide);
       void flush();
-      if (syncTimer.current) clearTimeout(syncTimer.current);
+      // A save still waiting for its sync goes out now rather than being dropped with the screen
+      // (walk-fix review EE-1, the same as the estimate editor).
+      if (syncTimer.current) {
+        clearTimeout(syncTimer.current);
+        syncTimer.current = null;
+        if (navigator.onLine) requestSync();
+      }
     };
-  }, [flush]);
+  }, [flush, requestSync]);
 
   return { record, values, setRow, flush };
 }

@@ -668,8 +668,8 @@ export function parseWinMetrics(metrics: unknown): WinMetrics {
 /** Cold-start explanation shown while no win model is active. */
 export function winColdStartMessage(minQuotes: number, nQuotes: number | null, reason: string | null = null): string {
   const need = `${formatCount(minQuotes)} decided ${plural(minQuotes, 'quote')}`;
-  if (nQuotes === null) return `Price recommendations start after ${need}. The first nightly run will count yours.`;
-  if (nQuotes < minQuotes) return `Price recommendations start after ${need} (you have ${formatCount(nQuotes)}).`;
+  if (nQuotes === null) return `Price suggestions start after ${need}. The first nightly run will count yours.`;
+  if (nQuotes < minQuotes) return `Price suggestions start after ${need} (you have ${formatCount(nQuotes)}).`;
   return `You have ${formatCount(nQuotes)} decided ${plural(nQuotes, 'quote')}, enough to train, but no price model is active yet${reason ? `: ${reason}` : '.'}`;
 }
 

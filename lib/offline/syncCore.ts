@@ -109,16 +109,30 @@ export function mergeRemote(
   const doc = parseDoc(remote.doc);
   if (!doc) return null;
   const status = asStatus(remote.status, doc.status);
-  // A signed estimate recommends what the customer signed: the server's headline is the signed
-  // price and option, so the editor's dock and option cards say the same as the list and the PDF
-  // (readiness walk W1: the dock read the estimator's earlier pick, Best, after Better was signed).
+  // A signed estimate's headline is what the customer signed (the server's: the signed price and
+  // option), for the list and the editor's dock (readiness walk W1). The draft keeps the option the
+  // quote highlighted: that is what the customer was shown, whatever they then signed (review W1-b).
   const signed = status === 'signed' && remote.headline ? remote.headline : null;
-  const draft: EstimateDraft = {
-    ...doc,
-    status,
-    rowVersion: remote.rowVersion,
-    ...(signed?.tier ? { selectedTier: signed.tier } : {}),
-  };
+  const draft: EstimateDraft = { ...doc, status, rowVersion: remote.rowVersion };
+  // The customer signed while this phone held an edit it has not sent (unfinished, refused or in
+  // conflict): the signed copy replaces it, read-only, and the estimator is told the change was not
+  // applied, as when a push hears 'locked' (L35). A pending edit hears 'locked' on its push instead.
+  // (Walk-fix review W1-d: the phone never learned of the signature.)
+  if (status === 'signed' && local && ['local', 'conflict', 'invalid', 'error'].includes(local.syncState)) {
+    return {
+      ...local,
+      draft,
+      syncState: 'locked',
+      mutationId: newMutationId,
+      lastError: UNSENT_CHANGE_DROPPED,
+      serverDoc: null,
+      serverRowVersion: null,
+      updatedAt: remote.updatedAt,
+      syncedAt: remote.updatedAt,
+      summaryPrice: signed ? signed.price : null,
+      summaryTier: signed ? signed.tier : null,
+    };
+  }
   // A copy saved by an older build lacks fields added since (photo reads, measurements…). Fill
   // them from the server before anything else, or the next edit would send empty ones and erase
   // the server's. A push refused for exactly that reason can then go through.
@@ -160,6 +174,68 @@ export function mergeRemote(
     // the server changed (viewed, signed) never drops the price (release review C FLOW-2).
     summaryPrice: remote.headline ? remote.headline.price : (local?.summaryPrice ?? null),
     summaryTier: remote.headline ? remote.headline.tier : (local?.summaryTier ?? null),
+  };
+}
+
+/** The fields the server owns or stamps: they never make two copies of an estimate different work. */
+const SERVER_FIELDS = new Set(['rowVersion', 'status', 'lastQuote', 'bundleHash', 'updatedAt']);
+function canonical(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.keys(v as Record<string, unknown>)
+        .sort()
+        .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
+    );
+  }
+  return v;
+}
+/** Two copies of an estimate hold the same work: everything but the server's own fields is equal. */
+export function sameWork(a: EstimateDraft, b: EstimateDraft): boolean {
+  const strip = (d: EstimateDraft) => {
+    const parsed = parseDoc(d) ?? d;
+    return JSON.stringify(canonical(Object.fromEntries(Object.entries(parsed).filter(([k]) => !SERVER_FIELDS.has(k)))));
+  };
+  return strip(a) === strip(b);
+}
+
+/**
+ * What the editor stores when it saves: the form's work on top of the stored copy's server fields,
+ * marked as a local edit (touch). `base` is the stored copy the editor's typing started from (its
+ * mutation id and draft). If a sync replaced that copy underneath the typing with different work
+ * (another device saved meanwhile), the save is stored as a conflict, mine against theirs, instead
+ * of taking the new row version and silently overwriting the other change (walk-fix review EE-2).
+ * A copy that changed only in the server's own fields (viewed, sent, a new row version from this
+ * phone's own push) is not a conflict.
+ */
+export function saveEdit(
+  cur: LocalEstimate,
+  form: EstimateDraft,
+  mutationId: string,
+  now: string,
+  base: { mutationId: string | null; draft: EstimateDraft | null },
+): LocalEstimate {
+  const merged: EstimateDraft = {
+    ...form,
+    rowVersion: cur.draft.rowVersion,
+    bundleHash: cur.draft.bundleHash,
+    lastQuote: cur.draft.lastQuote,
+    status: cur.draft.status,
+  };
+  const touched = touch(cur, merged, mutationId, now);
+  const replaced =
+    cur.syncState === 'synced' &&
+    base.mutationId !== null &&
+    base.draft !== null &&
+    cur.mutationId !== base.mutationId &&
+    !sameWork(base.draft, cur.draft);
+  if (!replaced) return touched;
+  return {
+    ...touched,
+    syncState: 'conflict',
+    serverDoc: cur.draft,
+    serverRowVersion: cur.draft.rowVersion,
+    lastError: 'Changed on another device.',
   };
 }
 

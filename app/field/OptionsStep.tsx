@@ -28,6 +28,7 @@ export function OptionsStep({
   profile,
   online,
   editPrice = null,
+  signed = null,
 }: {
   draft: EstimateDraft;
   update: Update;
@@ -39,6 +40,8 @@ export function OptionsStep({
   online: boolean;
   /** A "Change the price" Fix: this option's price editor opens, at Customer price (review B flow-B12). */
   editPrice?: Tier | null;
+  /** What the customer signed, on a signed estimate (the server's headline). */
+  signed?: { price: number; tier: Tier | null } | null;
 }) {
   const settings = bundle?.snapshot.settings;
   const showCosts = profile.role !== 'estimator' || !!settings?.estimatorsSeeCosts;
@@ -81,6 +84,14 @@ export function OptionsStep({
 
   return (
     <>
+      {signed ? (
+        // The cards below are priced again with today's pricing; the customer's price is fixed
+        // (walk-fix review W1-a). The star stays on the option the quote highlighted.
+        <Alert tone="blue">
+          The customer signed {signed.tier ? `${TIER_LABELS[signed.tier]} ` : ''}for {formatMoney(signed.price, { cents: 'never' })}. That price is
+          fixed. The prices below are worked out again with today&apos;s pricing, for reference only.
+        </Alert>
+      ) : null}
       <Card>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Crew">
@@ -176,7 +187,7 @@ export function OptionsStep({
       ) : null}
 
       {options.length > 0 && bundle && !winModel ? (
-        <p className="px-1 text-xs text-slate-500">Price recommendations start once enough quotes have been won or lost.</p>
+        <p className="px-1 text-xs text-slate-500">Price suggestions start once enough quotes have been won or lost.</p>
       ) : null}
 
       {bundle ? (

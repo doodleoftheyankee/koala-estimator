@@ -589,9 +589,9 @@ describe('win rate', () => {
   });
 
   it('explains the cold start', () => {
-    expect(winColdStartMessage(40, 12)).toBe('Price recommendations start after 40 decided quotes (you have 12).');
-    expect(winColdStartMessage(1, 0)).toBe('Price recommendations start after 1 decided quote (you have 0).');
-    expect(winColdStartMessage(40, null)).toBe('Price recommendations start after 40 decided quotes. The first nightly run will count yours.');
+    expect(winColdStartMessage(40, 12)).toBe('Price suggestions start after 40 decided quotes (you have 12).');
+    expect(winColdStartMessage(1, 0)).toBe('Price suggestions start after 1 decided quote (you have 0).');
+    expect(winColdStartMessage(40, null)).toBe('Price suggestions start after 40 decided quotes. The first nightly run will count yours.');
     expect(winColdStartMessage(40, 45, 'All 45 decided quotes were won.')).toBe(
       'You have 45 decided quotes, enough to train, but no price model is active yet: All 45 decided quotes were won.',
     );

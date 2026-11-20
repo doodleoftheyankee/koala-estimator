@@ -64,7 +64,7 @@ select jsonb_build_object(
       'margin_pct', 0.21, 'crew_days', 1.5, 'financing', null,
       'lines', jsonb_build_array(
         jsonb_build_object('id', 'b2100000-0000-0000-0000-000000000003', 'area_id', 'a2000000-0000-0000-0000-000000000001',
-          'kind', 'material', 'product', 'cellulose', 'description', 'Blown cellulose', 'qty', 70, 'unit', 'bag',
+          'kind', 'material', 'product', 'cellulose', 'description', 'Blown cellulose (~$14/bag)', 'qty', 70, 'unit', 'bag',
           'cost', 980, 'design_qty', 64.8, 'model_qty', 70, 'model_cost', 980, 'is_overridden', false,
           'line_key', 'a2000000-0000-0000-0000-000000000001|cellulose|material', 'sort_order', 0),
         jsonb_build_object('id', 'b2100000-0000-0000-0000-000000000004', 'area_id', 'a2000000-0000-0000-0000-000000000001',
@@ -389,6 +389,9 @@ begin
   assert v.scope->2->>'product' = 'air_sealing', 'air sealing in scope';
   assert not exists (select 1 from jsonb_array_elements(v.scope) e
                       where e ?| array['cost', 'unit_cost', 'model_cost', 'price']), 'scope carries no money';
+  -- A price written into a line's words never reaches the crew either (walk-fix review W2-a).
+  assert v.scope->0->>'description' = 'Blown cellulose', 'the price in a material name is taken out: ' || (v.scope->0->>'description');
+  assert not exists (select 1 from jsonb_array_elements(v.scope) e where e->>'description' like '%$%'), 'no scope words carry a $ amount';
   assert (select count(*) from crew_job_view where job_id = current_setting('p2.job2')::uuid) = 0, 'crew A cannot see crew B''s job';
 end $$;
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { predictWin, recommendPrice } from '@/lib/learning/winRate';
 import { priceEstimate, type WinModel } from '@/lib/pricing';
 import { area, coefficients, estimate, snapshot } from '@/lib/pricing/__fixtures__/seed';
-import { beyondOverrideLimit, MIN_WIN_SPREAD, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
+import { beyondOverrideLimit, learnedPriceSensitivity, MIN_WIN_SPREAD, primaryJobType, priceAdvice, recommendationReason, totalSqft, winFeaturesFor } from './priceAdvice';
 
 // A plausible market: win chance falls as the markup rises; walls jobs win a bit more often.
 const model: WinModel = {
@@ -85,6 +85,17 @@ describe('priceAdvice', () => {
     expect(none.current.winProbability).toBeGreaterThan(0);
   });
 
+  it('walk-fix review: a small job held at the minimum job price still gets the learned model suggestion', () => {
+    // So small that every allowed margin prices at the minimum job price: one price on the curve.
+    const small = priceAdvice(model, { price: settings.minimumJobPrice + 400, loadedCost: settings.minimumJobPrice * 0.3 }, features, settings)!;
+    expect(small.best.curve).toHaveLength(1);
+    expect(small.best.price).toBe(settings.minimumJobPrice);
+    expect(small.learnedPrice).toBe(true);
+    expect(small.atBest).toBe(false);
+    expect(learnedPriceSensitivity(model, features, settings)).toBe(true);
+    expect(learnedPriceSensitivity({ ...model, weights: { ...model.weights, markup: -0.02 } }, features, settings)).toBe(false);
+  });
+
   it('a higher price always has a lower win chance with this model', () => {
     const lo = priceAdvice(model, { price: better.price, loadedCost: better.loadedCost }, features, settings)!;
     const hi = priceAdvice(model, { price: better.price * 1.3, loadedCost: better.loadedCost }, features, settings)!;
@@ -129,7 +140,8 @@ describe('priceAdvice', () => {
 
 describe('recommendationReason', () => {
   it('names the evidence behind the price', () => {
-    expect(recommendationReason(model)).toBe('Expected-profit recommendation (win model, 87 quotes)');
+    // "Suggested", so "Recommended" on the Options step only means the option the quote highlights (W4).
+    expect(recommendationReason(model)).toBe('Suggested price (win model, 87 quotes)');
   });
 });
 

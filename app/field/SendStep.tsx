@@ -240,7 +240,8 @@ export function SendStep({
         </ul>
       </Card>
 
-      {options.length ? (
+      {/* A signed estimate's quote is fixed: today's re-priced options are not what the customer saw (walk-fix review W1-a). */}
+      {options.length && !locked ? (
         <Card>
           <h3 className="mb-2 text-sm font-semibold text-slate-600">The customer will see</h3>
           <ul className="space-y-1">

@@ -813,7 +813,7 @@ function WinRate({ data }: { data: Dashboard }) {
   const jobLabel = (code: string) => jobTypeLabel(code, names);
   return (
     <section className="space-y-3">
-      <SectionHeading id="win-rate" title="Win rate and price recommendations">
+      <SectionHeading id="win-rate" title="Win rate and price suggestions">
         Every sent quote ends won, lost or expired. Once there are enough of them, a model learns how price affects the chance of winning and
         suggests the price with the best expected profit.
       </SectionHeading>
@@ -835,7 +835,7 @@ function WinRate({ data }: { data: Dashboard }) {
                 {formatPct(winModel.metrics.baseRate)}
               </Stat>
             </div>
-            <p className="text-sm text-slate-600">Estimators see a recommended price with its win probability next to their own.</p>
+            <p className="text-sm text-slate-600">Estimators see the win chance at their price, and a suggested price once past quotes show how price changes the win chance.</p>
             {winRun && !winRun.summary.trained && winRun.summary.reason ? (
               <p className="text-sm text-slate-500">
                 The last run ({formatDate(winRun.row.started_at)}) kept this model: {winRun.summary.reason}

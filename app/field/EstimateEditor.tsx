@@ -4,7 +4,7 @@ import { priceEstimate, type PricedEstimate, type Tier } from '@/lib/pricing';
 import { computeDeviationFlags } from '@/lib/learning/deviation';
 import type { DeviationFlag } from '@/lib/learning/types';
 import { db, getCachedBundle, type CachedProfile, type LocalEstimate } from '@/lib/offline/db';
-import { resolveConflict, touch, UNSENT_CHANGE_DROPPED } from '@/lib/offline/syncCore';
+import { resolveConflict, saveEdit, UNSENT_CHANGE_DROPPED } from '@/lib/offline/syncCore';
 import { draftSchema, priceableAreas, toEstimateInput, type EstimateDraft } from '@/lib/sync/draft';
 import { withDraftDefaults } from '@/lib/field/draft';
 import { ackSummary } from '@/lib/field/flags';
@@ -74,6 +74,9 @@ export function EstimateEditor({
 
   const latest = useRef<EstimateDraft | null>(null);
   const savedMutation = useRef<string | null>(null);
+  // The stored copy the editor's typing started from (adopted or last saved): a save compares the
+  // stored copy with it to tell another device's change from this phone's own (review EE-2).
+  const baseDraft = useRef<EstimateDraft | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,6 +86,7 @@ export function EstimateEditor({
     if (!record) return;
     if (savedMutation.current === null || (record.mutationId !== savedMutation.current && timer.current === null)) {
       savedMutation.current = record.mutationId;
+      baseDraft.current = record.draft;
       const adopted = withDraftDefaults(record.draft);
       latest.current = adopted;
       setDraft(adopted);
@@ -132,25 +136,21 @@ export function EstimateEditor({
     const next = latest.current;
     if (!next) return;
     const mutationId = crypto.randomUUID();
+    const base = { mutationId: savedMutation.current, draft: baseDraft.current };
     savedMutation.current = mutationId;
     let pending = false;
     await db().transaction('rw', db().estimates, async () => {
       const cur = await db().estimates.get(id);
       if (!cur || cur.syncState === 'locked') return;
-      // Server-owned fields always come from the stored record, never from the form state.
-      const merged: EstimateDraft = {
-        ...next,
-        rowVersion: cur.draft.rowVersion,
-        bundleHash: cur.draft.bundleHash,
-        lastQuote: cur.draft.lastQuote,
-        status: cur.draft.status,
-      };
+      // Server-owned fields always come from the stored record, never from the form state; a copy
+      // another device changed underneath the typing becomes a conflict, not an overwrite (EE-2).
       const updated = {
-        ...touch(cur, merged, mutationId, new Date().toISOString()),
+        ...saveEdit(cur, next, mutationId, new Date().toISOString(), base),
         summaryPrice: summaryRef.current?.price ?? null,
         summaryTier: summaryRef.current?.tier ?? null,
       };
       pending = updated.syncState === 'pending';
+      baseDraft.current = updated.draft;
       await db().estimates.put(updated);
     });
     if (pending && navigator.onLine) {
@@ -196,9 +196,15 @@ export function EstimateEditor({
     return () => {
       document.removeEventListener('visibilitychange', onHide);
       void flushIfDirty();
-      if (syncTimer.current) clearTimeout(syncTimer.current);
+      // A save still waiting for its sync goes out now rather than being dropped with the editor
+      // (walk-fix review EE-1: Back within 2.5 s of a save left it pending for up to a minute).
+      if (syncTimer.current) {
+        clearTimeout(syncTimer.current);
+        syncTimer.current = null;
+        if (navigator.onLine) requestSync();
+      }
     };
-  }, [flushIfDirty]);
+  }, [flushIfDirty, requestSync]);
 
   // After a Fix opens its step, bring the field, area or option into view (and focus a field).
   useEffect(() => {
@@ -349,6 +355,7 @@ export function EstimateEditor({
               profile={profile}
               online={online}
               editPrice={focus?.step === 'options' && focus.edit === 'price' ? (focus.tier ?? null) : null}
+              signed={headline?.signed ? { price: headline.price, tier: headline.tier } : null}
             />
           ) : null}
         </fieldset>
