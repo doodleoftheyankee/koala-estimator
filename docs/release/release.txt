@@ -669,3 +669,43 @@ deployed; the go-live steps are in section 6.
   Still the owner's: demo mode (DEMO_MODE=1, the one-tap accounts) is on; RESEND_API_KEY and
   GOOGLE_MAPS_API_KEY unset; PR #11 (multi-location) open and must be rebased before any merge;
   no calibration candidate to approve while demo data is in the database.
+
+12. GO-LIVE RECORD: NAME + PIN SIGN-IN, CREW NOTES AND THE LOAD LIST (2026-11-20, the owner:
+    "publish", "send it")
+------------------------------------------------------------
+  Before     Vercel PIN_SECRET added (sensitive, production only; never shown or written down).
+  12:2x UTC  Migration "pin_sign_in" through the Supabase MCP apply_migration, from
+             supabase/migrations/20261121000001_pin_sign_in.sql verbatim.
+  12:3x UTC  Migration "crew_load_list" from 20261121000002_crew_load_list.sql WITHOUT its three
+             no-op lines (drop constraint if exists jobs_crew_notes_length; drop trigger if exists
+             jobs_crew_notes_audit; drop policy if exists app_settings_crew_load_list): the MCP
+             tool asks for a confirmation on DROP statements that never reached the owner, and
+             none of the three objects existed (checked first), so they had nothing to drop. The
+             file is unchanged and still re-runnable as written. Checked against a reference copy
+             built from the files: crew_job_view, crew_notes_without_prices,
+             tg_job_crew_notes_audit and the load_list setting identical (md5); pin_attempts and
+             pin_device_attempts readable by the service role only. Quotes 77, unchanged (md5).
+  12:44 UTC  PR #15 (claude/release-2 at ee4e781; CI app and database green on the push and the
+             pull request) merged into main as 2d11479. Production deployment
+             dpl_HRRyPfYBQBq1vSsfmouy6NQwj1mA; /sw.js serves v15 from 12:45.
+  12:46 UTC  The team, added on the live Team page ("Add a person") by the demo Owner, each with
+             the starting PIN the owner chose, no email: Richard (owner), Shannon (office), Junior
+             (estimator), Kenny and Brian (crew, both leads of Crew A). Kenny signed in and landed
+             on /crew.
+  12:47 UTC  Demo mode off: Vercel DEMO_MODE set to 0 (production and preview; set it to 1 to
+             bring the one-tap accounts back), then a production redeploy of the same commit,
+             dpl_3HcKRpbLyfgNPh5vjxRXDcTKE6N1, READY 12:48 and aliased to
+             koala-estimator-indol.vercel.app. The three demo profiles (Richard, Erin Estimator,
+             Carlos) switched off (profiles.active = false: no role, so no data; the Team page
+             can switch them back on). Their sample customers, estimates and jobs are kept.
+  12:49 UTC  Checked on the live site: no demo section on /login and POST /auth/demo goes back
+             to /login; the names Richard, Shannon, Junior, Brian, Kenny; Richard lands on
+             /estimates and opens the Team page, Junior on /field, Brian on /crew with the Load
+             list card and no price; no console errors; Vercel runtime errors: none. Quotes 77,
+             the same md5.
+  Still the owner's: everyone keeps the starting PIN until they change it ("Change my PIN" in
+  the menu; Richard first); RESEND_API_KEY and GOOGLE_MAPS_API_KEY unset; the demo sample jobs
+  and estimates are still in the lists (deleting them is permanent, so only on the owner's
+  word); spray foam on the load list is in board feet until the owner gives a set's yield;
+  PR #11 (multi-location) open and must be rebased before any merge; rotate the keys pasted
+  earlier; the Next.js security upgrade.
