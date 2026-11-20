@@ -84,7 +84,12 @@ export function EstimateEditor({
   // (sync pull, conflict resolution, quote sent) while there are no unsaved keystrokes.
   useEffect(() => {
     if (!record) return;
-    if (savedMutation.current === null || (record.mutationId !== savedMutation.current && timer.current === null)) {
+    // A copy the customer signed is taken even mid-typing: the typing cannot be saved any more, and
+    // a read-only editor must show what was signed, not the unsent edit (walk-fix recheck W1-R2).
+    const signedUnderneath = record.syncState === 'locked' && record.mutationId !== savedMutation.current;
+    if (savedMutation.current === null || (record.mutationId !== savedMutation.current && (timer.current === null || signedUnderneath))) {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
       savedMutation.current = record.mutationId;
       baseDraft.current = record.draft;
       const adopted = withDraftDefaults(record.draft);
@@ -139,8 +144,10 @@ export function EstimateEditor({
     const base = { mutationId: savedMutation.current, draft: baseDraft.current };
     savedMutation.current = mutationId;
     let pending = false;
+    let lockedCopy: LocalEstimate | null = null;
     await db().transaction('rw', db().estimates, async () => {
       const cur = await db().estimates.get(id);
+      if (cur?.syncState === 'locked') lockedCopy = cur;
       if (!cur || cur.syncState === 'locked') return;
       // Server-owned fields always come from the stored record, never from the form state; a copy
       // another device changed underneath the typing becomes a conflict, not an overwrite (EE-2).
@@ -153,9 +160,22 @@ export function EstimateEditor({
       baseDraft.current = updated.draft;
       await db().estimates.put(updated);
     });
+    // The customer signed underneath: nothing was saved; show the signed copy (recheck W1-R2).
+    const signedCopy = lockedCopy as LocalEstimate | null;
+    if (signedCopy) {
+      savedMutation.current = signedCopy.mutationId;
+      baseDraft.current = signedCopy.draft;
+      const adopted = withDraftDefaults(signedCopy.draft);
+      latest.current = adopted;
+      setDraft(adopted);
+      return;
+    }
     if (pending && navigator.onLine) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
-      syncTimer.current = setTimeout(requestSync, 2500);
+      syncTimer.current = setTimeout(() => {
+        syncTimer.current = null;
+        requestSync();
+      }, 2500);
     }
   }, [id, requestSync]);
 

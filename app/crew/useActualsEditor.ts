@@ -58,7 +58,10 @@ export function useActualsEditor(jobId: string, requestSync: () => void) {
     }
     if (pending && navigator.onLine) {
       if (syncTimer.current) clearTimeout(syncTimer.current);
-      syncTimer.current = setTimeout(requestSync, SYNC_DELAY_MS);
+      syncTimer.current = setTimeout(() => {
+        syncTimer.current = null;
+        requestSync();
+      }, SYNC_DELAY_MS);
     }
   }, [jobId, requestSync]);
 

@@ -86,7 +86,7 @@ export function OptionsStep({
     <>
       {signed ? (
         // The cards below are priced again with today's pricing; the customer's price is fixed
-        // (walk-fix review W1-a). The star stays on the option the quote highlighted.
+        // (walk-fix review W1-a). The signed card says Signed; no card claims what the quote highlighted.
         <Alert tone="blue">
           The customer signed {signed.tier ? `${TIER_LABELS[signed.tier]} ` : ''}for {formatMoney(signed.price, { cents: 'never' })}. That price is
           fixed. The prices below are worked out again with today&apos;s pricing, for reference only.
@@ -141,7 +141,11 @@ export function OptionsStep({
           <OptionCard
             key={o.tier}
             option={o}
-            recommended={recommended?.tier === o.tier ? (recommended.picked ? 'picked' : draft.selectedTier ? 'moved' : 'default') : null}
+            // A signed estimate's stored draft may have been edited after the quote went out, so it
+            // cannot say which option the quote highlighted: the card says what was signed instead
+            // (walk-fix recheck W1-R1).
+            recommended={signed ? null : recommended?.tier === o.tier ? (recommended.picked ? 'picked' : draft.selectedTier ? 'moved' : 'default') : null}
+            signedHere={signed ? signed.tier === o.tier : null}
             onSelect={() => update((d) => ({ ...d, selectedTier: o.tier }))}
             override={draft.overrides[o.tier] ?? null}
             onOverride={(ov) => update((d) => setPriceOverride(d, o.tier, ov))}
@@ -230,6 +234,7 @@ function OptionCard({
   option: o,
   hiddenReason = null,
   recommended,
+  signedHere = null,
   onSelect,
   override,
   onOverride,
@@ -256,6 +261,8 @@ function OptionCard({
    * estimator's pick is not shown (OD6) and the recommendation moved to this option.
    */
   recommended: 'picked' | 'default' | 'moved' | null;
+  /** On a signed estimate: whether this is the option the customer signed (null: not signed). No star or Make recommended then. */
+  signedHere?: boolean | null;
   onSelect: () => void;
   override: { price: number; reason: string } | null;
   onOverride: (o: { price: number; reason: string } | null) => void;
@@ -487,17 +494,22 @@ function OptionCard({
         ) : null}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {/* The recommended card says so; tapping it keeps it recommended. Others offer the action. */}
-          <Button size="sm" variant={recommended ? 'primary' : 'secondary'} onClick={onSelect}>
-            {recommended ? (
-              <>
-                <Icon icon={Star} size="s" className={cx(recommended === 'picked' && 'fill-current')} />
-                {recommended === 'picked' ? 'Recommended' : recommended === 'moved' ? 'Recommended (your pick is not shown)' : 'Recommended (default)'}
-              </>
-            ) : (
-              'Make recommended'
-            )}
-          </Button>
+          {/* The recommended card says so; tapping it keeps it recommended. Others offer the action.
+              A signed estimate has no pick to make: its signed card says Signed. */}
+          {signedHere !== null ? (
+            signedHere ? <Badge tone="green">Signed</Badge> : null
+          ) : (
+            <Button size="sm" variant={recommended ? 'primary' : 'secondary'} onClick={onSelect}>
+              {recommended ? (
+                <>
+                  <Icon icon={Star} size="s" className={cx(recommended === 'picked' && 'fill-current')} />
+                  {recommended === 'picked' ? 'Recommended' : recommended === 'moved' ? 'Recommended (your pick is not shown)' : 'Recommended (default)'}
+                </>
+              ) : (
+                'Make recommended'
+              )}
+            </Button>
+          )}
           {changePrice}
           {detailsButton}
           {/* The quote highlights the same recommended option (lib/quotes/model.ts, recommendedTier). */}

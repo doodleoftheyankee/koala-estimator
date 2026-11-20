@@ -110,8 +110,9 @@ export function mergeRemote(
   if (!doc) return null;
   const status = asStatus(remote.status, doc.status);
   // A signed estimate's headline is what the customer signed (the server's: the signed price and
-  // option), for the list and the editor's dock (readiness walk W1). The draft keeps the option the
-  // quote highlighted: that is what the customer was shown, whatever they then signed (review W1-b).
+  // option), for the list and the editor's dock (readiness walk W1). The draft is the server's copy
+  // as it is: its pick is not rewritten to the signed option (review W1-b), and the Options step
+  // marks the signed option itself (recheck W1-R1).
   const signed = status === 'signed' && remote.headline ? remote.headline : null;
   const draft: EstimateDraft = { ...doc, status, rowVersion: remote.rowVersion };
   // The customer signed while this phone held an edit it has not sent (unfinished, refused or in
