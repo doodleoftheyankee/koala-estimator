@@ -51,6 +51,8 @@ CONF
 POSTGREST_URL="http://127.0.0.1:$PGRST_PORT" node tests/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 & pids+=($!)
 
 export NEXT_PUBLIC_SUPABASE_URL=http://localhost:$MOCK_PORT APP_URL=http://localhost:$APP_PORT NEXT_TELEMETRY_DISABLED=1 CRON_SECRET=e2e-cron-secret
+# Sign in with a name and PIN: the key PIN passwords are derived with (lib/auth/pin.ts).
+export PIN_SECRET=e2e-pin-secret
 # AI photo reading talks to the stand-in in mock-supabase.mjs instead of Anthropic.
 export ANTHROPIC_API_KEY=e2e-test-key ANTHROPIC_BASE_URL=http://localhost:$MOCK_PORT
 # Satellite lookups talk to the Roof Takeoff stand-in in the same file (it expects this partner key).

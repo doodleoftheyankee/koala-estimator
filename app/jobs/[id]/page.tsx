@@ -17,8 +17,11 @@ import { formatVariance, varianceTone } from '@/lib/jobs/variance';
 import type { ProductCode, ProductUnit } from '@/lib/pricing';
 import { ActionForm, ToggleInput } from '../../admin/pricing/ActionForm';
 import { NumberField, TextField } from '../../admin/pricing/fields';
-import { changeStatus, saveActual, saveSchedule, setExcluded, unverifyActuals, verifyActuals } from '../actions';
-import { loadCrews, loadJob } from '../data';
+import { changeStatus, saveActual, saveCrewNotes, saveSchedule, setExcluded, unverifyActuals, verifyActuals } from '../actions';
+import { loadCrewCopy, loadCrews, loadJob } from '../data';
+import { CREW_NOTES_MAX } from '@/lib/jobs/forms';
+import { dayText, jobDays, jobLoadList, qtyText } from '@/lib/jobs/loadList';
+import type { CrewJob } from '@/lib/jobs/crew';
 import { BlowerDoorCard } from './BlowerDoorCard';
 
 export const metadata: Metadata = { title: 'Job' };
@@ -38,7 +41,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const { id } = await params;
   if (!z.guid().safeParse(id).success) notFound();
   const db = await createClient();
-  const [{ job, error }, crews] = await Promise.all([loadJob(db, id), loadCrews(db)]);
+  const [{ job, error }, crews, crewCopy] = await Promise.all([loadJob(db, id), loadCrews(db), loadCrewCopy(db, id)]);
   if (!job && !error) notFound();
 
   if (!job) {
@@ -207,6 +210,34 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           </Card>
         </div>
 
+        {/* Clear direction to the crew, and exactly what they load at the shop (the crew app's own list). */}
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card aria-labelledby="crew-notes-title">
+            <h2 id="crew-notes-title" className="mb-1 text-lg font-semibold text-slate-900">
+              Notes for the crew
+            </h2>
+            <p className="mb-3 text-sm text-slate-600">The crew sees these on the job and on their load list. Never on the customer&apos;s quote.</p>
+            <div className="mb-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">From the estimator</p>
+              {job.estimatorCrewNotes ? (
+                <p className="mt-1 whitespace-pre-line text-slate-900 [overflow-wrap:anywhere]" data-testid="estimator-crew-notes">
+                  {job.estimatorCrewNotes}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">None. The estimator writes these on the estimate&apos;s Customer step.</p>
+              )}
+            </div>
+            <ActionForm action={saveCrewNotes} readOnly={false} submitLabel="Save notes for the crew">
+              <input type="hidden" name="id" value={job.id} />
+              <Field label="From the office" hint="Added after booking: the signed estimate cannot change. The crew gets them on their next sync.">
+                <Textarea name="crew_notes" rows={4} maxLength={CREW_NOTES_MAX} defaultValue={job.crewNotes ?? ''} />
+              </Field>
+            </ActionForm>
+          </Card>
+
+          <CrewLoadCard copy={crewCopy} scheduledStart={job.scheduledStart} today={today} />
+        </div>
+
         <Card className="overflow-x-auto p-0">
           <div className="p-4 pb-2">
             <h2 className="text-lg font-semibold text-slate-900">Actuals vs estimate</h2>
@@ -334,6 +365,53 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         </section>
       </main>
     </>
+  );
+}
+
+/**
+ * "What the crew loads": the job's load list as the crew app builds it (lib/jobs/loadList.ts) from
+ * the crew's own copy of the job (crew_job_view), and the owner's always-bring list.
+ */
+function CrewLoadCard({
+  copy,
+  scheduledStart,
+  today,
+}: {
+  copy: { job: Omit<CrewJob, 'actuals' | 'verified'> | null; alwaysBring: string[]; error: string | null };
+  scheduledStart: string | null;
+  today: string;
+}) {
+  const lines = copy.job ? jobLoadList(copy.job) : [];
+  const days = copy.job ? jobDays(copy.job) : 1;
+  return (
+    <Card aria-labelledby="crew-load-title">
+      <h2 id="crew-load-title" className="mb-1 text-lg font-semibold text-slate-900">
+        What the crew loads
+      </h2>
+      <p className="mb-3 text-sm text-slate-600">
+        The signed estimate&apos;s materials, added up over its areas and rounded up to whole units: exactly what the crew app lists
+        {scheduledStart ? ` for ${formatYmd(scheduledStart, today)}` : ' once the job is scheduled'}
+        {days > 1 ? ` (${dayText({ day: 1, days })}: a job over several days loads on its first day)` : ''}.
+      </p>
+      {copy.error ? <Alert tone="red">Could not load the crew&apos;s copy of this job: {copy.error}</Alert> : null}
+      {!copy.error && lines.length === 0 ? <p className="text-sm text-slate-500">No materials in the signed scope.</p> : null}
+      {lines.length ? (
+        <ul className="divide-y divide-slate-100" aria-label="Materials the crew loads">
+          {lines.map((l) => (
+            <li key={l.key} className="flex items-baseline justify-between gap-3 py-2">
+              <span className="text-slate-900">{l.name}</span>
+              <span className="shrink-0 font-semibold tabular-nums text-slate-900">{qtyText(l)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">Always bring (every job)</p>
+      {copy.alwaysBring.length ? (
+        <p className="mt-1 text-sm text-slate-700">{copy.alwaysBring.join(' · ')}</p>
+      ) : (
+        <p className="mt-1 text-sm text-slate-500">Nothing set. The owner sets this list on Pricing.</p>
+      )}
+    </Card>
   );
 }
 

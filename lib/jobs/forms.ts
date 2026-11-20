@@ -88,6 +88,23 @@ export function valuesChanged(next: Record<string, string | number | null>, stor
 
 export const jobIdForm = z.object({ id: uuidField('Job') });
 
+/** The most a note for the crew may hold (jobs.crew_notes, the estimate's crewNotes). */
+export const CREW_NOTES_MAX = 2000;
+
+/**
+ * The office's notes for the crew on a booked job (jobs.crew_notes). Line breaks are stored as the
+ * phone types them (LF) and counted once, before the length check; blank clears the notes.
+ */
+export const crewNotesForm = z.object({
+  id: uuidField('Job'),
+  crew_notes: z
+    .string()
+    .optional()
+    .transform((s) => normalizeNewlines(s ?? '').trim())
+    .pipe(z.string().max(CREW_NOTES_MAX, `Notes for the crew must be ${CREW_NOTES_MAX.toLocaleString('en-US')} characters or fewer`))
+    .transform((s) => (s === '' ? null : s)),
+});
+
 export const excludeForm = z
   .object({
     job_id: uuidField('Job'),
@@ -126,13 +143,11 @@ export interface Membership {
 
 export const crewFieldName = (crewId: string) => `crew_${crewId}`;
 
-/** Reads one person's crew choices ("crew_<id>" = none | member | lead) for the given crews. */
-export function parseMembershipForm(
+/** The crew choices on a form ("crew_<id>" = none | member | lead) for the given crews. */
+export function parseCrewChoices(
   obj: Record<string, string>,
   crewIds: readonly string[],
-): { ok: true; profileId: string; memberships: Membership[] } | { ok: false; error: string } {
-  const id = uuidField('Team member').safeParse(obj.profile_id);
-  if (!id.success) return { ok: false, error: 'Team member is missing or not valid' };
+): { ok: true; memberships: Membership[] } | { ok: false; error: string } {
   const memberships: Membership[] = [];
   for (const crewId of crewIds) {
     const raw = obj[crewFieldName(crewId)];
@@ -141,7 +156,18 @@ export function parseMembershipForm(
     if (!choice.success) return { ok: false, error: 'Pick member, lead or not in this crew' };
     if (choice.data !== 'none') memberships.push({ crewId, isLead: choice.data === 'lead' });
   }
-  return { ok: true, profileId: id.data, memberships };
+  return { ok: true, memberships };
+}
+
+/** Reads one person's crew choices ("crew_<id>" = none | member | lead) for the given crews. */
+export function parseMembershipForm(
+  obj: Record<string, string>,
+  crewIds: readonly string[],
+): { ok: true; profileId: string; memberships: Membership[] } | { ok: false; error: string } {
+  const id = uuidField('Team member').safeParse(obj.profile_id);
+  if (!id.success) return { ok: false, error: 'Team member is missing or not valid' };
+  const choices = parseCrewChoices(obj, crewIds);
+  return choices.ok ? { ok: true, profileId: id.data, memberships: choices.memberships } : choices;
 }
 
 /**

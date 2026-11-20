@@ -40,6 +40,28 @@ weekly report.
 | Win chance and a recommended price on each option (once there are enough decided quotes) | `app/field/OptionsStep.tsx`, `lib/field/priceAdvice.ts` |
 | Migration: jobs from signed quotes, crew access through functions, actuals sync, flags | `supabase/migrations/20261021000001_phase2.sql` |
 
+### Crew load list and notes for the crew
+Clear direction from the estimator to the crew, and the right materials on the truck the first
+time (no drive back to the shop, no call to the owner to bring what was missed).
+- **Notes for the crew.** The estimator writes them on the Customer step, under "Notes for the
+  quote". They are never printed on the quote, its PDF or its emails. After booking, the office
+  adds its own on the job page (the signed estimate is locked). The crew sees both, with any price
+  taken out, at the top of the job and under the job on the load list.
+- **Load list.** At the top of the crew app, for Today and Tomorrow: every material of every job
+  that starts that day, added up over areas and jobs and then rounded up once to whole units
+  (exactly what the estimate calculated, which already has the waste factor; nothing extra). A
+  material the estimator set to 0 is not listed (nothing of it is installed); one that some area
+  gives no quantity for says so ("Amount not on the estimate", or "plus an amount not on the
+  estimate" next to the others' sum). Then the owner's always-bring list (Pricing, "Load list")
+  and a blower door kit for each job whose test-out is still to do. Each line is a box to tick
+  while loading; ticks stay on the phone, work with no signal and start over each day. A material
+  is ticked at its amount: if the day's amount changes after the tick (a job moved onto or off the
+  day), the line is unticked again and says what changed. A job over several days loads on its
+  first day.
+- Where: `lib/jobs/loadList.ts` (pure), `app/crew/LoadList.tsx`, `app/crew/JobDetail.tsx`,
+  `app/jobs/[id]/page.tsx` ("Notes for the crew", "What the crew loads"), and
+  `supabase/migrations/20261121000002_crew_load_list.sql`.
+
 ### How learning works
 1. A signed quote becomes a job. The office assigns a crew and a start date on **Jobs**.
 2. On site, the crew taps **Start job**, enters material used and person-hours per area plus
@@ -123,13 +145,19 @@ under Project → Settings → Environment Variables.
 | `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite roof takeoff (optional), on each area ("Look up from the address": attic floor or roof deck, crawlspace floor, garage ceiling or wall run) and on the Roof lookup page (`/field/roof`: any address, with roofing squares, waste, bundles, roof edges, materials, a one-page print and recent lookups). Only Roof Takeoff's `/api` is used, server to server (contract v1.2; older answers still work); its own page is retired. A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button and the page say the lookup isn't set up. |
 | `CRON_SECRET` | the nightly learning run. Vercel Cron sends it automatically; without it the run is disabled. Any long random string. |
 | `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional) |
+| `PIN_SECRET` | signing in with a name and a 4-digit PIN, for staff with no work email (server only; a long random string, e.g. `openssl rand -base64 32`). Each PIN person's Supabase password is derived from their PIN with it, so nobody can try PINs against Supabase directly. Without it the sign-in page says PIN sign-in is off and only the email code works. Changing it stops every PIN until the owner resets each one on Team. Keep Supabase's **Password requirements** (Authentication → Providers → Email) at the default or "letters and digits": the derived passwords are 43 letters, digits, `-` and `_`. |
 
 ### 3. First owner account
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
   npm run bootstrap:owner -- --email you@koala.example --name "Owner Name"
 ```
-After that, invite everyone else from **Team** in the app.
+After that, add everyone else from **Team** in the app: **Add a person** for someone with no work
+email (they tap their name on the sign-in page and type a 4-digit PIN, 1234 unless you set another;
+they can change it in their menu, and **Reset PIN** on their row sets a new one and clears a lockout
+after 5 wrong PINs), or **Invite someone by email** for someone who signs in with an email code.
+5 wrong PINs in a row lock a name for 15 minutes on every phone the person has not signed in on;
+a phone they have signed in on keeps its own count, so nobody else can lock them out of it.
 
 ### 4. Replace the placeholders (owner)
 The seed data is clearly marked **placeholder**. The Pricing page shows a banner until
@@ -188,6 +216,11 @@ drives a phone-sized browser through these steps:
    actuals and complete it (and see no prices). As the office, verify the actuals.
 7. Run the nightly learning job through its cron endpoint (and check it refuses a request
    without the secret), then open the Learning page and press **Run learning now**.
+8. Load list: notes for the crew on an estimate that is signed and scheduled for today; the
+   crew's load list (summed, rounded up, always-bring, blower door kit, notes) with ticks that
+   survive a reload and no signal, and a tick made at another amount shown unticked with what
+   changed; an office note the crew gets after a sync; no price on the
+   crew's screens and no crew note on the customer's quote page or PDF.
 
 ```bash
 DATABASE_URL=postgres://postgres@localhost:5432/postgres \

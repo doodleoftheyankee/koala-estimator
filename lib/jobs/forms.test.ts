@@ -6,9 +6,11 @@ import {
   actualValues,
   canMarkLost,
   crewFieldName,
+  crewNotesForm,
   excludeForm,
   markLostForm,
   membershipChanges,
+  parseCrewChoices,
   parseMembershipForm,
   scheduleForm,
   statusForm,
@@ -103,6 +105,23 @@ describe('valuesChanged', () => {
   });
 });
 
+describe('crewNotesForm (the office\'s notes for the crew)', () => {
+  const JOB_ID = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
+  it('keeps line breaks as LF, trims, and clears on blank', () => {
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: ' Park on the street.\r\nBring the 28 ft ladder. ' })).toEqual({ id: JOB_ID, crew_notes: 'Park on the street.\nBring the 28 ft ladder.' });
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: '  ' }).crew_notes).toBeNull();
+    expect(crewNotesForm.parse({ id: JOB_ID }).crew_notes).toBeNull();
+  });
+  it('counts a line break once and refuses more than 2,000 characters', () => {
+    const full = `${'x'.repeat(999)}\r\n${'y'.repeat(1000)}`;
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: full }).crew_notes).toHaveLength(2000);
+    const r = crewNotesForm.safeParse({ id: JOB_ID, crew_notes: 'x'.repeat(2001) });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toBe('Notes for the crew must be 2,000 characters or fewer');
+    expect(crewNotesForm.safeParse({ id: 'nope', crew_notes: 'x' }).success).toBe(false);
+  });
+});
+
 describe('excludeForm', () => {
   it('needs a reason to exclude, not to include', () => {
     const id = '44444444-4444-4444-8444-444444444441';
@@ -132,6 +151,17 @@ describe('crew membership', () => {
     });
     expect(parseMembershipForm({ profile_id: PERSON, [crewFieldName(CREW_A)]: 'boss' }, [CREW_A])).toMatchObject({ ok: false });
     expect(parseMembershipForm({ profile_id: 'nope' }, [CREW_A])).toMatchObject({ ok: false });
+  });
+  it('reads the crews of someone not added yet (the team page\'s "Add a person")', () => {
+    expect(parseCrewChoices({ [crewFieldName(CREW_A)]: 'member', [crewFieldName(CREW_B)]: 'lead' }, [CREW_A, CREW_B])).toEqual({
+      ok: true,
+      memberships: [
+        { crewId: CREW_A, isLead: false },
+        { crewId: CREW_B, isLead: true },
+      ],
+    });
+    expect(parseCrewChoices({}, [CREW_A])).toEqual({ ok: true, memberships: [] });
+    expect(parseCrewChoices({ [crewFieldName(CREW_A)]: 'boss' }, [CREW_A])).toEqual({ ok: false, error: 'Pick member, lead or not in this crew' });
   });
   it('writes only the differences, for crews on the form', () => {
     const existing = [

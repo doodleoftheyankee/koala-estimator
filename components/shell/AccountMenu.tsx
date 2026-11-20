@@ -1,12 +1,13 @@
 'use client';
 // The account menu, on every staff page: who is signed in, the rest of the role's pages (phones),
-// the theme, staff tools (Design), a help line, About, and Sign out. A bottom sheet on phones; on
-// a desktop it opens beside the sidebar.
+// the theme, staff tools (Design), "Change my PIN" for someone who signs in with a PIN, a help
+// line, About, and Sign out. A bottom sheet on phones; on a desktop it opens beside the sidebar.
 import { Sheet } from '../daymark/Sheet';
 import { ThemeSwitcher } from '../daymark/Theme';
 import { cx } from '../daymark/cx';
 import { ChevronRight, Icon, Info, LifeBuoy } from '../daymark/icons';
 import { SignOutButton } from '../SignOutButton';
+import { ChangePin } from './ChangePin';
 import { formatPhone } from '@/lib/format';
 import { moreItems, type NavItem, type RoleMenu } from '@/lib/nav';
 import { Avatar, NAV_ICONS, ShellLink, useShellOnline, type ShellOrg, type ShellProfile } from './parts';
@@ -62,6 +63,8 @@ export function AccountMenu({
             {org.company ? <p className="truncate text-[15px] font-medium text-ink-3">{org.company}</p> : null}
           </div>
         </section>
+
+        {profile.pinLogin ? <ChangePin online={online} /> : null}
 
         {phonePages.length ? (
           <nav aria-label="More pages" className="lg:hidden">

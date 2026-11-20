@@ -9,6 +9,7 @@ const pw = createRequire(import.meta.url)('playwright');
 import { sign } from './jwt.mjs';
 import { drawGable, turn } from './gable.mjs';
 import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 
 const BASE = process.env.APP_URL ?? 'http://localhost:3000';
 const SHOTS = (process.env.E2E_SHOTS ?? new URL('./shots', import.meta.url).pathname).replace(/\/?$/, '/');
@@ -2037,6 +2038,571 @@ step('owner edits the rebate programs');
     unreachableStep = false;
     check(psql("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'") === '900', 'and nothing was saved');
   }
+}
+
+// ---------------------------------------------------------------- Sign in with a name and PIN
+step('PIN sign-in: the owner adds a crew person and an office person with no email, PIN 1234');
+{
+  await op.goto(BASE + '/admin/team');
+  const add = op.getByRole('region', { name: 'Add a person' });
+  await add.waitFor();
+  const pinBox = add.getByLabel('PIN');
+  check((await pinBox.inputValue()) === '1234', 'the PIN box starts at 1234');
+  await add.getByLabel('Full name').fill('Nina Crew');
+  await add.getByLabel('Role').selectOption('crew');
+  await add.getByLabel('Crew A').selectOption('member');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText('Added Nina Crew. They sign in by tapping their name and entering the PIN.').waitFor({ timeout: 15000 });
+  check(
+    psql("select role || ' ' || pin_sign_in || ' ' || active || ' ' || coalesce(email::text, 'no-email') from profiles where full_name = 'Nina Crew'") === 'crew true true no-email',
+    'Nina Crew is on the team as crew, listed for PIN sign-in, with no email',
+  );
+  check(
+    psql("select count(*) from crew_members cm join profiles p on p.id = cm.profile_id join crews c on c.id = cm.crew_id where p.full_name = 'Nina Crew' and c.name = 'Crew A' and not cm.is_lead") === '1',
+    'and a member of Crew A, chosen on the same form',
+  );
+  check(
+    psql("select count(*) from auth.users u join profiles p on p.id = u.id where p.full_name = 'Nina Crew' and u.email = 'pin.' || p.id || '@example.com'") === '1',
+    'her login is the made-up pin.<id>@example.com address',
+  );
+  for (let i = 0; i < 50 && (await add.getByLabel('Full name').inputValue()) !== ''; i++) await op.waitForTimeout(100);
+  check((await pinBox.inputValue()) === '1234' && (await add.getByLabel('Full name').inputValue()) === '', 'the form is ready for the next person, PIN back at 1234');
+  await add.getByLabel('Full name').fill('Oren Office');
+  await add.getByLabel('Role').selectOption('office');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText('Added Oren Office. They sign in by tapping their name and entering the PIN.').waitFor({ timeout: 15000 });
+  check(psql("select role || ' ' || pin_sign_in from profiles where full_name = 'Oren Office'") === 'office true', 'Oren Office is added as office');
+  await add.getByLabel('Full name').fill(' nina  crew ');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText(/Someone on the sign-in page is already called nina\s+crew\./).waitFor({ timeout: 15000 });
+  check(psql("select count(*) from profiles where lower(full_name) = 'nina crew'") === '1', 'a second "Nina Crew" is refused: two alike names on the sign-in page');
+  await op.screenshot({ path: SHOTS + '30-team-add-pin-person.png', fullPage: true });
+}
+
+step('PIN sign-in: the sign-in page lists the names, with no email');
+const pinCtx = await browser.newContext(phone);
+const pinPage = await pinCtx.newPage();
+pinPage.on('console', (m) => m.type() === 'error' && logs.push(`PIN ${m.text()} (${m.location().url})`));
+pinPage.on('pageerror', (e) => logs.push('PIN PAGEERROR ' + e.message));
+const tokenCalls = () => {
+  const f = `${process.env.E2E_STORAGE}/token-calls.log`;
+  return existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+};
+const namesList = pinPage.getByRole('region', { name: 'Tap your name' });
+const pad = pinPage.getByRole('group', { name: 'PIN pad' });
+const typePin = async (pin) => {
+  for (const d of pin) await pad.getByRole('button', { name: d, exact: true }).click();
+};
+const signInAs = async (label, pin) => {
+  await namesList.getByRole('button', { name: label, exact: true }).click();
+  await pad.waitFor();
+  await typePin(pin);
+};
+const signOut = async () => {
+  await pinPage.getByRole('button', { name: 'Me', exact: true }).click();
+  await pinPage.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Sign out' }).click();
+  await pinPage.waitForURL(BASE + '/login');
+  await namesList.waitFor();
+};
+{
+  await pinPage.goto(BASE + '/login');
+  await namesList.waitFor();
+  const labels = (await namesList.getByRole('button').allInnerTexts()).map((t) => t.trim());
+  check(JSON.stringify(labels) === JSON.stringify(['Oren · Office', 'Nina · Crew']), `the sign-in page lists the PIN people, office first: ${labels.join(', ')}`);
+  const html = await pinPage.content();
+  check(!/@example\.com|@koala\.test|pin\.[0-9a-f-]{36}/.test(html) && !/Olivia|Eddie|Carl/.test(html), 'no email or login address on the page, and nobody who signs in by email');
+  check(
+    (await pinPage.getByRole('heading', { name: 'Have a work email? Sign in with a code' }).count()) === 1 && (await pinPage.getByRole('textbox', { name: /^Work email/ }).count()) === 1,
+    'the email-code form is still there, below',
+  );
+  await pinPage.screenshot({ path: SHOTS + '31-sign-in-names.png', fullPage: true });
+}
+
+step('PIN sign-in: a wrong PIN says how many tries are left; 5 lock the name, even for the right PIN');
+{
+  await signInAs('Oren · Office', '9999');
+  await pinPage.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(true, 'a wrong PIN says "Wrong PIN. 4 tries left."');
+  await pinPage.screenshot({ path: SHOTS + '32-pin-wrong.png', fullPage: true });
+  for (const [pin, said] of [
+    ['1111', 'Wrong PIN. 3 tries left.'],
+    ['2222', 'Wrong PIN. 2 tries left.'],
+    ['3333', 'Wrong PIN. 1 try left.'],
+    ['4444', 'Too many tries. Try again in 15 minutes.'],
+  ]) {
+    await typePin(pin);
+    await pinPage.getByText(said).waitFor({ timeout: 15000 });
+  }
+  check(true, 'the next wrong PINs count down to "1 try left", and the fifth locks the name for 15 minutes');
+  check(psql("select a.failed || ' ' || (a.locked_until > now() + interval '14 minutes') from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Oren Office'") === '5 true', 'pin_attempts: 5 wrong, locked for 15 minutes');
+  const before = tokenCalls().length;
+  await typePin('1234');
+  await pinPage.getByText('Too many tries. Try again in 15 minutes.').waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/login' && tokenCalls().length === before, 'the right PIN is refused while locked, and never reaches the sign-in service');
+  await pinPage.screenshot({ path: SHOTS + '33-pin-locked.png', fullPage: true });
+  await pinPage.getByRole('button', { name: 'Back', exact: true }).click();
+  await namesList.waitFor();
+}
+
+step('PIN sign-in: the crew person signs in with 1234 and lands on the crew app');
+{
+  await signInAs('Nina · Crew', '1234');
+  await pinPage.waitForURL(BASE + '/crew', { timeout: 20000 });
+  await pinPage.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(!/\$\s?\d/.test(await pinPage.locator('body').innerText()), 'Nina lands on /crew, her home: no prices');
+  check(tokenCalls().at(-1)?.ok === true && psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '0', 'signed in through Supabase with her derived password; no wrong PINs counted');
+  const field = await pinPage.request.get(BASE + '/estimates', { maxRedirects: 0 });
+  check(field.status() === 307 && (field.headers()['location'] ?? '').includes('/no-access'), 'and a priced page sends her to "not your page"');
+  await pinPage.getByRole('button', { name: 'Me', exact: true }).click();
+  const menu = pinPage.getByRole('dialog', { name: 'Menu' });
+  const menuText = await menu.innerText();
+  check(menuText.includes('Nina Crew') && !/@example\.com|pin\./.test(menuText), 'her menu shows her name, never the made-up login address');
+  await pinPage.screenshot({ path: SHOTS + '34-crew-signed-in-menu.png' });
+}
+
+step('PIN sign-in: Change my PIN, then the old PIN no longer works');
+{
+  const menu = pinPage.getByRole('dialog', { name: 'Menu' });
+  await menu.getByRole('button', { name: 'Change my PIN' }).click();
+  await menu.getByLabel('Current PIN').fill('1235');
+  await menu.getByLabel('New PIN (4 digits)').fill('2468');
+  await menu.getByLabel('New PIN again').fill('2468');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(
+    psql("select a.failed from pin_device_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '1',
+    "a wrong current PIN is refused and counts toward the lockout (this phone's own count: she signed in on it)",
+  );
+  await menu.getByLabel('Current PIN').fill('1234');
+  await menu.getByLabel('New PIN again').fill('2469');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText("The new PINs don't match. Type the same 4 digits twice.").waitFor();
+  await menu.getByLabel('New PIN again').fill('2468');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText('Your PIN is changed. Use the new one next time you sign in.').waitFor({ timeout: 15000 });
+  check(
+    psql("select (select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew') + (select count(*) from pin_device_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew')") === '0',
+    'Change my PIN works, and the right current PIN clears the count',
+  );
+  await pinPage.screenshot({ path: SHOTS + '35-change-pin.png' });
+  await pinPage.keyboard.press('Escape');
+  await pinPage.reload();
+  await pinPage.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/crew', 'and she is still signed in on this phone');
+  await signOut();
+  await signInAs('Nina · Crew', '1234');
+  await pinPage.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/login', 'the old PIN 1234 no longer works');
+  await typePin('2468');
+  await pinPage.waitForURL(BASE + '/crew', { timeout: 20000 });
+  check(true, 'the new PIN 2468 does');
+  await signOut();
+}
+
+step("PIN sign-in: the owner's Reset PIN restores 1234 and clears the lock");
+{
+  await op.goto(BASE + '/admin/team');
+  const card = op.locator('li', { has: op.getByLabel('New PIN for Oren Office') });
+  check((await card.getByText('Locked: too many wrong PINs').count()) === 1, 'the team page shows Oren is locked out');
+  check((await card.getByText('Signs in with name and PIN').count()) === 1, 'and that he signs in with his name and PIN');
+  check((await card.getByLabel('New PIN for Oren Office').inputValue()) === '1234', 'Reset PIN offers 1234');
+  await card.getByRole('button', { name: 'Reset PIN' }).click();
+  await card.getByText('New PIN set for Oren Office. The old PIN no longer works, and any lock is cleared.').waitFor({ timeout: 15000 });
+  check(psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Oren Office'") === '0', 'the lock is cleared');
+  await op.screenshot({ path: SHOTS + '36-team-reset-pin.png', fullPage: true });
+  await signInAs('Oren · Office', '1234');
+  await pinPage.waitForURL(BASE + '/estimates', { timeout: 20000 });
+  check(true, 'Oren signs in with 1234 at once and lands on the estimates, the office home');
+  await pinCtx.close();
+}
+
+step('PIN sign-in: a stranger cannot lock a person out of the phone she signs in on');
+{
+  const ninaId = psql("select id from profiles where full_name = 'Nina Crew'");
+  const herCtx = await browser.newContext(phone);
+  const her = await herCtx.newPage();
+  her.on('console', (m) => m.type() === 'error' && logs.push(`HER ${m.text()} (${m.location().url})`));
+  her.on('pageerror', (e) => logs.push('HER PAGEERROR ' + e.message));
+  const herNames = her.getByRole('region', { name: 'Tap your name' });
+  const herPad = her.getByRole('group', { name: 'PIN pad' });
+  const herSignIn = async (pin) => {
+    await herNames.getByRole('button', { name: 'Nina · Crew', exact: true }).click();
+    await herPad.waitFor();
+    for (const d of pin) await herPad.getByRole('button', { name: d, exact: true }).click();
+  };
+  await her.goto(BASE + '/login');
+  await herSignIn('2468');
+  await her.waitForURL(BASE + '/crew', { timeout: 20000 });
+  const known = (await herCtx.cookies()).find((c) => c.name === 'koala_pin_device');
+  check(
+    Boolean(known) && known.httpOnly && known.sameSite === 'Lax' && known.path === '/' && !known.value.includes(ninaId) && known.expires > Date.now() / 1000 + 300 * 86400,
+    'signing in remembers her phone: an httpOnly cookie that lasts over a year and does not name her',
+  );
+  await her.getByRole('button', { name: 'Me', exact: true }).click();
+  await her.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Sign out' }).click();
+  await her.waitForURL(BASE + '/login');
+  await herNames.waitFor();
+  check((await herCtx.cookies()).some((c) => c.name === 'koala_pin_device' && c.value === known.value), 'signing out keeps the phone known');
+
+  // A stranger's script: no cookies, the ids read off the sign-in page, wrong PINs for her name.
+  const stranger = await pw.request.newContext({ baseURL: BASE });
+  const loginHtml = await (await stranger.get('/login')).text();
+  check(loginHtml.includes(ninaId), "the script finds her id on the sign-in page");
+  const said = [];
+  for (const pin of ['0000', '1111', '2222', '3333', '4444']) said.push((await (await stranger.post('/auth/pin', { data: { id: ninaId, pin } })).json()).message);
+  check(said.at(-1) === 'Too many tries. Try again in 15 minutes.', `5 wrong PINs from the script lock her name for strangers (${said.join(' / ')})`);
+  const right = await (await stranger.post('/auth/pin', { data: { id: ninaId, pin: '2468' } })).json();
+  check(right.ok === false && right.message === 'Too many tries. Try again in 15 minutes.', 'and the script cannot guess on: even the right PIN is refused, so guessing stays at 5 tries per 15 minutes');
+  const forged = await (await stranger.post('/auth/pin', { data: { id: ninaId, pin: '2468' }, headers: { cookie: `koala_pin_device=${known.value.split('.')[0]}.${'A'.repeat(22)}` } })).json();
+  check(forged.ok === false && forged.message === 'Too many tries. Try again in 15 minutes.', 'a made-up phone cookie does not get the script round the lock');
+  check(psql(`select failed || ' ' || (locked_until > now() + interval '14 minutes') from pin_attempts where profile_id = '${ninaId}'`) === '5 true', 'pin_attempts: her name is locked for 15 minutes');
+
+  // Her own phone counts its own wrong PINs, and the right PIN gets her in.
+  await herSignIn('1357');
+  await her.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(psql(`select failed from pin_device_attempts where profile_id = '${ninaId}'`) === '1', 'a wrong PIN on her phone says "Wrong PIN. 4 tries left.": its own count, not the locked name\'s');
+  await her.screenshot({ path: SHOTS + '37-known-phone-wrong-pin.png', fullPage: true });
+  for (const d of '2468') await herPad.getByRole('button', { name: d, exact: true }).click();
+  await her.waitForURL(BASE + '/crew', { timeout: 20000 });
+  await her.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(true, 'she signs in on her phone with the right PIN while her name is locked for strangers');
+  check(
+    psql(`select count(*) from pin_device_attempts where profile_id = '${ninaId}'`) === '0' && psql(`select failed from pin_attempts where profile_id = '${ninaId}'`) === '5',
+    "her right PIN clears her phone's count, and leaves the stranger's lock as it is",
+  );
+
+  // A phone she has never signed in on is a stranger's: it waits out the lock, or the owner resets her PIN.
+  const newCtx = await browser.newContext(phone);
+  const fresh = await newCtx.newPage();
+  fresh.on('console', (m) => m.type() === 'error' && logs.push(`NEW ${m.text()} (${m.location().url})`));
+  fresh.on('pageerror', (e) => logs.push('NEW PAGEERROR ' + e.message));
+  await fresh.goto(BASE + '/login');
+  await fresh.getByRole('region', { name: 'Tap your name' }).getByRole('button', { name: 'Nina · Crew', exact: true }).click();
+  const freshPad = fresh.getByRole('group', { name: 'PIN pad' });
+  await freshPad.waitFor();
+  for (const d of '2468') await freshPad.getByRole('button', { name: d, exact: true }).click();
+  await fresh.getByText('Too many tries. Try again in 15 minutes.').waitFor({ timeout: 15000 });
+  check(new URL(fresh.url()).pathname === '/login', 'a phone she never signed in on is held by the lock like the script');
+  await stranger.dispose();
+  await newCtx.close();
+  await herCtx.close();
+}
+
+// ---------------------------------------------------------------- Load list (notes for the crew)
+// The estimator writes notes for the crew on an estimate that is signed and scheduled for today; the
+// crew app's Load list shows today's materials summed and rounded up, the owner's always-bring list,
+// a blower door kit for the test-out still to do, and the notes; ticks survive a reload and no
+// signal; the office adds a note the crew sees after a sync; no price anywhere on the crew's
+// screens; the customer's quote page and PDF never carry the notes.
+const LOAD_CREW_NOTES = 'Gate code 4411. Dog in the back yard.\nCustomer paid the $500 deposit (about $1,200 left).';
+const LOAD_OFFICE_NOTES = 'Park on the street.\nBring the 28 ft ladder for the garage attic.';
+const { inflateSync } = await import('node:zlib');
+/** A PDF's text: each content stream inflated, its text runs decoded (as lib/quotes tests read it). */
+const pdfText = (buf) => {
+  const raw = buf.toString('latin1');
+  const out = [];
+  const re = /stream\r?\n/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const start = m.index + m[0].length;
+    const end = raw.indexOf('endstream', start);
+    let body;
+    try {
+      body = inflateSync(Buffer.from(raw.slice(start, end), 'latin1')).toString('latin1');
+    } catch {
+      continue;
+    }
+    for (const r of body.matchAll(/\[((?:<[0-9a-fA-F]*>|[-\d.\s])*)\]\s*TJ|<([0-9a-fA-F]*)>\s*Tj/g)) {
+      out.push([...(r[1] ?? `<${r[2]}>`).matchAll(/<([0-9a-fA-F]*)>/g)].map((h) => Buffer.from(h[1], 'hex').toString('latin1')).join(''));
+    }
+    re.lastIndex = end;
+  }
+  return out.join('');
+};
+const UNIT_MANY = { board_ft: 'board ft', bag: 'bags', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hours', each: 'each' };
+const UNIT_ONE = { ...UNIT_MANY, bag: 'bag', hour: 'hour' };
+const qtyWords = (q, unit) => `${q.toLocaleString('en-US')}${unit ? ` ${(q === 1 ? UNIT_ONE : UNIT_MANY)[unit]}` : ''}`;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+let loadEstimate;
+let loadJobId;
+let loadLink;
+let loadExpected = [];
+
+step('load list: the estimator writes notes for the crew on an estimate, sends it, and the customer signs');
+{
+  await page.goto(BASE + '/field');
+  await page.getByRole('heading', { name: 'Estimates' }).waitFor();
+  await page.getByRole('button', { name: 'New estimate', exact: true }).click();
+  await page.getByLabel('First name').fill('Dana');
+  await page.getByLabel('Last name').fill('Loader');
+  await page.getByLabel('Email').fill('dana@example.com');
+  await page.getByLabel('Street address').fill('7 Loading Dock Rd');
+  await page.getByLabel('ZIP').fill('19711');
+  await page.getByLabel('Notes for the quote').fill('Both attics in one visit.');
+  check((await page.getByText('Never printed on the quote. The crew sees it on the job.', { exact: true }).count()) === 1, 'the Customer step has "Notes for the crew": never printed on the quote');
+  await page.getByLabel('Notes for the crew').fill(LOAD_CREW_NOTES);
+  await page.screenshot({ path: SHOTS + '30-crew-notes-customer-step.png', fullPage: true });
+  await page.getByRole('button', { name: 'Next' }).click();
+  // Two attics: the load list adds their material up before rounding.
+  await page.getByRole('button', { name: '+ Attic' }).click();
+  await page.getByLabel('Square feet').fill('1000');
+  await page.getByRole('button', { name: '+ Attic' }).click();
+  await page.getByLabel('Square feet').fill('640');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByText('Better', { exact: true }).first().waitFor();
+  await page.getByRole('button', { name: 'Next' }).click();
+  // The drive time, from the Send checklist's Fix (readiness walk W6).
+  await page.locator('li[data-check="drive"][data-ok="no"]').getByRole('button', { name: 'Add drive time' }).click();
+  await page.locator('#drive-minutes').fill('20');
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.waitForTimeout(3500); // let auto-sync run
+  loadEstimate = psql("select e.id from estimates e join customers c on c.id = e.customer_id where c.last_name = 'Loader'");
+  await waitForDb(`select client_doc->>'crewNotes' from estimates where id = '${loadEstimate}'`, LOAD_CREW_NOTES, 'the notes for the crew sync with the estimate (client_doc.crewNotes)');
+  await page.getByRole('button', { name: /Send quote to customer/ }).click();
+  await page.getByText(/Quote v1 sent/).waitFor({ timeout: 30000 });
+  loadLink = await page.locator('a[href*="/q/"]').first().getAttribute('href');
+  check(psql(`select count(*) from quotes where estimate_id = '${loadEstimate}' and snapshot::text like '%4411%'`) === '0', 'the quote as sent (its document and frozen inputs) carries no note for the crew');
+
+  const lc = await browser.newContext(phone);
+  const lcp = await lc.newPage();
+  lcp.on('console', (m) => m.type() === 'error' && !expected(m) && logs.push('LOAD CUSTOMER ' + m.text()));
+  lcp.on('pageerror', (e) => logs.push('LOAD CUSTOMER PAGEERROR ' + e.message));
+  await lcp.goto(loadLink);
+  await lcp.getByRole('button', { name: 'Review and sign' }).waitFor();
+  const quoteText = await lcp.locator('body').innerText();
+  check(quoteText.includes('Both attics in one visit.') && !quoteText.includes('4411') && !quoteText.includes('Dog in the back yard'), "the customer's quote page shows the notes for the quote, never the notes for the crew");
+  const token = new URL(loadLink, BASE).pathname.split('/').pop();
+  const sentPdf = pdfText(Buffer.from(await (await lc.request.get(BASE + `/api/public/quotes/${token}/pdf`)).body()));
+  check(sentPdf.includes('Dana Loader') && sentPdf.includes('Both attics') && !sentPdf.includes('4411') && !sentPdf.includes('Dog in the back'), "the quote PDF prints the customer and the notes for the quote, never the notes for the crew");
+  await lcp.getByRole('button', { name: 'Review and sign' }).click();
+  await lcp.getByLabel(/full name/i).fill('Dana Loader');
+  const canvas = lcp.locator('canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  const box = await canvas.boundingBox();
+  await lcp.mouse.move(box.x + 20, box.y + box.height / 2);
+  await lcp.mouse.down();
+  for (let i = 1; i <= 12; i++) await lcp.mouse.move(box.x + 20 + i * 20, box.y + box.height / 2 + (i % 2 ? -15 : 15));
+  await lcp.mouse.up();
+  await lcp.getByRole('checkbox').check();
+  await lcp.getByRole('button', { name: /^Sign and accept/ }).click();
+  await lcp.getByRole('heading', { name: /thank you/i }).waitFor({ timeout: 30000 });
+  check(!(await lcp.locator('body').innerText()).includes('4411'), 'nor the thank-you page');
+  const signedPdf = pdfText(Buffer.from(await (await lc.request.get(BASE + `/api/public/quotes/${token}/pdf`)).body()));
+  check(signedPdf.includes('Dana Loader') && !signedPdf.includes('4411') && !signedPdf.includes('Dog in the back'), 'nor the signed PDF');
+  await lc.close();
+  loadJobId = psql(`select id from jobs where estimate_id = '${loadEstimate}'`);
+  check(/^[0-9a-f-]{36}$/.test(loadJobId), 'signing made the job');
+  // What the crew should load: each material of the signed option, added up over the two attics, then rounded up.
+  const rows = psql(
+    `select name || '|' || unit || '|' || total || '|' || areas from (
+       select crew_text_without_prices(l->>'description') as name, coalesce(l->>'unit', '') as unit, sum((l->>'qty')::numeric) as total, count(*) as areas
+         from quotes q, jsonb_array_elements(q.snapshot->'options') o, jsonb_array_elements(o->'lines') l
+        where q.estimate_id = '${loadEstimate}' and q.status = 'signed' and o->>'tier' = q.signed_tier::text and l->>'kind' = 'material'
+          and coalesce((l->>'qty')::numeric, 1) > 0 -- a quantity of 0 installs nothing: not loaded
+        group by 1, 2) x order by name`,
+  )
+    .split('\n')
+    .filter(Boolean);
+  loadExpected = rows.map((r) => {
+    const [name, unit, sum, areas] = r.split('|');
+    return { name, unit: unit || null, sum: Number(sum), areas: Number(areas), qty: Math.ceil(Math.round(Number(sum) * 1e6) / 1e6) };
+  });
+  console.log('  materials to load:', loadExpected.map((e) => `${e.name}: ${e.sum} over ${e.areas} areas -> ${qtyWords(e.qty, e.unit)}`).join('; '));
+  check(loadExpected.length > 0 && loadExpected.some((e) => e.areas === 2), 'the signed option has material in both attics');
+}
+
+step('load list: the office schedules the job for today with Crew A, and sees what the crew loads');
+{
+  // A test-in on the estimate: the crew still has the test-out to do, so the load list adds the kit.
+  psql(`insert into blower_door_tests (id, estimate_id, kind, cfm, pa, exponent, cfm50, recorded_by) values (gen_random_uuid(), '${loadEstimate}', 'test_in', 5000, 50, 0.65, 5000, '${EST.id}')`);
+  await op.goto(BASE + '/jobs/' + loadJobId);
+  await op.locator('select[name="crew_id"]').selectOption({ label: 'Crew A' });
+  await op.locator('input[name="scheduled_start"]').fill(today);
+  await op.getByRole('button', { name: 'Save schedule' }).click();
+  await waitForDb(`select (crew_id is not null)::text || ':' || scheduled_start from jobs where id = '${loadJobId}'`, `true:${today}`, 'the job is scheduled for Crew A today');
+  await op.reload();
+  const notesCard = op.getByRole('region', { name: 'Notes for the crew' });
+  check((await notesCard.getByTestId('estimator-crew-notes').innerText()).includes('Gate code 4411. Dog in the back yard.'), "the office job page shows the estimator's notes for the crew, read-only");
+  const loads = await op.getByRole('region', { name: 'What the crew loads' }).innerText();
+  check(loadExpected.every((e) => loads.includes(e.name) && loads.includes(qtyWords(e.qty, e.unit))), `and what the crew loads: ${loadExpected.map((e) => `${qtyWords(e.qty, e.unit)} ${e.name}`).join(', ')}`);
+  check(loads.includes('Ladders') && loads.includes('Insulation blower and hoses'), "with the owner's always-bring list");
+  await op.getByRole('region', { name: 'Notes for the crew' }).scrollIntoViewIfNeeded();
+  await op.screenshot({ path: SHOTS + '31-office-crew-notes.png', fullPage: true });
+}
+
+step("load list: the crew app shows today's load list, summed and rounded up, with the always-bring list, the kit and the notes");
+{
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await list.getByRole('tab', { name: 'Today' }).getAttribute('aria-selected')) === 'true', 'the Load list is at the top of the crew home, on Today');
+  for (const e of loadExpected) {
+    const row = list.getByRole('checkbox', { name: new RegExp(escapeRe(e.name)) });
+    const text = (await row.innerText()).replace(/\s+/g, ' ');
+    check(text.includes(qtyWords(e.qty, e.unit)), `"${e.name}": ${qtyWords(e.qty, e.unit)} (${e.sum} added up over ${e.areas} area${e.areas === 1 ? '' : 's'}, rounded up once)`);
+  }
+  for (const item of ['Insulation blower and hoses', 'Ladders', 'Respirators and safety glasses', 'Tarps and drop cloths', 'Utility knives and tape measure']) {
+    check((await list.getByRole('checkbox', { name: item, exact: true }).count()) === 1, `always bring: ${item}`);
+  }
+  await list.getByRole('checkbox', { name: 'Blower door kit (test-out at 7 Loading Dock Rd)' }).waitFor({ timeout: 20000 });
+  check(true, 'the estimate has a test-in and the job no test-out: "Blower door kit (test-out at 7 Loading Dock Rd)"');
+  const listText = await list.innerText();
+  check(listText.includes('Gate code 4411. Dog in the back yard.') && listText.includes('Customer paid the deposit.'), "the estimator's notes are under the job, the $ amounts taken out");
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'no $ anywhere on the crew home');
+  const api = await cpg.evaluate(async () => (await fetch('/api/crew/jobs')).text());
+  check(!/\$|price|revenue|cost/i.test(api), 'nor in what the crew app downloads');
+  // Big targets at 390 px: every box and button on the list is at least 44 px tall and wide.
+  const small = await list.evaluate((el) =>
+    [...el.querySelectorAll('button, a[href], [role=checkbox], [role=tab]')]
+      .map((b) => ({ b, r: b.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && (r.width < 44 || r.height < 44))
+      .map(({ b, r }) => `${b.textContent.trim().slice(0, 30)} ${Math.round(r.width)}x${Math.round(r.height)}`),
+  );
+  check(small.length === 0, `every tap target on the load list is at least 44 px at 390 px wide${small.length ? `: ${small.join(', ')}` : ''}`);
+  const overflow = await cpg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow <= 0, 'and nothing runs off the side of a 390 px phone');
+  await list.scrollIntoViewIfNeeded();
+  await cpg.screenshot({ path: SHOTS + '32-crew-load-list.png', fullPage: true });
+  for (const theme of ['night', 'sun']) {
+    await cpg.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+    await cpg.screenshot({ path: SHOTS + `32-crew-load-list-${theme}.png`, fullPage: true });
+  }
+  await cpg.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+  await list.getByRole('tab', { name: 'Tomorrow' }).click();
+  await list.getByText(/no job starts tomorrow/).waitFor();
+  check(true, 'Tomorrow has its own list (nothing starts tomorrow here)');
+  await list.getByRole('tab', { name: 'Today' }).click();
+}
+
+step('load list: a tick stays after a reload and with no signal');
+{
+  const list = cpg.getByTestId('load-list');
+  const first = list.getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) });
+  await first.click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('1 of'));
+  check((await first.getAttribute('aria-checked')) === 'true', `ticked "${loadExpected[0].name}" off`);
+  await cpg.reload();
+  await cpg.getByTestId('load-list').getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await cpg.getByTestId('load-list').getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) }).getAttribute('aria-checked')) === 'true', 'the tick is still there after a reload');
+  await cctx.setOffline(true);
+  offlineStep = true;
+  await cpg.reload();
+  const offlineList = cpg.getByTestId('load-list');
+  await offlineList.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await offlineList.getByRole('checkbox', { name: new RegExp(escapeRe(loadExpected[0].name)) }).getAttribute('aria-checked')) === 'true', 'with no signal the list opens with the tick');
+  await offlineList.getByRole('checkbox', { name: 'Ladders', exact: true }).click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('2 of'));
+  await cpg.reload();
+  await cpg.getByTestId('load-list').getByText('Dana Loader').waitFor({ timeout: 20000 });
+  check((await cpg.getByTestId('load-list').getByRole('checkbox', { name: 'Ladders', exact: true }).getAttribute('aria-checked')) === 'true', 'a tick made with no signal stays too');
+  check((await cpg.getByTestId('load-progress').innerText()).startsWith('2 of'), 'two lines loaded');
+  await cpg.screenshot({ path: SHOTS + '33-crew-load-list-offline.png', fullPage: true });
+  await cctx.setOffline(false);
+  offlineStep = false;
+  await cpg.evaluate(() => window.dispatchEvent(new Event('online')));
+}
+
+// Review LOAD-TICK-1: a tick holds the amount it was ticked at. The phone's stored tick is set to
+// fewer than the day needs now, as when the crew ticks the evening before and the office then moves
+// a second job onto the day: the row must not count as loaded, and must say what changed.
+step('load list: a material ticked at another amount than the day needs now shows unticked, with what changed');
+{
+  const first = loadExpected[0];
+  const was = first.qty > 1 ? Math.floor(first.qty / 3) || 1 : 2;
+  const meta = (write) =>
+    cpg.evaluate(
+      async ({ key, write }) => {
+        const db = await new Promise((res, rej) => {
+          const r = indexedDB.open('koala-crew');
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        try {
+          const tx = db.transaction('meta', 'readwrite');
+          const store = tx.objectStore('meta');
+          const row = await new Promise((res, rej) => {
+            const r = store.get(key);
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+          const amounts = Object.entries(row?.value ?? {}).filter(([, v]) => v !== null && typeof v === 'object');
+          if (write !== null && amounts.length === 1) store.put({ ...row, value: { ...row.value, [amounts[0][0]]: { ...amounts[0][1], qty: write } } });
+          await new Promise((res, rej) => {
+            tx.oncomplete = res;
+            tx.onerror = () => rej(tx.error);
+          });
+          return amounts.map(([k, v]) => ({ k, v }));
+        } finally {
+          db.close();
+        }
+      },
+      { key: `load:${CREW.id}:${today}`, write },
+    );
+  const kept = await meta(null);
+  check(kept.length === 1 && kept[0].v.qty === first.qty && kept[0].v.plusUnknown === false, `the phone keeps the tick of "${first.name}" with the amount it was ticked at (${qtyWords(first.qty, first.unit)})`);
+  await meta(was);
+  await cpg.reload();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  const row = list.getByRole('checkbox', { name: new RegExp(escapeRe(first.name)) });
+  const changed = `Changed after it was ticked: was ${qtyWords(was, first.unit)}, now ${qtyWords(first.qty, first.unit)}.`;
+  await row.getByText(changed).waitFor({ timeout: 20000 });
+  check((await row.getAttribute('aria-checked')) === 'false', `ticked at ${qtyWords(was, first.unit)}, "${first.name}" is not loaded now that the day needs ${qtyWords(first.qty, first.unit)}: "${changed}"`);
+  check((await cpg.getByTestId('load-progress').innerText()).startsWith('1 of'), 'and it is not counted as loaded (Ladders still is)');
+  await list.scrollIntoViewIfNeeded();
+  await cpg.screenshot({ path: SHOTS + '33-crew-load-list-changed.png', fullPage: true });
+  await row.click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('2 of'));
+  check((await row.getAttribute('aria-checked')) === 'true' && (await list.getByTestId('load-changed').count()) === 0, 'ticked again once the truck is checked: loaded, and the change note is gone');
+  const again = await meta(null);
+  check(again.length === 1 && again[0].v.qty === first.qty, `the tick now holds ${qtyWords(first.qty, first.unit)}`);
+}
+
+step('load list: the office adds a note for the crew; the crew sees it after a sync');
+{
+  await op.goto(BASE + '/jobs/' + loadJobId);
+  const notesCard = op.getByRole('region', { name: 'Notes for the crew' });
+  await notesCard.getByLabel(/From the office/).fill(LOAD_OFFICE_NOTES);
+  await notesCard.getByRole('button', { name: 'Save notes for the crew' }).click();
+  await notesCard.getByText('Notes saved. The crew sees them on the job after their next sync.').waitFor({ timeout: 15000 });
+  check(psql(`select crew_notes from jobs where id = '${loadJobId}'`) === LOAD_OFFICE_NOTES, 'the office saves notes for the crew on the job');
+  check(psql(`select count(*) from audit_log where action = 'job.crew_notes' and row_id = '${loadJobId}' and actor_id = '${OWNER.id}'`) === '1', 'and the change is audited with who made it');
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+  await cpg.getByRole('button', { name: 'Sync now' }).click();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Bring the 28 ft ladder for the garage attic.').waitFor({ timeout: 20000 });
+  check((await list.getByRole('note', { name: 'From the office' }).innerText()).includes('Park on the street.'), "after a sync the crew sees the office's note under the job, with the estimator's");
+  await list.getByRole('button', { name: /Dana Loader/ }).click();
+  const notes = cpg.getByRole('region', { name: 'Notes for the crew' });
+  await notes.waitFor();
+  const notesText = await notes.innerText();
+  check(notesText.includes('Gate code 4411') && notesText.includes('Park on the street.'), "the crew's job page has both notes at the top");
+  const bring = await cpg.getByRole('region', { name: 'What to bring' }).innerText();
+  check(loadExpected.every((e) => bring.includes(e.name) && bring.includes(qtyWords(e.qty, e.unit))), "and \"What to bring\" with this job's materials above the areas");
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'no $ on the crew job page');
+  await cpg.screenshot({ path: SHOTS + '34-crew-job-notes.png', fullPage: true });
+  await cpg.goto(BASE + '/crew');
+  await cpg.getByRole('heading', { name: 'Jobs' }).waitFor();
+}
+
+step('load list: the owner edits the always-bring list on Pricing; the crew gets it on the next sync');
+{
+  await op.goto(BASE + '/admin/pricing#load-list');
+  const box = op.getByLabel(/Always bring, one item per line/);
+  const before = await box.inputValue();
+  check(before.split('\n').includes('Ladders'), 'Pricing shows the always-bring list, one item per line');
+  await box.fill(`${before}\nExtension cords`);
+  const form = box.locator('xpath=ancestor::form[1]');
+  await form.getByRole('button', { name: 'Save the always-bring list' }).click();
+  await form.getByText('Saved.').waitFor({ timeout: 15000 });
+  check(psql("select value->'always_bring'->>5 from app_settings where key = 'load_list'") === 'Extension cords', 'the owner adds "Extension cords"');
+  check(psql(`select count(*) from audit_log where table_name = 'app_settings' and row_id = 'load_list' and actor_id = '${OWNER.id}'`) !== '0', 'and the change is audited with who made it');
+  await cpg.getByRole('button', { name: 'Sync now' }).click();
+  await cpg.getByTestId('load-list').getByRole('checkbox', { name: 'Extension cords', exact: true }).waitFor({ timeout: 20000 });
+  check(true, 'the crew gets it on their next sync');
+  check(!/\$/.test(await cpg.locator('body').innerText()), 'still no $ on the crew home');
 }
 
 console.log('console errors:', logs.length ? logs : 'none');

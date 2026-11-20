@@ -1,11 +1,14 @@
-// Minimal Supabase gateway for local E2E: /auth/v1/user (JWT check), /rest/v1 -> PostgREST,
-// /storage/v1 -> files on disk. Also stands in for the Anthropic Messages API (photo reads) and the
-// Roof Takeoff site (satellite lookups). Not for production.
+// Minimal Supabase gateway for local E2E: /auth/v1/user (JWT check), password sign-in and the
+// admin users API (PIN sign-in, lib/auth/pin.ts), /rest/v1 -> PostgREST, /storage/v1 -> files on
+// disk. Also stands in for the Anthropic Messages API (photo reads) and the Roof Takeoff site
+// (satellite lookups). Not for production.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { verify } from './jwt.mjs';
+import { execFileSync } from 'node:child_process';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { sign, verify } from './jwt.mjs';
 const PGRST = process.env.POSTGREST_URL ?? 'http://127.0.0.1:3001';
 const STORE = process.env.E2E_STORAGE ?? new URL('./storage/', import.meta.url).pathname;
 
@@ -89,6 +92,45 @@ const send = (res, code, body, headers = {}) => {
 };
 const readBody = (req) => new Promise((r) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
 
+// Users made through the admin API (the team page's "Add a person"): kept here with a hash of their
+// password (never the password), and in the e2e database's auth.users, which profiles reference.
+// Every password sign-in is logged (email and whether it worked), so the test can see that a
+// locked name's PIN never reached the sign-in service.
+const made = new Map(); // id -> { id, email, pw, user_metadata, created_at, updated_at }
+const refreshTokens = new Map(); // refresh token -> user id
+const pwHash = (pw) => createHash('sha256').update(String(pw)).digest('hex');
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const authError = (res, status, code, msg) => send(res, status, { code: status, error_code: code, msg });
+const authUser = (u) => ({
+  id: u.id,
+  aud: 'authenticated',
+  role: 'authenticated',
+  email: u.email,
+  email_confirmed_at: u.created_at,
+  app_metadata: { provider: 'email', providers: ['email'] },
+  user_metadata: u.user_metadata ?? {},
+  identities: [],
+  created_at: u.created_at,
+  updated_at: u.updated_at ?? u.created_at,
+});
+function authUsersTable(sql, vars) {
+  const args = [process.env.E2E_DB_URL, '-q', '-v', 'ON_ERROR_STOP=1', ...Object.entries(vars).flatMap(([k, v]) => ['-v', `${k}=${v}`])];
+  execFileSync('psql', args, { input: sql, stdio: ['pipe', 'ignore', 'inherit'] });
+}
+function session(u) {
+  const refresh = randomBytes(16).toString('hex');
+  refreshTokens.set(refresh, u.id);
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    access_token: sign({ sub: u.id, role: 'authenticated', email: u.email, aud: 'authenticated', session_id: randomUUID() }),
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: now + 3600,
+    refresh_token: refresh,
+    user: authUser(u),
+  };
+}
+
 // The e2e flow can make the database unreachable (L36): REST answers 503 as Supabase's gateway does
 // when PostgREST cannot be reached, while sign-in keeps working. POST /__e2e/rest {"down": true|false}.
 let restDown = false;
@@ -103,9 +145,75 @@ http.createServer(async (req, res) => {
     }
     if (url.pathname === '/auth/v1/user') {
       const claims = verify(auth);
+      const m = claims && made.get(claims.sub);
+      if (m) return send(res, 200, authUser(m));
       const u = claims && users.find((x) => x.id === claims.sub);
       if (!u) return send(res, 401, { code: 401, msg: 'invalid JWT' });
       return send(res, 200, { id: u.id, email: u.email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() });
+    }
+    // Password sign-in (and refreshing that session), as GoTrue answers them.
+    if (url.pathname === '/auth/v1/token' && req.method === 'POST') {
+      const body = JSON.parse((await readBody(req)).toString() || '{}');
+      if (url.searchParams.get('grant_type') === 'refresh_token') {
+        const id = refreshTokens.get(body.refresh_token);
+        refreshTokens.delete(body.refresh_token);
+        const u = id && made.get(id);
+        return u ? send(res, 200, session(u)) : authError(res, 400, 'refresh_token_not_found', 'Invalid Refresh Token: Refresh Token Not Found');
+      }
+      if (url.searchParams.get('grant_type') !== 'password') return authError(res, 400, 'validation_failed', 'unsupported grant_type');
+      const email = String(body.email ?? '').toLowerCase();
+      const u = [...made.values()].find((x) => x.email === email);
+      const ok = Boolean(u && u.pw === pwHash(body.password));
+      fs.mkdirSync(STORE, { recursive: true });
+      fs.appendFileSync(path.join(STORE, 'token-calls.log'), JSON.stringify({ email, ok }) + '\n');
+      return ok ? send(res, 200, session(u)) : authError(res, 400, 'invalid_credentials', 'Invalid login credentials');
+    }
+    if (url.pathname === '/auth/v1/logout' && req.method === 'POST') {
+      res.writeHead(204);
+      return res.end();
+    }
+    // The admin users API (service role only): create, read, update, delete.
+    if (url.pathname === '/auth/v1/admin/users' || url.pathname.startsWith('/auth/v1/admin/users/')) {
+      if (verify(auth)?.role !== 'service_role') return authError(res, 403, 'not_admin', 'User not allowed');
+      const id = decodeURIComponent(url.pathname.slice('/auth/v1/admin/users/'.length));
+      const body = ['POST', 'PUT'].includes(req.method) ? JSON.parse((await readBody(req)).toString() || '{}') : {};
+      const now = new Date().toISOString();
+      if (url.pathname === '/auth/v1/admin/users' && req.method === 'POST') {
+        const email = String(body.email ?? '').toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[a-z]+$/.test(email)) return authError(res, 400, 'validation_failed', 'Unable to validate email address: invalid format');
+        if ([...made.values()].some((x) => x.email === email) || users.some((x) => x.email === email)) {
+          return authError(res, 422, 'email_exists', 'A user with this email address has already been registered');
+        }
+        if (body.id !== undefined && !UUID_RE.test(body.id)) return authError(res, 400, 'validation_failed', 'id must be a UUID');
+        if (String(body.password ?? '').length < 6) return authError(res, 422, 'weak_password', 'Password should be at least 6 characters.');
+        const u = { id: (body.id ?? randomUUID()).toLowerCase(), email, pw: pwHash(body.password), user_metadata: body.user_metadata ?? {}, created_at: now };
+        authUsersTable("insert into auth.users (id, email) values (:'id', :'email');", { id: u.id, email: u.email });
+        made.set(u.id, u);
+        return send(res, 200, authUser(u));
+      }
+      const fixed = users.find((x) => x.id === id);
+      const u = made.get(id);
+      if (!u) {
+        if (fixed && req.method === 'GET') return send(res, 200, authUser({ ...fixed, created_at: now }));
+        return authError(res, 404, 'user_not_found', 'User not found');
+      }
+      if (req.method === 'GET') return send(res, 200, authUser(u));
+      if (req.method === 'PUT') {
+        if (body.password !== undefined) {
+          if (String(body.password).length < 6) return authError(res, 422, 'weak_password', 'Password should be at least 6 characters.');
+          u.pw = pwHash(body.password);
+          // As GoTrue: a new password signs the person out everywhere.
+          for (const [t, uid] of refreshTokens) if (uid === u.id) refreshTokens.delete(t);
+        }
+        if (body.user_metadata) u.user_metadata = body.user_metadata;
+        u.updated_at = now;
+        return send(res, 200, authUser(u));
+      }
+      if (req.method === 'DELETE') {
+        authUsersTable("delete from auth.users where id = :'id';", { id: u.id });
+        made.delete(u.id);
+        return send(res, 200, {});
+      }
     }
     if (url.pathname.startsWith('/auth/v1/')) return send(res, 404, { msg: 'not mocked: ' + url.pathname });
 

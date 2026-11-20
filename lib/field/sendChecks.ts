@@ -196,6 +196,7 @@ function otherCheck(d: EstimateDraft): SendCheck {
   if (top === 'lineOverrides' || top === 'overrides' || top === 'deviationAcks' || top === 'driveMinutesOneWay')
     return { id: 'other', ok: false, label: 'A change on the Options step is not finished (a reason may be too short).', fix: { label: 'Open Options', target: { step: 'options' } } };
   if (top === 'notes') return { id: 'other', ok: false, label: 'The notes for the quote are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'notes' } } };
+  if (top === 'crewNotes') return { id: 'other', ok: false, label: 'The notes for the crew are too long.', fix: { label: 'Shorten the notes', target: { step: 'customer', field: 'crewNotes' } } };
   return { id: 'other', ok: false, label: 'Something on this estimate is not finished.', fix: { label: 'Check the customer', target: { step: 'customer', field: 'firstName' } } };
 }
 

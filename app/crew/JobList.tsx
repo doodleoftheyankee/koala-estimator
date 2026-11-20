@@ -24,6 +24,7 @@ import {
 } from '@/components/daymark';
 import { num, plural } from '@/lib/format';
 import { useLive } from '@/app/field/hooks';
+import { LoadList } from './LoadList';
 
 /** The crew's actuals, as a status tag: icon + word + colour, like every status in the app. */
 export const ACTUALS_BADGE: Record<ActualsSyncState, { tone: TagTone; icon: LucideIcon; label: string }> = {
@@ -88,6 +89,13 @@ export function JobList({
           <Banner tone="hazard" icon={CloudOff} title="Offline." live={false}>
             Saving on this phone.{unsynced ? ` ${plural(unsynced, 'job')} will sync when you have signal.` : ''}
           </Banner>
+        </div>
+      ) : null}
+
+      {/* What to load at the shop for today's and tomorrow's jobs, at the top (works with no signal). */}
+      {jobs.length ? (
+        <div className="px-3 pt-4">
+          <LoadList ownerId={profile.userId} jobs={jobs} today={today} online={online} onOpen={onOpen} />
         </div>
       ) : null}
 

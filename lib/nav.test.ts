@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Role } from '@/lib/pricing';
-import { activeHref, allItems, initials, isWithin, menuFor, moreItems, phoneTabs } from './nav';
+import { activeHref, allItems, initials, isWithin, menuFor, moreItems, phoneTabs, roleHome } from './nav';
 
 const ROLES: Role[] = ['owner', 'office', 'estimator', 'crew'];
 const ROOT = join(import.meta.dirname, '..');
@@ -18,6 +18,11 @@ function pageRoles(href: string): Role[] {
 }
 
 describe('the app menu', () => {
+  it('sends each role home after signing in: a crew to its jobs, never a priced page', () => {
+    expect(ROLES.map(roleHome)).toEqual(['/estimates', '/estimates', '/field', '/crew']);
+    for (const role of ROLES) expect(pageRoles(roleHome(role)), role).toContain(role);
+  });
+
   it.each(ROLES)('never offers %s a page that sends them away', (role) => {
     for (const item of allItems(menuFor(role))) {
       expect(pageRoles(item.href), `${role} → ${item.href}`).toContain(role);

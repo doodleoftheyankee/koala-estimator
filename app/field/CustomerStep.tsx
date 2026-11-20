@@ -96,6 +96,16 @@ export function CustomerStep({ draft, update }: { draft: EstimateDraft; update: 
           {/* The id is where the checklist's "Shorten the notes" lands; 5,000 is the draft's own limit (review B flow-B5). */}
           <Textarea id="customer-notes" rows={3} maxLength={5000} value={draft.notes} onChange={(e) => update((d) => ({ ...d, notes: e.target.value }))} />
         </Field>
+        {/* Clear direction to the crew (the load list, the crew's job page): never on the quote. */}
+        <Field label="Notes for the crew" hint="Never printed on the quote. The crew sees it on the job." className="mt-3">
+          <Textarea
+            id="customer-crewNotes"
+            rows={3}
+            maxLength={2000}
+            value={draft.crewNotes ?? ''}
+            onChange={(e) => update((d) => ({ ...d, crewNotes: e.target.value }))}
+          />
+        </Field>
       </Card>
     </>
   );

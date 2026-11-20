@@ -49,9 +49,20 @@ export function Toggle({ checked, onChange, label, hint }: { checked: boolean; o
 }
 
 /** A plate: surface, edge, 16px radius, padded. */
-export function Card({ children, className, id }: { children: ReactNode; className?: string; id?: string }) {
+export function Card({
+  children,
+  className,
+  id,
+  'aria-labelledby': labelledBy,
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+  /** Names the card (a region) after its heading. */
+  'aria-labelledby'?: string;
+}) {
   return (
-    <DmCard className={className} id={id}>
+    <DmCard className={className} id={id} aria-labelledby={labelledBy}>
       {children}
     </DmCard>
   );

@@ -14,6 +14,21 @@ import {
 
 const CREW = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
 
+describe('parseSettingsForm: the load list (Pricing, "Always bring")', () => {
+  it('saves one item per line as load_list.always_bring, on its own card', () => {
+    expect(parseSettingsForm({ 'load_list.always_bring': 'Ladders\r\n\nTarps and drop cloths\n' })).toEqual({
+      ok: true,
+      values: { load_list: { always_bring: ['Ladders', 'Tarps and drop cloths'] } },
+    });
+    expect(parseSettingsForm({ 'load_list.always_bring': '' })).toEqual({ ok: true, values: { load_list: { always_bring: [] } } });
+  });
+  it('refuses an item too long to read on a phone', () => {
+    const r = parseSettingsForm({ 'load_list.always_bring': 'x'.repeat(200) });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error).toMatch(/^Always bring: keep each item under 120 characters/);
+  });
+});
+
 describe('parseSettingsForm', () => {
   it('stores percentages as fractions and numbers as numbers', () => {
     const r = parseSettingsForm({

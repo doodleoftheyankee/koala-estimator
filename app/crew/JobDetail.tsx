@@ -15,6 +15,8 @@ import { ActualsForm } from './ActualsForm';
 import { ActualsTag } from './JobList';
 import { useActualsEditor } from './useActualsEditor';
 import { BlowerDoorLink } from '@/app/field/blower-door/BlowerDoorLink';
+import { jobDays, jobLoadList, notesOf, PLUS_UNKNOWN, qtyText } from '@/lib/jobs/loadList';
+import { CrewNotesBlock, hasNotes } from './CrewNotes';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
 
@@ -125,6 +127,16 @@ export function JobDetail({
       </header>
 
       <div className="space-y-3 p-3">
+        {/* Clear direction first: what the estimator and the office want the crew to know. */}
+        {hasNotes(notesOf(job)) ? (
+          <Card aria-labelledby="crew-notes-title">
+            <h2 id="crew-notes-title" className="mb-2 text-[19px] leading-snug font-extrabold text-ink">
+              Notes for the crew
+            </h2>
+            <CrewNotesBlock notes={notesOf(job)} />
+          </Card>
+        ) : null}
+
         <Card>
           <p className="text-lg font-semibold text-slate-900">{job.address.street}</p>
           <p className="text-slate-700">
@@ -167,6 +179,8 @@ export function JobDetail({
             ) : null}
           </Alert>
         ) : null}
+
+        <WhatToBring job={job} />
 
         <h2 className="px-1 pt-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Scope</h2>
         {job.areas.map((a) => (
@@ -256,6 +270,40 @@ function StatusPanel({
       {!online ? (
         <p className="mt-2 text-center text-sm text-amber-800">Starting and completing a job need signal. Your actuals are saved on this phone.</p>
       ) : null}
+    </Card>
+  );
+}
+
+/** This job's load list: every material of its scope, summed over the areas and rounded up. */
+function WhatToBring({ job }: { job: CrewJob }) {
+  const lines = jobLoadList(job);
+  const days = jobDays(job);
+  return (
+    <Card aria-labelledby="what-to-bring-title">
+      <h2 id="what-to-bring-title" className="text-[19px] leading-snug font-extrabold text-ink">
+        What to bring
+      </h2>
+      <p className="mt-0.5 text-[15px] leading-snug font-medium text-ink-2">
+        What the estimate calculated for this job, added up over its areas and rounded up to whole units
+        {days > 1 ? `. A ${days}-day job: it all loads on day 1.` : '.'}
+      </p>
+      {lines.length ? (
+        <ul className="mt-2 divide-y divide-line">
+          {lines.map((l) => (
+            <li key={l.key} className="flex min-h-12 items-center justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block text-[17px] leading-snug font-bold text-ink [overflow-wrap:anywhere]">{l.name}</span>
+                {l.plusUnknown ? <span className="block text-[15px] leading-snug font-semibold text-ink-2">{PLUS_UNKNOWN}</span> : null}
+              </span>
+              <span className={l.qty === null ? 'shrink-0 text-right text-[15px] font-semibold text-ink-2' : 'gauge-m shrink-0 text-right text-[22px] text-ink'}>
+                {qtyText({ qty: l.qty, unit: l.unit })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-[15px] font-medium text-ink-2">No materials in the signed scope.</p>
+      )}
     </Card>
   );
 }

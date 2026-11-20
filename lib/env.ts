@@ -24,6 +24,12 @@ export const serverEnv = {
   roofTakeoffKey: () => process.env.ROOF_TAKEOFF_KEY?.trim() || null,
   /** Shared secret Vercel Cron sends as `Authorization: Bearer <CRON_SECRET>`. Unset = cron endpoints refuse to run. */
   cronSecret: () => process.env.CRON_SECRET || null,
+  /**
+   * The key PIN passwords are derived with (lib/auth/pin.ts). Unset = signing in with a name and
+   * PIN is off (the email code still works). Changing it stops every PIN working until the owner
+   * resets each one.
+   */
+  pinSecret: () => process.env.PIN_SECRET?.trim() || null,
   /** Where the nightly job reports failures (and, in Phase 4, the weekly owner report). */
   ownerReportEmail: () => process.env.OWNER_REPORT_EMAIL || null,
 };

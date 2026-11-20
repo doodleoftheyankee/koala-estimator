@@ -45,7 +45,7 @@ end $$;
 update app_settings set value = :'seed_branding'::jsonb, description = 'PLACEHOLDER — PDF branding' where key = 'branding';
 update app_settings set value = to_jsonb(:'seed_terms'::text), description = 'Terms printed on every quote — PLACEHOLDER, owner to replace' where key = 'quote_terms';
 update app_settings set value = '"Workmanship warranty — PLACEHOLDER, owner to replace."'::jsonb where key = 'warranty_text';
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select value from app_settings where key = 'branding')
          = '{"company":"Koala Insulation","license":null,"phone":null,"primary_color":null,"logo_path":null}'::jsonb,
@@ -58,7 +58,7 @@ end $$;
 
 -- Running it again changes nothing.
 create temp table od_after_first as select key, value, description from app_settings where key in ('branding', 'quote_terms', 'warranty_text');
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select count(*) from app_settings s join od_after_first f using (key)
            where s.value is distinct from f.value or s.description is distinct from f.description) = 0,
@@ -75,7 +75,7 @@ update app_settings set value = '{"company":"Koala Insulation of Newark","licens
 update app_settings set value = '"Our own terms."'::jsonb, description = 'Terms printed on every quote' where key = 'quote_terms';
 update app_settings set value = '"Workmanship warranty: 10 years."'::jsonb where key = 'warranty_text';
 create temp table od_owner as select key, value, description from app_settings where key in ('branding', 'quote_terms', 'warranty_text');
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select value->>'company' || ' / ' || (value->>'phone') from app_settings where key = 'branding')
          = 'Koala Insulation of Newark / (555) 010-0199',
@@ -91,7 +91,7 @@ end $$;
 -- with its PLACEHOLDER still in it but edited, are the owner's.
 update app_settings set value = to_jsonb(replace(:'seed_terms'::text, 'Quote valid', 'Quote is valid')) where key = 'quote_terms';
 update app_settings set value = '"Workmanship warranty — PLACEHOLDER, owner to replace. Two years."'::jsonb where key = 'warranty_text';
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select value #>> '{}' from app_settings where key = 'quote_terms') like 'Quote is valid%Koala Insulation of Newark%',
     'edited terms are not the seed: kept';
@@ -187,7 +187,7 @@ reset role;
 
 -- Running the migration again keeps every request and its cost; a database without the column gets it.
 create temp table rb_before as select string_agg(id::text || status || coalesce(loaded_cost::text, '-'), ',' order by id) as s from price_approvals;
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select s from rb_before) = (select string_agg(id::text || status || coalesce(loaded_cost::text, '-'), ',' order by id) from price_approvals),
     'requests and their costs are kept on a second run';
