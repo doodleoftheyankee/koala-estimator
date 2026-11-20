@@ -4,8 +4,9 @@
 // opens with no signal. Each material is the estimate's quantity summed over areas and jobs and
 // rounded up to a whole unit (owner decision: exactly what the estimate calculated, no extra). Then
 // the owner's always-bring list and a blower door kit for each job whose test-out is still to do,
-// each a box to tick while loading (ticks stay on this phone, per day). Then each job's short
-// header with the estimator's and the office's notes. Never a price.
+// each a box to tick while loading (ticks stay on this phone, per day; a material's tick holds the
+// amount it was ticked at, so it shows unticked, with what changed, once the day's amount differs).
+// Then each job's short header with the estimator's and the office's notes. Never a price.
 import { useEffect, useState, type ReactNode } from 'react';
 import { ALWAYS_BRING_KEY, crewDb, type CachedAlwaysBring, type LocalJob } from '@/lib/offline/crewDb';
 import { blowerDoorDb, type LocalContext } from '@/lib/offline/blowerDoor';
@@ -14,11 +15,16 @@ import { refreshBlowerDoorReadings, toggleLoaded } from '@/lib/offline/crewLoad'
 import {
   alwaysBringLines,
   blowerDoorKitLine,
+  changedText,
   dayLoadList,
   dayText,
+  isTicked,
   loadDates,
+  loadProgress,
   needsBlowerDoorKit,
+  PLUS_UNKNOWN,
   qtyText,
+  tickedBefore,
   ticksKey,
   type DayLoad,
   type EquipmentLine,
@@ -74,10 +80,9 @@ export function LoadList({ ownerId, jobs, today, online, onOpen }: { ownerId: st
     .map(blowerDoorKitLine);
   const equipment: EquipmentLine[] = day.jobs.length ? [...kitLines, ...alwaysBringLines(always?.items ?? [])] : [];
 
-  const total = day.lines.length + equipment.length;
-  const done = [...day.lines, ...equipment].filter((l) => ticks[l.key]).length;
-  const toggle = (lineKey: string) => {
-    toggleLoaded(ownerId, date, lineKey, today).catch((e) => console.error('[load list] could not keep the tick on this phone', e));
+  const { done, total } = loadProgress(day.lines, equipment, ticks);
+  const toggle = (line: LoadLine | EquipmentLine) => {
+    toggleLoaded(ownerId, date, line, today).catch((e) => console.error('[load list] could not keep the tick on this phone', e));
   };
 
   return (
@@ -113,7 +118,7 @@ export function LoadList({ ownerId, jobs, today, online, onOpen }: { ownerId: st
   );
 }
 
-function DayBody({
+export function DayBody({
   day,
   equipment,
   ticks,
@@ -124,7 +129,7 @@ function DayBody({
   day: DayLoad;
   equipment: EquipmentLine[];
   ticks: Ticks;
-  onToggle: (key: string) => void;
+  onToggle: (line: LoadLine | EquipmentLine) => void;
   onOpen: (id: string) => void;
   when: Day;
 }) {
@@ -135,7 +140,7 @@ function DayBody({
       {day.lines.length ? (
         <Group title="Materials" hint="What the estimate calculated, added up and rounded up to whole units.">
           {day.lines.map((l) => (
-            <MaterialRow key={l.key} line={l} jobs={day.jobs.length} checked={Boolean(ticks[l.key])} onToggle={() => onToggle(l.key)} />
+            <MaterialRow key={l.key} line={l} jobs={day.jobs.length} ticks={ticks} onToggle={() => onToggle(l)} />
           ))}
         </Group>
       ) : day.jobs.length ? (
@@ -145,7 +150,7 @@ function DayBody({
       {equipment.length ? (
         <Group title="Always bring">
           {equipment.map((e) => (
-            <CheckRow key={e.key} checked={Boolean(ticks[e.key])} onToggle={() => onToggle(e.key)}>
+            <CheckRow key={e.key} checked={isTicked(ticks, e)} onToggle={() => onToggle(e)}>
               <span className="block text-[17px] leading-snug font-bold text-ink">{e.text}</span>
             </CheckRow>
           ))}
@@ -218,18 +223,29 @@ function CheckRow({ checked, onToggle, children }: { checked: boolean; onToggle:
   );
 }
 
-function MaterialRow({ line, jobs, checked, onToggle }: { line: LoadLine; jobs: number; checked: boolean; onToggle: () => void }) {
+/**
+ * A material to tick off. Ticked at another amount than it says now (a job moved onto or off the
+ * day after the tick), it shows unticked with what changed, so the truck is checked again.
+ */
+function MaterialRow({ line, jobs, ticks, onToggle }: { line: LoadLine; jobs: number; ticks: Ticks; onToggle: () => void }) {
+  const was = tickedBefore(ticks, line);
   return (
-    <CheckRow checked={checked} onToggle={onToggle}>
+    <CheckRow checked={isTicked(ticks, line)} onToggle={onToggle}>
       <span className="min-w-0 flex-1">
         <span className="block text-[17px] leading-snug font-bold text-ink [overflow-wrap:anywhere]">{line.name}</span>
         {jobs > 1 ? <span className="block text-[15px] font-medium text-ink-2">{line.jobIds.length === jobs ? 'All the jobs' : `For ${plural(line.jobIds.length, 'job')}`}</span> : null}
+        {line.plusUnknown ? <span className="block text-[15px] leading-snug font-semibold text-ink-2">{PLUS_UNKNOWN}</span> : null}
+        {was ? (
+          <span className="mt-0.5 block text-[15px] leading-snug font-bold text-warn" data-testid="load-changed">
+            {changedText(was, line)}
+          </span>
+        ) : null}
       </span>
       {line.qty === null ? (
         <span className="max-w-[9rem] shrink-0 text-right text-[15px] leading-snug font-semibold text-ink-2">{qtyText(line)}</span>
       ) : (
         <span className="gauge-m shrink-0 text-right text-[22px] text-ink" data-testid="load-qty">
-          {qtyText(line)}
+          {qtyText({ qty: line.qty, unit: line.unit })}
         </span>
       )}
     </CheckRow>

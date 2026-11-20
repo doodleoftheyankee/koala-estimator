@@ -74,7 +74,7 @@ export interface LocalJob {
 /**
  * meta rows: 'profile' (who last used the crew app here), ALWAYS_BRING_KEY (the owner's
  * always-bring list, from GET /api/crew/jobs) and one row per person and day of load list ticks
- * (lib/jobs/loadList.ts ticksKey: line key -> true), so ticking works with no signal and a new day
+ * (lib/jobs/loadList.ts ticksKey: line key -> its tick, a material's at its amount), so ticking works with no signal and a new day
  * starts empty.
  */
 interface MetaRow {

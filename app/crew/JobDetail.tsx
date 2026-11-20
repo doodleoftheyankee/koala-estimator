@@ -15,7 +15,7 @@ import { ActualsForm } from './ActualsForm';
 import { ActualsTag } from './JobList';
 import { useActualsEditor } from './useActualsEditor';
 import { BlowerDoorLink } from '@/app/field/blower-door/BlowerDoorLink';
-import { jobDays, jobLoadList, notesOf, qtyText } from '@/lib/jobs/loadList';
+import { jobDays, jobLoadList, notesOf, PLUS_UNKNOWN, qtyText } from '@/lib/jobs/loadList';
 import { CrewNotesBlock, hasNotes } from './CrewNotes';
 
 type Message = { tone: 'red' | 'green' | 'amber'; text: string; blockers?: string[] };
@@ -291,8 +291,13 @@ function WhatToBring({ job }: { job: CrewJob }) {
         <ul className="mt-2 divide-y divide-line">
           {lines.map((l) => (
             <li key={l.key} className="flex min-h-12 items-center justify-between gap-3 py-2">
-              <span className="min-w-0 text-[17px] leading-snug font-bold text-ink [overflow-wrap:anywhere]">{l.name}</span>
-              <span className={l.qty === null ? 'shrink-0 text-right text-[15px] font-semibold text-ink-2' : 'gauge-m shrink-0 text-right text-[22px] text-ink'}>{qtyText(l)}</span>
+              <span className="min-w-0">
+                <span className="block text-[17px] leading-snug font-bold text-ink [overflow-wrap:anywhere]">{l.name}</span>
+                {l.plusUnknown ? <span className="block text-[15px] leading-snug font-semibold text-ink-2">{PLUS_UNKNOWN}</span> : null}
+              </span>
+              <span className={l.qty === null ? 'shrink-0 text-right text-[15px] font-semibold text-ink-2' : 'gauge-m shrink-0 text-right text-[22px] text-ink'}>
+                {qtyText({ qty: l.qty, unit: l.unit })}
+              </span>
             </li>
           ))}
         </ul>

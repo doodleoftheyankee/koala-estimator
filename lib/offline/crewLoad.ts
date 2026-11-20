@@ -3,17 +3,20 @@
 // per person and day, so it works with no signal and a new day starts empty) and the blower door
 // readings of the jobs on it (the tool's own store, filled from the existing price-free
 // GET /api/blower-door/tests while there is signal).
-import { staleTickKeys, ticksKey, toggleTick, type Ticks } from '@/lib/jobs/loadList';
+import { staleTickKeys, ticksKey, tickOf, toggleTick, type EquipmentLine, type LoadLine, type Ticks } from '@/lib/jobs/loadList';
 import { fetchContext } from './blowerDoor';
 import { crewDb } from './crewDb';
 
-/** Ticks a line off, or back on. Drops the ticks of days before `today` as it goes. */
-export async function toggleLoaded(ownerId: string, date: string, lineKey: string, today: string): Promise<void> {
+/**
+ * Ticks a line off, or back on: a material is ticked at the amount it says now (so the tick no
+ * longer counts once the amount changes). Drops the ticks of days before `today` as it goes.
+ */
+export async function toggleLoaded(ownerId: string, date: string, line: LoadLine | EquipmentLine, today: string): Promise<void> {
   const db = crewDb();
   await db.transaction('rw', db.meta, async () => {
     const key = ticksKey(ownerId, date);
     const current = ((await db.meta.get(key))?.value as Ticks | undefined) ?? {};
-    await db.meta.put({ key, value: toggleTick(current, lineKey) });
+    await db.meta.put({ key, value: toggleTick(current, line.key, tickOf(line)) });
     const stale = staleTickKeys((await db.meta.toCollection().primaryKeys()) as string[], ownerId, today);
     if (stale.length) await db.meta.bulkDelete(stale);
   });

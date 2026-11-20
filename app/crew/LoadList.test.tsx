@@ -4,9 +4,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { CrewJob } from '@/lib/jobs/crew';
+import type { CrewJob, ScopeLine } from '@/lib/jobs/crew';
+import { alwaysBringLines, dayLoadList, type Ticks } from '@/lib/jobs/loadList';
 import type { LocalJob } from '@/lib/offline/crewDb';
-import { LoadList } from './LoadList';
+import { DayBody, LoadList } from './LoadList';
 
 const TODAY = '2026-11-20';
 
@@ -77,5 +78,63 @@ describe('crew Load list', () => {
     expect(html).toContain('no job starts today');
     expect(html).toContain('Nothing to load for today.');
     expect(html).toMatch(/role="tab"[^>]*min-h-\[52px\]/);
+  });
+});
+
+/** One day's list as the card shows it, with the ticks this phone has stored for the day. */
+const renderDay = (jobs: LocalJob[], ticks: Ticks) =>
+  renderToStaticMarkup(
+    createElement(DayBody, {
+      day: dayLoadList(
+        jobs.map((j) => j.job),
+        TODAY,
+      ),
+      equipment: alwaysBringLines(['Ladders']),
+      ticks,
+      onToggle: () => {},
+      onOpen: () => {},
+      when: 'today',
+    }),
+  );
+const boxOf = (html: string, name: string) => new RegExp(`<button[^>]*role="checkbox"[^>]*>(?:(?!</button>).)*${name}`).exec(html)?.[0] ?? '';
+const words = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+describe('crew Load list: a tick holds the amount it was loaded at (review LOAD-TICK-1)', () => {
+  const KEY = 'm:cellulose|bag|blown cellulose';
+
+  it('a material ticked at 20 bags is not ticked when the day now needs 63, and says what changed', () => {
+    const html = renderDay([localJob({})], { [KEY]: { qty: 20, plusUnknown: false } });
+    const box = boxOf(html, 'Blown cellulose');
+    expect(box).toContain('aria-checked="false"');
+    expect(words(html)).toContain('Changed after it was ticked: was 20 bags, now 63 bags.');
+  });
+
+  it('ticked at 63 bags it is loaded, with no change note; a thing to bring stays ticked as it was', () => {
+    const html = renderDay([localJob({})], { [KEY]: { qty: 63, plusUnknown: false }, 'a:ladders': true });
+    expect(boxOf(html, 'Blown cellulose')).toContain('aria-checked="true"');
+    expect(boxOf(html, 'Ladders')).toContain('aria-checked="true"');
+    expect(html).not.toContain('Changed after it was ticked');
+  });
+});
+
+describe('crew Load list: a material set to 0 on the estimate is not loaded (review LOAD-ZERO-1)', () => {
+  const withScope = (extra: ScopeLine[][]) =>
+    localJob({
+      areas: localJob({}).job.areas.map((a, i) => ({ ...a, scope: [...a.scope, ...(extra[i] ?? [])] })),
+    });
+
+  it('leaves the material out: no row, no box, not counted', () => {
+    const zero: ScopeLine = { product: 'air_sealing', kind: 'material', description: 'Air sealing foam', qty: 0, unit: 'sqft', hours: null };
+    const html = render([withScope([[zero], [zero]])]);
+    expect(html).not.toContain('Air sealing foam');
+    expect(html).not.toContain('Amount not on the estimate');
+    expect(html).toContain('0 of 1 loaded');
+  });
+
+  it('keeps the part of a material with no amount on the estimate next to the part with one', () => {
+    const unknown: ScopeLine = { product: 'cellulose', kind: 'material', description: 'Blown cellulose', qty: null, unit: 'bag', hours: null };
+    const html = words(renderDay([withScope([[], [unknown]])], {}));
+    expect(html).toContain('63 bags');
+    expect(html).toContain('Plus an amount not on the estimate');
   });
 });

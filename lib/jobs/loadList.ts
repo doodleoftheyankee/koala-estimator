@@ -6,8 +6,13 @@
 // the waste factor), rounded UP to whole units, with no extra percentage. Every material line of
 // every area of every job that starts that day is summed by material name and unit first, then
 // rounded up once (two areas of 31.4 bags load 63 bags, not 64). Labor and removal lines are hours,
-// not things to load, and are left out. A day is the job's scheduled start date in the business
-// time zone (lib/jobs/dates.ts); a job planned over several days loads on its first day only.
+// not things to load, and are left out, and so is a material line whose quantity the estimator set
+// to 0 (nothing of it is installed; the engine keeps the line so the quantity can be changed back).
+// A day is the job's scheduled start date in the business time zone (lib/jobs/dates.ts); a job
+// planned over several days loads on its first day only.
+//
+// A tick on the phone holds the amount it was ticked at, so a material ticked at 20 bags is not
+// "loaded" once the day says 50 (a job moved onto the day after the crew ticked it).
 //
 // Built from the crew app's own copy of its jobs (crew_job_view: quantities and words only, never a
 // price), so it works with no signal. Pure.
@@ -28,13 +33,15 @@ export type LoadSourceJob = Pick<CrewJob, 'jobId' | 'status' | 'scheduledStart' 
 
 /** One material to load: the sum over areas and jobs, rounded up to a whole unit. */
 export interface LoadLine {
-  /** Stable key for ticking it off on the phone: the same material, name and unit every day. */
+  /** Stable key of the line on the phone: the same material, name and unit every day (a tick also holds its amount). */
   key: string;
   product: ProductCode;
   name: string;
   unit: ProductUnit | null;
   /** Whole units to load; null when no area of the scope gives a quantity. */
   qty: number | null;
+  /** `qty` is what the areas with a quantity add up to, and some other area has this material with none. */
+  plusUnknown: boolean;
   /** The jobs that need it, in the day's order. */
   jobIds: string[];
 }
@@ -107,21 +114,28 @@ const roundUp = (n: number) => Math.ceil(Math.round(n * 1e6) / 1e6);
 const lineKey = (product: ProductCode, name: string, unit: ProductUnit | null) =>
   `m:${product}|${unit ?? ''}|${name.trim().replace(/\s+/g, ' ').toLowerCase()}`;
 
-/** Every material line of these jobs' scopes, summed by material and unit, then rounded up. */
+/**
+ * Every material line of these jobs' scopes, summed by material and unit, then rounded up. A line
+ * with a quantity of 0 (or less) installs nothing and is left out; a line with no quantity marks its
+ * material as having an amount the estimate does not give (on its own, or on top of the others' sum).
+ */
 function sumMaterials(jobs: readonly LoadSourceJob[]): LoadLine[] {
-  const acc = new Map<string, LoadLine & { sum: number | null; order: number }>();
+  const acc = new Map<string, Omit<LoadLine, 'qty' | 'plusUnknown'> & { sum: number | null; unknown: boolean; order: number }>();
   for (const job of jobs) {
     for (const area of job.areas) {
       for (const line of area.scope) {
         if (line.kind !== 'material') continue;
+        const qty = line.qty !== null && Number.isFinite(line.qty) ? line.qty : null;
+        if (qty !== null && qty <= 0) continue;
         const name = withoutPrices(line.description).replace(/\s+/g, ' ').trim() || 'Material';
         const key = lineKey(line.product, name, line.unit);
         let row = acc.get(key);
         if (!row) {
-          row = { key, product: line.product, name, unit: line.unit, qty: null, jobIds: [], sum: null, order: acc.size };
+          row = { key, product: line.product, name, unit: line.unit, jobIds: [], sum: null, unknown: false, order: acc.size };
           acc.set(key, row);
         }
-        if (line.qty !== null && Number.isFinite(line.qty) && line.qty > 0) row.sum = (row.sum ?? 0) + line.qty;
+        if (qty === null) row.unknown = true;
+        else row.sum = (row.sum ?? 0) + qty;
         if (!row.jobIds.includes(job.jobId)) row.jobIds.push(job.jobId);
       }
     }
@@ -134,7 +148,15 @@ function sumMaterials(jobs: readonly LoadSourceJob[]): LoadLine[] {
         (a.unit ?? '').localeCompare(b.unit ?? '') ||
         a.order - b.order,
     )
-    .map(({ key, product, name, unit, jobIds, sum }) => ({ key, product, name, unit, qty: sum === null ? null : roundUp(sum), jobIds }));
+    .map(({ key, product, name, unit, jobIds, sum, unknown }) => ({
+      key,
+      product,
+      name,
+      unit,
+      qty: sum === null ? null : roundUp(sum),
+      plusUnknown: sum !== null && unknown,
+      jobIds,
+    }));
 }
 
 /** One job's notes; a job cached on the phone before notes existed has none. */
@@ -252,11 +274,17 @@ export function blowerDoorKitLine(job: Pick<LoadJob, 'jobId' | 'street'>): Equip
 const UNIT_ONE: Record<ProductUnit, string> = { board_ft: 'board ft', bag: 'bag', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hour', each: 'each' };
 const UNIT_MANY: Record<ProductUnit, string> = { board_ft: 'board ft', bag: 'bags', sqft: 'sq ft', linear_ft: 'linear ft', hour: 'hours', each: 'each' };
 
-/** "63 bags", "1 bag", "2,400 board ft"; "Amount not on the estimate" with no quantity. */
-export function qtyText(line: Pick<LoadLine, 'qty' | 'unit'>): string {
+/** What a material line says with its sum when some area gives no quantity for it. */
+export const PLUS_UNKNOWN = 'Plus an amount not on the estimate';
+
+/**
+ * "63 bags", "1 bag", "2,400 board ft"; "Amount not on the estimate" with no quantity; "32 bags,
+ * plus an amount not on the estimate" when some area gives one and another none.
+ */
+export function qtyText(line: Pick<LoadLine, 'qty' | 'unit'> & { plusUnknown?: boolean }): string {
   if (line.qty === null) return 'Amount not on the estimate';
   const unit = line.unit ? (line.qty === 1 ? UNIT_ONE : UNIT_MANY)[line.unit] : '';
-  return `${num(line.qty)}${unit ? ` ${unit}` : ''}`;
+  return `${num(line.qty)}${unit ? ` ${unit}` : ''}${line.plusUnknown ? `, ${PLUS_UNKNOWN.toLowerCase()}` : ''}`;
 }
 
 /** "Day 1 of 3", or null for a one-day job. */
@@ -268,17 +296,77 @@ export function dayText(job: Pick<LoadJob, 'day' | 'days'>): string | null {
 // Ticks (which lines are loaded), kept on the phone per day
 // ---------------------------------------------------------------------------
 
-/** The phone's record of what is loaded on one day: line key -> true. */
-export type Ticks = Record<string, true>;
+/** The amount a material was ticked off at (its line's quantity then). */
+export interface AmountTick {
+  qty: number | null;
+  plusUnknown: boolean;
+}
+
+/** What a tick holds: the amount for a material, true for a thing to bring (the always-bring list, a kit). */
+export type Tick = AmountTick | true;
+
+/** The phone's record of what is loaded on one day: line key -> its tick. */
+export type Ticks = Record<string, Tick>;
+
+const isMaterial = (line: LoadLine | EquipmentLine): line is LoadLine => 'qty' in line;
+
+/** A stored amount tick as it should be (the phone's store can hold anything: an older build's `true`, a broken row). */
+function amountTick(stored: unknown): AmountTick | null {
+  if (stored === null || typeof stored !== 'object') return null;
+  const { qty, plusUnknown } = stored as Partial<AmountTick>;
+  if (!(qty === null || (typeof qty === 'number' && Number.isFinite(qty))) || typeof plusUnknown !== 'boolean') return null;
+  return { qty, plusUnknown };
+}
+
+/** What ticking this line stores: a material's amount right now, or true. */
+export function tickOf(line: LoadLine | EquipmentLine): Tick {
+  return isMaterial(line) ? { qty: line.qty, plusUnknown: line.plusUnknown } : true;
+}
+
+const sameTick = (stored: unknown, tick: Tick): boolean => {
+  if (tick === true) return stored === true;
+  const t = amountTick(stored);
+  return t !== null && t.qty === tick.qty && t.plusUnknown === tick.plusUnknown;
+};
+
+/** True when the line is loaded: ticked, and a material at the amount it says now. */
+export function isTicked(ticks: Ticks, line: LoadLine | EquipmentLine): boolean {
+  return sameTick(ticks[line.key], tickOf(line));
+}
+
+/**
+ * The amount a material was ticked at when it says another amount now (the day's jobs changed after
+ * the tick), else null. The row shows it unticked, with what changed.
+ */
+export function tickedBefore(ticks: Ticks, line: LoadLine): AmountTick | null {
+  const t = amountTick(ticks[line.key]);
+  return t && !sameTick(t, tickOf(line)) ? t : null;
+}
+
+const amountWords = (t: Pick<LoadLine, 'qty' | 'unit' | 'plusUnknown'>) => (t.qty === null ? 'an amount not on the estimate' : qtyText(t));
+
+/** "Changed after it was ticked: was 20 bags, now 50 bags." */
+export function changedText(was: AmountTick, line: LoadLine): string {
+  return `Changed after it was ticked: was ${amountWords({ ...was, unit: line.unit })}, now ${amountWords(line)}.`;
+}
+
+/** How many of the day's lines are loaded (a material at the amount it says now), of how many. */
+export function loadProgress(lines: readonly LoadLine[], equipment: readonly EquipmentLine[], ticks: Ticks): { done: number; total: number } {
+  const all = [...lines, ...equipment];
+  return { done: all.filter((l) => isTicked(ticks, l)).length, total: all.length };
+}
 
 /** The key the crew app keeps a day's ticks under (per person, per day: a new day starts empty). */
 export const ticksKey = (ownerId: string, date: string) => `load:${ownerId}:${date}`;
 
-/** Ticks with one line flipped. */
-export function toggleTick(ticks: Ticks, key: string): Ticks {
+/**
+ * Ticks with one line flipped: a line loaded at `tick` (what ticking it stores now, tickOf) is
+ * unticked; anything else (unticked, or ticked at another amount) is ticked at `tick`.
+ */
+export function toggleTick(ticks: Ticks, key: string, tick: Tick): Ticks {
   const next = { ...ticks };
-  if (next[key]) delete next[key];
-  else next[key] = true;
+  if (sameTick(next[key], tick)) delete next[key];
+  else next[key] = tick;
   return next;
 }
 

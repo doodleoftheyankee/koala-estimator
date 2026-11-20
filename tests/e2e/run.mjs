@@ -2149,6 +2149,7 @@ step('load list: the estimator writes notes for the crew on an estimate, sends i
        select crew_text_without_prices(l->>'description') as name, coalesce(l->>'unit', '') as unit, sum((l->>'qty')::numeric) as total, count(*) as areas
          from quotes q, jsonb_array_elements(q.snapshot->'options') o, jsonb_array_elements(o->'lines') l
         where q.estimate_id = '${loadEstimate}' and q.status = 'signed' and o->>'tier' = q.signed_tier::text and l->>'kind' = 'material'
+          and coalesce((l->>'qty')::numeric, 1) > 0 -- a quantity of 0 installs nothing: not loaded
         group by 1, 2) x order by name`,
   )
     .split('\n')
@@ -2251,6 +2252,62 @@ step('load list: a tick stays after a reload and with no signal');
   await cctx.setOffline(false);
   offlineStep = false;
   await cpg.evaluate(() => window.dispatchEvent(new Event('online')));
+}
+
+// Review LOAD-TICK-1: a tick holds the amount it was ticked at. The phone's stored tick is set to
+// fewer than the day needs now, as when the crew ticks the evening before and the office then moves
+// a second job onto the day: the row must not count as loaded, and must say what changed.
+step('load list: a material ticked at another amount than the day needs now shows unticked, with what changed');
+{
+  const first = loadExpected[0];
+  const was = first.qty > 1 ? Math.floor(first.qty / 3) || 1 : 2;
+  const meta = (write) =>
+    cpg.evaluate(
+      async ({ key, write }) => {
+        const db = await new Promise((res, rej) => {
+          const r = indexedDB.open('koala-crew');
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        });
+        try {
+          const tx = db.transaction('meta', 'readwrite');
+          const store = tx.objectStore('meta');
+          const row = await new Promise((res, rej) => {
+            const r = store.get(key);
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          });
+          const amounts = Object.entries(row?.value ?? {}).filter(([, v]) => v !== null && typeof v === 'object');
+          if (write !== null && amounts.length === 1) store.put({ ...row, value: { ...row.value, [amounts[0][0]]: { ...amounts[0][1], qty: write } } });
+          await new Promise((res, rej) => {
+            tx.oncomplete = res;
+            tx.onerror = () => rej(tx.error);
+          });
+          return amounts.map(([k, v]) => ({ k, v }));
+        } finally {
+          db.close();
+        }
+      },
+      { key: `load:${CREW.id}:${today}`, write },
+    );
+  const kept = await meta(null);
+  check(kept.length === 1 && kept[0].v.qty === first.qty && kept[0].v.plusUnknown === false, `the phone keeps the tick of "${first.name}" with the amount it was ticked at (${qtyWords(first.qty, first.unit)})`);
+  await meta(was);
+  await cpg.reload();
+  const list = cpg.getByTestId('load-list');
+  await list.getByText('Dana Loader').waitFor({ timeout: 20000 });
+  const row = list.getByRole('checkbox', { name: new RegExp(escapeRe(first.name)) });
+  const changed = `Changed after it was ticked: was ${qtyWords(was, first.unit)}, now ${qtyWords(first.qty, first.unit)}.`;
+  await row.getByText(changed).waitFor({ timeout: 20000 });
+  check((await row.getAttribute('aria-checked')) === 'false', `ticked at ${qtyWords(was, first.unit)}, "${first.name}" is not loaded now that the day needs ${qtyWords(first.qty, first.unit)}: "${changed}"`);
+  check((await cpg.getByTestId('load-progress').innerText()).startsWith('1 of'), 'and it is not counted as loaded (Ladders still is)');
+  await list.scrollIntoViewIfNeeded();
+  await cpg.screenshot({ path: SHOTS + '33-crew-load-list-changed.png', fullPage: true });
+  await row.click();
+  await cpg.waitForFunction(() => document.querySelector('[data-testid=load-progress]')?.textContent?.startsWith('2 of'));
+  check((await row.getAttribute('aria-checked')) === 'true' && (await list.getByTestId('load-changed').count()) === 0, 'ticked again once the truck is checked: loaded, and the change note is gone');
+  const again = await meta(null);
+  check(again.length === 1 && again[0].v.qty === first.qty, `the tick now holds ${qtyWords(first.qty, first.unit)}`);
 }
 
 step('load list: the office adds a note for the crew; the crew sees it after a sync');

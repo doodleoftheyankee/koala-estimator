@@ -5,20 +5,26 @@ import {
   alwaysBringFromText,
   alwaysBringLines,
   blowerDoorKitLine,
+  changedText,
   dayLoadList,
   dayOfJob,
   dayText,
+  isTicked,
   jobDays,
   jobLoadList,
   loadDates,
+  loadProgress,
   needsBlowerDoorKit,
   notesOf,
   parseAlwaysBring,
   qtyText,
   staleTickKeys,
+  tickedBefore,
+  tickOf,
   ticksKey,
   toggleTick,
   type LoadSourceJob,
+  type Ticks,
 } from './loadList';
 
 const TODAY = '2026-11-20';
@@ -107,10 +113,10 @@ describe('the load list sums first, then rounds up once (owner decision: exactly
   });
 
   it('a material with no quantity on the estimate is still listed, and says so', () => {
-    const lines = jobLoadList(job({ areas: [area('A', [mat('air_sealing', 'Foam sealant', null, 'each')]), area('B', [mat('cellulose', 'Blown cellulose', 0, 'bag')])] }));
-    expect(lines.map((l) => [l.name, l.qty])).toEqual([
-      ['Blown cellulose', null],
-      ['Foam sealant', null],
+    const lines = jobLoadList(job({ areas: [area('A', [mat('air_sealing', 'Foam sealant', null, 'each')]), area('B', [mat('cellulose', 'Blown cellulose', 12, 'bag')])] }));
+    expect(lines.map((l) => [l.name, l.qty, l.plusUnknown])).toEqual([
+      ['Blown cellulose', 12, false],
+      ['Foam sealant', null, false],
     ]);
     expect(qtyText(lines[1]!)).toBe('Amount not on the estimate');
     expect(qtyText({ qty: 1, unit: 'bag' })).toBe('1 bag');
@@ -118,11 +124,42 @@ describe('the load list sums first, then rounds up once (owner decision: exactly
     expect(qtyText({ qty: 3, unit: null })).toBe('3');
   });
 
+  // Review LOAD-ZERO-1: the engine keeps the lines of a product whose quantity the estimator set to
+  // 0 (nothing installed), so they reach the crew. They showed as "Amount not on the estimate" with
+  // a box to tick, and the crew loaded some anyway.
+  it('a material the estimator set to 0 is not on the list: nothing of it is installed', () => {
+    const zeroed = job({ areas: [area('Attic', [mat('air_sealing', 'Air sealing', 0, 'sqft'), mat('cellulose', 'Blown cellulose', 10, 'bag'), labor('cellulose', 4)])] });
+    expect(jobLoadList(zeroed).map((l) => l.name)).toEqual(['Blown cellulose']);
+    expect(jobLoadList(job({ areas: [area('Attic', [mat('air_sealing', 'Air sealing', 0, 'sqft')])] }))).toEqual([]);
+    // 0 in one area and a quantity in another: the quantity, and only the job that needs it.
+    const other = job({ customer: { name: 'Zoe Zero', phone: null }, areas: [area('Attic', [mat('air_sealing', 'Air sealing', 0, 'sqft'), mat('cellulose', 'Blown cellulose', 0, 'bag')])] });
+    const sealed = job({ customer: { name: 'Al Sealed', phone: null }, areas: [area('Attic', [mat('air_sealing', 'Air sealing', 640.2, 'sqft')])] });
+    const day = dayLoadList([zeroed, other, sealed], TODAY);
+    expect(day.lines).toEqual([
+      expect.objectContaining({ name: 'Blown cellulose', qty: 10, plusUnknown: false, jobIds: [zeroed.jobId] }),
+      expect.objectContaining({ name: 'Air sealing', qty: 641, plusUnknown: false, jobIds: [sealed.jobId] }),
+    ]);
+    // The job is still on the day (its header and notes), it just loads nothing more.
+    expect(day.jobs.map((j) => j.customer)).toEqual(['Al Sealed', 'Pat Lee', 'Zoe Zero']);
+  });
+
+  it('a material with a quantity in one area and none in another keeps both: the number, plus an amount not on the estimate', () => {
+    const j = job({ areas: [area('Attic', [mat('cellulose', 'Blown cellulose', 31.4, 'bag')]), area('Walls', [mat('cellulose', 'Blown cellulose', null, 'bag')])] });
+    const [line] = jobLoadList(j);
+    expect(line).toMatchObject({ name: 'Blown cellulose', qty: 32, plusUnknown: true });
+    expect(qtyText(line!)).toBe('32 bags, plus an amount not on the estimate');
+    // Across jobs too: the unknown part is never dropped.
+    const k = job({ areas: [area('Attic', [mat('cellulose', 'Blown cellulose', 10, 'bag')])] });
+    expect(dayLoadList([job({ areas: [area('Walls', [mat('cellulose', 'Blown cellulose', null, 'bag')])] }), k], TODAY).lines).toEqual([
+      expect.objectContaining({ qty: 10, plusUnknown: true }),
+    ]);
+  });
+
   it('never carries a price: no money field, and a price in a material name is taken out', () => {
     const j = job({ areas: [area('A', [mat('ocsf', 'Open-cell set (~$1,800/set at full yield, per board ft)', 950.4, 'board_ft')])] });
     const lines = jobLoadList(j);
     expect(lines[0]!.name).toBe('Open-cell set');
-    expect(Object.keys(lines[0]!).sort()).toEqual(['jobIds', 'key', 'name', 'product', 'qty', 'unit']);
+    expect(Object.keys(lines[0]!).sort()).toEqual(['jobIds', 'key', 'name', 'plusUnknown', 'product', 'qty', 'unit']);
     const day = dayLoadList([j], TODAY);
     expect(JSON.stringify(day)).not.toMatch(/\$|price|cost/i);
   });
@@ -137,7 +174,7 @@ describe('the load list sums first, then rounds up once (owner decision: exactly
     const names = jobLoadList(j).map((l) => l.name);
     expect(names).toEqual(['Open-cell set', 'Closed-cell set', 'Blown cellulose', 'Loose cellulose', 'Batt R-13', 'Air sealing']);
     expect(jobLoadList({ ...j, areas: [...j.areas].reverse() }).map((l) => l.name)).toEqual(names);
-    // The tick key is the same for the same material on any day.
+    // The line's key is the same for the same material on any day (a tick also holds its amount).
     expect(jobLoadList(j)[2]!.key).toBe('m:cellulose|bag|blown cellulose');
   });
 });
@@ -230,9 +267,83 @@ describe('what every crew brings', () => {
 
 describe('ticks on the phone: per person and day, a new day starts empty', () => {
   it('flips one line at a time', () => {
-    const t = toggleTick({}, 'm:cellulose|bag|blown cellulose');
-    expect(t).toEqual({ 'm:cellulose|bag|blown cellulose': true });
-    expect(toggleTick(t, 'm:cellulose|bag|blown cellulose')).toEqual({});
+    const [ladders] = alwaysBringLines(['Ladders']);
+    const t = toggleTick({}, ladders!.key, tickOf(ladders!));
+    expect(t).toEqual({ 'a:ladders': true });
+    expect(isTicked(t, ladders!)).toBe(true);
+    expect(toggleTick(t, ladders!.key, tickOf(ladders!))).toEqual({});
+  });
+
+  // Review LOAD-TICK-1: a tick was kept by material name and unit only. Ticked at 20 bags the
+  // evening before, it stayed ticked when the office moved a second job onto the day and the row
+  // said 50 bags: 30 bags short on the truck, and the owner drives them out.
+  it('a material ticked at 20 bags is not loaded once the day needs 50 (a job moved onto the day after the tick)', () => {
+    const a = job({ customer: { name: 'Ann Able', phone: null }, scheduledStart: TOMORROW, areas: [area('Attic', [mat('cellulose', 'Blown cellulose', 20, 'bag')])] });
+    const b = job({ customer: { name: 'Bo Baker', phone: null }, scheduledStart: '2026-11-23', areas: [area('Attic', [mat('cellulose', 'Blown cellulose', 30, 'bag')])] });
+    const evening = dayLoadList([a, b], TOMORROW);
+    const was = evening.lines[0]!;
+    expect(qtyText(was)).toBe('20 bags');
+    let ticks: Ticks = toggleTick({}, was.key, tickOf(was));
+    expect(isTicked(ticks, was)).toBe(true);
+    expect(loadProgress(evening.lines, [], ticks)).toEqual({ done: 1, total: 1 });
+
+    // The office moves job B onto the same day; the phone syncs.
+    const morning = dayLoadList([a, { ...b, scheduledStart: TOMORROW }], TOMORROW);
+    const now = morning.lines[0]!;
+    expect(now.key).toBe(was.key);
+    expect(qtyText(now)).toBe('50 bags');
+    expect(isTicked(ticks, now)).toBe(false);
+    expect(loadProgress(morning.lines, [], ticks)).toEqual({ done: 0, total: 1 });
+    expect(tickedBefore(ticks, now)).toEqual({ qty: 20, plusUnknown: false });
+    expect(changedText(tickedBefore(ticks, now)!, now)).toBe('Changed after it was ticked: was 20 bags, now 50 bags.');
+
+    // Ticked again once the 50 bags are on: loaded at 50, and the change note is gone.
+    ticks = toggleTick(ticks, now.key, tickOf(now));
+    expect(isTicked(ticks, now)).toBe(true);
+    expect(tickedBefore(ticks, now)).toBeNull();
+    // Down as well as up: job B moved off again, 20 bags is not what was ticked.
+    expect(isTicked(ticks, evening.lines[0]!)).toBe(false);
+    expect(changedText(tickedBefore(ticks, evening.lines[0]!)!, evening.lines[0]!)).toBe('Changed after it was ticked: was 50 bags, now 20 bags.');
+    expect(toggleTick(ticks, now.key, tickOf(now))).toEqual({});
+  });
+
+  it('a material ticked with part of its amount not on the estimate is not loaded once that part is known, and the other way round', () => {
+    const known = jobLoadList(job({ areas: [area('A', [mat('cellulose', 'Blown cellulose', 20, 'bag')])] }))[0]!;
+    const partly = jobLoadList(job({ areas: [area('A', [mat('cellulose', 'Blown cellulose', 20, 'bag')]), area('B', [mat('cellulose', 'Blown cellulose', null, 'bag')])] }))[0]!;
+    const unknown = jobLoadList(job({ areas: [area('B', [mat('cellulose', 'Blown cellulose', null, 'bag')])] }))[0]!;
+    const t = toggleTick({}, partly.key, tickOf(partly));
+    expect(isTicked(t, partly)).toBe(true);
+    expect(isTicked(t, known)).toBe(false);
+    expect(changedText(tickedBefore(t, known)!, known)).toBe('Changed after it was ticked: was 20 bags, plus an amount not on the estimate, now 20 bags.');
+    const u = toggleTick({}, unknown.key, tickOf(unknown));
+    expect(isTicked(u, unknown)).toBe(true);
+    expect(isTicked(u, known)).toBe(false);
+    expect(changedText(tickedBefore(u, known)!, known)).toBe('Changed after it was ticked: was an amount not on the estimate, now 20 bags.');
+  });
+
+  it('reads a stored tick it does not know as not loaded (a mark from an older build, or a broken one)', () => {
+    const line = jobLoadList(job())[0]!;
+    for (const stored of [true, null, 'yes', 20, { qty: '32' }, { amount: 32 }]) {
+      const ticks = { [line.key]: stored } as unknown as Ticks;
+      expect(isTicked(ticks, line)).toBe(false);
+      expect(tickedBefore(ticks, line)).toBeNull();
+      // Tapping it ticks it at its amount.
+      expect(isTicked(toggleTick(ticks, line.key, tickOf(line)), line)).toBe(true);
+    }
+    const [ladders] = alwaysBringLines(['Ladders']);
+    expect(isTicked({ [ladders!.key]: { qty: 1, plusUnknown: false } }, ladders!)).toBe(false);
+  });
+
+  it('counts the lines loaded, materials at their amount and things to bring', () => {
+    const day = dayLoadList([job({ areas: [area('A', [mat('cellulose', 'Blown cellulose', 31.4, 'bag'), mat('air_sealing', 'Air sealing', 300, 'sqft')])] })], TODAY);
+    const equipment = alwaysBringLines(['Ladders', 'Tarps']);
+    let ticks: Ticks = {};
+    expect(loadProgress(day.lines, equipment, ticks)).toEqual({ done: 0, total: 4 });
+    ticks = toggleTick(ticks, day.lines[0]!.key, tickOf(day.lines[0]!));
+    ticks = toggleTick(ticks, equipment[1]!.key, tickOf(equipment[1]!));
+    // A tick of a line no longer on the list counts for nothing.
+    ticks = toggleTick(ticks, 'a:respirators', true);
+    expect(loadProgress(day.lines, equipment, ticks)).toEqual({ done: 2, total: 4 });
   });
 
   it('keys by person and date, and finds the days to drop', () => {

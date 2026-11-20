@@ -49,10 +49,15 @@ time (no drive back to the shop, no call to the owner to bring what was missed).
   taken out, at the top of the job and under the job on the load list.
 - **Load list.** At the top of the crew app, for Today and Tomorrow: every material of every job
   that starts that day, added up over areas and jobs and then rounded up once to whole units
-  (exactly what the estimate calculated, which already has the waste factor; nothing extra). Then
-  the owner's always-bring list (Pricing, "Load list") and a blower door kit for each job whose
-  test-out is still to do. Each line is a box to tick while loading; ticks stay on the phone, work
-  with no signal and start over each day. A job over several days loads on its first day.
+  (exactly what the estimate calculated, which already has the waste factor; nothing extra). A
+  material the estimator set to 0 is not listed (nothing of it is installed); one that some area
+  gives no quantity for says so ("Amount not on the estimate", or "plus an amount not on the
+  estimate" next to the others' sum). Then the owner's always-bring list (Pricing, "Load list")
+  and a blower door kit for each job whose test-out is still to do. Each line is a box to tick
+  while loading; ticks stay on the phone, work with no signal and start over each day. A material
+  is ticked at its amount: if the day's amount changes after the tick (a job moved onto or off the
+  day), the line is unticked again and says what changed. A job over several days loads on its
+  first day.
 - Where: `lib/jobs/loadList.ts` (pure), `app/crew/LoadList.tsx`, `app/crew/JobDetail.tsx`,
   `app/jobs/[id]/page.tsx` ("Notes for the crew", "What the crew loads"), and
   `supabase/migrations/20261121000002_crew_load_list.sql`.
@@ -207,7 +212,8 @@ drives a phone-sized browser through these steps:
    without the secret), then open the Learning page and press **Run learning now**.
 8. Load list: notes for the crew on an estimate that is signed and scheduled for today; the
    crew's load list (summed, rounded up, always-bring, blower door kit, notes) with ticks that
-   survive a reload and no signal; an office note the crew gets after a sync; no price on the
+   survive a reload and no signal, and a tick made at another amount shown unticked with what
+   changed; an office note the crew gets after a sync; no price on the
    crew's screens and no crew note on the customer's quote page or PDF.
 
 ```bash
