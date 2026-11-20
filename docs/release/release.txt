@@ -255,6 +255,8 @@ deployed; the go-live steps are in section 6.
       the answer for a reason that has nothing to do with the migrations.
     - New objects: price_approvals, quote_number_counters, blower_door_tests, the new material rows
       (dense-pack cellulose, seven batt sizes; none is a product's default), materials.typical_min.
+    - The two spray foam materials read "Open-cell set (per board ft)" and "Closed-cell set (per
+      board ft)" where they were the seed names with a price in them (readiness walk W2).
     - Grants: select has_table_privilege('anon','blower_door_tests','select'),
         has_table_privilege('authenticated','blower_door_tests','insert'),
         has_table_privilege('authenticated','price_approvals','insert'),
@@ -264,6 +266,10 @@ deployed; the go-live steps are in section 6.
        project (an IANA name such as America/Chicago) before the build: every date and time it
        prints, and each new quote's "Valid until" day, are then in its zone. Unset means
        America/New_York (this franchise: nothing to set). A quote keeps the zone it was sent in.
+       The value is written into the build: changing it later takes a redeploy, and phones pick it
+       up once their service worker updates. A name the browser does not know (for example
+       "Central") silently means New York, so after the deploy check that a printed time (the
+       estimate list, a test quote's date) is in the franchise's own zone.
     4. The sender name on quote emails. This Vercel project sets QUOTE_FROM_EMAIL to
        "Koala Insulation of Newark <onboarding@resend.dev>" (Production, Preview and Development;
        read 2026-11-19). A set value wins over the code's "Koala Insulation" default (lib/env.ts),
@@ -271,6 +277,14 @@ deployed; the go-live steps are in section 6.
        OK, change it to "Koala Insulation <onboarding@resend.dev>" (or delete it to use the default)
        before step 5, so the new build picks it up. When the franchise sends from its own domain,
        put that address here instead.
+       Quote emails need RESEND_API_KEY as well. It is not set on this Vercel project (names listed
+       2026-11-20, values not read), so today no quote email is sent, on the live site or after the
+       release: the Send step says "Email is not set up yet; share the link below with the
+       customer", and the server logs "[email] RESEND_API_KEY not set; not sending." To send
+       emails, the owner creates a Resend account, verifies the sending domain there, and sets
+       RESEND_API_KEY on Vercel (OFFICE_NOTIFY_EMAIL for the signed-quote notice to the office and
+       OWNER_REPORT_EMAIL for the nightly report are also unset). That is the owner's call; until
+       then step 4 has no visible effect.
     5. Merge claude/release into main through a pull request (never a force-push), and let Vercel
        build it. The Next.js build may stop once at a "security upgrade" notice: retry the same
        build once; do not upgrade and do not follow the notice.
@@ -279,6 +293,9 @@ deployed; the go-live steps are in section 6.
   for Production, Preview and Development). Before the migrations, a preview runs the new code on an
   unmigrated database; after them, anything done on a preview writes to production. Try the release
   on a local copy with its own database (scripts/e2e.sh with E2E_KEEP=1, or a seeded stack).
+  Such previews exist now: every push to claude/release built one (at least 12, all ready, behind
+  Vercel's team sign-in), and a team member who opens one and uses a demo button runs the new code
+  on production's data. Avoid them, or remove them in the Vercel dashboard (the owner's call).
   Verify after the deploy
     - As the owner: the menu has Blower door and Rebate programs (and the optional Business
       profile); Rebate programs shows two programs and saves a change (audited).
@@ -286,12 +303,14 @@ deployed; the go-live steps are in section 6.
       company and warranty). Make and send a new test quote to yourself: "Koala Insulation",
       "Limited lifetime warranty", whole dollars, a number like KN-2026-0001-v1, no business form
       asked for.
-    - Phones: the service worker updates to v13 on the next open with signal; the field app, the
+    - Phones: the service worker updates to v14 on the next open with signal; the field app, the
       crew app and the blower door tool then open with no signal. On a crew phone the blower door
       tool shows no air sealing price.
     - Blower door: save a test-in on an estimate and a test-out on its job; the office job page
       shows both readings, the tier and the rebate in whole dollars.
-    - A test quote's email comes from "Koala Insulation" (step 4), not "of Newark".
+    - Once RESEND_API_KEY is set (step 4): a test quote's email comes from "Koala Insulation", not
+      "of Newark". Without it, check the quote page and the Send step's "share the link" screen
+      instead, and the Vercel function log line above.
   Before real staff and customers use it: the live site runs in demo mode (DEMO_MODE=1 with
   DEMO_PASSWORD: one-tap Owner, Estimator and Crew lead accounts on the sign-in page, and sample
   estimates). Turn demo mode off (unset DEMO_MODE) and give each person their own account; the
@@ -507,6 +526,9 @@ deployed; the go-live steps are in section 6.
     a. Format-2 quotes' expired page now ends with the zone (" EST"); production has none.
     b. NEXT_PUBLIC_BUSINESS_TIME_ZONE is read as process.env.NEXT_PUBLIC_BUSINESS_TIME_ZONE, so
        Next.js writes the value into the phone bundle when it is set at build time (go-live
-       step 3 sets it before the build); unset, the phone falls back to New York.
+       step 3 sets it before the build); unset, the phone falls back to New York. Confirmed by the
+       go-live readiness check (2026-11-20): a build with America/Chicago writes it into 4 client
+       and 5 server chunks, the phone shells (/field, /crew, /field/blower-door, /field/roof) load
+       it, and in Chromium the build reads Chicago; the unset build reads New York.
     c. The service-role client (public quote page, sign and send routes) keeps postgrest-js's
        default retries (about 7 s on a 503). Outside FLOW-3's scope; noted for later.

@@ -210,6 +210,8 @@ describe('release review C FLOW-2: the row keeps its headline when the server co
     // Same row version and status as the server: before W1 this was 'already up to date' and kept no price.
     const pulled = mergeRemote(locked, remote({ status: 'signed', rowVersion: 5, doc: sent, headline: { price: 5060, tier: 'better' } }), 'u1', 'm2')!;
     expect(pulled).toMatchObject({ syncState: 'locked', summaryPrice: 5060, summaryTier: 'better' });
+    // The estimator is still told the unsent change was not applied (L35).
+    expect(pulled.lastError).toBe(UNSENT_CHANGE_DROPPED);
     expect(pulled.draft.selectedTier).toBe('better');
     // Once it has the signed headline, the same copy is up to date again.
     expect(mergeRemote(pulled, remote({ status: 'signed', rowVersion: 5, doc: sent, headline: { price: 5060, tier: 'better' } }), 'u1', 'm3')).toBeNull();

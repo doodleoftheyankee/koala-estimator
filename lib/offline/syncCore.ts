@@ -149,7 +149,9 @@ export function mergeRemote(
     syncState: draft.status === 'signed' ? 'locked' : 'synced',
     // A new mutation id tells an open editor that the stored copy changed underneath it.
     mutationId: newMutationId,
-    lastError: null,
+    // A signed copy refreshed only for its headline keeps telling the estimator their unsent change
+    // was dropped (L35); anything else starts clean.
+    lastError: local?.syncState === 'locked' && local.lastError === UNSENT_CHANGE_DROPPED && draft.status === 'signed' ? UNSENT_CHANGE_DROPPED : null,
     serverDoc: null,
     serverRowVersion: null,
     updatedAt: remote.updatedAt,
