@@ -1,13 +1,16 @@
 import type { Metadata } from 'next';
 import { z } from 'zod';
-import { Alert, Badge, Card, Field, Select } from '@/components/ui';
+import { Alert, Badge, Card, Field, Input, Select } from '@/components/ui';
 import { requireRole } from '@/lib/server/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
-import { ROLE_LABELS, ROLES } from '@/lib/admin/team';
+import { DEFAULT_PIN, PIN_LENGTH } from '@/lib/auth/pinShared';
+import { serverEnv } from '@/lib/env';
+import { PIN_OFF_FOR_OWNER, ROLE_LABELS, ROLES } from '@/lib/admin/team';
 import { crewFieldName } from '@/lib/jobs/forms';
 import { ActionForm, ToggleInput } from '../pricing/ActionForm';
 import { TextField } from '../pricing/fields';
-import { inviteMember, updateCrewMembership, updateMember } from './actions';
+import { addPinMember, inviteMember, resetMemberPin, updateCrewMembership, updateMember } from './actions';
 
 export const metadata: Metadata = { title: 'Team' };
 
@@ -18,6 +21,7 @@ const profileRows = z.array(
     email: z.string().nullable(),
     role: z.enum(ROLES),
     active: z.boolean(),
+    pin_sign_in: z.boolean(),
   }),
 );
 
@@ -44,13 +48,46 @@ function RoleSelect({ name, defaultValue }: { name: string; defaultValue: string
   );
 }
 
+/** A 4-digit PIN box, starting at 1234. */
+function PinInput({ label, name }: { label: string; name: string }) {
+  return (
+    <Field label={label} hint={`${PIN_LENGTH} digits. Tell them; they can change it in their menu.`}>
+      <Input
+        name={name}
+        type="text"
+        inputMode="numeric"
+        pattern={`[0-9]{${PIN_LENGTH}}`}
+        minLength={PIN_LENGTH}
+        maxLength={PIN_LENGTH}
+        autoComplete="off"
+        required
+        defaultValue={DEFAULT_PIN}
+        className="tracking-[0.3em]"
+      />
+    </Field>
+  );
+}
+
+/** Who is locked out after too many wrong PINs (pin_attempts is the server's: service role). */
+async function lockedOut(): Promise<Set<string>> {
+  try {
+    const { data, error } = await createAdminClient({ retry: false }).from('pin_attempts').select('profile_id').gt('locked_until', new Date().toISOString());
+    if (error) return new Set();
+    return new Set((data ?? []).map((r) => String((r as { profile_id: unknown }).profile_id)));
+  } catch {
+    return new Set();
+  }
+}
+
 export default async function TeamPage() {
   const profile = await requireRole('owner');
   const db = await createClient();
-  const [res, crewsRes, membershipRes] = await Promise.all([
-    db.from('profiles').select('id, full_name, email, role, active').order('active', { ascending: false }).order('full_name'),
+  const pinOff = !serverEnv.pinSecret();
+  const [res, crewsRes, membershipRes, locked] = await Promise.all([
+    db.from('profiles').select('id, full_name, email, role, active, pin_sign_in').order('active', { ascending: false }).order('full_name'),
     db.from('crews').select('id, name, active').order('name'),
     db.from('crew_members').select('crew_id, profile_id, is_lead'),
+    lockedOut(),
   ]);
   const parsed = res.error ? null : profileRows.safeParse(res.data);
   const members = parsed?.success ? parsed.data : null;
@@ -69,7 +106,51 @@ export default async function TeamPage() {
         <h1 className="text-2xl font-bold text-slate-900">Team</h1>
 
         <Card>
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Invite someone</h2>
+          <section aria-labelledby="add-person">
+            <h2 id="add-person" className="mb-1 text-lg font-semibold text-slate-900">
+              Add a person
+            </h2>
+            <p className="mb-3 text-sm text-slate-600">
+              For people with no work email. They sign in on any phone by tapping their name and typing their {PIN_LENGTH}-digit PIN. Tell them the PIN;
+              they can change it in their menu.
+            </p>
+            {pinOff ? (
+              <div className="mb-3">
+                <Alert tone="amber">{PIN_OFF_FOR_OWNER}</Alert>
+              </div>
+            ) : null}
+            <ActionForm action={addPinMember} readOnly={pinOff} submitLabel="Add person" resetOnSuccess>
+              <div className="grid gap-3 md:grid-cols-3">
+                <TextField label="Full name" name="full_name" defaultValue="" required />
+                <Field label="Role">
+                  <RoleSelect name="role" defaultValue="crew" />
+                </Field>
+                <PinInput label="PIN" name="pin" />
+              </div>
+              {crews.some((c) => c.active) ? (
+                <fieldset className="min-w-0">
+                  <legend className="mb-2 text-sm font-semibold text-slate-800">Crews (a crew member sees only their crews&rsquo; jobs)</legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {crews
+                      .filter((c) => c.active)
+                      .map((c) => (
+                        <Field key={c.id} label={c.name}>
+                          <Select name={crewFieldName(c.id)} defaultValue="none">
+                            <option value="none">Not in this crew</option>
+                            <option value="member">Member</option>
+                            <option value="lead">Crew lead</option>
+                          </Select>
+                        </Field>
+                      ))}
+                  </div>
+                </fieldset>
+              ) : null}
+            </ActionForm>
+          </section>
+        </Card>
+
+        <Card>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Invite someone by email</h2>
           <p className="mb-3 text-sm text-slate-600">They get an email with a link to sign in. They can then sign in with a one-time code.</p>
           <ActionForm action={inviteMember} readOnly={false} submitLabel="Send invite" resetOnSuccess>
             <div className="grid gap-3 md:grid-cols-3">
@@ -107,7 +188,8 @@ export default async function TeamPage() {
                         {isSelf ? <Badge tone="blue">You</Badge> : null}
                         <Badge tone={m.role === 'owner' ? 'green' : 'slate'}>{ROLE_LABELS[m.role]}</Badge>
                         {!m.active ? <Badge tone="red">Inactive</Badge> : null}
-                        <span className="w-full break-all text-sm text-slate-600 sm:w-auto">{m.email ?? 'No email'}</span>
+                        {locked.has(m.id) ? <Badge tone="red">Locked: too many wrong PINs</Badge> : null}
+                        <span className="w-full break-all text-sm text-slate-600 sm:w-auto">{m.pin_sign_in ? 'Signs in with name and PIN' : (m.email ?? 'No email')}</span>
                       </div>
                       {isSelf ? (
                         <p className="text-sm text-slate-500">You cannot change your own role or deactivate yourself.</p>
@@ -122,6 +204,21 @@ export default async function TeamPage() {
                           </div>
                         </ActionForm>
                       )}
+                      {m.pin_sign_in ? (
+                        <div className="mt-4 border-t border-slate-100 pt-3">
+                          <h3 className="mb-2 text-sm font-semibold text-slate-800">PIN</h3>
+                          {isSelf ? (
+                            <p className="text-sm text-slate-500">Change your own PIN with &ldquo;Change my PIN&rdquo; in your menu.</p>
+                          ) : (
+                            <ActionForm action={resetMemberPin} readOnly={pinOff} submitLabel="Reset PIN" submitVariant="secondary">
+                              <input type="hidden" name="id" value={m.id} />
+                              <div className="max-w-xs">
+                                <PinInput label={`New PIN for ${m.full_name}`} name="pin" />
+                              </div>
+                            </ActionForm>
+                          )}
+                        </div>
+                      ) : null}
                       <CrewMembership memberId={m.id} name={m.full_name} isCrew={m.role === 'crew'} crews={crews} current={memberships.get(m.id) ?? new Map()} />
                     </Card>
                   </li>

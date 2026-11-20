@@ -9,6 +9,7 @@ import {
   excludeForm,
   markLostForm,
   membershipChanges,
+  parseCrewChoices,
   parseMembershipForm,
   scheduleForm,
   statusForm,
@@ -132,6 +133,17 @@ describe('crew membership', () => {
     });
     expect(parseMembershipForm({ profile_id: PERSON, [crewFieldName(CREW_A)]: 'boss' }, [CREW_A])).toMatchObject({ ok: false });
     expect(parseMembershipForm({ profile_id: 'nope' }, [CREW_A])).toMatchObject({ ok: false });
+  });
+  it('reads the crews of someone not added yet (the team page\'s "Add a person")', () => {
+    expect(parseCrewChoices({ [crewFieldName(CREW_A)]: 'member', [crewFieldName(CREW_B)]: 'lead' }, [CREW_A, CREW_B])).toEqual({
+      ok: true,
+      memberships: [
+        { crewId: CREW_A, isLead: false },
+        { crewId: CREW_B, isLead: true },
+      ],
+    });
+    expect(parseCrewChoices({}, [CREW_A])).toEqual({ ok: true, memberships: [] });
+    expect(parseCrewChoices({ [crewFieldName(CREW_A)]: 'boss' }, [CREW_A])).toEqual({ ok: false, error: 'Pick member, lead or not in this crew' });
   });
   it('writes only the differences, for crews on the form', () => {
     const existing = [

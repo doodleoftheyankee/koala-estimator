@@ -11,6 +11,8 @@ export interface ShellProfile {
   fullName: string;
   email: string | null;
   role: Role;
+  /** Signs in with their name and PIN: the account menu offers "Change my PIN". */
+  pinLogin?: boolean;
 }
 
 /** The franchise's own details, read from its settings (never typed into the app). */

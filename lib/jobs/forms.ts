@@ -126,13 +126,11 @@ export interface Membership {
 
 export const crewFieldName = (crewId: string) => `crew_${crewId}`;
 
-/** Reads one person's crew choices ("crew_<id>" = none | member | lead) for the given crews. */
-export function parseMembershipForm(
+/** The crew choices on a form ("crew_<id>" = none | member | lead) for the given crews. */
+export function parseCrewChoices(
   obj: Record<string, string>,
   crewIds: readonly string[],
-): { ok: true; profileId: string; memberships: Membership[] } | { ok: false; error: string } {
-  const id = uuidField('Team member').safeParse(obj.profile_id);
-  if (!id.success) return { ok: false, error: 'Team member is missing or not valid' };
+): { ok: true; memberships: Membership[] } | { ok: false; error: string } {
   const memberships: Membership[] = [];
   for (const crewId of crewIds) {
     const raw = obj[crewFieldName(crewId)];
@@ -141,7 +139,18 @@ export function parseMembershipForm(
     if (!choice.success) return { ok: false, error: 'Pick member, lead or not in this crew' };
     if (choice.data !== 'none') memberships.push({ crewId, isLead: choice.data === 'lead' });
   }
-  return { ok: true, profileId: id.data, memberships };
+  return { ok: true, memberships };
+}
+
+/** Reads one person's crew choices ("crew_<id>" = none | member | lead) for the given crews. */
+export function parseMembershipForm(
+  obj: Record<string, string>,
+  crewIds: readonly string[],
+): { ok: true; profileId: string; memberships: Membership[] } | { ok: false; error: string } {
+  const id = uuidField('Team member').safeParse(obj.profile_id);
+  if (!id.success) return { ok: false, error: 'Team member is missing or not valid' };
+  const choices = parseCrewChoices(obj, crewIds);
+  return choices.ok ? { ok: true, profileId: id.data, memberships: choices.memberships } : choices;
 }
 
 /**

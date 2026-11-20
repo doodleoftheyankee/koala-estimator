@@ -1,10 +1,15 @@
 import type { Metadata } from 'next';
 import { DEMO_ACCOUNTS, demoEnabled, type DemoRole } from '@/lib/demo/accounts';
 import { loginErrorMessage } from '@/lib/auth/loginMessages';
+import { loadPinNames, PIN_OFF_MESSAGE } from '@/lib/auth/pin';
+import { serverEnv } from '@/lib/env';
 import { safeNext } from '@/lib/safeNext';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { Banner } from '@/components/daymark/Banner';
 import { Monogram } from '@/components/daymark/Brand';
 import { ChevronRight, CloudOff, Icon, LifeBuoy, Satellite, Signature, type LucideIcon } from '@/components/daymark/icons';
 import { LoginForm } from './LoginForm';
+import { PinSignIn, type PinPerson } from './PinSignIn';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
@@ -15,11 +20,26 @@ const FEATURES: Array<{ icon: LucideIcon; text: string }> = [
   { icon: Signature, text: 'Customers compare options and sign on their own phone.' },
 ];
 
+/**
+ * The people who sign in with their name and PIN, read with the service role (signed out, nobody
+ * may read profiles): their id and "First · Role" only. Off without PIN_SECRET.
+ */
+async function pinPeople(): Promise<{ state: 'off' } | { state: 'unreachable' } | { state: 'on'; people: PinPerson[] }> {
+  if (!serverEnv.pinSecret()) return { state: 'off' };
+  try {
+    const names = await loadPinNames(createAdminClient({ retry: false }));
+    return names ? { state: 'on', people: names.map((n) => ({ id: n.id, label: n.label })) } : { state: 'unreachable' };
+  } catch {
+    return { state: 'unreachable' };
+  }
+}
+
 // Sign-in: the product's name, not a franchise's. A franchise's own name and colours appear on
 // its customer quotes, not here.
 // A repeated key (?next=/a&next=/b) arrives as an array: safeNext and the error lookup take one string only.
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string | string[]; error?: string | string[] }> }) {
   const { next, error } = await searchParams;
+  const pin = await pinPeople();
   return (
     <main className="min-h-dvh lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       {/* Desktop: what the product is. Dark in every theme. */}
@@ -74,17 +94,36 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 );
               })}
             </ul>
-            <p className="text-[15px] font-medium text-ink-2">Team members sign in with an email code below.</p>
+            <p className="text-[15px] font-medium text-ink-2">Team members sign in below.</p>
           </section>
         ) : null}
 
-        <div className="plate p-5">
-          <LoginForm next={safeNext(next)} initialError={loginErrorMessage(typeof error === 'string' ? error : null)} />
-        </div>
+        {pin.state === 'on' && pin.people.length ? (
+          <div className="mb-8">
+            <PinSignIn people={pin.people} next={safeNext(next)} />
+          </div>
+        ) : pin.state === 'off' ? (
+          <Banner className="mb-8" live={false}>
+            {PIN_OFF_MESSAGE}
+          </Banner>
+        ) : pin.state === 'unreachable' ? (
+          <Banner className="mb-8" tone="warn" live={false}>
+            Can&rsquo;t load the names for PIN sign-in right now. Try again in a minute, or sign in with your email code.
+          </Banner>
+        ) : null}
+
+        <section aria-labelledby="email-sign-in" className="space-y-3">
+          <h2 id="email-sign-in" className="sign-label text-ink-2">
+            Have a work email? Sign in with a code
+          </h2>
+          <div className="plate p-5">
+            <LoginForm next={safeNext(next)} initialError={loginErrorMessage(typeof error === 'string' ? error : null)} />
+          </div>
+        </section>
 
         <p className="mt-6 flex gap-2.5 text-[15px] font-medium text-ink-2">
           <Icon icon={LifeBuoy} size="s" className="mt-0.5 text-ink" />
-          <span>Trouble signing in? Ask the owner or your office to add your work email to the team.</span>
+          <span>Trouble signing in? Ask the owner to add you to the team, or to reset your PIN.</span>
         </p>
       </div>
     </main>

@@ -96,6 +96,12 @@ const MENUS: Record<Role, RoleMenu> = {
   },
 };
 
+/** Where a role lands after signing in (and on "/"): crews their jobs (never a priced page),
+ * estimators the field app, owner and office the estimates. */
+export function roleHome(role: Role): string {
+  return role === 'crew' ? '/crew' : role === 'estimator' ? '/field' : '/estimates';
+}
+
 export function menuFor(role: Role): RoleMenu {
   return MENUS[role];
 }

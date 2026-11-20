@@ -4,14 +4,18 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isPinLoginEmail, shownEmail } from '@/lib/auth/pin';
 import type { Role } from '@/lib/pricing';
 import { authErrorState, PATH_HEADER, profileReadState, UNREACHABLE_BODY, unreachableHref } from './sessionState';
 
 export interface SessionProfile {
   userId: string;
+  /** The person's email; null for a PIN person (their made-up login address is never shown). */
   email: string | null;
   role: Role;
   fullName: string;
+  /** Signs in with their name and PIN (lib/auth/pin.ts): their menu offers "Change my PIN". */
+  pinLogin: boolean;
 }
 
 export type SessionResult = { state: 'ok'; profile: SessionProfile } | { state: 'signed_out' } | { state: 'unreachable' };
@@ -33,7 +37,11 @@ export const getSessionState = cache(async function getSessionState(): Promise<S
     const { data, error, status } = await supabase.from('profiles').select('role, full_name, active').eq('id', user.id).maybeSingle();
     if (error) return { state: profileReadState(status) };
     if (!data || !data.active) return { state: 'signed_out' };
-    return { state: 'ok', profile: { userId: user.id, email: user.email ?? null, role: data.role as Role, fullName: data.full_name as string } };
+    const pinLogin = isPinLoginEmail(user.email);
+    return {
+      state: 'ok',
+      profile: { userId: user.id, email: shownEmail(user.email), role: data.role as Role, fullName: data.full_name as string, pinLogin },
+    };
   } catch {
     // A request that threw instead of answering (no connection at all).
     return { state: 'unreachable' };

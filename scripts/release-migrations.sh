@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/release-migrations.sh (Postgres 16 on socket /tmp/kpg port 5499; edit PG/url for another server).
-# Release step 3: the two new migrations on a production-shaped database (the test stub, which has
-# production's default privileges since review B database-B5, plus every migration on origin/main),
-# in order, twice; the second run must change nothing. Then the blower door migration alone on
+# Release step 3: the two new migrations (and any later one not on origin/main yet) on a
+# production-shaped database (the test stub, which has production's default privileges since
+# review B database-B5, plus every migration on origin/main), in order, twice; the second run must change nothing. Then the blower door migration alone on
 # main's schema (no accuracy migration) with its SQL test, to show it relies on nothing the
 # accuracy migration changed. Every database made here is dropped.
 set -euo pipefail
@@ -17,7 +17,10 @@ cleanup() { psql "$PG" -qtc "drop database if exists $A" >/dev/null; psql "$PG" 
 trap cleanup EXIT
 cleanup
 MAIN_MIGS=$(git ls-tree --name-only origin/main supabase/migrations/ | sort)
-NEW="supabase/migrations/20261119000001_accuracy.sql supabase/migrations/20261120000001_blower_door.sql"
+# The release's two migrations, then every migration here that origin/main does not have yet (the
+# PIN sign-in migration), in file order.
+LATER="$(comm -13 <(echo "$MAIN_MIGS") <(ls supabase/migrations/*.sql | sort) | tr '\n' ' ')"
+NEW="supabase/migrations/20261119000001_accuracy.sql supabase/migrations/20261120000001_blower_door.sql $LATER"
 
 apply_file() { psql "$(url "$1")" -q -v ON_ERROR_STOP=1 -f "$2" >/dev/null; }
 apply_main() {
@@ -51,6 +54,8 @@ echo "  what the first run changed in rows (lines only in the first-run dump):"
 diff <(grep -v '^== ' "$OUT/0-main.data.txt" | sort) <(grep -v '^== ' "$OUT/1-first.data.txt" | sort) | grep '^[<>]' | cut -c1-160 | sed 's/^/    /' | head -40 || true
 echo "  blower door objects' grants (production's default privileges, then the migration's revokes):"
 grep -E ' blower_door_tests ' "$OUT/2-second.grants.txt" | sed 's/^/    /'
+echo "  pin_attempts grants (the service role only; anon and authenticated must not be listed):"
+grep -E ' pin_attempts ' "$OUT/2-second.grants.txt" | sed 's/^/    /'
 psql "$(url $A)" -qAt -c "select p.proname || ' ' || coalesce(array_to_string(p.proacl, ','), 'default') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('sync_blower_door_test','blower_door_context','can_see_blower_door','can_record_blower_door','tg_blower_door_tests_job_estimate') order by 1" | sed 's/^/    /'
 echo "  SQL tests on this database (after tests/sql/01_grants.sql, as npm run test:db does):"
 apply_file $A tests/sql/01_grants.sql
@@ -64,6 +69,8 @@ apply_file $B supabase/migrations/20261120000001_blower_door.sql
 apply_file $B supabase/migrations/20261120000001_blower_door.sql
 apply_file $B tests/sql/01_grants.sql
 psql "$(url $B)" -q -v ON_ERROR_STOP=1 -o /dev/null -f tests/sql/50_blower_door.test.sql && echo "    ok tests/sql/50_blower_door.test.sql (blower door without the accuracy migration, applied twice)"
+# The later migrations on B too, so the names compared below are the accuracy migration's only.
+for f in $LATER; do apply_file $B "$f"; done
 echo "  names the blower door migration uses that only the accuracy migration creates:"
 ONLY_ACC=$(comm -23 "$OUT/names-with-accuracy.txt" <(psql "$(url $B)" -qAt -c "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where nspname = 'public' union select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where nspname = 'public'" | sort -u))
 found=0

@@ -7,9 +7,9 @@ import type { Role } from '@/lib/pricing';
 import { AppShell } from './AppShell';
 import { PageHeader } from './PageHeader';
 
-function shell(role: Role, org = { company: null as string | null, phone: null as string | null }) {
+function shell(role: Role, org = { company: null as string | null, phone: null as string | null }, pinLogin = false) {
   return renderToStaticMarkup(
-    <AppShell profile={{ fullName: 'Pat Person', email: 'pat@example.com', role }} menu={menuFor(role)} org={org} version="9.9.9">
+    <AppShell profile={{ fullName: 'Pat Person', email: pinLogin ? null : 'pat@example.com', role, pinLogin }} menu={menuFor(role)} org={org} version="9.9.9">
       <main>
         <h1>Page</h1>
       </main>
@@ -27,6 +27,15 @@ describe('the app shell', () => {
       for (const theme of ['Auto', 'Day', 'Night', 'Sun+']) expect(html, `${role} ${theme}`).toContain(`>${theme}<`);
       expect(html, role).toContain('version 9.9.9');
       expect(html, role).toContain('Need help?');
+    }
+  });
+
+  it('offers "Change my PIN" only to someone who signs in with a PIN, and shows no login address', () => {
+    for (const role of ['owner', 'office', 'estimator', 'crew'] as Role[]) {
+      expect(shell(role), role).not.toContain('>Change my PIN<');
+      const pin = shell(role, undefined, true);
+      expect(pin, role).toContain('>Change my PIN<');
+      expect(pin, role).not.toMatch(/@example\.com/);
     }
   });
 

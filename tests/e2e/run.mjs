@@ -9,6 +9,7 @@ const pw = createRequire(import.meta.url)('playwright');
 import { sign } from './jwt.mjs';
 import { drawGable, turn } from './gable.mjs';
 import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 
 const BASE = process.env.APP_URL ?? 'http://localhost:3000';
 const SHOTS = (process.env.E2E_SHOTS ?? new URL('./shots', import.meta.url).pathname).replace(/\/?$/, '/');
@@ -2037,6 +2038,176 @@ step('owner edits the rebate programs');
     unreachableStep = false;
     check(psql("select value->'programs'->0->'tiers'->0->>'rebate' from app_settings where key = 'blower_door'") === '900', 'and nothing was saved');
   }
+}
+
+// ---------------------------------------------------------------- Sign in with a name and PIN
+step('PIN sign-in: the owner adds a crew person and an office person with no email, PIN 1234');
+{
+  await op.goto(BASE + '/admin/team');
+  const add = op.getByRole('region', { name: 'Add a person' });
+  await add.waitFor();
+  const pinBox = add.getByLabel('PIN');
+  check((await pinBox.inputValue()) === '1234', 'the PIN box starts at 1234');
+  await add.getByLabel('Full name').fill('Nina Crew');
+  await add.getByLabel('Role').selectOption('crew');
+  await add.getByLabel('Crew A').selectOption('member');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText('Added Nina Crew. They sign in by tapping their name and entering the PIN.').waitFor({ timeout: 15000 });
+  check(
+    psql("select role || ' ' || pin_sign_in || ' ' || active || ' ' || coalesce(email::text, 'no-email') from profiles where full_name = 'Nina Crew'") === 'crew true true no-email',
+    'Nina Crew is on the team as crew, listed for PIN sign-in, with no email',
+  );
+  check(
+    psql("select count(*) from crew_members cm join profiles p on p.id = cm.profile_id join crews c on c.id = cm.crew_id where p.full_name = 'Nina Crew' and c.name = 'Crew A' and not cm.is_lead") === '1',
+    'and a member of Crew A, chosen on the same form',
+  );
+  check(
+    psql("select count(*) from auth.users u join profiles p on p.id = u.id where p.full_name = 'Nina Crew' and u.email = 'pin.' || p.id || '@example.com'") === '1',
+    'her login is the made-up pin.<id>@example.com address',
+  );
+  for (let i = 0; i < 50 && (await add.getByLabel('Full name').inputValue()) !== ''; i++) await op.waitForTimeout(100);
+  check((await pinBox.inputValue()) === '1234' && (await add.getByLabel('Full name').inputValue()) === '', 'the form is ready for the next person, PIN back at 1234');
+  await add.getByLabel('Full name').fill('Oren Office');
+  await add.getByLabel('Role').selectOption('office');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText('Added Oren Office. They sign in by tapping their name and entering the PIN.').waitFor({ timeout: 15000 });
+  check(psql("select role || ' ' || pin_sign_in from profiles where full_name = 'Oren Office'") === 'office true', 'Oren Office is added as office');
+  await add.getByLabel('Full name').fill(' nina  crew ');
+  await add.getByRole('button', { name: 'Add person' }).click();
+  await add.getByText(/Someone on the sign-in page is already called nina\s+crew\./).waitFor({ timeout: 15000 });
+  check(psql("select count(*) from profiles where lower(full_name) = 'nina crew'") === '1', 'a second "Nina Crew" is refused: two alike names on the sign-in page');
+  await op.screenshot({ path: SHOTS + '30-team-add-pin-person.png', fullPage: true });
+}
+
+step('PIN sign-in: the sign-in page lists the names, with no email');
+const pinCtx = await browser.newContext(phone);
+const pinPage = await pinCtx.newPage();
+pinPage.on('console', (m) => m.type() === 'error' && logs.push(`PIN ${m.text()} (${m.location().url})`));
+pinPage.on('pageerror', (e) => logs.push('PIN PAGEERROR ' + e.message));
+const tokenCalls = () => {
+  const f = `${process.env.E2E_STORAGE}/token-calls.log`;
+  return existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+};
+const namesList = pinPage.getByRole('region', { name: 'Tap your name' });
+const pad = pinPage.getByRole('group', { name: 'PIN pad' });
+const typePin = async (pin) => {
+  for (const d of pin) await pad.getByRole('button', { name: d, exact: true }).click();
+};
+const signInAs = async (label, pin) => {
+  await namesList.getByRole('button', { name: label, exact: true }).click();
+  await pad.waitFor();
+  await typePin(pin);
+};
+const signOut = async () => {
+  await pinPage.getByRole('button', { name: 'Me', exact: true }).click();
+  await pinPage.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Sign out' }).click();
+  await pinPage.waitForURL(BASE + '/login');
+  await namesList.waitFor();
+};
+{
+  await pinPage.goto(BASE + '/login');
+  await namesList.waitFor();
+  const labels = (await namesList.getByRole('button').allInnerTexts()).map((t) => t.trim());
+  check(JSON.stringify(labels) === JSON.stringify(['Oren · Office', 'Nina · Crew']), `the sign-in page lists the PIN people, office first: ${labels.join(', ')}`);
+  const html = await pinPage.content();
+  check(!/@example\.com|@koala\.test|pin\.[0-9a-f-]{36}/.test(html) && !/Olivia|Eddie|Carl/.test(html), 'no email or login address on the page, and nobody who signs in by email');
+  check(
+    (await pinPage.getByRole('heading', { name: 'Have a work email? Sign in with a code' }).count()) === 1 && (await pinPage.getByRole('textbox', { name: /^Work email/ }).count()) === 1,
+    'the email-code form is still there, below',
+  );
+  await pinPage.screenshot({ path: SHOTS + '31-sign-in-names.png', fullPage: true });
+}
+
+step('PIN sign-in: a wrong PIN says how many tries are left; 5 lock the name, even for the right PIN');
+{
+  await signInAs('Oren · Office', '9999');
+  await pinPage.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(true, 'a wrong PIN says "Wrong PIN. 4 tries left."');
+  await pinPage.screenshot({ path: SHOTS + '32-pin-wrong.png', fullPage: true });
+  for (const [pin, said] of [
+    ['1111', 'Wrong PIN. 3 tries left.'],
+    ['2222', 'Wrong PIN. 2 tries left.'],
+    ['3333', 'Wrong PIN. 1 try left.'],
+    ['4444', 'Too many tries. Try again in 15 minutes.'],
+  ]) {
+    await typePin(pin);
+    await pinPage.getByText(said).waitFor({ timeout: 15000 });
+  }
+  check(true, 'the next wrong PINs count down to "1 try left", and the fifth locks the name for 15 minutes');
+  check(psql("select a.failed || ' ' || (a.locked_until > now() + interval '14 minutes') from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Oren Office'") === '5 true', 'pin_attempts: 5 wrong, locked for 15 minutes');
+  const before = tokenCalls().length;
+  await typePin('1234');
+  await pinPage.getByText('Too many tries. Try again in 15 minutes.').waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/login' && tokenCalls().length === before, 'the right PIN is refused while locked, and never reaches the sign-in service');
+  await pinPage.screenshot({ path: SHOTS + '33-pin-locked.png', fullPage: true });
+  await pinPage.getByRole('button', { name: 'Back', exact: true }).click();
+  await namesList.waitFor();
+}
+
+step('PIN sign-in: the crew person signs in with 1234 and lands on the crew app');
+{
+  await signInAs('Nina · Crew', '1234');
+  await pinPage.waitForURL(BASE + '/crew', { timeout: 20000 });
+  await pinPage.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(!/\$\s?\d/.test(await pinPage.locator('body').innerText()), 'Nina lands on /crew, her home: no prices');
+  check(tokenCalls().at(-1)?.ok === true && psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '0', 'signed in through Supabase with her derived password; no wrong PINs counted');
+  const field = await pinPage.request.get(BASE + '/estimates', { maxRedirects: 0 });
+  check(field.status() === 307 && (field.headers()['location'] ?? '').includes('/no-access'), 'and a priced page sends her to "not your page"');
+  await pinPage.getByRole('button', { name: 'Me', exact: true }).click();
+  const menu = pinPage.getByRole('dialog', { name: 'Menu' });
+  const menuText = await menu.innerText();
+  check(menuText.includes('Nina Crew') && !/@example\.com|pin\./.test(menuText), 'her menu shows her name, never the made-up login address');
+  await pinPage.screenshot({ path: SHOTS + '34-crew-signed-in-menu.png' });
+}
+
+step('PIN sign-in: Change my PIN, then the old PIN no longer works');
+{
+  const menu = pinPage.getByRole('dialog', { name: 'Menu' });
+  await menu.getByRole('button', { name: 'Change my PIN' }).click();
+  await menu.getByLabel('Current PIN').fill('1235');
+  await menu.getByLabel('New PIN (4 digits)').fill('2468');
+  await menu.getByLabel('New PIN again').fill('2468');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(psql("select a.failed from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '1', 'a wrong current PIN is refused and counts toward the lockout');
+  await menu.getByLabel('Current PIN').fill('1234');
+  await menu.getByLabel('New PIN again').fill('2469');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText("The new PINs don't match. Type the same 4 digits twice.").waitFor();
+  await menu.getByLabel('New PIN again').fill('2468');
+  await menu.getByRole('button', { name: 'Save new PIN' }).click();
+  await menu.getByText('Your PIN is changed. Use the new one next time you sign in.').waitFor({ timeout: 15000 });
+  check(psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '0', 'Change my PIN works, and the right current PIN clears the count');
+  await pinPage.screenshot({ path: SHOTS + '35-change-pin.png' });
+  await pinPage.keyboard.press('Escape');
+  await pinPage.reload();
+  await pinPage.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/crew', 'and she is still signed in on this phone');
+  await signOut();
+  await signInAs('Nina · Crew', '1234');
+  await pinPage.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(new URL(pinPage.url()).pathname === '/login', 'the old PIN 1234 no longer works');
+  await typePin('2468');
+  await pinPage.waitForURL(BASE + '/crew', { timeout: 20000 });
+  check(true, 'the new PIN 2468 does');
+  await signOut();
+}
+
+step("PIN sign-in: the owner's Reset PIN restores 1234 and clears the lock");
+{
+  await op.goto(BASE + '/admin/team');
+  const card = op.locator('li', { has: op.getByLabel('New PIN for Oren Office') });
+  check((await card.getByText('Locked: too many wrong PINs').count()) === 1, 'the team page shows Oren is locked out');
+  check((await card.getByText('Signs in with name and PIN').count()) === 1, 'and that he signs in with his name and PIN');
+  check((await card.getByLabel('New PIN for Oren Office').inputValue()) === '1234', 'Reset PIN offers 1234');
+  await card.getByRole('button', { name: 'Reset PIN' }).click();
+  await card.getByText('New PIN set for Oren Office. The old PIN no longer works, and any lock is cleared.').waitFor({ timeout: 15000 });
+  check(psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Oren Office'") === '0', 'the lock is cleared');
+  await op.screenshot({ path: SHOTS + '36-team-reset-pin.png', fullPage: true });
+  await signInAs('Oren · Office', '1234');
+  await pinPage.waitForURL(BASE + '/estimates', { timeout: 20000 });
+  check(true, 'Oren signs in with 1234 at once and lands on the estimates, the office home');
+  await pinCtx.close();
 }
 
 console.log('console errors:', logs.length ? logs : 'none');

@@ -69,7 +69,7 @@ export async function StaffShell({ children, register }: { children: ReactNode; 
   const org = await loadOrg(profile.role);
   return (
     <AppShell
-      profile={{ fullName: profile.fullName, email: profile.email, role: profile.role }}
+      profile={{ fullName: profile.fullName, email: profile.email, role: profile.role, pinLogin: profile.pinLogin }}
       menu={menuFor(profile.role)}
       org={org}
       version={VERSION}

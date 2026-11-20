@@ -123,13 +123,17 @@ under Project → Settings → Environment Variables.
 | `ROOF_TAKEOFF_KEY`, `ROOF_TAKEOFF_URL` | the satellite roof takeoff (optional), on each area ("Look up from the address": attic floor or roof deck, crawlspace floor, garage ceiling or wall run) and on the Roof lookup page (`/field/roof`: any address, with roofing squares, waste, bundles, roof edges, materials, a one-page print and recent lookups). Only Roof Takeoff's `/api` is used, server to server (contract v1.2; older answers still work); its own page is retired. A finished lookup of the same house is used again for a day instead of paying Google again. The key is Roof Takeoff's `PARTNER_KEY`; the URL defaults to `https://roof-takeoff-ten.vercel.app`. Without the key the button and the page say the lookup isn't set up. |
 | `CRON_SECRET` | the nightly learning run. Vercel Cron sends it automatically; without it the run is disabled. Any long random string. |
 | `OWNER_REPORT_EMAIL` | where the nightly run sends "a new pricing candidate is waiting" (optional) |
+| `PIN_SECRET` | signing in with a name and a 4-digit PIN, for staff with no work email (server only; a long random string, e.g. `openssl rand -base64 32`). Each PIN person's Supabase password is derived from their PIN with it, so nobody can try PINs against Supabase directly. Without it the sign-in page says PIN sign-in is off and only the email code works. Changing it stops every PIN until the owner resets each one on Team. Keep Supabase's **Password requirements** (Authentication → Providers → Email) at the default or "letters and digits": the derived passwords are 43 letters, digits, `-` and `_`. |
 
 ### 3. First owner account
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
   npm run bootstrap:owner -- --email you@koala.example --name "Owner Name"
 ```
-After that, invite everyone else from **Team** in the app.
+After that, add everyone else from **Team** in the app: **Add a person** for someone with no work
+email (they tap their name on the sign-in page and type a 4-digit PIN, 1234 unless you set another;
+they can change it in their menu, and **Reset PIN** on their row sets a new one and clears a lockout
+after 5 wrong PINs), or **Invite someone by email** for someone who signs in with an email code.
 
 ### 4. Replace the placeholders (owner)
 The seed data is clearly marked **placeholder**. The Pricing page shows a banner until

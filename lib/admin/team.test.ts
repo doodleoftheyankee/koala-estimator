@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inviteForm, isEmailTakenError, memberForm, selfEditError } from './team';
+import { inviteForm, isEmailTakenError, memberForm, pinMemberForm, pinNameTaken, resetPinForm, selfEditError } from './team';
 
 const ID = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
 
@@ -37,5 +37,30 @@ describe('selfEditError', () => {
     expect(selfEditError(ID, { id: ID, role: 'owner', active: false })).toMatch(/deactivate/);
     expect(selfEditError(ID, { id: ID, role: 'owner', active: true })).toBeNull();
     expect(selfEditError(ID, { id: 'other', role: 'crew', active: false })).toBeNull();
+  });
+});
+
+describe('adding a person who signs in with a PIN', () => {
+  it('needs a name, a role and a 4-digit PIN', () => {
+    expect(pinMemberForm.parse({ full_name: ' Nell Crew ', role: 'crew', pin: ' 1234 ' })).toEqual({ full_name: 'Nell Crew', role: 'crew', pin: '1234' });
+    for (const pin of ['123', '12345', '12a4', '', undefined]) {
+      const r = pinMemberForm.safeParse({ full_name: 'Nell', role: 'crew', pin });
+      expect(r.success, String(pin)).toBe(false);
+    }
+    expect(pinMemberForm.safeParse({ full_name: 'Nell', role: 'crew', pin: '12a4' }).error?.issues[0]?.message).toBe('The PIN must be 4 digits (0 to 9)');
+    expect(pinMemberForm.safeParse({ full_name: '', role: 'crew', pin: '1234' }).success).toBe(false);
+    expect(pinMemberForm.safeParse({ full_name: 'Nell', role: 'boss', pin: '1234' }).success).toBe(false);
+  });
+
+  it('resets a PIN for one person', () => {
+    expect(resetPinForm.parse({ id: ID, pin: '1234' })).toEqual({ id: ID, pin: '1234' });
+    expect(resetPinForm.safeParse({ id: 'x', pin: '1234' }).success).toBe(false);
+    expect(resetPinForm.safeParse({ id: ID, pin: '99' }).success).toBe(false);
+  });
+
+  it('refuses a second listed person with the same name, case and spaces aside', () => {
+    expect(pinNameTaken(['Nell Crew', 'Oscar Office'], ' nell   CREW ')).toBe(true);
+    expect(pinNameTaken(['Nell Crew'], 'Nell C.')).toBe(false);
+    expect(pinNameTaken([], 'Nell Crew')).toBe(false);
   });
 });
