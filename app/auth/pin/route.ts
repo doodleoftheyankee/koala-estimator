@@ -6,8 +6,10 @@
 // The lockout comes first and every refusal reads like a wrong PIN, so nothing says whether a name
 // exists (lib/auth/pin.ts). Refusals answer 200 with { ok: false, message }: a wrong PIN is
 // something the person did, not a server error, and the page shows the words as they are.
+// A sign-in also sets the known-phone cookie: on this phone the person's PINs are then counted on
+// their own, so a stranger who locks the name (the ids are on the sign-in page) cannot keep them out.
 import { NextResponse, type NextRequest } from 'next/server';
-import { checkPin, ENTER_PIN_MESSAGE, PIN_OFF_MESSAGE } from '@/lib/auth/pin';
+import { checkPin, DEVICE_COOKIE, deviceCookieOptions, ENTER_PIN_MESSAGE, PIN_OFF_MESSAGE } from '@/lib/auth/pin';
 import { serverEnv } from '@/lib/env';
 import { roleHome } from '@/lib/nav';
 import { safeNext } from '@/lib/safeNext';
@@ -35,11 +37,18 @@ export async function POST(request: NextRequest) {
   }
   const supabase = await createClient();
   const result = await checkPin(
-    { admin, secret, signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }) },
+    {
+      admin,
+      secret,
+      signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
+      device: request.cookies.get(DEVICE_COOKIE)?.value ?? null,
+    },
     body.id,
     body.pin,
   );
   if (!result.ok) return refuse(result.message, result.kind);
   const next = safeNext(body.next, '/');
-  return NextResponse.json({ ok: true, to: next === '/' ? roleHome(result.role) : next }, { headers: NO_STORE });
+  const res = NextResponse.json({ ok: true, to: next === '/' ? roleHome(result.role) : next }, { headers: NO_STORE });
+  res.cookies.set(DEVICE_COOKIE, result.device, deviceCookieOptions(request.nextUrl.protocol === 'https:'));
+  return res;
 }

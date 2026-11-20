@@ -2169,7 +2169,10 @@ step('PIN sign-in: Change my PIN, then the old PIN no longer works');
   await menu.getByLabel('New PIN again').fill('2468');
   await menu.getByRole('button', { name: 'Save new PIN' }).click();
   await menu.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
-  check(psql("select a.failed from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '1', 'a wrong current PIN is refused and counts toward the lockout');
+  check(
+    psql("select a.failed from pin_device_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '1',
+    "a wrong current PIN is refused and counts toward the lockout (this phone's own count: she signed in on it)",
+  );
   await menu.getByLabel('Current PIN').fill('1234');
   await menu.getByLabel('New PIN again').fill('2469');
   await menu.getByRole('button', { name: 'Save new PIN' }).click();
@@ -2177,7 +2180,10 @@ step('PIN sign-in: Change my PIN, then the old PIN no longer works');
   await menu.getByLabel('New PIN again').fill('2468');
   await menu.getByRole('button', { name: 'Save new PIN' }).click();
   await menu.getByText('Your PIN is changed. Use the new one next time you sign in.').waitFor({ timeout: 15000 });
-  check(psql("select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew'") === '0', 'Change my PIN works, and the right current PIN clears the count');
+  check(
+    psql("select (select count(*) from pin_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew') + (select count(*) from pin_device_attempts a join profiles p on p.id = a.profile_id where p.full_name = 'Nina Crew')") === '0',
+    'Change my PIN works, and the right current PIN clears the count',
+  );
   await pinPage.screenshot({ path: SHOTS + '35-change-pin.png' });
   await pinPage.keyboard.press('Escape');
   await pinPage.reload();
@@ -2208,6 +2214,78 @@ step("PIN sign-in: the owner's Reset PIN restores 1234 and clears the lock");
   await pinPage.waitForURL(BASE + '/estimates', { timeout: 20000 });
   check(true, 'Oren signs in with 1234 at once and lands on the estimates, the office home');
   await pinCtx.close();
+}
+
+step('PIN sign-in: a stranger cannot lock a person out of the phone she signs in on');
+{
+  const ninaId = psql("select id from profiles where full_name = 'Nina Crew'");
+  const herCtx = await browser.newContext(phone);
+  const her = await herCtx.newPage();
+  her.on('console', (m) => m.type() === 'error' && logs.push(`HER ${m.text()} (${m.location().url})`));
+  her.on('pageerror', (e) => logs.push('HER PAGEERROR ' + e.message));
+  const herNames = her.getByRole('region', { name: 'Tap your name' });
+  const herPad = her.getByRole('group', { name: 'PIN pad' });
+  const herSignIn = async (pin) => {
+    await herNames.getByRole('button', { name: 'Nina · Crew', exact: true }).click();
+    await herPad.waitFor();
+    for (const d of pin) await herPad.getByRole('button', { name: d, exact: true }).click();
+  };
+  await her.goto(BASE + '/login');
+  await herSignIn('2468');
+  await her.waitForURL(BASE + '/crew', { timeout: 20000 });
+  const known = (await herCtx.cookies()).find((c) => c.name === 'koala_pin_device');
+  check(
+    Boolean(known) && known.httpOnly && known.sameSite === 'Lax' && known.path === '/' && !known.value.includes(ninaId) && known.expires > Date.now() / 1000 + 300 * 86400,
+    'signing in remembers her phone: an httpOnly cookie that lasts over a year and does not name her',
+  );
+  await her.getByRole('button', { name: 'Me', exact: true }).click();
+  await her.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Sign out' }).click();
+  await her.waitForURL(BASE + '/login');
+  await herNames.waitFor();
+  check((await herCtx.cookies()).some((c) => c.name === 'koala_pin_device' && c.value === known.value), 'signing out keeps the phone known');
+
+  // A stranger's script: no cookies, the ids read off the sign-in page, wrong PINs for her name.
+  const stranger = await pw.request.newContext({ baseURL: BASE });
+  const loginHtml = await (await stranger.get('/login')).text();
+  check(loginHtml.includes(ninaId), "the script finds her id on the sign-in page");
+  const said = [];
+  for (const pin of ['0000', '1111', '2222', '3333', '4444']) said.push((await (await stranger.post('/auth/pin', { data: { id: ninaId, pin } })).json()).message);
+  check(said.at(-1) === 'Too many tries. Try again in 15 minutes.', `5 wrong PINs from the script lock her name for strangers (${said.join(' / ')})`);
+  const right = await (await stranger.post('/auth/pin', { data: { id: ninaId, pin: '2468' } })).json();
+  check(right.ok === false && right.message === 'Too many tries. Try again in 15 minutes.', 'and the script cannot guess on: even the right PIN is refused, so guessing stays at 5 tries per 15 minutes');
+  const forged = await (await stranger.post('/auth/pin', { data: { id: ninaId, pin: '2468' }, headers: { cookie: `koala_pin_device=${known.value.split('.')[0]}.${'A'.repeat(22)}` } })).json();
+  check(forged.ok === false && forged.message === 'Too many tries. Try again in 15 minutes.', 'a made-up phone cookie does not get the script round the lock');
+  check(psql(`select failed || ' ' || (locked_until > now() + interval '14 minutes') from pin_attempts where profile_id = '${ninaId}'`) === '5 true', 'pin_attempts: her name is locked for 15 minutes');
+
+  // Her own phone counts its own wrong PINs, and the right PIN gets her in.
+  await herSignIn('1357');
+  await her.getByText('Wrong PIN. 4 tries left.').waitFor({ timeout: 15000 });
+  check(psql(`select failed from pin_device_attempts where profile_id = '${ninaId}'`) === '1', 'a wrong PIN on her phone says "Wrong PIN. 4 tries left.": its own count, not the locked name\'s');
+  await her.screenshot({ path: SHOTS + '37-known-phone-wrong-pin.png', fullPage: true });
+  for (const d of '2468') await herPad.getByRole('button', { name: d, exact: true }).click();
+  await her.waitForURL(BASE + '/crew', { timeout: 20000 });
+  await her.getByRole('heading', { name: 'Jobs' }).waitFor({ timeout: 15000 });
+  check(true, 'she signs in on her phone with the right PIN while her name is locked for strangers');
+  check(
+    psql(`select count(*) from pin_device_attempts where profile_id = '${ninaId}'`) === '0' && psql(`select failed from pin_attempts where profile_id = '${ninaId}'`) === '5',
+    "her right PIN clears her phone's count, and leaves the stranger's lock as it is",
+  );
+
+  // A phone she has never signed in on is a stranger's: it waits out the lock, or the owner resets her PIN.
+  const newCtx = await browser.newContext(phone);
+  const fresh = await newCtx.newPage();
+  fresh.on('console', (m) => m.type() === 'error' && logs.push(`NEW ${m.text()} (${m.location().url})`));
+  fresh.on('pageerror', (e) => logs.push('NEW PAGEERROR ' + e.message));
+  await fresh.goto(BASE + '/login');
+  await fresh.getByRole('region', { name: 'Tap your name' }).getByRole('button', { name: 'Nina · Crew', exact: true }).click();
+  const freshPad = fresh.getByRole('group', { name: 'PIN pad' });
+  await freshPad.waitFor();
+  for (const d of '2468') await freshPad.getByRole('button', { name: d, exact: true }).click();
+  await fresh.getByText('Too many tries. Try again in 15 minutes.').waitFor({ timeout: 15000 });
+  check(new URL(fresh.url()).pathname === '/login', 'a phone she never signed in on is held by the lock like the script');
+  await stranger.dispose();
+  await newCtx.close();
+  await herCtx.close();
 }
 
 console.log('console errors:', logs.length ? logs : 'none');

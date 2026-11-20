@@ -1,12 +1,13 @@
 // POST /api/account/pin {current, pin, again} (JSON, "Change my PIN" in the account menu): a
 // signed-in PIN person changes their own PIN. The current PIN is checked as signing in checks it,
-// and a wrong one counts toward the same lockout (lib/auth/pin.ts). Supabase signs a person out
+// and a wrong one counts toward the same lockout (lib/auth/pin.ts): this phone's own count when
+// the person signed in on it (the known-phone cookie), else the name's. Supabase signs a person out
 // everywhere when their password changes, so this phone is signed in again with the new PIN right
 // after (a new session cookie on this answer) and the person carries on.
 // Refusals answer 200 with { ok: false, message } (words for the person, not a server error).
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import { checkPin, derivedPassword, PIN_OFF_MESSAGE, setPin } from '@/lib/auth/pin';
+import { NextResponse, type NextRequest } from 'next/server';
+import { checkPin, derivedPassword, DEVICE_COOKIE, deviceCookieOptions, PIN_OFF_MESSAGE, setPin } from '@/lib/auth/pin';
 import { newPinProblem } from '@/lib/auth/pinShared';
 import { publicEnv, serverEnv } from '@/lib/env';
 import { authorize } from '@/lib/server/auth';
@@ -16,7 +17,7 @@ import { createClient } from '@/lib/supabase/server';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const answer = (ok: boolean, message: string) => NextResponse.json({ ok, message }, { headers: NO_STORE });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const { profile, error } = await authorize();
   if (error) return error;
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) {
@@ -39,7 +40,16 @@ export async function POST(request: Request) {
 
   // The current PIN, checked on a client that keeps no session: this phone's stays as it is.
   const check = createSupabaseClient(publicEnv.supabaseUrl(), publicEnv.supabaseAnonKey(), { auth: { persistSession: false, autoRefreshToken: false } });
-  const current = await checkPin({ admin, secret, signIn: (email, password) => check.auth.signInWithPassword({ email, password }) }, profile.userId, body!.current);
+  const current = await checkPin(
+    {
+      admin,
+      secret,
+      signIn: (email, password) => check.auth.signInWithPassword({ email, password }),
+      device: request.cookies.get(DEVICE_COOKIE)?.value ?? null,
+    },
+    profile.userId,
+    body!.current,
+  );
   if (!current.ok) return answer(false, current.message);
 
   const failed = await setPin(admin, profile.userId, pin, secret);
@@ -48,5 +58,7 @@ export async function POST(request: Request) {
   // Signed in again with the new PIN, so this phone keeps working.
   const supabase = await createClient();
   await supabase.auth.signInWithPassword({ email: current.email, password: derivedPassword(profile.userId, pin, secret) }).catch(() => undefined);
-  return answer(true, 'Your PIN is changed. Use the new one next time you sign in.');
+  const res = answer(true, 'Your PIN is changed. Use the new one next time you sign in.');
+  res.cookies.set(DEVICE_COOKIE, current.device, deviceCookieOptions(request.nextUrl.protocol === 'https:'));
+  return res;
 }

@@ -1,7 +1,8 @@
 'use client';
 // Sign in with your name and a 4-digit PIN (staff with no work email). Tap your name, then type
 // the PIN on big keys; the fourth digit sends it (POST /auth/pin) and the page opens the person's
-// home. A wrong PIN says how many tries are left; 5 wrong in a row lock the name for 15 minutes.
+// home. A wrong PIN says how many tries are left; 5 wrong in a row lock the name for 15 minutes
+// (on a phone the person has signed in on before, that phone has its own count: lib/auth/pin.ts).
 // A computer keyboard works too: digits, Backspace, and Escape to go back to the names.
 import { useEffect, useRef, useState } from 'react';
 import { PIN_LENGTH } from '@/lib/auth/pinShared';

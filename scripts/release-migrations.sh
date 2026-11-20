@@ -54,8 +54,8 @@ echo "  what the first run changed in rows (lines only in the first-run dump):"
 diff <(grep -v '^== ' "$OUT/0-main.data.txt" | sort) <(grep -v '^== ' "$OUT/1-first.data.txt" | sort) | grep '^[<>]' | cut -c1-160 | sed 's/^/    /' | head -40 || true
 echo "  blower door objects' grants (production's default privileges, then the migration's revokes):"
 grep -E ' blower_door_tests ' "$OUT/2-second.grants.txt" | sed 's/^/    /'
-echo "  pin_attempts grants (the service role only; anon and authenticated must not be listed):"
-grep -E ' pin_attempts ' "$OUT/2-second.grants.txt" | sed 's/^/    /'
+echo "  pin_attempts and pin_device_attempts grants (the service role only; anon and authenticated must not be listed):"
+grep -E ' pin_(device_)?attempts ' "$OUT/2-second.grants.txt" | sed 's/^/    /'
 psql "$(url $A)" -qAt -c "select p.proname || ' ' || coalesce(array_to_string(p.proacl, ','), 'default') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('sync_blower_door_test','blower_door_context','can_see_blower_door','can_record_blower_door','tg_blower_door_tests_job_estimate') order by 1" | sed 's/^/    /'
 echo "  SQL tests on this database (after tests/sql/01_grants.sql, as npm run test:db does):"
 apply_file $A tests/sql/01_grants.sql

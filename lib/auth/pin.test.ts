@@ -1,7 +1,8 @@
 // Sign in with a name and a PIN: the PIN's shape, the password behind it, the lockout (5 wrong
-// PINs in a row lock the name for 15 minutes; the right PIN starts again), the service-role reads
-// and writes of pin_attempts (against an in-memory stand-in for the Supabase client), what the
-// person reads, and the names on the sign-in page.
+// PINs in a row lock the name for 15 minutes; the right PIN starts again), known phones (a phone
+// the person has signed in on counts its own wrong PINs, so a stranger cannot keep them out), the
+// service-role reads and writes of pin_attempts and pin_device_attempts (against an in-memory
+// stand-in for the Supabase client), what the person reads, and the names on the sign-in page.
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
@@ -13,19 +14,26 @@ const {
   createPinLogin,
   DEFAULT_PIN,
   derivedPassword,
+  DEVICE_COOKIE,
+  DEVICE_COOKIE_DAYS,
+  deviceCookieOptions,
+  deviceKey,
   isPin,
   isPinLoginEmail,
   isUuid,
   isWrongCredentials,
+  knownDevice,
   loadPinNames,
   LOCK_MINUTES,
   lockedMessage,
+  MAX_KNOWN_PEOPLE,
   MAX_TRIES,
   minutesLeft,
   PIN_LENGTH,
   pinLoginEmail,
   pinSignInList,
   releaseAttempt,
+  rememberDevice,
   reserveAttempt,
   setPin,
   shownEmail,
@@ -42,8 +50,8 @@ const NOBODY = '0a000000-0000-4000-8000-0000000000ff';
 const T0 = new Date('2026-11-20T15:00:00.000Z');
 
 // ---------------------------------------------------------------------------------------------
-// An in-memory stand-in for the service-role client: profiles, pin_attempts (with its primary
-// key and foreign key) and auth.admin. Every call waits a turn, so attempts sent side by side
+// An in-memory stand-in for the service-role client: profiles, pin_attempts and
+// pin_device_attempts (with their primary keys and foreign key) and auth.admin. Every call waits a turn, so attempts sent side by side
 // interleave as they do over the network.
 // ---------------------------------------------------------------------------------------------
 type Row = Record<string, unknown>;
@@ -53,6 +61,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 function fakeDb() {
   const profiles = new Map<string, Row>();
   const attempts = new Map<string, Row>();
+  /** pin_device_attempts, by `${profile_id}|${device}`. */
+  const devices = new Map<string, Row>();
   const users = new Map<string, { id: string; email: string; password: string; user_metadata: unknown }>();
   const fail: Partial<Record<'read' | 'insert' | 'update' | 'delete' | 'profiles' | 'getUser' | 'createUser' | 'updateUser', Err>> = {};
   const calls: string[] = [];
@@ -61,8 +71,9 @@ function fakeDb() {
   let betweenReadAndWrite: (() => void) | null = null;
 
   function table(name: string) {
-    const rows = name === 'profiles' ? profiles : attempts;
+    const rows = name === 'profiles' ? profiles : name === 'pin_device_attempts' ? devices : attempts;
     const key = name === 'profiles' ? 'id' : 'profile_id';
+    const keyOf = (r: Row) => (name === 'pin_device_attempts' ? `${r.profile_id}|${r.device}` : String(r[key]));
     const filters: Array<(r: Row) => boolean> = [];
     let op: { kind: 'select' } | { kind: 'insert'; row: Row } | { kind: 'update'; values: Row } | { kind: 'delete' } = { kind: 'select' };
     let returning = false;
@@ -74,7 +85,7 @@ function fakeDb() {
         const e = name === 'profiles' ? fail.profiles : fail.read;
         if (e) return { data: null, error: e };
         const hit = matches().map((r) => ({ ...r }));
-        if (name === 'pin_attempts' && betweenReadAndWrite) {
+        if (name !== 'profiles' && betweenReadAndWrite) {
           const f = betweenReadAndWrite;
           betweenReadAndWrite = null;
           queueMicrotask(f);
@@ -83,8 +94,8 @@ function fakeDb() {
       }
       if (fail[op.kind]) return { data: null, error: fail[op.kind]! };
       if (op.kind === 'insert') {
-        const id = op.row[key] as string;
-        if (name === 'pin_attempts' && !profiles.has(id)) return { data: null, error: { message: 'fk', code: '23503' } };
+        const id = keyOf(op.row);
+        if (name !== 'profiles' && !profiles.has(op.row.profile_id as string)) return { data: null, error: { message: 'fk', code: '23503' } };
         if (rows.has(id)) return { data: null, error: { message: 'duplicate key', code: '23505' } };
         rows.set(id, { ...op.row });
         return { data: null, error: null };
@@ -92,7 +103,7 @@ function fakeDb() {
       const hit = matches();
       for (const r of hit) {
         if (op.kind === 'update') Object.assign(r, op.values);
-        else rows.delete(r[key] as string);
+        else rows.delete(keyOf(r));
       }
       return { data: returning ? hit.map((r) => ({ [key]: r[key] })) : null, error: null };
     }
@@ -119,6 +130,10 @@ function fakeDb() {
       },
       is(col: string, v: null) {
         filters.push((r) => (r[col] ?? null) === v);
+        return b;
+      },
+      match(query: Row) {
+        for (const [col, v] of Object.entries(query)) b.eq(col, v);
         return b;
       },
       async maybeSingle() {
@@ -184,6 +199,7 @@ function fakeDb() {
     client: admin as unknown as SupabaseClient,
     profiles,
     attempts,
+    devices,
     users,
     fail,
     calls,
@@ -195,6 +211,8 @@ function fakeDb() {
 }
 
 const at = (minutes: number) => () => new Date(T0.getTime() + minutes * 60_000);
+/** The known-phone cookie: the phone's id, then a seal per person who signed in on it. */
+const PHONE_COOKIE = /^[A-Za-z0-9_-]{22}(\.[A-Za-z0-9_-]{22})+$/;
 
 // ---------------------------------------------------------------------------------------------
 
@@ -353,14 +371,38 @@ describe('pin_attempts, written with the service role', () => {
     expect(db.attempts.get(CREW)!.failed).toBe(3);
   });
 
-  it('clears the count and the lock', async () => {
+  it("clears the count and the lock: the name's, and every phone's", async () => {
     const db = fakeDb();
     db.addPerson(CREW, 'crew', 'Nell Crew');
+    db.addPerson(OFFICE, 'office', 'Oscar Office');
     db.attempts.set(CREW, { profile_id: CREW, failed: 5, locked_until: '2026-11-20T15:15:00.000Z', updated_at: 'a' });
+    db.devices.set(`${CREW}|k1`, { profile_id: CREW, device: 'k1', failed: 5, locked_until: '2026-11-20T15:15:00.000Z', updated_at: 'a' });
+    db.devices.set(`${CREW}|k2`, { profile_id: CREW, device: 'k2', failed: 2, locked_until: null, updated_at: 'a' });
+    db.devices.set(`${OFFICE}|k1`, { profile_id: OFFICE, device: 'k1', failed: 1, locked_until: null, updated_at: 'a' });
     expect(await clearAttempts(db.client, CREW)).toBeNull();
     expect(db.attempts.has(CREW)).toBe(false);
+    expect([...db.devices.keys()]).toEqual([`${OFFICE}|k1`]); // another person's count stays
     db.fail.delete = { message: 'no' };
     expect(await clearAttempts(db.client, CREW)).toBe('no');
+  });
+
+  it("counts a known phone's attempts in pin_device_attempts, by person and phone", async () => {
+    const db = fakeDb();
+    db.addPerson(CREW, 'crew', 'Nell Crew');
+    expect(await reserveAttempt(db.client, CREW, at(0), 'k1')).toMatchObject({ kind: 'try', failed: 1, prev: null, device: 'k1' });
+    expect(await reserveAttempt(db.client, CREW, at(1), 'k1')).toMatchObject({ kind: 'try', failed: 2, device: 'k1' });
+    expect(await reserveAttempt(db.client, CREW, at(1), 'k2')).toMatchObject({ kind: 'try', failed: 1, device: 'k2' });
+    expect(db.devices.get(`${CREW}|k1`)).toMatchObject({ profile_id: CREW, device: 'k1', failed: 2, locked_until: null });
+    expect(db.attempts.size).toBe(0); // the name's count is not touched
+    expect(await reserveAttempt(db.client, NOBODY, at(0), 'k1')).toEqual({ kind: 'unknown' });
+    const r = await reserveAttempt(db.client, CREW, at(2), 'k2');
+    await releaseAttempt(db.client, CREW, r as Extract<typeof r, { kind: 'try' }>);
+    expect(db.devices.get(`${CREW}|k2`)).toMatchObject({ failed: 1, updated_at: at(1)().toISOString() });
+    const first = await reserveAttempt(db.client, CREW, at(3), 'k3');
+    await releaseAttempt(db.client, CREW, first as Extract<typeof first, { kind: 'try' }>);
+    expect(db.devices.has(`${CREW}|k3`)).toBe(false);
+    for (let i = 0; i < 3; i++) await reserveAttempt(db.client, CREW, at(4), 'k1');
+    expect(await reserveAttempt(db.client, CREW, at(5), 'k1')).toEqual({ kind: 'locked', minutes: 14 });
   });
 });
 
@@ -379,7 +421,7 @@ describe('checking a PIN', () => {
   it('lets the right PIN in, with the role, and clears earlier wrong PINs', async () => {
     const { db, deps } = setup();
     expect(await checkPin(deps, CREW, '9999')).toEqual({ ok: false, kind: 'wrong', message: 'Wrong PIN. 4 tries left.' });
-    expect(await checkPin(deps, CREW, '1234')).toEqual({ ok: true, role: 'crew', email: pinLoginEmail(CREW) });
+    expect(await checkPin(deps, CREW, '1234')).toEqual({ ok: true, role: 'crew', email: pinLoginEmail(CREW), device: expect.stringMatching(PHONE_COOKIE) });
     expect(db.signIn).toHaveBeenLastCalledWith(pinLoginEmail(CREW), derivedPassword(CREW, '1234', SECRET));
     expect(db.attempts.has(CREW)).toBe(false);
     expect(await checkPin(deps, CREW, '0000')).toMatchObject({ message: 'Wrong PIN. 4 tries left.' });
@@ -461,6 +503,141 @@ describe('checking a PIN', () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------
+// Known phones (review SEC-PIN-3): every id is on the sign-in page, so a stranger's script could
+// send 5 wrong PINs for each name every 15 minutes and keep the whole crew out all day.
+// ---------------------------------------------------------------------------------------------
+describe('known phones', () => {
+  const A = 'A'.repeat(22);
+  const B = 'B'.repeat(22);
+
+  it('remember who signed in on a phone in a signed cookie that names nobody', () => {
+    expect(DEVICE_COOKIE).toBe('koala_pin_device');
+    const c = rememberDevice(undefined, CREW, SECRET, () => A);
+    expect(c).toMatch(PHONE_COOKIE);
+    expect(c.startsWith(`${A}.`)).toBe(true);
+    expect(c).not.toContain(CREW.slice(0, 8));
+    expect(knownDevice(c, CREW, SECRET)).toBe(A);
+    expect(knownDevice(c, CREW.toUpperCase(), SECRET)).toBe(A);
+    // Only for that person, and only with the server's key.
+    expect(knownDevice(c, OFFICE, SECRET)).toBeNull();
+    expect(knownDevice(c, CREW, 'another-secret')).toBeNull();
+    expect(knownDevice(c, CREW, '')).toBeNull();
+    // A made-up cookie is no one's phone: the seal is bound to the phone's id and the person.
+    const seal = c.split('.')[1]!;
+    expect(knownDevice(`${B}.${seal}`, CREW, SECRET)).toBeNull();
+    expect(knownDevice(`${A}.${'x'.repeat(22)}`, CREW, SECRET)).toBeNull();
+    for (const junk of [undefined, null, '', 'abc', 42, A, `${A}.`, `${A}.${seal}x`, `${A}.${seal}`.padEnd(600, '.'), `${A}!.${seal}`])
+      expect(knownDevice(junk, CREW, SECRET), String(junk)).toBeNull();
+  });
+
+  it('keep the phone and up to 8 people on it (a shared tablet), the latest first', () => {
+    expect(MAX_KNOWN_PEOPLE).toBe(8);
+    let c = rememberDevice(undefined, CREW, SECRET, () => A);
+    c = rememberDevice(c, OFFICE, SECRET, () => {
+      throw new Error('a known phone keeps its id');
+    });
+    expect(knownDevice(c, CREW, SECRET)).toBe(A);
+    expect(knownDevice(c, OFFICE, SECRET)).toBe(A);
+    const again = rememberDevice(c, CREW, SECRET);
+    expect(again.split('.')).toEqual([A, c.split('.')[2], c.split('.')[1]]); // moved to the front, once
+    const ids = Array.from({ length: 10 }, (_, i) => `0c000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+    let many = c;
+    for (const id of ids) many = rememberDevice(many, id, SECRET);
+    expect(many.split('.')).toHaveLength(1 + MAX_KNOWN_PEOPLE);
+    expect(ids.map((id) => knownDevice(many, id, SECRET) === A)).toEqual([false, false, true, true, true, true, true, true, true, true]);
+    expect(knownDevice(many, CREW, SECRET)).toBeNull();
+    // Seals that are not well formed are dropped; a cookie that is not ours starts a new phone.
+    expect(rememberDevice(`${A}.junk`, CREW, SECRET).split('.')).toHaveLength(2);
+    expect(rememberDevice('junk', CREW, SECRET, () => B).startsWith(`${B}.`)).toBe(true);
+    const fresh = rememberDevice(undefined, CREW, SECRET);
+    expect(fresh).toMatch(PHONE_COOKIE);
+    expect(rememberDevice(undefined, CREW, SECRET).split('.')[0]).not.toBe(fresh.split('.')[0]);
+  });
+
+  it("are counted under a hash of the phone's id, and the cookie lasts 400 days, httpOnly", () => {
+    expect(deviceKey(A)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(deviceKey(A)).toBe(deviceKey(A));
+    expect(deviceKey(A)).not.toBe(deviceKey(B));
+    expect(deviceKey(A)).not.toContain(A);
+    expect(DEVICE_COOKIE_DAYS).toBe(400);
+    expect(deviceCookieOptions(true)).toEqual({ httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 400 * 24 * 60 * 60 });
+    expect(deviceCookieOptions(false)).toMatchObject({ httpOnly: true, secure: false });
+  });
+
+  function setup() {
+    const db = fakeDb();
+    db.addPerson(CREW, 'crew', 'Nell Crew');
+    db.addPerson(OFFICE, 'office', 'Oscar Office', { pin: '2580' });
+    let minutes = 0;
+    const deps = { admin: db.client, secret: SECRET, signIn: db.signIn, now: () => at(minutes)() };
+    return { db, deps, wait: (m: number) => (minutes += m) };
+  }
+  const signIn = async (deps: Parameters<typeof checkPin>[0], id: string, pin: string) => {
+    const r = await checkPin(deps, id, pin);
+    if (!r.ok) throw new Error(`not signed in: ${r.message}`);
+    return r.device;
+  };
+
+  it('a stranger who sends 5 wrong PINs cannot keep the person out of a phone they signed in on', async () => {
+    const { db, deps } = setup();
+    const phone = await signIn(deps, CREW, '1234'); // her phone, the first time
+    // The stranger's script: no cookie, the id from the sign-in page, 5 wrong PINs.
+    for (let i = 0; i < MAX_TRIES; i++) await checkPin(deps, CREW, String(i).repeat(4));
+    expect(await checkPin(deps, CREW, '1234')).toEqual({ ok: false, kind: 'locked', message: 'Too many tries. Try again in 15 minutes.' });
+    // Her phone still gets in, and stays known.
+    const mine = { ...deps, device: phone };
+    const back = await checkPin(mine, CREW, '1234');
+    expect(back).toMatchObject({ ok: true, role: 'crew', device: phone });
+    // Guessing from anywhere else is still 5 tries per 15 minutes: the lock stays for strangers.
+    expect(await checkPin(deps, CREW, '1234')).toMatchObject({ kind: 'locked' });
+    expect(db.attempts.get(CREW)).toMatchObject({ failed: 5 });
+    // Another person's phone cookie, or a made-up one, is a stranger's.
+    const theirs = await signIn(deps, OFFICE, '2580');
+    expect(await checkPin({ ...deps, device: theirs }, CREW, '1234')).toMatchObject({ kind: 'locked' });
+    expect(await checkPin({ ...deps, device: `${phone.split('.')[0]}.${'A'.repeat(22)}` }, CREW, '1234')).toMatchObject({ kind: 'locked' });
+  });
+
+  it("counts wrong PINs on a known phone on their own: 5 lock that phone for that person, not the name", async () => {
+    const { db, deps, wait } = setup();
+    const phone = await signIn(deps, CREW, '1234');
+    const mine = { ...deps, device: phone };
+    const said: string[] = [];
+    for (let i = 0; i < 6; i++) said.push(((await checkPin(mine, CREW, '4321')) as { message: string }).message);
+    expect(said).toEqual([
+      'Wrong PIN. 4 tries left.',
+      'Wrong PIN. 3 tries left.',
+      'Wrong PIN. 2 tries left.',
+      'Wrong PIN. 1 try left.',
+      'Too many tries. Try again in 15 minutes.',
+      'Too many tries. Try again in 15 minutes.',
+    ]);
+    expect(await checkPin(mine, CREW, '1234')).toMatchObject({ kind: 'locked' });
+    expect(db.signIn).toHaveBeenCalledTimes(1 + MAX_TRIES);
+    expect(db.attempts.has(CREW)).toBe(false); // the name's count is untouched
+    expect(db.devices.get(`${CREW}|${deviceKey(phone.split('.')[0]!)}`)).toMatchObject({ failed: 5 });
+    // Another phone is not locked, nor is someone else on this phone.
+    expect(await checkPin(deps, CREW, '9999')).toMatchObject({ kind: 'wrong', message: 'Wrong PIN. 4 tries left.' });
+    expect(await checkPin(mine, OFFICE, '2580')).toMatchObject({ ok: true });
+    wait(LOCK_MINUTES);
+    expect(await checkPin(mine, CREW, '1234')).toMatchObject({ ok: true });
+    expect(db.devices.size).toBe(0);
+  });
+
+  it("the right PIN on a known phone clears that phone's count, never a stranger's", async () => {
+    const { db, deps } = setup();
+    const phone = await signIn(deps, CREW, '1234');
+    await checkPin(deps, CREW, '0000'); // a stranger
+    await checkPin({ ...deps, device: phone }, CREW, '0000'); // her own slip
+    expect(await checkPin({ ...deps, device: phone }, CREW, '1234')).toMatchObject({ ok: true });
+    expect(db.devices.size).toBe(0);
+    expect(db.attempts.get(CREW)).toMatchObject({ failed: 1 }); // no fresh tries for the stranger
+    // A new phone's right PIN clears the name's count, as before.
+    expect(await checkPin(deps, CREW, '1234')).toMatchObject({ ok: true });
+    expect(db.attempts.has(CREW)).toBe(false);
+  });
+});
+
 describe('adding a PIN person and setting their PIN', () => {
   it('creates the login with the id it chose, the made-up address confirmed, and the derived password', async () => {
     const db = fakeDb();
@@ -488,13 +665,15 @@ describe('adding a PIN person and setting their PIN', () => {
     expect(await createPinLogin(db.client, { fullName: 'X', pin: '1234', secret: SECRET })).toEqual({ ok: false, error: 'Database error creating new user' });
   });
 
-  it('sets a new PIN and clears the lock', async () => {
+  it("sets a new PIN and clears the lock: the name's and every phone's", async () => {
     const db = fakeDb();
     db.addPerson(CREW, 'crew', 'Nell Crew', { pin: '5555' });
     db.attempts.set(CREW, { profile_id: CREW, failed: 5, locked_until: '2026-11-20T15:15:00.000Z', updated_at: 'a' });
+    db.devices.set(`${CREW}|k1`, { profile_id: CREW, device: 'k1', failed: 5, locked_until: '2026-11-20T15:15:00.000Z', updated_at: 'a' });
     expect(await setPin(db.client, CREW, '1234', SECRET)).toBeNull();
     expect(db.users.get(CREW)!.password).toBe(derivedPassword(CREW, '1234', SECRET));
     expect(db.attempts.has(CREW)).toBe(false);
+    expect(db.devices.size).toBe(0);
     db.fail.updateUser = { message: 'nope' };
     expect(await setPin(db.client, CREW, '1234', SECRET)).toBe('nope');
   });

@@ -12,9 +12,16 @@ import 'server-only';
 //    minutes, and the right PIN starts the count again. An attempt is counted BEFORE the PIN is
 //    checked (and taken back when it proves right), with a compare-and-set write, so PINs sent
 //    side by side cannot get more than 5 tries between them.
+//  - Known phones (review SEC-PIN-3): every id is on the sign-in page, so a stranger's script
+//    could send 5 wrong PINs for each name every 15 minutes and keep the whole crew out all day.
+//    So a phone that has signed in as a person is remembered in a signed, httpOnly cookie, and on
+//    that phone the person's PINs are counted on their own (pin_device_attempts: 5 wrong lock
+//    that phone for that person only); a lock on the name does not stop them there. Every other
+//    phone, and any script, shares the name's count as before, so guessing stays at 5 tries per
+//    15 minutes, and only the right PIN makes a phone known.
 //  - What the sign-in page answers never says whether a name exists: a person who is not listed
 //    (inactive, email only, or no one at all) gets the same "Wrong PIN" as a wrong PIN.
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ROLE_LABELS, ROLES, type TeamRole } from '@/lib/admin/team';
@@ -56,6 +63,63 @@ export function isPinLoginEmail(email: string | null | undefined): boolean {
  */
 export function shownEmail(authEmail: string | null | undefined): string | null {
   return !authEmail || isPinLoginEmail(authEmail) ? null : authEmail;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Known phones
+// ---------------------------------------------------------------------------------------------
+
+/** The cookie that remembers who has signed in with a PIN on this phone. */
+export const DEVICE_COOKIE = 'koala_pin_device';
+/** How long a phone stays known without signing in again (the longest a browser keeps a cookie). */
+export const DEVICE_COOKIE_DAYS = 400;
+/** People one phone remembers (a shared crew tablet): the latest to sign in on it. */
+export const MAX_KNOWN_PEOPLE = 8;
+
+// The cookie is "<phone id>.<seal>.<seal>...": a random id for the phone, then a seal per person
+// who signed in on it, HMAC(PIN_SECRET, 'device:' + person + ':' + phone id) cut to 16 bytes. It
+// names nobody, and nobody can make a seal without PIN_SECRET.
+const TOKEN = /^[A-Za-z0-9_-]{22}$/;
+const MAX_COOKIE = 512;
+
+function deviceSeal(profileId: string, deviceId: string, secret: string): string {
+  return createHmac('sha256', secret).update(`device:${profileId.toLowerCase()}:${deviceId}`).digest().subarray(0, 16).toString('base64url');
+}
+
+function readDeviceCookie(value: unknown): { deviceId: string; seals: string[] } | null {
+  if (typeof value !== 'string' || value.length > MAX_COOKIE) return null;
+  const [deviceId, ...seals] = value.split('.');
+  if (!deviceId || !TOKEN.test(deviceId)) return null;
+  return { deviceId, seals: seals.filter((t) => TOKEN.test(t)).slice(0, MAX_KNOWN_PEOPLE) };
+}
+
+/** The phone's id when its cookie shows `profileId` has signed in on it; null for anyone else's. */
+export function knownDevice(cookie: unknown, profileId: string, secret: string): string | null {
+  const c = secret ? readDeviceCookie(cookie) : null;
+  if (!c) return null;
+  const want = Buffer.from(deviceSeal(profileId, c.deviceId, secret));
+  return c.seals.some((t) => timingSafeEqual(Buffer.from(t), want)) ? c.deviceId : null;
+}
+
+/**
+ * The cookie after `profileId` signed in on this phone: the phone keeps its id (a new one if it
+ * had no cookie of ours), and the person goes first, once, ahead of up to 7 others.
+ */
+export function rememberDevice(cookie: unknown, profileId: string, secret: string, newId: () => string = () => randomBytes(16).toString('base64url')): string {
+  const c = readDeviceCookie(cookie);
+  const deviceId = c?.deviceId ?? newId();
+  const seal = deviceSeal(profileId, deviceId, secret);
+  return [deviceId, seal, ...(c?.seals ?? []).filter((t) => t !== seal)].slice(0, 1 + MAX_KNOWN_PEOPLE).join('.');
+}
+
+/** What pin_device_attempts holds for a phone: a hash of its id, never the id from the cookie. */
+export function deviceKey(deviceId: string): string {
+  return createHash('sha256').update(`pin-device:${deviceId}`).digest('base64url');
+}
+
+/** How the known-phone cookie is set: httpOnly, for every page (sign-in and "Change my PIN"). */
+export function deviceCookieOptions(secure: boolean) {
+  return { httpOnly: true, secure, sameSite: 'lax' as const, path: '/', maxAge: DEVICE_COOKIE_DAYS * 24 * 60 * 60 };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -115,15 +179,28 @@ export function startAttempt(row: AttemptRow | null, now: Date): AttemptStart {
 }
 
 // ---------------------------------------------------------------------------------------------
-// pin_attempts (service role)
+// pin_attempts and pin_device_attempts (service role)
 // ---------------------------------------------------------------------------------------------
 
 export type Reservation =
   | { kind: 'locked'; minutes: number }
   /** No such person: nothing stored. */
   | { kind: 'unknown' }
-  | { kind: 'try'; failed: number; prev: AttemptRow | null; wrote: AttemptRow }
+  /** `device`: the known phone's key the attempt was counted on, or null for the name's count. */
+  | { kind: 'try'; failed: number; prev: AttemptRow | null; wrote: AttemptRow; device: string | null }
   | { kind: 'error'; message: string };
+
+/**
+ * One count: the name's (pin_attempts: every phone the person has not signed in on, and any
+ * script), or one known phone's (pin_device_attempts, by person and phone key). `key` is its
+ * primary key, to match on.
+ */
+function attemptCount(admin: SupabaseClient, profileId: string, device: string | null) {
+  return {
+    from: () => admin.from(device ? 'pin_device_attempts' : 'pin_attempts'),
+    key: device ? { profile_id: profileId, device } : { profile_id: profileId },
+  };
+}
 
 const FOREIGN_KEY_VIOLATION = '23503';
 const UNIQUE_VIOLATION = '23505';
@@ -132,13 +209,20 @@ const UNIQUE_VIOLATION = '23505';
 const ROUNDS = MAX_TRIES * 2;
 
 /**
- * Counts an attempt as wrong before its PIN is checked, unless the name is locked. The write only
- * lands on the row as it was read (failed, locked_until and updated_at all equal), so two attempts
- * side by side never both count from the same number: the one that loses reads again.
+ * Counts an attempt as wrong before its PIN is checked, unless that count is locked: the name's,
+ * or with `device` (a known phone's key) that phone's. The write only lands on the row as it was
+ * read (failed, locked_until and updated_at all equal), so two attempts side by side never both
+ * count from the same number: the one that loses reads again.
  */
-export async function reserveAttempt(admin: SupabaseClient, profileId: string, now: () => Date = () => new Date()): Promise<Reservation> {
+export async function reserveAttempt(
+  admin: SupabaseClient,
+  profileId: string,
+  now: () => Date = () => new Date(),
+  device: string | null = null,
+): Promise<Reservation> {
+  const count = attemptCount(admin, profileId, device);
   for (let round = 0; round < ROUNDS; round++) {
-    const read = await admin.from('pin_attempts').select('failed, locked_until, updated_at').eq('profile_id', profileId).maybeSingle();
+    const read = await count.from().select('failed, locked_until, updated_at').match(count.key).maybeSingle();
     if (read.error) return { kind: 'error', message: read.error.message };
     const prev = (read.data as AttemptRow | null) ?? null;
     const t = now();
@@ -146,15 +230,15 @@ export async function reserveAttempt(admin: SupabaseClient, profileId: string, n
     if (start.kind === 'locked') return start;
     const wrote: AttemptRow = { failed: start.failed, locked_until: start.lockedUntil, updated_at: t.toISOString() };
     if (!prev) {
-      const ins = await admin.from('pin_attempts').insert({ profile_id: profileId, ...wrote });
-      if (!ins.error) return { kind: 'try', failed: start.failed, prev, wrote };
+      const ins = await count.from().insert({ ...count.key, ...wrote });
+      if (!ins.error) return { kind: 'try', failed: start.failed, prev, wrote, device };
       if (ins.error.code === FOREIGN_KEY_VIOLATION) return { kind: 'unknown' };
       if (ins.error.code !== UNIQUE_VIOLATION) return { kind: 'error', message: ins.error.message };
       continue; // another attempt wrote first: read again
     }
-    const up = await sameRow(admin.from('pin_attempts').update(wrote).eq('profile_id', profileId), prev).select('profile_id');
+    const up = await sameRow(count.from().update(wrote).match(count.key), prev).select('profile_id');
     if (up.error) return { kind: 'error', message: up.error.message };
-    if ((up.data ?? []).length === 1) return { kind: 'try', failed: start.failed, prev, wrote };
+    if ((up.data ?? []).length === 1) return { kind: 'try', failed: start.failed, prev, wrote, device };
   }
   return { kind: 'error', message: 'Too many sign-ins for this name at once.' };
 }
@@ -170,19 +254,28 @@ function sameRow<Q extends { eq(column: string, value: unknown): Q; is(column: s
  * to how it was, unless another attempt has changed it since. Best effort.
  */
 export async function releaseAttempt(admin: SupabaseClient, profileId: string, r: Extract<Reservation, { kind: 'try' }>): Promise<void> {
+  const count = attemptCount(admin, profileId, r.device);
   try {
-    const mine = sameRow(admin.from('pin_attempts').delete().eq('profile_id', profileId), r.wrote);
-    if (!r.prev) await mine;
-    else await sameRow(admin.from('pin_attempts').update(r.prev).eq('profile_id', profileId), r.wrote);
+    if (!r.prev) await sameRow(count.from().delete().match(count.key), r.wrote);
+    else await sameRow(count.from().update(r.prev).match(count.key), r.wrote);
   } catch {
     // The count stays one higher: the person sees one try fewer, nothing worse.
   }
 }
 
-/** The right PIN, or the owner's Reset PIN: no wrong PINs, no lock. */
+/** The right PIN: that count (the name's, or the known phone's) starts again. */
+async function clearCount(admin: SupabaseClient, profileId: string, device: string | null): Promise<void> {
+  const count = attemptCount(admin, profileId, device);
+  await count.from().delete().match(count.key);
+}
+
+/** The owner's Reset PIN, or a changed PIN: no wrong PINs and no lock, for the name or any phone. */
 export async function clearAttempts(admin: SupabaseClient, profileId: string): Promise<string | null> {
-  const del = await admin.from('pin_attempts').delete().eq('profile_id', profileId);
-  return del.error ? del.error.message : null;
+  const [name, phones] = await Promise.all([
+    admin.from('pin_attempts').delete().eq('profile_id', profileId),
+    admin.from('pin_device_attempts').delete().eq('profile_id', profileId),
+  ]);
+  return name.error?.message ?? phones.error?.message ?? null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -195,7 +288,8 @@ export interface PasswordSignIn {
 }
 
 export type PinCheck =
-  | { ok: true; role: TeamRole; email: string }
+  /** `device`: the known-phone cookie to set on the answer (this phone now knows the person). */
+  | { ok: true; role: TeamRole; email: string; device: string }
   | { ok: false; kind: 'invalid' | 'wrong' | 'locked' | 'unreachable'; message: string };
 
 /** A refused email and password (400 from Supabase's token endpoint), not a failure to answer. */
@@ -211,9 +305,17 @@ const profileRow = z.object({ role: z.enum(ROLES), active: z.boolean(), pin_sign
  * for PIN sign-in), their login address (auth.admin.getUserById), then `signIn` with the derived
  * password. `signIn` decides where a session goes: the sign-in route's cookie client, or a
  * throwaway client for "Change my PIN". Every way of failing for a person reads like a wrong PIN.
+ * `device` is the known-phone cookie the request came with: when it shows the person has signed
+ * in on this phone, the attempt is counted on the phone's own count, not the name's.
  */
 export async function checkPin(
-  deps: { admin: SupabaseClient; secret: string; signIn: (email: string, password: string) => Promise<PasswordSignIn>; now?: () => Date },
+  deps: {
+    admin: SupabaseClient;
+    secret: string;
+    signIn: (email: string, password: string) => Promise<PasswordSignIn>;
+    now?: () => Date;
+    device?: string | null;
+  },
   profileId: unknown,
   pin: unknown,
 ): Promise<PinCheck> {
@@ -232,7 +334,9 @@ async function checkPinFor(
   const { admin } = deps;
   const unreachable: PinCheck = { ok: false, kind: 'unreachable', message: PIN_UNREACHABLE_MESSAGE };
 
-  const r = await reserveAttempt(admin, profileId, deps.now);
+  const phone = knownDevice(deps.device, profileId, deps.secret);
+  const device = phone ? deviceKey(phone) : null;
+  const r = await reserveAttempt(admin, profileId, deps.now, device);
   if (r.kind === 'locked') return { ok: false, kind: 'locked', message: lockedMessage(r.minutes) };
   if (r.kind === 'unknown') return wrong(1);
   if (r.kind === 'error') return unreachable;
@@ -254,8 +358,10 @@ async function checkPinFor(
   const s = await deps.signIn(email, derivedPassword(profileId, pin, deps.secret));
   if (s.error) return isWrongCredentials(s.error) ? wrong(r.failed) : giveBack();
 
-  await clearAttempts(admin, profileId);
-  return { ok: true, role: person.data.role, email };
+  // Only the count this attempt was on: the person's right PIN on their own phone gives a
+  // stranger who locked the name no fresh tries.
+  await clearCount(admin, profileId, device);
+  return { ok: true, role: person.data.role, email, device: rememberDevice(deps.device, profileId, deps.secret) };
 }
 
 // ---------------------------------------------------------------------------------------------

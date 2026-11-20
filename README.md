@@ -134,6 +134,8 @@ After that, add everyone else from **Team** in the app: **Add a person** for som
 email (they tap their name on the sign-in page and type a 4-digit PIN, 1234 unless you set another;
 they can change it in their menu, and **Reset PIN** on their row sets a new one and clears a lockout
 after 5 wrong PINs), or **Invite someone by email** for someone who signs in with an email code.
+5 wrong PINs in a row lock a name for 15 minutes on every phone the person has not signed in on;
+a phone they have signed in on keeps its own count, so nobody else can lock them out of it.
 
 ### 4. Replace the placeholders (owner)
 The seed data is clearly marked **placeholder**. The Pricing page shows a banner until
