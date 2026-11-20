@@ -76,7 +76,8 @@ end $$;
 set role authenticated;
 select set_config('request.jwt.claim.sub', :'crewa', false);
 do $$ begin
-  assert (select array_agg(key) from app_settings) = array['blower_door'], 'a crew member reads the blower door setting and no other';
+  -- (The crew load list migration, 20261121000002, lets crews read its one key too: tests/sql/61.)
+  assert (select array_agg(key order by key) from app_settings where key <> 'load_list') = array['blower_door'], 'a crew member reads the blower door setting and no other';
 end $$;
 select set_config('request.jwt.claim.sub', :'esta', false);
 do $$ begin

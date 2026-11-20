@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getSessionProfile, type SessionProfile } from '@/lib/server/auth';
 import { actionRefusal } from '@/lib/server/actionAuth';
 import { failure, formToObject, parseWith, success, UNIQUE_VIOLATION, type ActionResult } from '@/lib/admin/forms';
-import { actualCosts, actualForm, actualValues, excludeForm, jobIdForm, scheduleForm, statusForm, valuesChanged } from '@/lib/jobs/forms';
+import { actualCosts, actualForm, actualValues, crewNotesForm, excludeForm, jobIdForm, scheduleForm, statusForm, valuesChanged } from '@/lib/jobs/forms';
 import { JOB_STATUS_LABELS } from '@/lib/jobs/status';
 
 type Db = Awaited<ReturnType<typeof createClient>>;
@@ -35,6 +35,24 @@ export async function saveSchedule(_prev: ActionResult | null, fd: FormData): Pr
   if (!res.data?.length) return failure('That job was not found.');
   refresh(id);
   return success('Schedule saved.');
+}
+
+/**
+ * The office's notes for the crew on a booked job (the signed estimate is locked, so direction the
+ * office adds after booking goes here). The crew app shows them on the job and its load list after
+ * its next sync, with any price taken out (crew_job_view). The database audits each change.
+ */
+export async function saveCrewNotes(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const s = await staff();
+  if (!s) return failure(await actionRefusal(NOT_STAFF));
+  const parsed = parseWith(crewNotesForm, formToObject(fd));
+  if (!parsed.ok) return failure(parsed.error);
+  const { id, crew_notes } = parsed.data;
+  const res = await s.db.from('jobs').update({ crew_notes }).eq('id', id).select('id');
+  if (res.error) return failure(`Saving the notes failed: ${res.error.message}`);
+  if (!res.data?.length) return failure('That job was not found.');
+  refresh(id);
+  return success(crew_notes ? 'Notes saved. The crew sees them on the job after their next sync.' : 'Notes cleared.');
 }
 
 export async function changeStatus(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {

@@ -1,0 +1,10 @@
+-- Runs the accuracy migration again (tests/sql/40_accuracy.test.sql and 41_owner_decisions.test.sql)
+-- on a database that also has the newer crew load list migration (20261121000002_crew_load_list.sql).
+-- That migration appends two columns to crew_job_view, and CREATE OR REPLACE VIEW cannot take
+-- columns away, so the older migration's view statement would stop it: the view goes first, the
+-- accuracy migration runs, then the newer migration puts its view back (it is idempotent too).
+-- Nothing else is touched.
+-- (Not a *.test.sql file: scripts/test-db.sh does not run it on its own.)
+drop view if exists crew_job_view;
+\i supabase/migrations/20261119000001_accuracy.sql
+\i supabase/migrations/20261121000002_crew_load_list.sql

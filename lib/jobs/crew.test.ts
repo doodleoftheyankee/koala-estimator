@@ -9,6 +9,7 @@ import {
   LOCKED_MESSAGE,
   mapsUrl,
   naturalKey,
+  notesWithoutPrices,
   syncActualsResultSchema,
   telUrl,
   toDbActualRow,
@@ -107,6 +108,34 @@ describe('groupViewRows', () => {
     const [job] = groupViewRows([crewViewRowSchema.parse(viewRow())]);
     const body = { jobs: [{ ...job, actuals: [], verified: false }], fetchedAt: '2026-10-20T12:00:00Z' };
     expect(crewJobsResponseSchema.safeParse(body).success).toBe(true);
+  });
+});
+
+describe('notes for the crew (load list)', () => {
+  it("reads the estimator's and the office's notes onto the job, without prices, line breaks kept", () => {
+    const rows = [
+      viewRow({ estimate_crew_notes: 'Gate code 4411.\n\nDeposit of $500 paid.', job_crew_notes: 'Park on the street (meter $2/hr).' }),
+      viewRow({ area_id: A2, area_name: 'Garage', area_sort: 2, scope: [] }),
+    ].map((r) => crewViewRowSchema.parse(r));
+    const [job] = groupViewRows(rows);
+    expect(job!.notes).toEqual({ estimator: 'Gate code 4411.\n\nDeposit of paid.', office: 'Park on the street.' });
+    const body = { jobs: [{ ...job, actuals: [], verified: false }], fetchedAt: '2026-11-20T12:00:00Z', alwaysBring: ['Ladders'] };
+    expect(crewJobsResponseSchema.parse(body).jobs[0]!.notes).toEqual(job!.notes);
+    expect(crewJobsResponseSchema.parse(body).alwaysBring).toEqual(['Ladders']);
+  });
+  it('a view (or a server) without the notes reads as none; blank notes are none', () => {
+    const [job] = groupViewRows([crewViewRowSchema.parse(viewRow())]);
+    expect(job!.notes).toEqual({ estimator: null, office: null });
+    expect(crewViewRowSchema.parse(viewRow({ estimate_crew_notes: '  ', job_crew_notes: '$40' })).job_crew_notes).toBeNull();
+    const old = { jobs: [{ ...job, notes: undefined, actuals: [], verified: false }], fetchedAt: '2026-11-20T12:00:00Z' };
+    const parsed = crewJobsResponseSchema.parse(old);
+    expect(parsed.jobs[0]!.notes).toBeUndefined();
+    expect(parsed.alwaysBring).toBeUndefined();
+  });
+  it('notesWithoutPrices takes prices out of each line and keeps the lines', () => {
+    expect(notesWithoutPrices('Line one ($40)\r\nLine two, $1,200 left\n')).toBe('Line one\nLine two, left');
+    expect(notesWithoutPrices(' \n $5 \n')).toBeNull();
+    expect(notesWithoutPrices('No money here')).toBe('No money here');
   });
 });
 

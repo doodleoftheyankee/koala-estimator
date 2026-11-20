@@ -83,7 +83,7 @@ end $$;
 create temp table before_rerun as
 select (select count(*) from materials) as materials, (select count(*) from coefficients) as coefficients,
        (select string_agg(id::text || cost_per_unit::text, ',' order by id) from materials) as costs;
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select materials from before_rerun) = (select count(*) from materials), 'no material added on a second run';
   assert (select coefficients from before_rerun) = (select count(*) from coefficients), 'no coefficient added on a second run';
@@ -180,7 +180,7 @@ end $$;
 -- function's grants: Supabase grants every new function to the API roles, the migration takes
 -- them back; the same grants were checked on the first run above).
 update app_settings set value = '"AB"' where key = 'quote_number_prefix';
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select value from app_settings where key = 'quote_number_prefix') = '"AB"'::jsonb, 'a saved prefix is kept on a second run';
   assert (select last_value from quote_number_counters where year = 2026) = 3, 'the counters are kept on a second run';
@@ -252,7 +252,7 @@ begin
 end $$;
 -- An owner's own range (and cost) is kept when the migration runs again.
 update materials set typical_min = 0.5, typical_max = 1.5, typical_source = 'Supplier price list' where r_value = 13;
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select typical_min = 0.5 and typical_max = 1.5 and typical_source = 'Supplier price list' from materials where r_value = 13),
     'a range the owner entered is kept on a second run';
@@ -491,7 +491,7 @@ end $$;
 
 -- Running the migration again keeps every approval.
 create temp table approvals_before as select count(*) as n, string_agg(id::text || status, ',' order by id) as s from price_approvals;
-\i supabase/migrations/20261119000001_accuracy.sql
+\i tests/sql/rerun_accuracy.psql
 do $$ begin
   assert (select n from approvals_before) = (select count(*) from price_approvals)
      and (select s from approvals_before) = (select string_agg(id::text || status, ',' order by id) from price_approvals),

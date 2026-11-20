@@ -6,6 +6,7 @@ import {
   actualValues,
   canMarkLost,
   crewFieldName,
+  crewNotesForm,
   excludeForm,
   markLostForm,
   membershipChanges,
@@ -100,6 +101,23 @@ describe('valuesChanged', () => {
     expect(valuesChanged({ actual_material_unit: 'bag' }, { actual_material_unit: 'bag' })).toBe(false);
     // A multipart form post turns the crew's LF line breaks into CRLF: not a change.
     expect(valuesChanged({ notes: 'Knee walls were tight\r\nSkip the garage' }, { notes: 'Knee walls were tight\nSkip the garage' })).toBe(false);
+  });
+});
+
+describe('crewNotesForm (the office\'s notes for the crew)', () => {
+  const JOB_ID = '8f14e45f-ceea-467f-a8f6-3b3a0c6c2b10';
+  it('keeps line breaks as LF, trims, and clears on blank', () => {
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: ' Park on the street.\r\nBring the 28 ft ladder. ' })).toEqual({ id: JOB_ID, crew_notes: 'Park on the street.\nBring the 28 ft ladder.' });
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: '  ' }).crew_notes).toBeNull();
+    expect(crewNotesForm.parse({ id: JOB_ID }).crew_notes).toBeNull();
+  });
+  it('counts a line break once and refuses more than 2,000 characters', () => {
+    const full = `${'x'.repeat(999)}\r\n${'y'.repeat(1000)}`;
+    expect(crewNotesForm.parse({ id: JOB_ID, crew_notes: full }).crew_notes).toHaveLength(2000);
+    const r = crewNotesForm.safeParse({ id: JOB_ID, crew_notes: 'x'.repeat(2001) });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.message).toBe('Notes for the crew must be 2,000 characters or fewer');
+    expect(crewNotesForm.safeParse({ id: 'nope', crew_notes: 'x' }).success).toBe(false);
   });
 });
 

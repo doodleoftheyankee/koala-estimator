@@ -412,6 +412,7 @@ export function sampleDraft(args: { id: string; input: EstimateInput; selectedTi
     photoReads: {},
     selectedTier: args.selectedTier,
     notes: '',
+    crewNotes: '',
     rowVersion: null,
     bundleHash: null,
     lastQuote: null,
